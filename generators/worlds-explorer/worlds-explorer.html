@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>worlds-explorer — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+World Forge — Infinite Explorer
+  Hierarchical AI-crafted worlds (or indoor areas). Drill world -> region -> location -> entity -> detail,
+  with streaming generation, on-demand + per-card image generation, AI-derived flavor stats,
+  reroll controls, tree-wide search, and persistent saves.
+-->
+<style>
+  :root {
+    --bg:#0b0d12; --panel:#13151d; --panel2:#0f1118;
+    --border:#1e2330; --border2:#2a3040;
+    --text:#e0e4ec; --sub:#8a93a6; --muted:#5a6580;
+    --accent:#00d2be; --accent2:#ff4757;
+    --radius:14px;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg); color:var(--text);
+    overflow-x:hidden; text-align:left;
+    -webkit-tap-highlight-color:transparent;
+  }
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-track { background:var(--bg); }
+  ::-webkit-scrollbar-thumb { background:#1e2330; border-radius:4px; }
+  ::-webkit-scrollbar-thumb:hover { background:#2c3345; }
+  button { font-family:inherit; }
+  input { font-family:inherit; }
+
+  /* ── Intro ── */
+  #startCtn {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-height:100vh; padding:24px 16px;
+    background:radial-gradient(circle at 50% 30%, #1a1d2e 0%, #0b0d12 70%);
+    position:relative; overflow:hidden;
+  }
+  #startCtn::before {
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background:url("data:image/svg+xml,%3Csvg width='200' height='200' viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  .start-glow {
+    width:min(500px,90vw); aspect-ratio:1; position:absolute; top:-100px; pointer-events:none;
+    background:radial-gradient(circle, rgba(0,210,190,0.10) 0%, rgba(0,0,0,0) 70%); border-radius:50%;
+  }
+  .start-title {
+    font-size:clamp(2.4em, 9vw, 3.4em); margin:0 0 10px; position:relative; z-index:1;
+    background:linear-gradient(180deg,#fff,#aab2c3); -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    text-align:center;
+  }
+  .start-sub {
+    font-size:clamp(0.95em,3.5vw,1.1em); max-width:460px; color:var(--sub);
+    margin:0 0 20px; text-align:center; line-height:1.6; position:relative; z-index:1;
+  }
+  .mode-toggle {
+    display:flex; gap:8px; position:relative; z-index:1; margin-bottom:16px;
+    background:#0d101a; padding:5px; border-radius:12px; border:1px solid var(--border);
+  }
+  .mode-toggle button {
+    flex:1; padding:9px 16px; background:transparent; border:none; color:var(--sub);
+    border-radius:8px; cursor:pointer; font-size:0.92em; font-weight:600; transition:background .2s, color .2s;
+  }
+  .mode-toggle button.active { background:var(--accent2); color:#fff; }
+  .start-form {
+    display:flex; flex-direction:column; gap:12px; width:100%; max-width:420px; position:relative; z-index:1;
+  }
+  .field { display:flex; flex-direction:column; gap:4px; }
+  .field label {
+    font-size:0.75em; color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-weight:600;
+  }
+  .field input {
+    width:100%; background:#0d101a; border:1px solid #222; color:var(--text);
+    padding:12px 14px; border-radius:10px; font-size:0.95rem; outline:none; transition:border-color .2s, box-shadow .2s;
+  }
+  .field input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,210,190,0.15); }
+  .start-hint { font-size:0.82em; color:#4a5268; margin:2px 0 0; text-align:center; }
+  .start-row { display:flex; gap:10px; justify-content:center; margin-top:4px; }
+
+  .btn {
+    padding:12px 22px; font-size:1em; font-weight:600; cursor:pointer;
+    border:1px solid var(--border2); border-radius:10px; transition:filter .2s, transform .1s, background .2s;
+    background:#1a1e2e; color:var(--text);
+  }
+  .btn:hover { filter:brightness(1.15); }
+  .btn:active { transform:translateY(1px); }
+  .btn-primary { background:var(--accent2); color:#fff; border:none; box-shadow:0 4px 20px rgba(255,71,87,0.3); }
+  .btn-primary:hover { box-shadow:0 6px 26px rgba(255,71,87,0.45); }
+  .btn-accent { background:var(--accent); color:#062b27; border:none; }
+  .btn-sm { padding:7px 12px; font-size:0.82em; }
+
+  #savedListCtn {
+    display:none; flex-direction:column; align-items:stretch; gap:8px;
+    width:100%; max-width:500px; margin-top:24px; position:relative; z-index:1;
+  }
+  #savedListCtn h3 {
+    margin:0 0 4px; color:var(--sub); font-size:0.8em; text-transform:uppercase; letter-spacing:1px;
+  }
+  .save-row {
+    display:flex; align-items:center; gap:10px; background:#0d101a; border:1px solid var(--border);
+    padding:10px 12px; border-radius:10px;
+  }
+  .save-row .name { flex:1; min-width:0; }
+  .save-row .name b { display:block; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .save-row .meta { font-size:0.78em; color:var(--muted); margin-top:2px; }
+  .save-row .meta .tag { color:var(--accent); }
+  .save-row button { padding:6px 10px; font-size:0.85em; }
+  .icon-btn { color:var(--accent2); }
+
+  /* ── App ── */
+  #appCtn { display:none; min-height:100vh; max-width:1100px; margin:0 auto; padding-bottom:40px; }
+  #headerCtn {
+    display:flex; align-items:center; gap:8px; padding:12px 16px;
+    border-bottom:1px solid var(--border); position:sticky; top:0;
+    background:rgba(11,13,18,0.88); backdrop-filter:blur(12px); z-index:50;
+  }
+  .hdr-btn {
+    padding:7px 12px; background:#1a1e2e; color:var(--text); border:1px solid var(--border2);
+    border-radius:8px; cursor:pointer; font-size:0.88em; font-weight:500; white-space:nowrap;
+  }
+  .hdr-btn:hover { background:#222839; }
+  #breadcrumbEl {
+    flex:1; min-width:0; display:flex; align-items:center; gap:2px; overflow-x:auto;
+    white-space:nowrap; scrollbar-width:none;
+  }
+  #breadcrumbEl::-webkit-scrollbar { display:none; }
+  .crumb { cursor:pointer; color:#7a859c; font-weight:500; padding:4px 2px; }
+  .crumb:hover { color:var(--text); }
+  .crumb-sep { color:#2a3040; padding:0 2px; }
+  .crumb-final { color:var(--accent); font-weight:600; cursor:default; }
+  .crumb-ellipsis { color:#4a5268; padding:0 2px; }
+
+  /* ── Info panel ── */
+  #infoCtn {
+    margin:16px; padding:20px; background:var(--panel); border:1px solid var(--border);
+    border-radius:var(--radius); position:relative; overflow:hidden;
+  }
+  .world-img {
+    width:100%; height:clamp(180px,40vw,260px); object-fit:cover; border-radius:10px;
+    display:block; background:#0d101a; border:1px solid var(--border);
+  }
+  .world-img.hidden { display:none; }
+  .img-loading {
+    width:100%; height:clamp(180px,40vw,260px); border-radius:10px;
+    background:linear-gradient(90deg,#0d101a,#15181f,#0d101a); background-size:200% 100%;
+    animation:shimmer 1.6s linear infinite; border:1px solid var(--border);
+  }
+  @keyframes shimmer { to { background-position:-200% 0; } }
+  .atmo-bar {
+    height:4px; width:100%; margin-top:12px; border-radius:2px; opacity:0.7;
+    background:linear-gradient(90deg, var(--hue1,#ff4757), var(--hue2,#00d2be));
+  }
+  .info-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .info-titles { flex:1; min-width:0; }
+  #titleEl {
+    margin:14px 0 0; font-size:clamp(1.6em,6vw,2.4em); font-weight:700; line-height:1.1;
+    background:linear-gradient(180deg,#fff,#aab2c3); -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  #descEl { margin:8px 0 0; line-height:1.65; color:var(--sub); font-size:1em; }
+  #typeBadge {
+    display:inline-block; padding:3px 10px; border-radius:20px; font-size:0.72em; font-weight:700;
+    text-transform:uppercase; letter-spacing:1px; background:#1e2330; color:var(--accent);
+    margin-top:10px; border:1px solid var(--border2);
+  }
+  #typeBadge.hidden { display:none; }
+  #prefsCtn { display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
+  .pill {
+    font-size:0.74em; padding:4px 10px; border-radius:20px; background:#1a1e2e;
+    color:#8a93a6; border:1px solid var(--border2);
+  }
+  .info-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:14px; }
+  .info-actions .btn-sm { background:#1a1e2e; border:1px solid var(--border2); color:var(--text); }
+  .info-actions .btn-sm:hover { background:var(--accent); color:#062b27; border-color:var(--accent); }
+
+  /* ── Children grid ── */
+  #childrenCtn {
+    padding:0 16px; display:grid; gap:14px;
+    grid-template-columns:repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  }
+  .node-card {
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:0 0 16px; cursor:pointer; transition:transform .2s, border-color .2s, box-shadow .2s;
+    position:relative; overflow:hidden; display:flex; flex-direction:column;
+  }
+  .node-card::before {
+    content:""; position:absolute; top:0; left:0; right:0; height:3px;
+    background:linear-gradient(90deg, var(--ch1,transparent), var(--ch2,transparent));
+    opacity:0; transition:opacity .25s; z-index:2;
+  }
+  .node-card:hover { border-color:#2a3a55; transform:translateY(-3px); box-shadow:0 10px 26px rgba(0,0,0,0.4); }
+  .node-card:hover::before { opacity:1; }
+  .card-img-wrap { width:100%; height:130px; background:#0d101a; position:relative; overflow:hidden; }
+  .card-img { width:100%; height:100%; object-fit:cover; display:block; }
+  .card-img.hidden { display:none; }
+  .card-img-shimmer {
+    width:100%; height:100%;
+    background:linear-gradient(90deg,#0d101a,#15181f,#0d101a); background-size:200% 100%;
+    animation:shimmer 1.6s linear infinite;
+  }
+  .card-img-shimmer.hidden { display:none; }
+  .card-body { padding:14px 16px 0; flex:1; }
+  .node-card h3 { margin:0 0 6px; color:var(--text); font-size:1.1em; }
+  .node-card p { margin:0; font-size:0.9em; color:var(--sub); line-height:1.5; }
+  .card-meta { display:flex; gap:6px; margin-top:10px; padding:0 16px; flex-wrap:wrap; }
+  .meta-tag {
+    font-size:0.7em; padding:3px 8px; border-radius:4px; background:#0d101a;
+    color:#5a6580; border:1px solid #1a1e2e; text-transform:uppercase; letter-spacing:0.5px;
+  }
+  .meta-tag.type-Flora { color:#7bd88f; }
+  .meta-tag.type-Fauna { color:#ffb86c; }
+  .meta-tag.type-Object { color:#9aa6e0; }
+  .meta-tag.type-Person { color:#f08acc; }
+
+  .end-marker { grid-column:1/-1; text-align:center; padding:48px 20px; color:#4a5268; }
+  .end-icon { font-size:2.6em; margin-bottom:10px; opacity:0.55; }
+
+  /* ── Detail panel ── */
+  #detailCtn { display:none; padding:0 16px 16px; }
+  #detailCard { background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+  #detailHeader { padding:18px; display:flex; gap:14px; border-bottom:1px solid var(--border); }
+  #detailImg {
+    width:96px; height:96px; object-fit:cover; border-radius:10px; border:1px solid var(--border);
+    flex-shrink:0; background:#0d101a;
+  }
+  #detailImg.hidden { display:none; }
+  .detail-img-loading {
+    width:96px; height:96px; border-radius:10px; flex-shrink:0;
+    background:linear-gradient(90deg,#0d101a,#15181f,#0d101a); background-size:200% 100%;
+    animation:shimmer 1.6s linear infinite; border:1px solid var(--border);
+  }
+  .detail-img-loading.hidden { display:none; }
+  #detailTextArea { flex:1; min-width:0; }
+  #detailTitle { margin:0; font-size:1.3em; font-weight:700; color:#fff; }
+  #detailDesc { margin:6px 0 0; color:var(--sub); line-height:1.55; font-size:0.92em; }
+
+  #detailStats {
+    display:grid; gap:10px; padding:16px 18px; border-bottom:1px solid var(--border);
+    background:var(--panel2);
+    grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));
+  }
+  .stat-item { display:flex; flex-direction:column; gap:3px; }
+  .stat-label { font-size:0.7em; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .stat-val { font-size:0.98em; font-weight:600; color:var(--text); }
+  .stat-val.loading { color:var(--muted); font-style:italic; font-weight:400; }
+  .trait-bar { height:4px; background:#1a1e2e; border-radius:2px; margin-top:5px; overflow:hidden; }
+  .trait-fill { height:100%; border-radius:2px; }
+
+  #interactCtn { padding:18px; }
+  #interactLabel {
+    margin:0 0 12px; font-size:0.78em; text-transform:uppercase; letter-spacing:1.5px;
+    color:var(--muted); font-weight:700;
+  }
+  #actionsRow { display:flex; gap:8px; flex-wrap:wrap; }
+  .act-btn {
+    padding:9px 14px; background:#1a1e2e; border:1px solid var(--border2); color:var(--text);
+    border-radius:8px; cursor:pointer; font-size:0.86em; font-weight:500; transition:background .2s, border-color .2s;
+  }
+  .act-btn:hover { background:var(--accent); border-color:var(--accent); color:#062b27; }
+  #interactResult {
+    margin-top:16px; padding:14px; background:var(--panel2); border:1px solid var(--border);
+    border-radius:10px; color:var(--sub); line-height:1.65; font-size:0.93em;
+    white-space:pre-wrap; display:none;
+  }
+  #interactResult.visible { display:block; }
+
+  /* ── Loading overlay ── */
+  #loadingCtn {
+    position:fixed; inset:0; background:rgba(5,5,10,0.92); display:none;
+    flex-direction:column; align-items:center; justify-content:center; z-index:100; backdrop-filter:blur(4px);
+    padding:20px;
+  }
+  .loader-ring {
+    width:52px; height:52px; border:4px solid #1a1e2e; border-top-color:var(--accent);
+    border-radius:50%; animation:spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #loadingTextEl { margin-top:16px; color:var(--sub); font-size:1em; text-align:center; }
+  #loadingPreviewEl {
+    margin-top:18px; max-width:560px; max-height:50vh; overflow:auto;
+    color:var(--muted); font-size:0.85em; line-height:1.6; white-space:pre-wrap;
+    background:#0d101a; border:1px solid var(--border); border-radius:10px; padding:14px;
+    display:none;
+  }
+  #loadingPreviewEl.visible { display:block; }
+
+  /* ── Search modal ── */
+  #searchCtn {
+    position:fixed; inset:0; background:rgba(5,5,10,0.85); backdrop-filter:blur(6px);
+    display:none; align-items:flex-start; justify-content:center; z-index:150; padding:40px 16px;
+  }
+  #searchCtn.visible { display:flex; }
+  .search-box {
+    width:100%; max-width:560px; background:var(--panel); border:1px solid var(--border2);
+    border-radius:var(--radius); overflow:hidden;
+  }
+  .search-input-wrap { padding:12px; border-bottom:1px solid var(--border); display:flex; gap:8px; }
+  .search-input-wrap input {
+    flex:1; background:#0d101a; border:1px solid #222; color:var(--text); padding:10px 12px;
+    border-radius:8px; font-size:0.95rem; outline:none;
+  }
+  .search-input-wrap input:focus { border-color:var(--accent); }
+  #searchResults { max-height:60vh; overflow:auto; }
+  .search-result {
+    padding:12px 14px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .15s;
+  }
+  .search-result:hover { background:#1a1e2e; }
+  .search-result .sr-title { font-weight:600; color:var(--text); }
+  .search-result .sr-path { font-size:0.78em; color:var(--muted); margin-top:3px; }
+  .search-result mark { background:rgba(0,210,190,0.25); color:var(--accent); border-radius:2px; padding:0 2px; }
+  .search-empty { padding:24px; text-align:center; color:var(--muted); font-size:0.9em; }
+
+  /* ── Toast ── */
+  .toast {
+    position:fixed; left:50%; bottom:20px; transform:translate(-50%,120%);
+    padding:11px 18px; background:#1a1e2e; border:1px solid var(--border2); border-radius:10px;
+    color:var(--text); font-size:0.9em; z-index:200; opacity:0;
+    transition:transform .4s cubic-bezier(0.34,1.56,0.64,1), opacity .4s;
+    box-shadow:0 10px 30px rgba(0,0,0,0.4); max-width:90vw; text-align:center;
+  }
+  .toast.show { transform:translate(-50%,0); opacity:1; }
+
+  @media (min-width:640px) {
+    #infoCtn { margin:24px; padding:28px; }
+    #childrenCtn, #detailCtn { padding-left:24px; padding-right:24px; }
+  }
+</style>
+
+<!-- ── Intro ── -->
+<div id="startCtn">
+  <div class="start-glow"></div>
+  <h1 class="start-title">World Forge</h1>
+  <p class="start-sub">Infinite, AI-crafted realms and spaces. Name a seed of an idea — and step into a world that unfolds the deeper you look.</p>
+
+  <div class="mode-toggle" id="modeToggle">
+    <button class="active" data-mode="world">🌍 World</button>
+    <button data-mode="area">🏢 Area</button>
+  </div>
+
+  <div class="start-form" id="creationCtn">
+    <div class="field">
+      <label for="themeInput">Theme / Aesthetic</label>
+      <input id="themeInput" type="text" placeholder="solarpunk, high fantasy, biopunk..." maxlength="80" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="focusInput">Focus / What to see</label>
+      <input id="focusInput" type="text" placeholder="sky whales, ancient ruins, markets..." maxlength="80" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="moodInput">Mood / Atmosphere</label>
+      <input id="moodInput" type="text" placeholder="serene, ominous, whimsical..." maxlength="80" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="notesInput">Extra notes</label>
+      <input id="notesInput" type="text" placeholder="any additional direction..." maxlength="120" autocomplete="off">
+    </div>
+    <p class="start-hint">Optional — leave blank for pure surprise.</p>
+    <div class="start-row">
+      <button class="btn btn-primary" id="startBtn">Forge</button>
+    </div>
+  </div>
+
+  <div id="savedListCtn"></div>
+</div>
+
+<!-- ── App ── -->
+<div id="appCtn">
+  <div id="headerCtn">
+    <button class="hdr-btn" id="menuBtn">☰</button>
+    <button class="hdr-btn" id="backBtn" hidden>◀</button>
+    <button class="hdr-btn" id="searchBtn">🔍</button>
+    <div id="breadcrumbEl"></div>
+  </div>
+
+  <div id="infoCtn">
+    <img id="worldImg" class="world-img hidden" alt="">
+    <div id="imgSlot"></div>
+    <div class="atmo-bar" id="atmoBar"></div>
+    <div class="info-head">
+      <div class="info-titles">
+        <span id="typeBadge" class="hidden"></span>
+        <h1 id="titleEl"></h1>
+        <p id="descEl"></p>
+      </div>
+    </div>
+    <div id="prefsCtn"></div>
+    <div class="info-actions" id="infoActions"></div>
+  </div>
+
+  <div id="childrenCtn"></div>
+
+  <div id="detailCtn">
+    <div id="detailCard">
+      <div id="detailHeader">
+        <img id="detailImg" class="hidden" alt="">
+        <div id="detailImgSlot" class="hidden"></div>
+        <div id="detailTextArea">
+          <h2 id="detailTitle"></h2>
+          <p id="detailDesc"></p>
+        </div>
+      </div>
+      <div id="detailStats"></div>
+      <div id="interactCtn">
+        <div id="interactLabel">Interactions</div>
+        <div id="actionsRow"></div>
+        <div id="interactResult"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Loading ── -->
+<div id="loadingCtn">
+  <div class="loader-ring" id="loaderRing"></div>
+  <p id="loadingTextEl">Imagining...</p>
+  <div id="loadingPreviewEl"></div>
+</div>
+
+<!-- ── Search ── -->
+<div id="searchCtn">
+  <div class="search-box">
+    <div class="search-input-wrap">
+      <input id="searchInput" type="text" placeholder="Search nodes by name or description..." autocomplete="off">
+      <button class="btn btn-sm" id="searchCloseBtn">✕</button>
+    </div>
+    <div id="searchResults"></div>
+  </div>
+</div>
+
+<!-- ── Toast ── -->
+<div id="toastEl" class="toast"></div>
+
+<script>
+  // ── State ──
+  let worldRoot = null;
+  let path = [];
+  let currentSaveId = null;
+  let currentMode = "world"; // 'world' | 'area'
+  let detailNode = null;     // node currently shown in detail panel
+
+  const DEPTH_LABELS_WORLD = ["World","Region","Location","Entity","Detail","Essence"];
+  const DEPTH_LABELS_AREA  = ["Area","Section","Room","Feature","Detail","Essence"];
+  const ACTION_MAP = {
+    Flora:  ["Observe closely","Harvest","Taste","Crush for essence"],
+    Fauna:  ["Observe closely","Attempt to tame","Hunt","Feed","Study tracks"],
+    Object: ["Inspect closely","Activate","Collect","Dismantle"],
+    Person: ["Converse","Trade","Ask for secret","Challenge","Befriend"],
+    Mystery:["Observe closely"]
+  };
+
+  // ── Helpers ──
+  const $ = id => document.getElementById(id);
+  function toast(msg) { toastEl.textContent = msg; toastEl.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(()=>toastEl.classList.remove("show"),2600); }
+  function escapeHtml(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  function escapeReg(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+  function setLoading(msg, withPreview) {
+    loadingTextEl.textContent = msg;
+    loadingCtn.style.display = "flex";
+    loaderRing.style.display = withPreview ? "none" : "block";
+    loadingTextEl.style.display = "";
+    if (withPreview) { loadingPreviewEl.textContent = ""; loadingPreviewEl.classList.add("visible"); }
+    else { loadingPreviewEl.classList.remove("visible"); }
+  }
+  function hideLoading() { loadingCtn.style.display = "none"; loadingPreviewEl.classList.remove("visible"); }
+  function hashStr(s) { let h=0; s=String(s); for(let i=0;i<s.length;i++){h=s.charCodeAt(i)+((h<<5)-h);} return h; }
+  function hueFromStr(s) { return Math.abs(hashStr(s)) % 360; }
+  function isArea() { return (worldRoot?.meta?.category || currentMode) === "area"; }
+
+  // ── Prompt builders ──
+  function rootPrompt(ctx, mode) {
+    let isArea = mode === "area";
+    let noun = isArea ? "indoor area or building" : "imaginary world";
+    let nameLbl = isArea ? "Area Name" : "World Name";
+    let childLbl = isArea ? "Sections" : "Regions";
+    return "Craft a unique " + noun + ". " + ctx + "\n" +
+      "Respond in EXACTLY this format:\n" +
+      nameLbl + ": <a memorable name>\n" +
+      "Overview: <2 vivid sentences>\n" +
+      "Atmosphere: <3 comma-separated adjectives>\n" +
+      "Scale: <a short label like \"Age of\" or \"Era of\">\n" +
+      "Children:\n" +
+      "- <" + childLbl.replace(/s$/,"") + " name>: <one sentence>\n" +
+      "- <" + childLbl.replace(/s$/,"") + " name>: <one sentence>\n" +
+      "- <" + childLbl.replace(/s$/,"") + " name>: <one sentence>\n" +
+      "- <" + childLbl.replace(/s$/,"") + " name>: <one sentence>\n" +
+      "- <" + childLbl.replace(/s$/,"") + " name>: <one sentence>";
+  }
+  function expandPrompt(node, depth, ctx, mode) {
+    let isArea = mode === "area";
+    let instr;
+    if (depth === 1) {
+      if (isArea) instr = "For section \"" + node.name + "\" (" + node.desc + "). " + ctx + "\nList 5 rooms, halls, or zones.";
+      else instr = "For region \"" + node.name + "\" (" + node.desc + "). " + ctx + "\nList 5 notable locations (cities, ruins, landmarks, forests).";
+    } else if (depth === 2) {
+      let place = isArea ? "room" : "place";
+      instr = "For " + place + " \"" + node.name + "\" (" + node.desc + "). " + ctx + "\nList 5 entities found here. Tag EACH with exactly one of [Flora] [Fauna] [Object] [Person].";
+    } else {
+      instr = "Zoom into \"" + node.name + "\" (" + node.desc + "). It is a " + (node.meta && node.meta.type || "mystery") + ". " + ctx +
+        "\nGenerate 5 deeper micro-aspects:\n" +
+        "- If Flora: seeds, fruit, medicinal use, toxicity, companion fauna.\n" +
+        "- If Fauna: diet, behavior, domestication, danger level, drops.\n" +
+        "- If Object: material, age, magical property, condition, rumored origin.\n" +
+        "- If Person: role, personality, secret, faction, desire.\n" +
+        "Tag EACH micro-aspect with exactly one of [Flora] [Fauna] [Object] [Person].";
+    }
+    return instr + "\nRespond in EXACTLY this format:\nChildren:\n- <Name>: <one sentence> [Tag]";
+  }
+  function interactPrompt(node, action) {
+    return "In a richly imagined world, a traveler performs \"" + action + "\" upon a " + (node.meta && node.meta.type || "thing") + " named \"" + node.name + "\".\n" +
+      "Description: " + node.desc + "\n" +
+      "Write a short immersive 2-3 sentence narrative result. Be vivid and a little unexpected. No preamble.";
+  }
+  function imagePrompt(node, prefs, mode) {
+    let themeStr = prefs.theme ? prefs.theme + " aesthetic, " : "";
+    let moodStr = prefs.mood ? prefs.mood + " mood, " : "";
+    let depth = node.depth || 0;
+    let desc = (node.desc || "").slice(0, 140);
+    let type = (node.meta && node.meta.type) || "environment";
+    let isArea = (mode || (worldRoot?.meta?.category) || "world") === "area";
+    let kind = isArea ? "Interior concept art" : "Fantasy concept art";
+    if (depth === 0) {
+      return isArea
+        ? "Interior concept art, " + themeStr + moodStr + node.name + ", " + desc + ", architectural visualization, 4k"
+        : "Fantasy world concept art, " + themeStr + moodStr + node.name + ", " + desc + ", epic scale, vibrant colors, digital painting, 4k";
+    }
+    if (depth <= 2) return kind + ", " + themeStr + moodStr + node.name + ", " + desc + ", " + type + ", lush detail, digital painting";
+    return (isArea ? "Interior detail" : "Fantasy close-up illustration") + ", " + themeStr + moodStr + node.name + ", " + desc + ", " + type + ", intricate detail, digital painting";
+  }
+  function statsPrompt(node) {
+    let type = node.meta?.type || "Mystery";
+    let labels;
+    if (type === "Flora") labels = "Rarity, Height, Toxicity, Bloom";
+    else if (type === "Fauna") labels = "Temperament, Diet, Size, Habitat";
+    else if (type === "Object") labels = "Material, Age, Condition, Magic";
+    else if (type === "Person") labels = "Role, Mood, Trust, Secret";
+    else labels = "Nature, Origin, Stability, Mystery";
+    return "Generate 4 compact flavor stats for a " + type + " named \"" + node.name + "\".\nDescription: " + node.desc + "\n" +
+      "Use exactly these labels (one per line, format \"Label: Value\"): " + labels + ".\n" +
+      "Values must be 1-3 words. For numeric-ish values include a number where sensible. Output ONLY the 4 lines, no preamble.";
+  }
+  function buildContext(prefs) {
+    let parts = [];
+    if (prefs.theme) parts.push("Overall theme/aesthetic: \"" + prefs.theme + "\".");
+    if (prefs.focus) parts.push("The traveler specifically wants to encounter: \"" + prefs.focus + "\". Make it recurring and prioritized.");
+    if (prefs.mood) parts.push("Atmosphere/mood: \"" + prefs.mood + "\".");
+    if (prefs.notes) parts.push("Extra creative direction: \"" + prefs.notes + "\".");
+    return parts.join(" ");
+  }
+
+  // ── Menu / Saves ──
+  async function init() {
+    modeToggle.addEventListener("click", (e) => {
+      let b = e.target.closest("button[data-mode]");
+      if (!b) return;
+      currentMode = b.dataset.mode;
+      modeToggle.querySelectorAll("button").forEach(x => x.classList.toggle("active", x === b));
+      themeInput.placeholder = currentMode === "area" ? "brutalist, cottagecore, art-deco..." : "solarpunk, high fantasy, biopunk...";
+    });
+    renderSavedList();
+  }
+  init();
+
+  async function renderSavedList() {
+    let entries = [];
+    try { entries = await root.kv.saves?.entries?.() || []; } catch(e) {}
+    if (!entries.length) { savedListCtn.style.display = "none"; return; }
+    savedListCtn.style.display = "flex";
+    entries.sort((a,b) => (b[1].timestamp||0) - (a[1].timestamp||0));
+    let html = `<h3>Saved</h3>`;
+    for (let [id, save] of entries) {
+      let date = save.timestamp ? new Date(save.timestamp).toLocaleDateString() : "";
+      let typeIcon = save.prefs?.mode === "area" ? "🏢" : "🌍";
+      html += `
+        <div class="save-row">
+          <div class="name">
+            <b>${escapeHtml(save.name||"Untitled")}</b>
+            <div class="meta">${typeIcon} ${date ? escapeHtml(date) + " · " : ""}<span class="tag">${escapeHtml(save.prefs?.theme||"no theme")}</span></div>
+          </div>
+          <button class="btn" data-load="${escapeHtml(id)}">Load</button>
+          <button class="btn icon-btn" data-del="${escapeHtml(id)}">✕</button>
+        </div>`;
+    }
+    savedListCtn.innerHTML = html;
+  }
+
+  savedListCtn.addEventListener("click", async (e) => {
+    let loadId = e.target.getAttribute("data-load");
+    let delId = e.target.getAttribute("data-del");
+    if (loadId) loadSave(loadId);
+    else if (delId) {
+      try { await root.kv.saves?.delete?.(delId); } catch(e) {}
+      if (currentSaveId === delId) currentSaveId = null;
+      renderSavedList();
+      toast("Deleted.");
+    }
+  });
+
+  async function saveCurrent(silent) {
+    if (!worldRoot) return;
+    let id = currentSaveId || ("save_" + Date.now());
+    currentSaveId = id;
+    let data = {
+      name: worldRoot.name || "Untitled",
+      root: worldRoot,
+      prefs: { ...(worldRoot.userPrefs||{}), mode: worldRoot.meta?.category || "world" },
+      timestamp: Date.now()
+    };
+    try { await root.kv.saves?.set?.(id, data); } catch(e) {}
+    if (!silent) toast("Saved.");
+  }
+
+  async function loadSave(id) {
+    let save = null;
+    try { save = await root.kv.saves?.get?.(id); } catch(e) {}
+    if (!save) { toast("Could not load."); return; }
+    currentSaveId = id;
+    worldRoot = save.root;
+    currentMode = worldRoot.meta?.category || save.prefs?.mode || "world";
+    path = [worldRoot];
+    showApp();
+    render();
+  }
+
+  function returnToMenu() {
+    saveCurrent(true);
+    worldRoot = null; path = []; currentSaveId = null; detailNode = null;
+    appCtn.style.display = "none";
+    startCtn.style.display = "flex";
+    renderSavedList();
+  }
+
+  function showApp() {
+    startCtn.style.display = "none";
+    appCtn.style.display = "block";
+    window.scrollTo(0,0);
+  }
+
+  // ── Creation (streaming) ──
+  startBtn.addEventListener("click", startCreation);
+
+  async function startCreation() {
+    let prefs = {
+      theme: themeInput.value.trim(),
+      focus: focusInput.value.trim(),
+      mood: moodInput.value.trim(),
+      notes: notesInput.value.trim()
+    };
+    setLoading("Conjuring from the void...", true);
+    let ctx = buildContext(prefs);
+    let text = "";
+    try {
+      await root.generateText({
+        instruction: rootPrompt(ctx, currentMode),
+        onChunk: (d) => {
+          text = d.fullTextSoFar;
+          loadingPreviewEl.textContent = text;
+        }
+      });
+    } catch(e) { hideLoading(); toast("Generation failed: " + e.message); return; }
+
+    let nameLbl = currentMode === "area" ? "Area Name" : "World Name";
+    let name = (text.match(new RegExp(nameLbl + ":\\s*(.+)","i"))?.[1] || (currentMode==="area"?"Unnamed Area":"Unnamed World")).trim();
+    let desc = (text.match(/Overview:\s*([^]*?)(?=\n\s*(Atmosphere|Scale|Children))/i)?.[1] || "").trim();
+    let atmo = (text.match(/Atmosphere:\s*(.+)/i)?.[1] || "Mysterious, Vast, Ancient").trim();
+    let items = parseChildren(text);
+    if (!items.length) items = [{name: currentMode==="area"?"Main Hall":"Prime Continent", desc: currentMode==="area"?"The central chamber.":"The first known landmass.", meta:{type: currentMode==="area"?"Section":"Geography"}}];
+
+    worldRoot = {
+      name, desc, atmo,
+      children: items.map(c => ({...c, depth:1, children:[]})),
+      depth: 0,
+      meta: { type: currentMode==="area"?"Area":"World", category: currentMode },
+      userPrefs: prefs
+    };
+    path = [worldRoot];
+    showApp();
+    render();
+    hideLoading();
+    saveCurrent(true);
+  }
+
+  // ── Parsing ──
+  function parseChildren(text) {
+    let m = text.match(/Children:\s*([\s\S]*?)(?:\n\s*\n|\n\s*[A-Z][a-z]+:|$)/i);
+    let body = (m ? m[1] : text).trim();
+    let items = [];
+    for (let line of body.split("\n")) {
+      line = line.trim();
+      if (!line) continue;
+      let clean = line.replace(/^[-*•]\s*/, "");
+      let tagMatch = clean.match(/\[(Flora|Fauna|Object|Person)\]/i);
+      let tag = tagMatch ? tagMatch[1] : null;
+      clean = clean.replace(/\s*\[(Flora|Fauna|Object|Person)\]\s*/gi, "").trim();
+      let b = clean.match(/^([^:]+):\s*(.+)$/);
+      if (b) items.push({ name:b[1].trim(), desc:b[2].trim(), meta:{type: tag || "Mystery"} });
+    }
+    return items;
+  }
+
+  function parseStats(text) {
+    let stats = [];
+    for (let line of text.split("\n")) {
+      line = line.trim();
+      if (!line) continue;
+      let m = line.match(/^([^:]+):\s*(.+)$/);
+      if (m) stats.push({ label: m[1].trim(), value: m[2].trim() });
+    }
+    return stats.slice(0, 4);
+  }
+
+  // ── Expansion ──
+  async function expandNode(node) {
+    if (node.children.length > 0) return;
+    let nextDepth = (node.depth || 0) + 1;
+    setLoading("Exploring " + node.name + "...");
+    let ctx = buildContext(worldRoot.userPrefs || {});
+    let text;
+    try {
+      text = await root.generateText(expandPrompt(node, nextDepth, ctx, worldRoot.meta?.category));
+    } catch(e) { hideLoading(); toast("Expansion failed."); return; }
+    let items = parseChildren(text);
+    if (!items.length) items = [{name:"Uncharted Mystery", desc:"The fog resists further clarity.", meta:{type:"Mystery"}}];
+    node.children = items.map(it => ({...it, depth:nextDepth, children:[]}));
+    hideLoading();
+    saveCurrent(true);
+  }
+
+  // ── Interaction ──
+  async function interactWith(node, action) {
+    setLoading(action + "...");
+    let result;
+    try {
+      result = await root.generateText(interactPrompt(node, action));
+    } catch(e) { hideLoading(); toast("Interaction failed."); return; }
+    node.interactions = node.interactions || {};
+    node.interactions[action] = result.trim();
+    hideLoading();
+    if (detailNode === node) renderDetail(node);
+    saveCurrent(true);
+  }
+
+  // ── Image generation ──
+  // On-demand for current node (large hero image)
+  function requestImage(node, imgEl, slotEl, isDetail) {
+    if (node.meta?.img) { imgEl.src = node.meta.img; imgEl.classList.remove("hidden"); if (slotEl) slotEl.innerHTML = ""; return; }
+    if (node.meta?.imgPending) return;
+    node.meta = node.meta || {};
+    node.meta.imgPending = true;
+    imgEl.classList.add("hidden");
+    if (slotEl) slotEl.innerHTML = isDetail ? '<div class="detail-img-loading"></div>' : '<div class="img-loading"></div>';
+    let prefs = worldRoot?.userPrefs || {};
+    root.generateImage(imagePrompt(node, prefs, worldRoot?.meta?.category)).then(result => {
+      let url = result?.dataUrl || String(result);
+      node.meta.img = url;
+      node.meta.imgPending = false;
+      if (slotEl) slotEl.innerHTML = "";
+      if (imgEl.isConnected) { imgEl.src = url; imgEl.classList.remove("hidden"); }
+      saveCurrent(true);
+    }).catch(() => {
+      node.meta.imgPending = false;
+      if (slotEl) slotEl.innerHTML = "";
+    });
+  }
+
+  // Per-card thumbnail (for child cards). Queues naturally.
+  function requestCardImage(child, imgEl, shimmerEl) {
+    if (child.meta?.img) {
+      imgEl.src = child.meta.img;
+      imgEl.classList.remove("hidden");
+      shimmerEl.classList.add("hidden");
+      return;
+    }
+    if (child.meta?.imgPending) { shimmerEl.classList.remove("hidden"); imgEl.classList.add("hidden"); return; }
+    child.meta = child.meta || {};
+    child.meta.imgPending = true;
+    shimmerEl.classList.remove("hidden");
+    imgEl.classList.add("hidden");
+    let prefs = worldRoot?.userPrefs || {};
+    root.generateImage(imagePrompt(child, prefs, worldRoot?.meta?.category)).then(result => {
+      let url = result?.dataUrl || String(result);
+      child.meta.img = url;
+      child.meta.imgPending = false;
+      if (imgEl.isConnected) { imgEl.src = url; imgEl.classList.remove("hidden"); shimmerEl.classList.add("hidden"); }
+      saveCurrent(true);
+    }).catch(() => {
+      child.meta.imgPending = false;
+      if (shimmerEl.isConnected) shimmerEl.classList.add("hidden");
+    });
+  }
+
+  // ── AI Stats ──
+  function maybeFetchAIStats(node) {
+    if (node.meta?.aiStats || node.meta?.statsPending) return;
+    let type = node.meta?.type;
+    if (!["Flora","Fauna","Object","Person"].includes(type)) return;
+    node.meta = node.meta || {};
+    node.meta.statsPending = true;
+    root.generateText(statsPrompt(node)).then(text => {
+      let stats = parseStats(text);
+      node.meta.aiStats = stats.length >= 2 ? stats : null;
+      node.meta.statsPending = false;
+      if (detailNode === node) renderStats(node);
+      saveCurrent(true);
+    }).catch(() => { node.meta.statsPending = false; });
+  }
+
+  // ── Rendering ──
+  function currentNode() { return path[path.length-1]; }
+
+  function render() {
+    let node = currentNode();
+    detailNode = null;
+    titleEl.textContent = node.name;
+    descEl.textContent = node.desc || "No description yet.";
+
+    // Prefs pills
+    let up = worldRoot.userPrefs || {};
+    let pills = [];
+    if (up.theme) pills.push("Theme: " + up.theme);
+    if (up.focus) pills.push("Focus: " + up.focus);
+    if (up.mood) pills.push("Mood: " + up.mood);
+    prefsCtn.innerHTML = pills.map(t => `<span class="pill">${escapeHtml(t)}</span>`).join("");
+
+    // Type badge
+    let labels = isArea() ? DEPTH_LABELS_AREA : DEPTH_LABELS_WORLD;
+    let label = node.meta?.type || labels[node.depth] || "Node";
+    typeBadge.textContent = label;
+    typeBadge.classList.toggle("hidden", node.depth < 2);
+
+    // Breadcrumbs (truncated)
+    renderBreadcrumb();
+
+    // Atmosphere bar
+    let h1 = hueFromStr(node.name), h2 = (h1 + 140) % 360;
+    atmoBar.style.setProperty("--hue1", "hsl(" + h1 + ",70%,60%)");
+    atmoBar.style.setProperty("--hue2", "hsl(" + h2 + ",70%,60%)");
+
+    // Image (on-demand hero)
+    requestImage(node, worldImg, imgSlot, false);
+
+    // Info actions (reroll)
+    infoActions.innerHTML = "";
+    if (node !== worldRoot) {
+      let rerollImgBtn = document.createElement("button");
+      rerollImgBtn.className = "btn btn-sm";
+      rerollImgBtn.textContent = "🔄 Reroll Image";
+      rerollImgBtn.addEventListener("click", rerollImage);
+      infoActions.appendChild(rerollImgBtn);
+    }
+    if ((node.depth||0) > 0 && (node.depth||0) < 4) {
+      let rerollKidsBtn = document.createElement("button");
+      rerollKidsBtn.className = "btn btn-sm";
+      rerollKidsBtn.textContent = "🔄 Reroll Children";
+      rerollKidsBtn.addEventListener("click", rerollChildren);
+      infoActions.appendChild(rerollKidsBtn);
+    }
+
+    // Children
+    childrenCtn.innerHTML = "";
+    detailCtn.style.display = "none";
+
+    if (node.children.length > 0) {
+      node.children.forEach(child => {
+        let card = document.createElement("div");
+        card.className = "node-card";
+        let ch = hueFromStr(child.name);
+        card.style.setProperty("--ch1", "hsl(" + ch + ",60%,55%)");
+        card.style.setProperty("--ch2", "hsl(" + ((ch+60)%360) + ",60%,55%)");
+        let type = child.meta?.type;
+        let tagHtml = type ? `<span class="meta-tag type-${escapeHtml(type)}">${escapeHtml(type)}</span>` : "";
+        if ((child.depth||0) >= 4) tagHtml += `<span class="meta-tag">micro</span>`;
+        let imgHtml = child.meta?.img
+          ? `<img class="card-img" src="${escapeHtml(child.meta.img)}" alt="">`
+          : `<div class="card-img-shimmer"></div>`;
+        card.innerHTML = `
+          <div class="card-img-wrap">${imgHtml}</div>
+          <div class="card-body"><h3>${escapeHtml(child.name)}</h3><p>${escapeHtml(child.desc)}</p></div>
+          <div class="card-meta">${tagHtml}</div>`;
+        let cardImg = card.querySelector(".card-img");
+        let cardShimmer = card.querySelector(".card-img-shimmer");
+        if (cardImg && cardShimmer) {
+          // ensure both exist for requestCardImage
+        }
+        // kick off image if not present
+        if (!child.meta?.img) {
+          let shimmerEl = cardShimmer, imgEl = cardImg;
+          if (!imgEl) {
+            imgEl = document.createElement("img");
+            imgEl.className = "card-img hidden";
+            card.querySelector(".card-img-wrap").appendChild(imgEl);
+          }
+          requestCardImage(child, imgEl, shimmerEl);
+        }
+        card.addEventListener("click", () => onChildClick(child));
+        childrenCtn.appendChild(card);
+      });
+    } else if ((node.depth||0) < 4) {
+      childrenCtn.innerHTML = `
+        <div class="end-marker">
+          <div class="end-icon">🌌</div>
+          <p style="margin:0 0 16px;">This region is yet uncharted.</p>
+          <button class="btn btn-primary" id="exploreBtn">Explore Deeper</button>
+        </div>`;
+      $("exploreBtn").addEventListener("click", triggerExpand);
+    } else {
+      childrenCtn.innerHTML = `
+        <div class="end-marker">
+          <div class="end-icon">✨</div>
+          <p>This thread is fully explored — interact below.</p>
+        </div>`;
+    }
+
+    // Detail / interaction panel for tagged entities
+    let entityType = node.meta?.type;
+    if (entityType === "Flora" || entityType === "Fauna" || entityType === "Object" || entityType === "Person") {
+      detailCtn.style.display = "block";
+      detailNode = node;
+      renderDetail(node);
+    }
+  }
+
+  function renderBreadcrumb() {
+    let parts = [];
+    if (path.length > 4) {
+      parts = [
+        { name: path[0].name, i: 0, final: false },
+        { name: "…", i: -1, ellipsis: true },
+        { name: path[path.length-2].name, i: path.length-2, final: false },
+        { name: path[path.length-1].name, i: -1, final: true }
+      ];
+    } else {
+      parts = path.map((n, i) => ({ name: n.name, i, final: i === path.length-1 }));
+    }
+    let html = "";
+    parts.forEach((p, idx) => {
+      if (idx > 0) html += `<span class="crumb-sep">/</span>`;
+      if (p.ellipsis) html += `<span class="crumb-ellipsis">${escapeHtml(p.name)}</span>`;
+      else if (p.final) html += `<span class="crumb-final">${escapeHtml(p.name)}</span>`;
+      else html += `<span class="crumb" data-jump="${p.i}">${escapeHtml(p.name)}</span>`;
+    });
+    breadcrumbEl.innerHTML = html;
+  }
+
+  async function onChildClick(child) {
+    path.push(child);
+    render();
+    if (child.children.length === 0 && (child.depth||0) < 4) {
+      await expandNode(child);
+      if (currentNode() === child) render();
+    }
+  }
+
+  function renderDetail(node) {
+    detailTitle.textContent = node.name;
+    detailDesc.textContent = node.desc;
+    requestImage(node, detailImg, detailImgSlot, true);
+    renderStats(node);
+    maybeFetchAIStats(node);
+
+    actionsRow.innerHTML = "";
+    let acts = ACTION_MAP[node.meta?.type] || ACTION_MAP.Mystery;
+    acts.forEach(action => {
+      let btn = document.createElement("button");
+      btn.className = "act-btn";
+      btn.textContent = action;
+      btn.addEventListener("click", () => interactWith(node, action));
+      actionsRow.appendChild(btn);
+    });
+
+    if (node.interactions) {
+      let last = Object.keys(node.interactions).pop();
+      interactResult.textContent = node.interactions[last];
+      interactResult.classList.add("visible");
+    } else {
+      interactResult.classList.remove("visible");
+      interactResult.textContent = "";
+    }
+  }
+
+  function renderStats(node) {
+    detailStats.innerHTML = "";
+    const makeStat = (label, val, barPct, hue, isLoading) => {
+      let bar = (barPct != null)
+        ? `<div class="trait-bar"><div class="trait-fill" style="width:${Math.max(0,Math.min(100,barPct))}%;background:hsl(${hue},70%,55%)"></div></div>`
+        : "";
+      return `<div class="stat-item"><span class="stat-label">${escapeHtml(label)}</span><span class="stat-val${isLoading?" loading":""}">${escapeHtml(val)}</span>${bar}</div>`;
+    };
+
+    let stats = node.meta?.aiStats;
+    if (stats && stats.length) {
+      detailStats.innerHTML = stats.map(s => {
+        let numMatch = String(s.value).match(/(\d+)/);
+        let pct = null, hue = hueFromStr(s.label);
+        if (numMatch) {
+          let n = parseInt(numMatch[1],10);
+          if (n >= 0 && n <= 100) pct = n;
+          else if (n > 100) pct = Math.min(100, n / 10);
+        }
+        return makeStat(s.label, s.value, pct, hue, false);
+      }).join("");
+      return;
+    }
+
+    // AI stats pending → show loading placeholders
+    if (node.meta?.statsPending) {
+      detailStats.innerHTML = ["—","—","—","—"].map((_,i) => makeStat("…","loading", null, 0, true)).join("");
+      return;
+    }
+
+    // Fallback: hash-derived stats
+    let type = node.meta?.type || "Mystery";
+    let h = hashStr(node.name);
+    let statsArr = [];
+    if (type === "Flora") {
+      let rar = ["Common","Uncommon","Rare","Legendary"][Math.abs(h)%4];
+      let edib = ["Toxic","Bitter","Edible","Delicacy"][Math.abs(hashStr(node.name+"e"))%4];
+      statsArr = [
+        ["Rarity", rar, [25,50,75,100][["Common","Uncommon","Rare","Legendary"].indexOf(rar)], hueFromStr("rar")],
+        ["Height", (Math.abs(hashStr(node.name+"h"))%20+1) + (Math.abs(h)%2===0?" cm":" m")],
+        ["Bioluminescent", Math.abs(hashStr(node.name+"b"))%2===0?"Yes":"No"],
+        ["Edibility", edib, Math.abs(hashStr(node.name+"e"))%4*25, hueFromStr("edib")]
+      ];
+    } else if (type === "Fauna") {
+      let temp = ["Docile","Cautious","Aggressive","Territorial"][Math.abs(hashStr(node.name+"t"))%4];
+      let size = ["Tiny","Small","Medium","Large","Gargantuan"][Math.abs(hashStr(node.name+"s"))%5];
+      let diet = ["Herbivore","Carnivore","Omnivore","Mana-eater"][Math.abs(hashStr(node.name+"d"))%4];
+      statsArr = [
+        ["Temperament", temp, [100,65,30,20][["Docile","Cautious","Aggressive","Territorial"].indexOf(temp)], hueFromStr("temp")],
+        ["Size", size],
+        ["Diet", diet],
+        ["Nocturnal", Math.abs(hashStr(node.name+"n"))%2===0?"Yes":"No"]
+      ];
+    } else if (type === "Object") {
+      let cond = ["Pristine","Worn","Cracked","Ancient"][Math.abs(hashStr(node.name+"c"))%4];
+      let magic = Math.abs(hashStr(node.name+"m"))%100;
+      statsArr = [
+        ["Condition", cond, [100,70,40,20][["Pristine","Worn","Cracked","Ancient"].indexOf(cond)], hueFromStr("cond")],
+        ["Magic", magic+"%", magic, hueFromStr("magic")],
+        ["Age", (Math.abs(hashStr(node.name+"a"))%500+10)+" yrs"],
+        ["Sentience", Math.abs(hashStr(node.name+"se"))%5===0?"Latent":"None"]
+      ];
+    } else if (type === "Person") {
+      let mood = ["Joyful","Melancholic","Suspicious","Bored","Eager"][Math.abs(hashStr(node.name+"m"))%5];
+      let wealth = ["Poor","Modest","Wealthy","Noble"][Math.abs(hashStr(node.name+"w"))%4];
+      let trust = Math.abs(hashStr(node.name+"tr"))%100;
+      statsArr = [
+        ["Mood", mood],
+        ["Trust", trust+"%", trust, hueFromStr("trust")],
+        ["Secret", Math.abs(hashStr(node.name+"sc"))%3===0?"Yes":"Unknown"],
+        ["Wealth", wealth, [20,50,75,100][["Poor","Modest","Wealthy","Noble"].indexOf(wealth)], hueFromStr("wealth")]
+      ];
+    } else {
+      statsArr = [
+        ["Nature", node.meta?.type || "Unknown"],
+        ["Depth", ((node.depth||0)+1)]
+      ];
+    }
+    detailStats.innerHTML = statsArr.map(s => makeStat(s[0], s[1], s[2], s[3], false)).join("");
+  }
+
+  // ── Reroll ──
+  async function rerollChildren() {
+    let node = currentNode();
+    node.children = [];
+    node.expanded = false;
+    await expandNode(node);
+    render();
+  }
+  function rerollImage() {
+    let node = currentNode();
+    node.meta = node.meta || {};
+    node.meta.img = null;
+    node.meta.imgPending = false;
+    render();
+  }
+
+  // ── Search ──
+  function openSearch() {
+    if (!worldRoot) return;
+    searchCtn.classList.add("visible");
+    searchInput.value = "";
+    searchResults.innerHTML = `<div class="search-empty">Type to search the whole tree…</div>`;
+    setTimeout(() => searchInput.focus(), 50);
+  }
+  function closeSearch() { searchCtn.classList.remove("visible"); }
+
+  function runSearch(query) {
+    query = query.trim().toLowerCase();
+    if (!query) { searchResults.innerHTML = `<div class="search-empty">Type to search the whole tree…</div>`; return; }
+    let results = [];
+    function walk(node, p) {
+      let curPath = [...p, node];
+      let nameMatch = node.name.toLowerCase().includes(query);
+      let descMatch = (node.desc||"").toLowerCase().includes(query);
+      if (nameMatch || descMatch) {
+        results.push({ node, path: curPath, nameMatch, descMatch });
+      }
+      for (let c of (node.children||[])) walk(c, curPath);
+    }
+    walk(worldRoot, []);
+    if (!results.length) { searchResults.innerHTML = `<div class="search-empty">No matches.</div>`; return; }
+    let re = new RegExp(escapeReg(query), "gi");
+    let html = "";
+    for (let r of results.slice(0, 50)) {
+      let name = escapeHtml(r.node.name).replace(re, m => `<mark>${m}</mark>`);
+      let desc = r.descMatch ? escapeHtml((r.node.desc||"").slice(0,80)).replace(re, m => `<mark>${m}</mark>`) : "";
+      let crumb = r.path.slice(0, -1).map(n => n.name).join(" / ") || "(root)";
+      html += `<div class="search-result" data-path="${r.path.length-1}">
+        <div class="sr-title">${name}</div>
+        ${desc ? `<div class="sr-path" style="color:var(--sub);margin-top:2px;">${desc}…</div>` : ""}
+        <div class="sr-path">${escapeHtml(crumb)}</div>
+      </div>`;
+      // store path on element via closure-friendly attribute (index-based)
+      searchResults._paths = searchResults._paths || [];
+      searchResults._paths.push(r.path);
+    }
+    searchResults.innerHTML = html;
+    // re-attach path references
+    searchResults._paths = results.slice(0,50).map(r => r.path);
+    [...searchResults.querySelectorAll(".search-result")].forEach((el, i) => {
+      el.addEventListener("click", () => {
+        path = searchResults._paths[i].slice();
+        closeSearch();
+        showApp();
+        render();
+      });
+    });
+  }
+
+  searchInput.addEventListener("input", () => runSearch(searchInput.value));
+  searchCloseBtn.addEventListener("click", closeSearch);
+  searchCtn.addEventListener("click", (e) => { if (e.target === searchCtn) closeSearch(); });
+
+  // ── Navigation ──
+  backBtn.addEventListener("click", goBack);
+  menuBtn.addEventListener("click", returnToMenu);
+  searchBtn.addEventListener("click", openSearch);
+  breadcrumbEl.addEventListener("click", (e) => {
+    let i = e.target.getAttribute("data-jump");
+    if (i != null) jumpTo(parseInt(i,10));
+  });
+
+  function goBack() { if (path.length > 1) { path.pop(); render(); } }
+  function jumpTo(i) { if (i < path.length-1) { path = path.slice(0, i+1); render(); } }
+  async function triggerExpand() {
+    let node = currentNode();
+    await expandNode(node);
+    render();
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ov8t0tl85d — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Fishing Mod Documentation</h1>
+  <p>Complete fishing system for Minecraft Fabric (0.136.0+1.21.10) with custom items, blocks, and HUD.</p>
+  
+  <div class="tabs">
+    <button class="tabBtn active" data-tab="java">Java Files</button>
+    <button class="tabBtn" data-tab="json">JSON Files</button>
+    <button class="tabBtn" data-tab="textures">Textures</button>
+    <button class="tabBtn" data-tab="structure">File Structure</button>
+  </div>
+  
+  <div id="java" class="tabContent active">
+    <div class="code-section">
+      <h2>FishingMod.java</h2>
+      <pre><code class="language-java">// src/main/java/net/example/fishingmod/FishingMod.java
+package net.example.fishingmod;
+
+import net.example.fishingmod.block.FishBlock;
+import net.example.fishingmod.item.CustomFishingRodItem;
+import net.example.fishingmod.item.FishingNetItem;
+import net.example.fishingmod.screen.FishingHudScreen;
+import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.item.v1.FabricItemSettings;
+import net.fabricmc.fabric.api.object.builder.v1.block.FabricBlockSettings;
+import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
+import net.fabricmc.fabric.api.screenhandler.v1.ScreenRegistry;
+import net.fabricmc.fabric.api.tag.TagRegistry;
+import net.minecraft.block.Block;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.Material;
+import net.minecraft.block.entity.BlockEntityType;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemGroup;
+import net.minecraft.registry.Registries;
+import net.minecraft.registry.Registry;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.tag.BlockTags;
+import net.minecraft.registry.tag.ItemTags;
+import net.minecraft.screen.ScreenHandlerType;
+import net.minecraft.util.Identifier;
+
+public class FishingMod implements ModInitializer \{
+public static final String MOD_ID = "fishingmod";
+
+// Items
+public static final Item CUSTOM_FISHING_ROD = Registry.register(
+Registries.ITEM, id("custom_fishing_rod"),
+new CustomFishingRodItem(new FabricItemSettings().group(ItemGroup.TOOLS).maxDamage(300))
+);
+
+public static final Item FISHING_NET = Registry.register(
+Registries.ITEM, id("fishing_net"),
+new FishingNetItem(new FabricItemSettings().group(ItemGroup.TOOLS).maxDamage(150))
+);
+
+// Blocks
+public static final Block FISH_BLOCK = Registry.register(
+Registries.BLOCK, id("fish_block"),
+new FishBlock(FabricBlockSettings.create(Material.WOOD).strength(1.5f).nonOpaque())
+);
+
+public static final Item FISH_BLOCK_ITEM = Registry.register(
+Registries.ITEM, id("fish_block"),
+new BlockItem(FISH_BLOCK, new FabricItemSettings().group(ItemGroup.BUILDING_BLOCKS))
+);
+
+// Block Entities
+public static final BlockEntityType &lt; FishBlockEntity &gt; FISH_BLOCK_ENTITY = Registry.register(
+Registries.BLOCK_ENTITY_TYPE, id("fish_block_entity"),
+FabricBlockEntityTypeBuilder.create(FishBlockEntity::new, FISH_BLOCK).build(null)
+);
+
+// Loot Tables
+public static final Identifier FISH_LOOT_TABLE = id("blocks/fish_block");
+
+// Screen Handler
+public static ScreenHandlerType &lt; FishingHudScreenHandler &gt; FISHING_HUD_HANDLER;
+
+private static Identifier id(String path) \{
+return new Identifier(MOD_ID, path);
+\}
+
+@Override
+public void onInitialize() \{
+// Register screen handler
+FISHING_HUD_HANDLER = Registry.register(
+Registries.SCREEN_HANDLER, id("fishing_hud"),
+new ScreenHandlerType&lt;&gt;(FishingHudScreenHandler::new)
+);
+
+// Register loot table (client-side will load from data folder)
+// Create data/fishingmod/loot_tables/blocks/fish_block.json
+\}
+\}</code></pre>
+    </div>
+    
+    <div class="code-section">
+      <h2>CustomFishingRodItem.java</h2>
+      <pre><code class="language-java">// src/main/java/net/example/fishingmod/item/CustomFishingRodItem.java
+package net.example.fishingmod.item;
+
+import net.example.fishingmod.FishingMod;
+import net.example.fishingmod.screen.FishingHudScreen;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.FishingRodItem;
+import net.minecraft.item.ItemStack;
+import net.minecraft.sound.SoundEvents;
+import net.minecraft.stat.Stats;
+import net.minecraft.util.Hand;
+import net.minecraft.util.TypedActionResult;
+import net.minecraft.world.World;
+
+public class CustomFishingRodItem extends FishingRodItem \{
+public CustomFishingRodItem(Settings settings) \{
+super(settings);
+\}
+
+@Override
+public TypedActionResult &lt; ItemStack &gt; use(World world, PlayerEntity user, Hand hand) \{
+ItemStack itemStack = user.getStackInHand(hand);
+
+if (user.fishHook != null) \{
+// Recall fishing bobber
+user.fishHook.onDestroyedBy(user);
+world.playSoundFromEntity(null, user, SoundEvents.ENTITY_FISHING_BOBBER_RETRIEVE, 1.0F, 1.0F);
+\} else \{
+// Open custom HUD instead of casting
+if (!world.isClient) \{
+// Server-side: sync to client
+return TypedActionResult.success(itemStack);
+\} else \{
+MinecraftClient.getInstance().setScreen(new FishingHudScreen());
+world.playSound(user, user.getX(), user.getY(), user.getZ(),
+SoundEvents.ENTITY_FISHING_BOBBER_THROW, 1.0F, 1.0F);
+\}
+\}
+
+user.incrementStat(Stats.USED.getOrCreateStat(this));
+return TypedActionResult.success(itemStack);
+\}
+\}</code></pre>
+    </div>
+    
+    <div class="code-section">
+      <h2>FishBlock.java</h2>
+      <pre><code class="language-java">// src/main/java/net/example/fishingmod/block/FishBlock.java
+package net.example.fishingmod.block;
+
+import net.example.fishingmod.FishingMod;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.screen.NamedScreenHandlerFactory;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.BlockView;
+import net.minecraft.world.World;
+
+public class FishBlock extends Block \{
+public FishBlock(Settings settings) \{
+super(settings);
+\}
+
+@Override
+public BlockEntity createBlockEntity(BlockView world) \{
+return new FishBlockEntity();
+\}
+
+@Override
+public ActionResult onUse(BlockState state, World world, BlockPos pos,
+PlayerEntity player, Hand hand, BlockHitResult hit) \{
+if (!world.isClient) \{
+NamedScreenHandlerFactory screenHandlerFactory =
+(NamedScreenHandlerFactory)world.getBlockEntity(pos);
+if (screenHandlerFactory != null) \{
+player.openHandledScreen(screenHandlerFactory);
+\}
+\}
+return ActionResult.SUCCESS;
+\}
+\}</code></pre>
+    </div>
+  </div>
+  
+  <div id="json" class="tabContent">
+    <div class="code-section">
+      <h2>fish_block.json (Loot Table)</h2>
+      <pre><code class="language-json">\{
+"type": "minecraft:block",
+"pools": [
+\{
+"rolls": 2,
+"entries": [
+\{
+"type": "minecraft:item",
+"name": "minecraft:cod",
+"weight": 40
+\},
+\{
+"type": "minecraft:item",
+"name": "minecraft:salmon",
+"weight": 30
+\},
+\{
+"type": "minecraft:item",
+"name": "minecraft:tropical_fish",
+"weight": 20
+\},
+\{
+"type": "minecraft:item",
+"name": "fishingmod:custom_fish",
+"weight": 10
+\}
+]
+\}
+]
+\}</code></pre>
+    </div>
+    
+    <div class="code-section">
+      <h2>fishing.json (Custom Fishing Loot)</h2>
+      <pre><code class="language-json">\{
+"type": "minecraft:fishing",
+"pools": [
+\{
+"rolls": 1,
+"bonus_rolls": 0,
+"entries": [
+\{
+"type": "minecraft:item",
+"name": "minecraft:cod",
+"weight": 60,
+"functions": [
+\{
+"function": "minecraft:set_count",
+"count": \{
+"min": 1.0,
+"max": 2.0,
+"type": "minecraft:uniform"
+\}
+\}
+]
+\}
+]
+\}
+]
+\}</code></pre>
+    </div>
+    
+    <div class="code-section">
+      <h2>fishing_net.json (Model)</h2>
+      <pre><code class="language-json">\{
+"parent": "minecraft:item/handheld",
+"textures": \{
+"layer0": "fishingmod:item/fishing_net"
+\},
+"overrides": [
+\{
+"predicate": \{
+"swing": 1.0
+\},
+"model": "fishingmod:item/fishing_net_swinging"
+\}
+]
+\}</code></pre>
+    </div>
+  </div>
+  
+  <div id="textures" class="tabContent">
+    <h2>Texture Specifications</h2>
+    
+    <div class="texture-spec">
+      <h3>custom_fishing_rod.png (16x16)</h3>
+      <p><strong>Color palette:</strong> #8B4513 (brown), #D2B48C (light wood), #4169E1 (blue string), #C0C0C0 (metal)</p>
+      <pre>Layout:
+- Pole: Diagonal line from (2,2) to (13,14) - brown (#8B4513, 2px thick)
+- Handle: (13,12)-(15,15) - dark brown (#654321)
+- Reel: Circle at (11,10)-(13,12) - metal (#C0C0C0)
+- String: Thin line (14,3)-(15,1) - blue (#4169E1)
+- Hook: Small triangle (15,0)-(15,1)-(16,1) - metal (#C0C0C0)</pre>
+    </div>
+    
+    <div class="texture-spec">
+      <h3>fishing_net.png (16x16) - Idle state</h3>
+      <p><strong>Color palette:</strong> #8B4513 (wood), #F4A460 (net), #228B22 (handles)</p>
+      <pre>Layout:
+- Wooden frame: Rectangle (2,2)-(14,14) - wood (#8B4513, 1px thick)
+- Net mesh: Grid pattern 3x3 squares inside frame - sandy (#F4A460)
+- Handles: (1,6)-(2,10) and (14,6)-(15,10) - green (#228B22)</pre>
+    </div>
+    
+    <div class="texture-spec">
+      <h3>fishing_net_swinging.png (16x16) - Animation state</h3>
+      <p><strong>Color palette:</strong> Same as fishing_net.png + motion blur #D4AF37 (yellow streaks)</p>
+      <pre>Layout:
+- Same frame as fishing_net.png
+- Net mesh: Distorted diagonally (tilted 20° right) - sandy (#F4A460)
+- Motion lines: 3 yellow streaks (#D4AF37) from (8,4)-(12,8)
+- Handles: Slightly stretched (1,5)-(2,11) and (14,5)-(15,11)</pre>
+    </div>
+    
+    <div class="texture-spec">
+      <h3>fish_block.png (16x16)</h3>
+      <p><strong>Color palette:</strong> #4682B4 (water), #FF6347 (fish), #32CD32 (scales)</p>
+      <pre>Layout:
+- Water background: Gradient (0,0)-(15,15) dark to light blue
+- Fish body: Oval (3,6)-(13,10) - salmon (#FF6347)
+- Fish tail: Triangle (13,7)-(15,9)-(13,11) - darker salmon (#E55A3D)
+- Eye: White circle (10,7)-(11,8) with black pupil (10,7)-(11,8)
+- Scales: 4 green dots (#32CD32) along body</pre>
+    </div>
+  </div>
+  
+  <div id="structure" class="tabContent">
+    <h2>File Structure</h2>
+    <pre><code>src/main/resources/
+├── assets/fishingmod/
+│   ├── textures/
+│   │   ├── item/
+│   │   │   ├── custom_fishing_rod.png
+│   │   │   ├── fishing_net.png
+│   │   │   └── fishing_net_swinging.png
+│   │   └── block/
+│   │       └── fish_block.png
+│   └── models/ (JSON files from previous response)
+└── data/fishingmod/
+    └── loot_tables/ (JSON files from previous response)</code></pre>
+    
+    <h2>Texture Generation Methods</h2>
+    <ul>
+      <li><strong>Online Editors:</strong> Use Piskel (piskelapp.com), Lospec Pixel Editor, or Aseprite Online</li>
+      <li><strong>Minecraft Tools:</strong> Generate via minecraft.tools/en/texture.php (16x16 canvas)</li>
+      <li><strong>SVG Conversion:</strong> Create SVG guides, then convert to PNG at svg-png-converter.com</li>
+    </ul>
+    
+    <h2>Verification Steps</h2>
+    <ol>
+      <li>Run `gradlew runClient`</li>
+      <li>Check Creative inventory for proper rendering</li>
+      <li>Test fishing net right-click for swing animation</li>
+      <li>Verify fish block texture on placed blocks</li>
+    </ol>
+  </div>
+</div>
+
+<style>
+  body \{ 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+    line-height: 1.6; 
+    margin: 0; 
+    padding: 20px; 
+    background: #f5f5f5;
+    color: #333;
+  \}
+  
+  .container \{ 
+    max-width: 1200px; 
+    margin: 0 auto; 
+    background: white; 
+    padding: 20px; 
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  \}
+  
+  h1 \{ 
+    text-align: center; 
+    color: #2c3e50;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 10px;
+  \}
+  
+  h2 \{ 
+    color: #2980b9;
+    border-left: 4px solid #3498db;
+    padding-left: 10px;
+  \}
+  
+  h3 \{ 
+    color: #34495e;
+  \}
+  
+  .tabs \{ 
+    display: flex; 
+    margin-bottom: 20px; 
+    border-bottom: 1px solid #ddd;
+    flex-wrap: wrap;
+  \}
+  
+  .tabBtn \{ 
+    background: #ecf0f1; 
+    border: none; 
+    padding: 10px 20px; 
+    cursor: pointer; 
+    margin-right: 5px; 
+    border-radius: 5px 5px 0 0;
+    font-weight: bold;
+    transition: all 0.3s;
+  \}
+  
+  .tabBtn:hover \{ 
+    background: #bdc3c7; 
+  \}
+  
+  .tabBtn.active \{ 
+    background: #3498db; 
+    color: white; 
+  \}
+  
+  .tabContent \{ 
+    display: none; 
+  \}
+  
+  .tabContent.active \{ 
+    display: block; 
+  \}
+  
+  .code-section \{ 
+    margin-bottom: 30px; 
+    border: 1px solid #ddd; 
+    border-radius: 5px;
+    overflow: hidden;
+  \}
+  
+  pre \{ 
+    background: #2c3e50; 
+    color: #ecf0f1; 
+    padding: 15px; 
+    overflow-x: auto; 
+    margin: 0;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 14px;
+  \}
+  
+  .texture-spec \{ 
+    background: #f9f9f9; 
+    padding: 15px; 
+    border-left: 4px solid #e74c3c; 
+    margin-bottom: 20px; 
+    border-radius: 0 5px 5px 0;
+  \}
+  
+  .texture-spec pre \{ 
+    background: #2c3e50; 
+    margin-top: 10px; 
+  \}
+  
+  ul \{ 
+    padding-left: 20px; 
+  \}
+  
+  li \{ 
+    margin-bottom: 8px; 
+  \}
+</style>
+
+<script>
+  // Tab switching functionality
+  const tabButtons = document.querySelectorAll('.tabBtn');
+  const tabContents = document.querySelectorAll('.tabContent');
+  
+  tabButtons.forEach(button => \{
+    button.addEventListener('click', () => \{
+      const tabId = button.getAttribute('data-tab');
+      
+      // Update button states
+      tabButtons.forEach(btn => btn.classList.remove('active'));
+      button.classList.add('active');
+      
+      // Update tab content visibility
+      tabContents.forEach(content => \{
+        content.classList.remove('active');
+        if (content.id === tabId) \{
+          content.classList.add('active');
+        \}
+      \});
+    \});
+  \});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-java.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+</body>
+</html>

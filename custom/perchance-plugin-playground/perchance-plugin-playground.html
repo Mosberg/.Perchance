@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>perchance-plugin-playground — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+  All-in-One Perchance Plugin Playground
+  - Tabs: KV Store | AI Text Gen | Image Gen | Remember | Super Fetch
+  - Fully interactive UI exercising every imported plugin feature.
+  - FIXED: Removed `type="module"` from KV script so `kv` global resolves correctly.
+-->
+
+<!-- ===== STYLES ===== -->
+<style>
+  body { margin:0; font-family:Segoe UI, system-ui, -apple-system, sans-serif; background:#f5f7fa; color:#1f2937; text-align:left; }
+  .header { background:#0b1020; color:#fff; padding:20px 24px; font-size:22px; font-weight:700; display:flex; align-items:center; gap:10px; }
+  .container { max-width:1100px; margin:0 auto; padding:24px; }
+  .nav-tabs { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+  .tab-btn { padding:10px 18px; border:1px solid #c8d0dc; background:#fff; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600; color:#334155; transition:all .15s; }
+  .tab-btn:hover { background:#f1f5f9; }
+  .tab-btn.active { background:#1d4ed8; color:#fff; border-color:#1d4ed8; }
+  .panel { display:none; background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:24px; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+  .panel.active { display:block; }
+  .panel h2 { margin:0 0 8px; font-size:20px; }
+  .panel p.desc { margin:0 0 18px; color:#64748b; font-size:14px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  .row > * { font-size:14px; }
+  input[type="text"], textarea, select { padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-family:inherit; font-size:14px; outline:none; min-width:220px; }
+  textarea { min-width:320px; min-height:80px; resize:vertical; }
+  button.action { padding:8px 14px; border:0; border-radius:8px; background:#1d4ed8; color:#fff; font-weight:600; cursor:pointer; font-size:14px; }
+  button.action:disabled { opacity:.6; cursor:not-allowed; }
+  button.secondary { background:#f1f5f9; color:#334155; }
+  .badge { font-size:12px; padding:4px 8px; border-radius:6px; background:#eef2ff; color:#1e3a8a; font-weight:700; }
+  .card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px; }
+  .card h4 { margin:0 0 6px; font-size:15px; }
+  .card p { margin:0; color:#475569; font-size:13px; }
+  .hint { font-size:13px; color:#64748b; margin-top:6px; }
+  .output-box { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px; min-height:60px; white-space:pre-wrap; font-size:14px; color:#334155; margin-top:10px; }
+  .toast { position:fixed; top:18px; right:18px; background:#0b1020; color:#fff; padding:10px 14px; border-radius:10px; font-size:13px; opacity:0; transform:translateY(-6px); transition:opacity .25s, transform .25s; pointer-events:none; z-index:9999; }
+  .toast.show { opacity:1; transform:translateY(0); }
+  .img-preview { max-width:100%; max-height:320px; border-radius:10px; border:1px solid #e2e8f0; margin-top:10px; display:block; }
+  .tag { display:inline-block; padding:3px 8px; border-radius:6px; background:#eef2ff; color:#1e40af; font-size:12px; font-weight:700; margin-right:6px; cursor:pointer; }
+  .kv-list { max-height:240px; overflow:auto; border:1px solid #e2e8f0; border-radius:10px; padding:10px; background:#f8fafc; }
+  .kv-item { display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid #e2e8f0; }
+  .kv-item:last-child { border-bottom:none; }
+  .kv-key { font-weight:700; color:#0f172a; }
+  .kv-val { color:#475569; font-size:13px; }
+</style>
+
+<!-- ===== HEADER ===== -->
+<div class="header">
+  <span style="font-size:26px;">🧩</span>
+  <span>Perchance Plugin Playground</span>
+  <span style="margin-left:auto; font-size:13px; font-weight:400; opacity:.85;">KV • AI Text • Image Gen • Remember • Super Fetch</span>
+</div>
+
+<div class="container">
+  <!-- ===== TABS ===== -->
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('kv')">kv-plugin</button>
+    <button class="tab-btn" onclick="switchTab('ai')">ai-text-plugin</button>
+    <button class="tab-btn" onclick="switchTab('img')">text-to-image-plugin</button>
+    <button class="tab-btn" onclick="switchTab('rem')">remember-plugin</button>
+    <button class="tab-btn" onclick="switchTab('fetch')">super-fetch-plugin</button>
+  </div>
+
+  <!-- ===== KV PANEL ===== -->
+  <div id="kvPanel" class="panel active">
+    <h2>kv-plugin</h2>
+    <p class="desc">Persistent IndexedDB-backed key-value storage with folders, batch ops, transactions, and more.</p>
+    <div class="row">
+      <input id="kvKeyInput" placeholder="Key (e.g., heroName)" />
+      <input id="kvValInput" placeholder="Value (e.g., Elara)" />
+      <button class="action" onclick="kvSet()">Set</button>
+      <button class="action secondary" onclick="kvGet()">Get</button>
+      <button class="action secondary" onclick="kvDelete()">Delete</button>
+    </div>
+    <div class="row">
+      <button class="action secondary" onclick="kvSetMany()">Set Many (batch)</button>
+      <button class="action secondary" onclick="kvGetMany()">Get Many</button>
+      <button class="action secondary" onclick="kvDeleteMany()">Delete Many</button>
+      <button class="action secondary" onclick="kvUpdate()">Update (+1 tx)</button>
+      <button class="action secondary" onclick="kvList()">List All</button>
+      <button class="action secondary" onclick="kvClear()">Clear All</button>
+    </div>
+    <div id="kvListCtn" class="kv-list" style="margin-top:8px;"></div>
+    <div id="kvStatusEl" class="hint"></div>
+  </div>
+
+  <!-- ===== AI TEXT PANEL ===== -->
+  <div id="aiPanel" class="panel">
+    <h2>ai-text-plugin</h2>
+    <p class="desc">Generate text with streaming, stop controls, stop sequences, and start-with forcing.</p>
+    <div class="row">
+      <textarea id="aiInstructionInput" placeholder="Enter your instruction...">Describe a hidden tavern in three sentences.</textarea>
+    </div>
+    <div class="row">
+      <select id="aiModeSelect">
+        <option value="creative">Mode: Creative</option>
+        <option value="accurate">Mode: Accurate</option>
+      </select>
+      <button class="action" onclick="aiGenerate()">Generate</button>
+      <button class="action secondary" onclick="aiStop()" id="aiStopBtn" hidden>Stop</button>
+    </div>
+    <div class="row">
+      <label style="font-size:13px; color:#475569;"><input type="checkbox" id="aiStreamChk" checked /> Stream output</label>
+      <label style="font-size:13px; color:#475569;"><input type="checkbox" id="aiForceStartChk" /> Force start with: "In the"</label>
+      <label style="font-size:13px; color:#475569;"><input type="checkbox" id="aiStopSeqChk" /> Stop at newline</label>
+    </div>
+    <div id="aiOutputEl" class="output-box"></div>
+  </div>
+
+  <!-- ===== IMAGE PANEL ===== -->
+  <div id="imgPanel" class="panel">
+    <h2>text-to-image-plugin</h2>
+    <p class="desc">Generate images from text prompts with selectable resolutions and styles.</p>
+    <div class="row">
+      <input id="imgPromptInput" style="flex:1; min-width:260px;" placeholder="Image prompt..." value="A cozy wizard's library with floating candles" />
+      <select id="imgResSelect">
+        <option value="512x512">512x512</option>
+        <option value="512x768">512x768</option>
+        <option value="768x512">768x512</option>
+        <option value="768x768" selected>768x768</option>
+      </select>
+      <button class="action" onclick="imgGenerate()">Generate Image</button>
+      <button class="action secondary" onclick="imgClear()">Clear</button>
+    </div>
+    <div class="row">
+      <span class="tag" onclick="imgQuick('A cyberpunk street market at night')">cyberpunk</span>
+      <span class="tag" onclick="imgQuick('A serene mountain lake at sunrise')">nature</span>
+      <span class="tag" onclick="imgQuick('A steampunk airship in cloudy skies')">steampunk</span>
+    </div>
+    <img id="imgOutputImg" class="img-preview" hidden />
+    <div id="imgStatusEl" class="hint"></div>
+  </div>
+
+  <!-- ===== REMEMBER PANEL ===== -->
+  <div id="remPanel" class="panel">
+    <h2>remember-plugin</h2>
+    <p class="desc">Simple persistent memory storage — saves strings across sessions using the remember plugin.</p>
+    <div class="row">
+      <input id="remKeyInput" placeholder="Memory key (e.g., lastTopic)" />
+      <input id="remValInput" placeholder="Memory value" />
+      <button class="action" onclick="remSave()">Save Memory</button>
+      <button class="action secondary" onclick="remLoad()">Load Memory</button>
+    </div>
+    <div class="row">
+      <button class="action secondary" onclick="remList()">List Memories</button>
+      <button class="action secondary" onclick="remClear()">Clear All</button>
+    </div>
+    <div id="remOutputEl" class="output-box"></div>
+  </div>
+
+  <!-- ===== SUPER FETCH PANEL ===== -->
+  <div id="fetchPanel" class="panel">
+    <h2>super-fetch-plugin</h2>
+    <p class="desc">Bypass CORS to fetch remote pages, then optionally parse them with Readability.</p>
+    <div class="row">
+      <input id="fetchUrlInput" style="flex:1;" placeholder="https://en.wikipedia.org/wiki/JavaScript" value="https://en.wikipedia.org/wiki/JavaScript" />
+      <button class="action" onclick="fetchPage()">Fetch Page</button>
+      <button class="action secondary" onclick="fetchReadable()">Fetch + Parse Readable</button>
+    </div>
+    <div class="row">
+      <label style="font-size:13px; color:#475569;"><input type="checkbox" id="fetchReadabilityChk" checked /> Auto-parse with Readability</label>
+    </div>
+    <div id="fetchOutputEl" class="output-box"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toastEl" class="toast"></div>
+
+<!-- ===== SHARED UTILITIES ===== -->
+<script>
+  function escapeHtml(s) { return s.replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  function switchTab(name) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(name + 'Panel').classList.add('active');
+    event.currentTarget.classList.add('active');
+  }
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    setTimeout(() => toastEl.classList.remove('show'), 2200);
+  }
+
+  function setStatus(elId, text) {
+    document.getElementById(elId).textContent = text;
+  }
+</script>
+
+<!-- ===== KV PLUGIN LOGIC (regular script so kv global resolves) ===== -->
+<script>
+  async function refreshKvList() {
+    let entries = await kv.playground.entries();
+    let ctn = kvListCtn;
+    if (!entries.length) { ctn.innerHTML = '<div class="kv-item"><span class="kv-val">No entries yet.</span></div>'; return; }
+    ctn.innerHTML = entries.map(([k, v]) => `<div class="kv-item"><span class="kv-key">${escapeHtml(String(k))}</span><span class="kv-val">${escapeHtml(String(JSON.stringify(v)).slice(0, 120))}</span></div>`).join('');
+  }
+
+  function kvSet() {
+    let k = kvKeyInput.value.trim(), v = kvValInput.value;
+    if (!k) { toast('Enter a key'); return; }
+    kv.playground.set(k, v).then(() => {
+      toast('Saved "' + k + '"');
+      setStatus('kvStatusEl', 'Set "' + k + '"');
+      refreshKvList();
+    });
+  }
+  function kvGet() {
+    let k = kvKeyInput.value.trim();
+    if (!k) { toast('Enter a key'); return; }
+    kv.playground.get(k).then(v => { setStatus('kvStatusEl', 'Get "' + k + '": ' + JSON.stringify(v)); });
+  }
+  function kvDelete() {
+    let k = kvKeyInput.value.trim();
+    if (!k) { toast('Enter a key'); return; }
+    kv.playground.delete(k).then(() => {
+      toast('Deleted "' + k + '"');
+      setStatus('kvStatusEl', 'Deleted "' + k + '"');
+      refreshKvList();
+    });
+  }
+  function kvSetMany() {
+    let now = Date.now();
+    kv.playground.setMany([['batchA', now], ['batchB', now+1]]).then(() => {
+      toast('Batch set 2 items');
+      setStatus('kvStatusEl', 'Batch set: batchA, batchB');
+      refreshKvList();
+    });
+  }
+  function kvGetMany() {
+    kv.playground.getMany(['batchA', 'batchB']).then(arr => { setStatus('kvStatusEl', 'GetMany: ' + JSON.stringify(arr)); });
+  }
+  function kvDeleteMany() {
+    kv.playground.deleteMany(['batchA', 'batchB']).then(() => {
+      toast('Batch deleted');
+      setStatus('kvStatusEl', 'Deleted batchA, batchB');
+      refreshKvList();
+    });
+  }
+  function kvUpdate() {
+    let k = kvKeyInput.value.trim() || 'counter';
+    kv.playground.update(k, v => (typeof v === 'number' ? v + 1 : 1)).then(() => {
+      toast('Updated (tx) "' + k + '"');
+      setStatus('kvStatusEl', 'Updated "' + k + '" via transaction');
+      refreshKvList();
+    });
+  }
+  function kvList() { refreshKvList(); setStatus('kvStatusEl', 'Listed all entries'); }
+  function kvClear() {
+    kv.playground.keys().then(keys => kv.playground.deleteMany(keys).then(() => {
+      toast('Cleared all keys');
+      setStatus('kvStatusEl', 'Cleared all');
+      refreshKvList();
+    }));
+  }
+
+  refreshKvList();
+</script>
+
+<!-- ===== AI TEXT PLUGIN LOGIC ===== -->
+<script>
+  let currentAiPromise = null;
+
+  function aiGenerate() {
+    let instruction = aiInstructionInput.value.trim();
+    if (!instruction) { toast('Enter an instruction'); return; }
+    aiOutputEl.textContent = '';
+    aiStopBtn.hidden = false;
+    let mode = aiModeSelect.value;
+    let stream = aiStreamChk.checked;
+    let forceStart = aiForceStartChk.checked ? 'In the' : null;
+    let stopSeq = aiStopSeqChk.checked ? ['\n'] : null;
+
+    let opts = { instruction };
+    if (mode === 'accurate') opts.temperature = 0.2;
+    if (forceStart) opts.startWith = forceStart;
+    if (stopSeq) opts.stopSequences = stopSeq;
+    if (stream) {
+      opts.onChunk = (data) => { aiOutputEl.textContent += data.textChunk; };
+    }
+
+    currentAiPromise = generateText(opts);
+    if (!stream) {
+      aiOutputEl.textContent = currentAiPromise;
+    }
+    currentAiPromise.then(() => { aiStopBtn.hidden = true; }).catch(() => { aiStopBtn.hidden = true; });
+  }
+
+  function aiStop() {
+    if (currentAiPromise && currentAiPromise.stop) { currentAiPromise.stop(); }
+    aiStopBtn.hidden = true;
+  }
+</script>
+
+<!-- ===== IMAGE PLUGIN LOGIC ===== -->
+<script>
+  async function imgGenerate() {
+    let prompt = imgPromptInput.value.trim();
+    if (!prompt) { toast('Enter a prompt'); return; }
+    imgOutputImg.hidden = true;
+    imgStatusEl.textContent = '⏳ Generating image...';
+    let res = imgResSelect.value;
+    let dataUrl = await generateImage(prompt, { resolution: res });
+    imgOutputImg.src = dataUrl;
+    imgOutputImg.hidden = false;
+    imgStatusEl.textContent = 'Generated (' + res + ')';
+  }
+  function imgClear() { imgOutputImg.hidden = true; imgOutputImg.src = ''; imgStatusEl.textContent = ''; }
+  function imgQuick(text) { imgPromptInput.value = text; imgGenerate(); }
+</script>
+
+<!-- ===== REMEMBER PLUGIN LOGIC ===== -->
+<script>
+  function remSave() {
+    let k = remKeyInput.value.trim(), v = remValInput.value;
+    if (!k) { toast('Enter a key'); return; }
+    rememberPlugin.set(k, v);
+    toast('Memory saved');
+    remOutputEl.textContent = 'Saved: ' + k + ' = ' + v;
+  }
+  function remLoad() {
+    let k = remKeyInput.value.trim();
+    if (!k) { toast('Enter a key'); return; }
+    let v = rememberPlugin.get(k);
+    remOutputEl.textContent = 'Loaded: ' + k + ' = ' + JSON.stringify(v);
+  }
+  function remList() {
+    let keys = rememberPlugin.keys();
+    let out = keys.map(k => k + ': ' + JSON.stringify(rememberPlugin.get(k))).join('\n');
+    remOutputEl.textContent = keys.length ? out : 'No memories stored.';
+  }
+  function remClear() {
+    rememberPlugin.clear();
+    toast('All memories cleared');
+    remOutputEl.textContent = 'All memories cleared.';
+  }
+</script>
+
+<!-- ===== SUPER FETCH PLUGIN LOGIC ===== -->
+<script type="module">
+  let sf = (typeof root !== 'undefined' && root.superFetch) || (typeof window !== 'undefined' && window.superFetch) || null;
+
+  async function fetchPage() {
+    let url = fetchUrlInput.value.trim();
+    if (!url) { toast('Enter a URL'); return; }
+    if (!sf) { fetchOutputEl.textContent = 'superFetch is not available.'; return; }
+    fetchOutputEl.textContent = '⏳ Fetching...';
+    try {
+      let html = await sf(url).then(r => r.text());
+      if (fetchReadabilityChk.checked) {
+        if (!window.Readability) {
+          window.Readability = await import("https://esm.sh/@mozilla/readability@0.5.0?no-check").then(m => m.Readability);
+        }
+        let doc = new DOMParser().parseFromString(html, 'text/html');
+        let article = new Readability(doc).parse();
+        fetchOutputEl.textContent = article ? '# ' + article.title + '\n\n' + article.textContent.slice(0, 2000) : 'Could not parse article.';
+      } else {
+        fetchOutputEl.textContent = html.slice(0, 3000);
+      }
+    } catch (e) {
+      fetchOutputEl.textContent = 'Error: ' + e.message;
+    }
+  }
+  async function fetchReadable() {
+    fetchReadabilityChk.checked = true;
+    fetchPage();
+  }
+  window.fetchPage = fetchPage;
+  window.fetchReadable = fetchReadable;
+</script>
+</body>
+</html>

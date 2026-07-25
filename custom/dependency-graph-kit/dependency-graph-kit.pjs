@@ -1,0 +1,269 @@
+$meta
+  title = Dependency Graph Kit
+  description = Directed dependency graph management with cycle detection, topological sort, and impact analysis.
+  image = https://user.uploads.dev/file/8c7563d0ece7c9ed36c8a83f8361a7a7.webp
+  tags = dependency graph, topology, cycle detection, architecture
+
+ensureGraphStore() =>
+  if(!window.__dependencyGraphKitV1) {
+    window.__dependencyGraphKitV1 = {};
+  }
+  return window.__dependencyGraphKitV1;
+
+normalizeGraphName(name) =>
+  const raw = name === undefined || name === null ? "default" : String(name).trim();
+  return raw === "" ? "default" : raw;
+
+normalizeNodeId(nodeId) =>
+  const raw = nodeId === undefined || nodeId === null ? "" : String(nodeId).trim();
+  return raw;
+
+ensureGraph(name) =>
+  const graphName = normalizeGraphName(name);
+  const store = ensureGraphStore();
+
+  if(!store[graphName]) {
+    store[graphName] = { nodes: {} };
+  }
+
+  return store[graphName];
+
+ensureNode(graph, nodeId) =>
+  const id = normalizeNodeId(nodeId);
+  if(id === "") return "";
+
+  if(!graph.nodes[id]) {
+    graph.nodes[id] = { deps: {} };
+  }
+
+  return id;
+
+addNode(name, nodeId) =>
+  const graph = ensureGraph(name);
+  const id = ensureNode(graph, nodeId);
+  if(id === "") return "error: empty node id";
+  return id;
+
+removeNode(name, nodeId) =>
+  const graph = ensureGraph(name);
+  const id = normalizeNodeId(nodeId);
+  if(id === "") return false;
+
+  if(!graph.nodes[id]) {
+    return false;
+  }
+
+  delete graph.nodes[id];
+
+  for(const keyName of Object.keys(graph.nodes)) {
+    if(graph.nodes[keyName].deps.hasOwnProperty(id)) {
+      delete graph.nodes[keyName].deps[id];
+    }
+  }
+
+  return true;
+
+addDependency(name, nodeId, dependsOnId) =>
+  const graph = ensureGraph(name);
+  const fromId = ensureNode(graph, nodeId);
+  const toId = ensureNode(graph, dependsOnId);
+
+  if(fromId === "" || toId === "") {
+    return "error: invalid node id";
+  }
+
+  if(fromId === toId) {
+    return "error: self dependency";
+  }
+
+  graph.nodes[fromId].deps[toId] = true;
+  return true;
+
+removeDependency(name, nodeId, dependsOnId) =>
+  const graph = ensureGraph(name);
+  const fromId = normalizeNodeId(nodeId);
+  const toId = normalizeNodeId(dependsOnId);
+
+  if(fromId === "" || toId === "") return false;
+  if(!graph.nodes[fromId]) return false;
+  if(!graph.nodes[fromId].deps.hasOwnProperty(toId)) return false;
+
+  delete graph.nodes[fromId].deps[toId];
+  return true;
+
+dependencies(name, nodeId, separator) =>
+  const graph = ensureGraph(name);
+  const id = normalizeNodeId(nodeId);
+  const sep = separator === undefined ? "," : String(separator);
+  if(id === "" || !graph.nodes[id]) return "";
+
+  return Object.keys(graph.nodes[id].deps).join(sep);
+
+dependents(name, nodeId, separator) =>
+  const graph = ensureGraph(name);
+  const id = normalizeNodeId(nodeId);
+  const sep = separator === undefined ? "," : String(separator);
+  if(id === "") return "";
+
+  const output = [];
+  for(const keyName of Object.keys(graph.nodes)) {
+    if(graph.nodes[keyName].deps.hasOwnProperty(id)) {
+      output.push(keyName);
+    }
+  }
+
+  return output.join(sep);
+
+nodeList(name, separator) =>
+  const sep = separator === undefined ? "," : String(separator);
+  return Object.keys(ensureGraph(name).nodes).join(sep);
+
+hasCycle(name) =>
+  const graph = ensureGraph(name);
+  const visiting = {};
+  const visited = {};
+
+  const walk = nodeId => {
+    if(visiting[nodeId] === true) {
+      return true;
+    }
+    if(visited[nodeId] === true) {
+      return false;
+    }
+
+    visiting[nodeId] = true;
+    const deps = Object.keys(graph.nodes[nodeId].deps);
+
+    for(let i = 0; i < deps.length; i += 1) {
+      const depId = deps[i];
+      if(graph.nodes[depId] && walk(depId)) {
+        return true;
+      }
+    }
+
+    visiting[nodeId] = false;
+    visited[nodeId] = true;
+    return false;
+  };
+
+  for(const keyName of Object.keys(graph.nodes)) {
+    if(walk(keyName)) {
+      return true;
+    }
+  }
+
+  return false;
+
+topoSort(name, separator) =>
+  const graph = ensureGraph(name);
+  const inDegree = {};
+  const dependentsMap = {};
+
+  for(const keyName of Object.keys(graph.nodes)) {
+    inDegree[keyName] = 0;
+    dependentsMap[keyName] = [];
+  }
+
+  for(const keyName of Object.keys(graph.nodes)) {
+    const deps = Object.keys(graph.nodes[keyName].deps);
+    inDegree[keyName] = deps.length;
+
+    for(let i = 0; i < deps.length; i += 1) {
+      const depId = deps[i];
+      if(dependentsMap[depId]) {
+        dependentsMap[depId].push(keyName);
+      }
+    }
+  }
+
+  const queue = [];
+  for(const keyName of Object.keys(inDegree)) {
+    if(inDegree[keyName] === 0) {
+      queue.push(keyName);
+    }
+  }
+
+  const sorted = [];
+  while(queue.length > 0) {
+    const current = queue.shift();
+    sorted.push(current);
+
+    const followers = dependentsMap[current] || [];
+    for(let i = 0; i < followers.length; i += 1) {
+      inDegree[followers[i]] -= 1;
+      if(inDegree[followers[i]] === 0) {
+        queue.push(followers[i]);
+      }
+    }
+  }
+
+  if(sorted.length !== Object.keys(graph.nodes).length) {
+    return "error: graph has cycle";
+  }
+
+  if(separator === undefined) {
+    return sorted;
+  }
+
+  return sorted.join(String(separator));
+
+affected(name, nodeId, separator) =>
+  const graph = ensureGraph(name);
+  const id = normalizeNodeId(nodeId);
+  if(id === "" || !graph.nodes[id]) {
+    return separator === undefined ? [] : "";
+  }
+
+  const seen = {};
+  const queue = [id];
+
+  while(queue.length > 0) {
+    const current = queue.shift();
+    for(const keyName of Object.keys(graph.nodes)) {
+      if(graph.nodes[keyName].deps.hasOwnProperty(current) && !seen[keyName]) {
+        seen[keyName] = true;
+        queue.push(keyName);
+      }
+    }
+  }
+
+  const out = Object.keys(seen);
+  if(separator === undefined) {
+    return out;
+  }
+  return out.join(String(separator));
+
+clear(name) =>
+  const graphName = normalizeGraphName(name);
+  const store = ensureGraphStore();
+  if(!store[graphName]) return false;
+  delete store[graphName];
+  return true;
+
+exportJson(name) =>
+  return JSON.stringify(ensureGraph(name));
+
+importJson(name, jsonText, mode) =>
+  let parsed;
+  try {
+    parsed = JSON.parse(String(jsonText));
+  } catch(error) {
+    return "error: invalid json";
+  }
+
+  if(!parsed || typeof parsed !== "object" || !parsed.nodes || typeof parsed.nodes !== "object") {
+    return "error: invalid graph shape";
+  }
+
+  const graphName = normalizeGraphName(name);
+  const store = ensureGraphStore();
+
+  if(store[graphName] && mode !== "replace") {
+    return "error: graph exists";
+  }
+
+  store[graphName] = {
+    nodes: parsed.nodes
+  };
+
+  return true;

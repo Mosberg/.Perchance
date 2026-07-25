@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>luau-ai-code-generator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  body { text-align:left; background:#0d1117; color:#c9d1d9; font-family:system-ui,-apple-system,sans-serif; margin:0; padding:20px; max-width:900px; margin-inline:auto; }
+  h1 { color:#fff; margin-bottom:6px; }
+  .desc { color:#8b949e; margin-top:0; margin-bottom:18px; }
+  #promptInput { width:100%; min-height:100px; background:#161b22; border:1px solid #30363d; color:#c9d1d9; border-radius:8px; padding:12px; font-size:14px; resize:vertical; box-sizing:border-box; font-family:inherit; }
+  .btn { background:#238636; color:#fff; border:none; padding:10px 20px; border-radius:6px; cursor:pointer; font-size:14px; font-weight:600; margin-top:10px; }
+  .btn:hover { background:#2ea043; }
+  .btn:disabled { background:#555; cursor:not-allowed; }
+  .btn.secondary { background:#1f6feb; margin-left:8px; }
+  .btn.secondary:hover { background:#388bfd; }
+  .btn.danger { background:#da3633; }
+  .btn.danger:hover { background:#f85149; }
+  .templates { margin:14px 0; display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { background:#21262d; border:1px solid #30363d; color:#58a6ff; padding:5px 12px; border-radius:16px; cursor:pointer; font-size:12px; transition:background 0.2s; }
+  .chip:hover { background:#30363d; }
+  #outputCtn { margin-top:20px; background:#161b22; border:1px solid #30363d; border-radius:8px; overflow:hidden; }
+  .outputHeader { background:#0d1117; padding:10px 15px; border-bottom:1px solid #30363d; display:flex; justify-content:space-between; align-items:center; }
+  .outputHeader span { font-weight:600; color:#fff; font-size:14px; }
+  .actions { display:flex; gap:8px; }
+  #codeBlockEl { padding:15px; margin:0; white-space:pre-wrap; word-break:break-word; font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace; font-size:13px; line-height:1.5; color:#e6edf3; max-height:500px; overflow:auto; }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,0.3); border-radius:50%; border-top-color:#fff; animation:spin 1s linear infinite; margin-right:6px; vertical-align:middle; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #statusEl { color:#8b949e; font-size:13px; margin-top:8px; min-height:18px; }
+</style>
+
+<h1>🎮 Luau AI Code Generator</h1>
+<p class="desc">Generate optimized Roblox Luau scripts with AI. Supports modern API, strict typing tips, and best practices.</p>
+
+<textarea id="promptInput" placeholder="Describe what you want to build... e.g., 'A script that gives players 100 coins when they touch a part'"></textarea>
+
+<div style="display:flex; align-items:center;">
+  <button id="generateBtn" class="btn" onclick="generate()">Generate Luau</button>
+  <button id="stopBtn" class="btn danger" style="margin-left:8px;" hidden onclick="stopGeneration()">Stop</button>
+</div>
+
+<div id="statusEl"></div>
+
+<div class="templates">
+  <span style="color:#8b949e; font-size:12px; width:100%; margin-bottom:4px;">Quick templates:</span>
+  <span class="chip" onclick="setPrompt('Script to respawn a player when they fall below Y = -50')">Kill Brick</span>
+  <span class="chip" onclick="setPrompt('Create a DataStore script that saves player cash and loads it when they join')">DataStore Save/Load</span>
+  <span class="chip" onclick="setPrompt('ProximityPrompt on a door that tweens it open when triggered')">Proximity Door</span>
+  <span class="chip" onclick="setPrompt('ClickDetector tool giver that gives a sword when clicked')">Tool Giver</span>
+  <span class="chip" onclick="setPrompt('LocalScript that listens for E key press and shoots a raycast projectile')">Raycast Ability</span>
+  <span class="chip" onclick="setPrompt('ModuleScript that creates a simple state machine for NPC behavior')">NPC State Machine</span>
+</div>
+
+<div id="outputCtn" hidden>
+  <div class="outputHeader">
+    <span>Generated Luau</span>
+    <div class="actions">
+      <button class="btn secondary" style="padding:6px 14px; font-size:12px;" onclick="copyCode()">📋 Copy</button>
+      <button class="btn danger" style="padding:6px 14px; font-size:12px;" onclick="clearOutput()">🗑️ Clear</button>
+    </div>
+  </div>
+  <pre id="codeBlockEl"></pre>
+</div>
+
+<script>
+  let currentGen = null;
+
+  function setPrompt(text) {
+    promptInput.value = text;
+    promptInput.focus();
+  }
+
+  async function generate() {
+    let prompt = promptInput.value.trim();
+    if (!prompt) {
+      statusEl.textContent = "⚠️ Please enter a description first.";
+      return;
+    }
+    if (typeof generateText !== 'function') {
+      statusEl.textContent = "❌ AI generation is not available in this environment.";
+      return;
+    }
+
+    generateBtn.disabled = true;
+    stopBtn.hidden = false;
+    statusEl.innerHTML = '<span class="spinner"></span> Generating Luau code...';
+    outputCtn.hidden = false;
+    codeBlockEl.textContent = "";
+
+    let instruction = `You are an expert Roblox Luau programmer. Write clean, modern Luau code for the following request. Follow these rules:
+- Use local variables everywhere.
+- Use task.wait() instead of wait().
+- Use task.spawn() or task.defer() instead of spawn().
+- Use proper Roblox services (Players, UserInputService, TweenService, etc.).
+- Add helpful comments.
+- Use camelCase for variables.
+- Prefer CollectionService or attributes where applicable.
+- If relevant, mention whether this should be a ServerScript, LocalScript, or ModuleScript.
+
+Request: ${prompt}
+
+Output ONLY the code inside a markdown code block labeled \`\`\`luau. Do not add extra explanation outside the code block unless it's brief comments inside the code.`;
+
+    try {
+      currentGen = generateText({
+        instruction: instruction,
+        onChunk: (data) => {
+          if (data && data.textChunk) codeBlockEl.textContent += data.textChunk;
+        }
+      });
+
+      // Defensive: attach a no-op catch immediately so the runtime never sees this as unhandled
+      if (currentGen && typeof currentGen.catch === 'function') {
+        currentGen.catch(() => {});
+      }
+
+      await currentGen;
+
+      // Strip markdown fences if present
+      let code = codeBlockEl.textContent.trim();
+      if (code.startsWith("```")) {
+        let lines = code.split("\n");
+        if (lines[0].trim().startsWith("```")) lines.shift();
+        if (lines[lines.length - 1].trim() === "```") lines.pop();
+        codeBlockEl.textContent = lines.join("\n");
+      }
+      statusEl.textContent = "✅ Generation complete!";
+    } catch (err) {
+      if (err && err.message && err.message.includes("stopped")) {
+        statusEl.textContent = "⏹️ Generation stopped.";
+      } else {
+        statusEl.textContent = "❌ Error: " + ((err && err.message) || err || "Failed to generate");
+      }
+    } finally {
+      generateBtn.disabled = false;
+      stopBtn.hidden = true;
+      currentGen = null;
+    }
+  }
+
+  function stopGeneration() {
+    if (currentGen && typeof currentGen.stop === 'function') {
+      try { currentGen.stop(); } catch (e) {}
+    }
+  }
+
+  function copyCode() {
+    if (!codeBlockEl.textContent) return;
+    navigator.clipboard.writeText(codeBlockEl.textContent).then(() => {
+      statusEl.textContent = "📋 Copied to clipboard!";
+      setTimeout(() => { if (statusEl.textContent.includes("Copied")) statusEl.textContent = ""; }, 2000);
+    }).catch(() => {
+      statusEl.textContent = "❌ Failed to copy.";
+    });
+  }
+
+  function clearOutput() {
+    codeBlockEl.textContent = "";
+    outputCtn.hidden = true;
+    statusEl.textContent = "";
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-image-to-prompt--metadata — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- 
+  AI Image to Prompt/Description/Metadata Generator
+  - Uses Perchance Plugins (uploadPlugin, generateText, kv, etc.)
+  - Features Image Upload, Drag-and-Drop, AI Analysis, Multiple Output Styles
+  - Auto-saves history and settings
+-->
+
+<div id="appCtn" class="app-ctn">
+  <!-- Header -->
+  <header class="header">
+    <h1>🎨 AI Image to Prompt & Metadata</h1>
+    <div class="header-controls">
+      <button id="themeToggleBtn" class="icon-btn">🌙</button>
+      <button id="historyToggleBtn" class="icon-btn">📂 History</button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <main class="main-grid">
+    
+    <!-- Left Column: Input & Settings -->
+    <section class="col-input">
+      
+      <!-- Upload Section -->
+      <div class="card">
+        <h2>1. Image Input</h2>
+        <div id="dropZone" class="drop-zone">
+          <input type="file" id="fileInput" accept="image/*" hidden>
+          <div id="uploadPlaceholder">
+            <span class="icon">📁</span>
+            <p>Drag & drop image here<br>or click to browse</p>
+            <small>Supports JPG, PNG, WEBP</small>
+          </div>
+          <img id="previewImg" class="preview-img hidden" alt="Preview">
+          <button id="clearImgBtn" class="clear-btn hidden" title="Remove Image">×</button>
+        </div>
+        
+        <!-- EXIF / Basic Metadata Preview -->
+        <div id="exifPanel" class="exif-panel hidden">
+          <h3>📷 EXIF Data</h3>
+          <div id="exifGrid" class="exif-grid"></div>
+        </div>
+      </div>
+
+      <!-- Settings Section -->
+      <div class="card">
+        <h2>2. Settings</h2>
+        
+        <div class="control-group">
+          <label>Output Mode</label>
+          <select id="modeSelect">
+            <option value="sd">Stable Diffusion Prompt</option>
+            <option value="mj">Midjourney Prompt</option>
+            <option value="nl">Natural Language Description</option>
+            <option value="meta">Full Metadata Sheet</option>
+          </select>
+        </div>
+
+        <details class="details-accordion">
+          <summary>Advanced Options</summary>
+          <div class="accordion-content">
+            <div class="control-group">
+              <label>Detail Level: <span id="detailVal">Balanced</span></label>
+              <input type="range" id="detailRange" min="1" max="3" value="2" step="1">
+            </div>
+            
+            <div class="control-group">
+              <label>Style Bias</label>
+              <select id="styleSelect">
+                <option value="auto">Auto-Detect</option>
+                <option value="photo">Photorealistic</option>
+                <option value="anime">Anime / Illustration</option>
+                <option value="drawing">Drawing</option>
+                <option value="cinematic">Cinematic</option>
+                <option value="3d">3D Render</option>
+              </select>
+            </div>
+
+            <div class="control-group">
+              <label>Include in Output</label>
+              <div class="checkbox-group">
+                <label><input type="checkbox" id="incTags" checked> Tags</label>
+                <label><input type="checkbox" id="incColors" checked> Color Palette</label>
+                <label><input type="checkbox" id="incCamera"> Camera Settings</label>
+                <label><input type="checkbox" id="incNegative"> Negative Prompt</label>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <button id="generateBtn" class="btn-primary">⚡ Generate Prompts</button>
+        <div id="loadingBar" class="loading-bar hidden">
+          <div class="spinner"></div> Analyzing Image & Generating Text...
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Output -->
+    <section class="col-output">
+      <div class="card output-card">
+        <div class="output-header">
+          <h2>Generated Results</h2>
+          <button id="copyAllBtn" class="btn-small">📋 Copy All</button>
+        </div>
+        
+        <div id="outputContainer" class="output-container">
+          <div id="placeholderMsg" class="placeholder-msg">
+            Upload an image and click Generate to see results here.
+          </div>
+
+          <!-- Result Blocks (Hidden by default) -->
+          <div id="resultsArea" class="results-area hidden">
+            
+            <!-- Main Prompt -->
+            <div class="result-block">
+              <div class="block-header">
+                <h3>Prompt</h3>
+                <button class="copy-btn" onclick="copyToClipboard(promptOutputEl)">Copy</button>
+              </div>
+              <div id="promptOutputEl" class="text-output"></div>
+            </div>
+
+            <!-- Negative Prompt -->
+            <div id="negativeBlock" class="result-block hidden">
+              <div class="block-header">
+                <h3>Negative Prompt</h3>
+                <button class="copy-btn" onclick="copyToClipboard(negativeOutputEl)">Copy</button>
+              </div>
+              <div id="negativeOutputEl" class="text-output"></div>
+            </div>
+
+            <!-- Description -->
+            <div class="result-block">
+              <div class="block-header">
+                <h3>Description</h3>
+              </div>
+              <div id="descOutputEl" class="text-output"></div>
+            </div>
+
+            <!-- Tags & Colors Grid -->
+            <div class="grid-2-col">
+              <div class="result-block">
+                <h3>Tags</h3>
+                <div id="tagsOutputEl" class="tags-container"></div>
+              </div>
+              <div class="result-block">
+                <h3>Color Palette</h3>
+                <div id="colorsOutputEl" class="color-container"></div>
+              </div>
+            </div>
+
+            <!-- Metadata Table -->
+            <div class="result-block">
+              <h3>Metadata Details</h3>
+              <table id="metaTableEl" class="meta-table">
+                <!-- Populated via JS -->
+              </table>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- History Drawer -->
+  <aside id="historyDrawer" class="drawer hidden">
+    <div class="drawer-header">
+      <h2>History</h2>
+      <button id="closeHistoryBtn" class="icon-btn">×</button>
+    </div>
+    <div id="historyList" class="history-list">
+      <!-- History items injected here -->
+    </div>
+    <button id="clearHistoryBtn" class="btn-small danger">Clear History</button>
+  </aside>
+
+</div>
+
+<!-- Toast Notification -->
+<div id="toastEl" class="toast hidden">Message</div>
+
+<!-- Scripts -->
+<!-- EXIF Library for client-side metadata extraction -->
+<script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+
+<script type="module">
+  // Access globals via root in module
+  const generateText = root.generateText;
+  const uploadPlugin = root.uploadPlugin;
+  const kv = root.kv;
+
+  // State
+  let currentFile = null;
+  let currentImageUrl = "";
+  let isGenerating = false;
+
+  // --- Initialization ---
+  async function init() {
+    // Load History
+    await renderHistory();
+    
+    // Set up Drag & Drop
+    setupDragDrop();
+    
+    // Event Listeners
+    clearImgBtn.onclick = clearImage;
+    fileInput.onchange = (e) => handleFile(e.target.files[0]);
+    generateBtn.onclick = runGeneration;
+    
+    // Settings Listeners
+    detailRange.oninput = (e) => {
+      let v = parseInt(e.target.value);
+      detailVal.textContent = v === 1 ? "Concise" : v === 2 ? "Balanced" : "Ultra-Detailed";
+    };
+    
+    // UI Toggles
+    themeToggleBtn.onclick = toggleTheme;
+    historyToggleBtn.onclick = () => historyDrawer.classList.remove('hidden');
+    closeHistoryBtn.onclick = () => historyDrawer.classList.add('hidden');
+    clearHistoryBtn.onclick = async () => {
+      if(confirm("Clear all history?")) {
+        await kv.history.delete("items");
+        renderHistory();
+      }
+    };
+    copyAllBtn.onclick = copyAllOutputs;
+
+    // Load remembered theme
+    if(localStorage.theme === 'light') {
+      document.body.classList.add('light-mode');
+      themeToggleBtn.textContent = '☀️';
+    }
+  }
+
+  // --- Image Handling ---
+  function setupDragDrop() {
+    dropZone.onclick = () => fileInput.click();
+    
+    dropZone.ondragover = (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    };
+    
+    dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
+    
+    dropZone.ondrop = (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    };
+  }
+
+  function handleFile(file) {
+    if(!file || !file.type.startsWith('image/')) {
+      showToast("Please upload a valid image file.");
+      return;
+    }
+    
+    currentFile = file;
+    
+    // Show Preview
+    let reader = new FileReader();
+    reader.onload = (e) => {
+      previewImg.src = e.target.result;
+      previewImg.classList.remove('hidden');
+      uploadPlaceholder.classList.add('hidden');
+      clearImgBtn.classList.remove('hidden');
+      extractExif(file);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearImage() {
+    currentFile = null;
+    currentImageUrl = "";
+    fileInput.value = "";
+    previewImg.src = "";
+    previewImg.classList.add('hidden');
+    uploadPlaceholder.classList.remove('hidden');
+    clearImgBtn.classList.add('hidden');
+    exifPanel.classList.add('hidden');
+    exifGrid.innerHTML = "";
+    resultsArea.classList.add('hidden');
+    placeholderMsg.classList.remove('hidden');
+  }
+
+  function extractExif(file) {
+    exifPanel.classList.remove('hidden');
+    exifGrid.innerHTML = '<div class="spinner small"></div>';
+    
+    // Need a slight delay for EXIF-JS to process the file object or data URL
+    // EXIF-JS reads from an img element or data URL
+    setTimeout(() => {
+      EXIF.getData(file, function() {
+        exifGrid.innerHTML = ""; // Clear spinner
+        let allTags = EXIF.getAllTags(this);
+        let tagsToShow = ['Make', 'Model', 'DateTime', 'ExposureTime', 'FNumber', 'ISOSpeedRatings', 'FocalLength', 'LensModel'];
+        let hasData = false;
+
+        tagsToShow.forEach(tag => {
+          if(allTags[tag]) {
+            hasData = true;
+            let row = document.createElement('div');
+            row.className = 'exif-item';
+            let label = tag;
+            let val = allTags[tag];
+            
+            // Format specific values
+            if(tag === 'ExposureTime') val = val >= 1 ? val : `1/${Math.round(1/val)}`;
+            if(tag === 'FNumber') val = `f/${val}`;
+            if(tag === 'FocalLength') val = `${val}mm`;
+            
+            row.innerHTML = `<span>${label}:</span> <b>${val}</b>`;
+            exifGrid.appendChild(row);
+          }
+        });
+
+        if(!hasData) exifGrid.innerHTML = "<i>No EXIF data found.</i>";
+      });
+    }, 100);
+  }
+
+  // --- AI Generation ---
+  async function runGeneration() {
+    if(!currentFile) { showToast("Please upload an image first."); return; }
+    if(isGenerating) return;
+
+    isGenerating = true;
+    generateBtn.disabled = true;
+    loadingBar.classList.remove('hidden');
+    placeholderMsg.classList.add('hidden');
+    resultsArea.classList.add('hidden');
+
+    try {
+      // 1. Upload Image
+      showToast("Uploading image...");
+      let uploadData = await uploadPlugin(currentFile, {expires: Date.now() + 1000 * 60 * 60}); // 1 hour expiry
+      if(uploadData.error) throw new Error(uploadData.error);
+      currentImageUrl = uploadData.url;
+
+      // 2. Prepare AI Prompt
+      let mode = modeSelect.value;
+      let styleBias = styleSelect.value;
+      let detailLvl = parseInt(detailRange.value); // 1, 2, 3
+      // Use different variable names to avoid conflict with element IDs
+      let includeTags = incTags.checked;
+      let includeColors = incColors.checked;
+      let includeCamera = incCamera.checked;
+      let includeNegative = incNegative.checked;
+
+      let promptContext = `You are an expert AI image analyzer and prompt engineer.
+      Analyze the image at this URL: ${currentImageUrl}
+      
+      Output a valid JSON object (no markdown formatting, just raw JSON) with the following structure:
+      {
+        "prompt": "A detailed prompt for ${mode === 'sd' ? 'Stable Diffusion' : mode === 'mj' ? 'Midjourney' : 'text generation'}. Be ${detailLvl === 1 ? 'concise' : detailLvl === 3 ? 'extremely detailed and verbose' : 'descriptive'}. Focus on ${styleBias === 'auto' ? 'all details' : styleBias + ' aesthetics'}.",
+        "negative_prompt": "${includeNegative ? 'List things to avoid in generation like blurry, low quality, deformed.' : 'N/A'}",
+        "description": "A comprehensive natural language description of the image.",
+        "tags": ${includeTags ? '["tag1", "tag2", ...]' : '[]'},
+        "colors": ${includeColors ? '["#hex1", "#hex2", ...]' : '[]'},
+        "camera_settings": ${includeCamera ? '{"model": "...", "iso": "...", "aperture": "..."}' : '{}'},
+        "subjects": ["Main subjects identified"],
+        "mood": "overall mood"
+      }
+      
+      If you cannot see the image URL, make a best-guess based on typical patterns or describe a placeholder scene.`;
+
+      // 3. Generate Text
+      showToast("AI Analyzing...");
+      let aiResponse = await generateText(promptContext);
+      
+      // 4. Parse JSON (clean markdown code blocks if AI adds them)
+      let cleanJson = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+      let data;
+      try {
+        data = JSON.parse(cleanJson);
+      } catch(e) {
+        console.error("JSON Parse Error", e);
+        // Fallback if JSON fails
+        data = {
+          prompt: aiResponse,
+          negative_prompt: "",
+          description: "AI response format error. See prompt field.",
+          tags: [],
+          colors: [],
+          camera_settings: {},
+          subjects: [],
+          mood: "Unknown"
+        };
+      }
+
+      // 5. Update UI
+      renderOutputs(data);
+      await saveToHistory(data, currentImageUrl);
+
+    } catch(err) {
+      console.error(err);
+      showToast("Error: " + err.message);
+    } finally {
+      isGenerating = false;
+      generateBtn.disabled = false;
+      loadingBar.classList.add('hidden');
+    }
+  }
+
+  // --- Rendering ---
+  function renderOutputs(data) {
+    resultsArea.classList.remove('hidden');
+
+    // Prompt
+    promptOutputEl.textContent = data.prompt || "No prompt generated.";
+    
+    // Negative
+    if(data.negative_prompt && data.negative_prompt !== "N/A") {
+      negativeBlock.classList.remove('hidden');
+      negativeOutputEl.textContent = data.negative_prompt;
+    } else {
+      negativeBlock.classList.add('hidden');
+    }
+
+    // Description
+    descOutputEl.textContent = data.description || "";
+
+    // Tags
+    tagsOutputEl.innerHTML = "";
+    (data.tags || []).forEach(tag => {
+      let span = document.createElement('span');
+      span.className = 'tag-pill';
+      span.textContent = tag;
+      tagsOutputEl.appendChild(span);
+    });
+
+    // Colors
+    colorsOutputEl.innerHTML = "";
+    (data.colors || []).forEach(col => {
+      let div = document.createElement('div');
+      div.className = 'color-swatch';
+      div.style.backgroundColor = col;
+      div.title = col;
+      colorsOutputEl.appendChild(div);
+    });
+
+    // Metadata Table
+    let meta = [
+      {k: "Style", v: styleSelect.value},
+      {k: "Mood", v: data.mood || "-"},
+      {k: "Subjects", v: (data.subjects || []).join(", ")},
+    ];
+    
+    if(data.camera_settings && Object.keys(data.camera_settings).length > 0) {
+      Object.entries(data.camera_settings).forEach(([k,v]) => meta.push({k: k.charAt(0).toUpperCase() + k.slice(1), v}));
+    }
+
+    metaTableEl.innerHTML = meta.map(m => `
+      <tr><td>${m.k}</td><td>${m.v}</td></tr>
+    `).join('');
+  }
+
+  // --- History ---
+  async function saveToHistory(data, imgUrl) {
+    let items = await kv.history.get("items") || [];
+    let newItem = {
+      id: Date.now(),
+      url: imgUrl,
+      prompt: data.prompt,
+      timestamp: new Date().toLocaleString()
+    };
+    items.unshift(newItem);
+    if(items.length > 20) items.pop(); // Keep last 20
+    await kv.history.set("items", items);
+    renderHistory();
+  }
+
+  async function renderHistory() {
+    let items = await kv.history.get("items") || [];
+    historyList.innerHTML = "";
+    if(items.length === 0) {
+      historyList.innerHTML = "<p style='color:#888; padding:1rem;'>No history yet.</p>";
+      return;
+    }
+    
+    items.forEach(item => {
+      let div = document.createElement('div');
+      div.className = 'history-item';
+      div.innerHTML = `
+        <img src="${item.url}" class="history-thumb">
+        <div class="history-info">
+          <div class="history-time">${item.timestamp}</div>
+          <div class="history-prompt">${item.prompt.substring(0, 60)}...</div>
+        </div>
+        <button class="btn-small" onclick="loadHistoryItem('${item.url}', \`${item.prompt.replace(/`/g, "\\`")}\`)">Load</button>
+      `;
+      historyList.appendChild(div);
+    });
+  }
+
+  window.loadHistoryItem = (url, prompt) => {
+    // In a real app we might reload the full object. Here we just copy the prompt for simplicity.
+    copyToClipboardText(prompt);
+    showToast("Prompt copied to clipboard!");
+  };
+
+  // --- Utilities ---
+  function toggleTheme() {
+    document.body.classList.toggle('light-mode');
+    let isLight = document.body.classList.contains('light-mode');
+    localStorage.theme = isLight ? 'light' : 'dark';
+    themeToggleBtn.textContent = isLight ? '☀️' : '🌙';
+  }
+
+  window.copyToClipboard = (el) => {
+    copyToClipboardText(el.textContent);
+  };
+
+  function copyToClipboardText(text) {
+    navigator.clipboard.writeText(text).then(() => showToast("Copied!"));
+  }
+
+  function copyAllOutputs() {
+    let text = `Prompt:\n${promptOutputEl.textContent}\n\n`;
+    if(!negativeBlock.classList.contains('hidden')) {
+      text += `Negative Prompt:\n${negativeOutputEl.textContent}\n\n`;
+    }
+    text += `Description:\n${descOutputEl.textContent}\n\nTags: ${tagsOutputEl.textContent}`;
+    copyToClipboardText(text);
+  }
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.remove('hidden');
+    setTimeout(() => toastEl.classList.add('hidden'), 3000);
+  }
+
+  // Run Init
+  init();
+
+</script>
+
+<!-- Global Styles -->
+<style>
+  :root {
+    --bg: #121212;
+    --card-bg: #1e1e1e;
+    --text: #e0e0e0;
+    --text-muted: #a0a0a0;
+    --accent: #6c5ce7;
+    --accent-hover: #5b4cc4;
+    --border: #333;
+    --input-bg: #2a2a2a;
+    --success: #00b894;
+    --danger: #d63031;
+  }
+
+  body.light-mode {
+    --bg: #f5f6fa;
+    --card-bg: #ffffff;
+    --text: #2d3436;
+    --text-muted: #636e72;
+    --accent: #0984e3;
+    --accent-hover: #74b9ff;
+    --border: #dfe6e9;
+    --input-bg: #f1f2f6;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    margin: 0;
+    padding: 0;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  .app-ctn {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    height: 100vh;
+    box-sizing: border-box;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 { margin: 0; font-size: 1.5rem; }
+  .header-controls { display: flex; gap: 10px; }
+
+  /* Grid */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 20px;
+    flex: 1;
+    min-height: 0; /* Important for scroll */
+  }
+  @media (max-width: 900px) {
+    .main-grid { grid-template-columns: 1fr; overflow-y: auto; }
+    .app-ctn { height: auto; }
+  }
+
+  /* Cards */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    overflow-y: auto;
+  }
+
+  .col-input { display: flex; flex-direction: column; gap: 20px; }
+
+  /* Upload Area */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 30px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: 0.2s;
+    position: relative;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--input-bg);
+  }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(108, 92, 231, 0.1); }
+  .preview-img { max-width: 100%; max-height: 250px; border-radius: 6px; object-fit: contain; }
+  .clear-btn {
+    position: absolute; top: 10px; right: 10px;
+    background: rgba(0,0,0,0.6); color: white; border: none;
+    border-radius: 50%; width: 24px; height: 24px; cursor: pointer;
+    font-weight: bold; display: flex; align-items: center; justify-content: center;
+  }
+
+  /* EXIF Panel */
+  .exif-panel { background: var(--input-bg); padding: 10px; border-radius: 6px; font-size: 0.9rem; }
+  .exif-panel h3 { margin: 0 0 10px 0; font-size: 0.95rem; color: var(--text-muted); }
+  .exif-grid { display: flex; flex-direction: column; gap: 5px; }
+  .exif-item { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
+  .exif-item span { color: var(--text-muted); }
+
+  /* Controls */
+  .control-group { display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 0.9rem; font-weight: 600; color: var(--text-muted); }
+  select, input[type="text"] {
+    background: var(--input-bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px; border-radius: 4px; width: 100%;
+  }
+  .checkbox-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .checkbox-group label { font-weight: normal; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+
+  /* Accordion */
+  details { margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  summary {
+    padding: 10px; background: var(--input-bg); cursor: pointer; font-weight: 600; user-select: none;
+    list-style: none; display: flex; justify-content: space-between; align-items: center;
+  }
+  summary::after { content: '+'; font-weight: bold; }
+  details[open] summary::after { content: '-'; }
+  .accordion-content { padding: 15px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 15px; }
+
+  /* Buttons */
+  .btn-primary, .btn-small, .icon-btn {
+    cursor: pointer; border: none; border-radius: 6px; font-weight: 600; transition: 0.2s;
+  }
+  .btn-primary {
+    background: var(--accent); color: white; padding: 12px; font-size: 1rem; margin-top: auto;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+  
+  .btn-small { padding: 4px 8px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); }
+  .btn-small:hover { background: var(--border); }
+  .btn-small.danger { color: var(--danger); border-color: var(--danger); }
+
+  .icon-btn { background: none; font-size: 1.2rem; padding: 5px; color: var(--text); }
+  .icon-btn:hover { background: var(--input-bg); border-radius: 4px; }
+
+  /* Output Area */
+  .output-card { height: 100%; }
+  .output-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .output-container { position: relative; flex: 1; overflow-y: auto; }
+  .placeholder-msg {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    color: var(--text-muted); text-align: center; width: 80%;
+  }
+
+  .results-area { display: flex; flex-direction: column; gap: 20px; }
+  .result-block { background: var(--input-bg); padding: 15px; border-radius: 8px; }
+  .block-header { display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center; }
+  .block-header h3 { margin: 0; font-size: 1rem; color: var(--accent); }
+  .text-output {
+    white-space: pre-wrap; font-family: monospace; font-size: 0.9rem; line-height: 1.5;
+    max-height: 200px; overflow-y: auto;
+  }
+
+  /* Tags & Colors */
+  .grid-2-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .tags-container { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag-pill {
+    background: var(--border); padding: 4px 8px; border-radius: 12px; font-size: 0.8rem;
+  }
+  .color-container { display: flex; gap: 8px; flex-wrap: wrap; }
+  .color-swatch { width: 24px; height: 24px; border-radius: 4px; border: 1px solid #fff3; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+
+  /* Meta Table */
+  .meta-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .meta-table td { padding: 6px; border-bottom: 1px solid var(--border); }
+  .meta-table td:first-child { color: var(--text-muted); width: 40%; }
+
+  /* Loading */
+  .loading-bar {
+    display: flex; align-items: center; gap: 10px; justify-content: center;
+    color: var(--accent); font-weight: 600; padding: 10px; background: var(--input-bg);
+    border-radius: 6px;
+  }
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid var(--accent);
+    border-top-color: transparent; border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  .spinner.small { width: 12px; height: 12px; border-width: 1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* History Drawer */
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 300px;
+    background: var(--card-bg); border-left: 1px solid var(--border);
+    padding: 20px; z-index: 100; transform: translateX(0);
+    transition: transform 0.3s; display: flex; flex-direction: column; gap: 10px;
+    box-shadow: -5px 0 15px rgba(0,0,0,0.3);
+  }
+  .drawer.hidden { transform: translateX(100%); }
+  .drawer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .history-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .history-item {
+    display: flex; gap: 10px; background: var(--input-bg); padding: 8px;
+    border-radius: 6px; align-items: center;
+  }
+  .history-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
+  .history-info { flex: 1; overflow: hidden; }
+  .history-time { font-size: 0.7rem; color: var(--text-muted); }
+  .history-prompt { font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 10px 20px;
+    border-radius: 20px; font-weight: 600; z-index: 200;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+</style>
+</body>
+</html>

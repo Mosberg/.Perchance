@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>step-prompt-lab — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<span style="display:none;">[setupPluginBridge()]</span>
+<span style="display:none;">[stepModeLibrary]</span>
+
+<div id="app">
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark"><img src="https://user.uploads.dev/file/98454f47f0175907f6ec7a1daefa1f2b.png" alt="Step Prompt Lab icon"></div>
+      <div>
+        <div class="title">Step Prompt Lab</div>
+        <div class="subtitle">Sequential image prompt refinement</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="addStepButton" class="button secondary">Add Step</button>
+      <button id="generateButton" class="button primary">Generate</button>
+    </div>
+  </div>
+
+  <!-- Step 0 -->
+  <div class="step-card base-step" id="baseStepCard">
+    <div class="step-header">
+      <div>
+        <div class="step-title">Step 0</div>
+        <div class="step-subtitle">Original user prompt</div>
+      </div>
+    </div>
+
+    <textarea id="basePrompt" class="prompt-input" placeholder="Write the original image prompt here..."></textarea>
+
+    <div class="result-area hidden" id="baseResultArea">
+      <div class="prompt-label">Prompt used</div>
+      <div class="prompt-output" id="basePromptOutput"></div>
+      <div class="image-grid" id="baseImageGrid"></div>
+    </div>
+  </div>
+
+  <!-- Dynamic steps -->
+  <div id="stepsContainer"></div>
+
+  <!-- Status -->
+  <div id="statusBox" class="status-box">Loading step modes...</div>
+</div>
+
+<style>
+  /* Base layout */
+  :root {
+    --bg: #0b0d10;
+    --panel: #14171b;
+    --panel-2: #1b1f24;
+    --panel-3: #22272e;
+    --border: #343a42;
+    --border-soft: #262b31;
+    --text: #e6e8eb;
+    --muted: #a4a9b0;
+    --muted-2: #737982;
+    --accent: #d2d6dc;
+    --accent-dark: #808791;
+    --danger: #d36b6b;
+    --shadow: 0 16px 40px rgba(0,0,0,.35);
+    --radius: 16px;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(circle at top left, rgba(130, 137, 148, .14), transparent 34%),
+      linear-gradient(180deg, #0b0d10 0%, #101216 100%);
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  #app {
+    width: min(1180px, calc(100vw - 28px));
+    margin: 18px auto 40px;
+  }
+
+  /* Top bar */
+  .topbar {
+    position: sticky;
+    top: 10px;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px;
+    margin-bottom: 14px;
+    background: rgba(20, 23, 27, .92);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(10px);
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #111418;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.16);
+  }
+
+  .brand-mark img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  .title {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .2px;
+  }
+
+  .subtitle {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  /* Buttons */
+  .button {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 14px;
+    color: var(--text);
+    background: var(--panel-2);
+    cursor: pointer;
+    font-weight: 650;
+    transition: transform .12s ease, background .12s ease, border-color .12s ease;
+  }
+
+  .button:hover {
+    transform: translateY(-1px);
+    border-color: #545b66;
+  }
+
+  .button:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .button.primary {
+    color: #101216;
+    background: linear-gradient(180deg, #eceff3 0%, #aeb4bd 100%);
+    border-color: #c6cbd2;
+  }
+
+  .button.secondary {
+    background: #20252b;
+  }
+
+  .button.danger {
+    color: #ffdada;
+    border-color: rgba(211, 107, 107, .4);
+    background: rgba(211, 107, 107, .1);
+  }
+
+  /* Step cards */
+  .step-card {
+    margin-bottom: 12px;
+    padding: 14px;
+    background: linear-gradient(180deg, var(--panel) 0%, #111418 100%);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    box-shadow: 0 10px 26px rgba(0,0,0,.22);
+    text-align: left;
+  }
+
+  .base-step {
+    border-color: var(--border);
+  }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .step-header > div:first-child {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .step-title,
+  .step-subtitle {
+    text-align: left;
+  }
+
+  .step-title {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--accent);
+  }
+
+  .step-subtitle {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--muted-2);
+  }
+
+  .step-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  select,
+  textarea {
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    outline: none;
+  }
+
+  select {
+    min-width: 130px;
+    padding: 10px 12px;
+    cursor: pointer;
+  }
+
+  .prompt-input {
+    width: 100%;
+    min-height: 92px;
+    resize: vertical;
+    padding: 13px;
+    line-height: 1.45;
+  }
+
+  .result-area {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-soft);
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .prompt-label {
+    margin-bottom: 7px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--muted);
+  }
+
+  .prompt-output {
+    white-space: pre-wrap;
+    padding: 12px;
+    margin-bottom: 12px;
+    color: #dfe3e8;
+    background: #0e1115;
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  /* Image results */
+  .image-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .image-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 280px;
+    overflow: hidden;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,.025), rgba(255,255,255,.008)),
+      #0b0e12;
+    border: 1px solid var(--border-soft);
+    border-radius: 14px;
+  }
+
+  .image-slot img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  .slot-loading {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .slot-error {
+    color: #ffdada;
+    padding: 12px;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  /* Status */
+  .status-box {
+    position: sticky;
+    bottom: 12px;
+    padding: 11px 13px;
+    color: var(--muted);
+    background: rgba(14, 17, 21, .92);
+    border: 1px solid var(--border-soft);
+    border-radius: 14px;
+    backdrop-filter: blur(8px);
+  }
+
+  @media (max-width: 760px) {
+    .topbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .actions {
+      justify-content: stretch;
+    }
+
+    .button {
+      flex: 1;
+    }
+
+    .step-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .step-controls {
+      width: 100%;
+    }
+
+    .step-controls select,
+    .step-controls button {
+      flex: 1;
+    }
+
+    .image-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<script>
+(function () {
+  // Clear previous runtime state
+  if (window.stepPromptLabRuntime && typeof window.stepPromptLabRuntime.destroy === "function") {
+    window.stepPromptLabRuntime.destroy();
+  }
+
+  // Define global state
+  const steps = [];
+  let stepCounter = 0;
+  let isRunning = false;
+  let pendingUploadTasks = [];
+  let uploadSuccessCount = 0;
+  let uploadFailCount = 0;
+  let stepModeDefinitions = [];
+  let modeLoadTimer = null;
+  let modeLoadTimeout = null;
+
+  const IMAGE_COUNT = 3;
+  const IMAGE_RESOLUTION = "768x768";
+  const IMAGE_DOWNLOAD_BASE_URL = "https://image-generation.perchance.org/api/downloadTemporaryImage?imageId=";
+
+  // Upload settings
+  const ENABLE_IMAGE_UPLOAD = true;
+  const WAIT_FOR_ALL_UPLOADS_AT_END = true;
+  const UPLOAD_ENDPOINT = "https://marcoalmeidati.com.br/ImageGen/upload.php";
+
+  const addStepButton = document.getElementById("addStepButton");
+  const generateButton = document.getElementById("generateButton");
+  const basePromptInput = document.getElementById("basePrompt");
+  const baseResultArea = document.getElementById("baseResultArea");
+  const basePromptOutput = document.getElementById("basePromptOutput");
+  const baseImageGrid = document.getElementById("baseImageGrid");
+  const stepsContainer = document.getElementById("stepsContainer");
+  const statusBox = document.getElementById("statusBox");
+
+  // Start with buttons locked until step modes are loaded
+  addStepButton.disabled = true;
+  generateButton.disabled = true;
+
+  // Set status
+  function setStatus(message) {
+    statusBox.textContent = message;
+  }
+
+  // Wait for imported step modes
+  function waitForStepModesAndStart() {
+    setStatus("Loading step modes...");
+
+    modeLoadTimer = setInterval(() => {
+      const loadedModes = readStepModesFromWindow();
+
+      if (loadedModes.length > 0) {
+        clearInterval(modeLoadTimer);
+        clearTimeout(modeLoadTimeout);
+
+        stepModeDefinitions = loadedModes;
+        startApp();
+      }
+    }, 50);
+
+    modeLoadTimeout = setTimeout(() => {
+      clearInterval(modeLoadTimer);
+      console.error("step-prompt-lab-modes did not load window.stepPromptLabStepModes.");
+      setStatus("Step mode library did not load. Check step-prompt-lab-modes import.");
+    }, 5000);
+  }
+
+  // Read imported step modes
+  function readStepModesFromWindow() {
+    if (!Array.isArray(window.stepPromptLabStepModes)) {
+      return [];
+    }
+
+    return window.stepPromptLabStepModes.map(mode => {
+      return {
+        id: String(mode.id || "").trim(),
+        label: String(mode.label || mode.id || "").trim(),
+        instructionBuilder: mode.instructionBuilder
+      };
+    }).filter(mode => {
+      return mode.id && mode.label && typeof mode.instructionBuilder === "function";
+    });
+  }
+
+  // Start app after modes are available
+  function startApp() {
+    steps.length = 0;
+    stepCounter = 0;
+    isRunning = false;
+    pendingUploadTasks = [];
+    uploadSuccessCount = 0;
+    uploadFailCount = 0;
+
+    stepsContainer.innerHTML = "";
+    baseResultArea.classList.add("hidden");
+    basePromptOutput.textContent = "";
+    baseImageGrid.innerHTML = "";
+
+    addStepButton.disabled = false;
+    generateButton.disabled = false;
+    basePromptInput.disabled = false;
+
+    addStepButton.addEventListener("click", handleAddStepClick);
+    generateButton.addEventListener("click", handleGenerateClick);
+
+    addStep();
+    setStatus("Ready.");
+  }
+
+  // Event handlers
+  function handleAddStepClick() {
+    addStep();
+  }
+
+  function handleGenerateClick() {
+    runPipeline();
+  }
+
+  // Step mode helpers
+  function getDefaultStepModeId() {
+    return stepModeDefinitions[0].id;
+  }
+
+  function getStepModeDefinition(modeId) {
+    return stepModeDefinitions.find(mode => mode.id === modeId) || stepModeDefinitions[0];
+  }
+
+  function getStepInstruction(modeId, previousPrompt) {
+    const mode = getStepModeDefinition(modeId);
+    return mode.instructionBuilder(previousPrompt);
+  }
+
+  function buildStepModeOptions(selectedModeId) {
+    return stepModeDefinitions.map(mode => {
+      const selected = mode.id === selectedModeId ? "selected" : "";
+      return `<option value="${mode.id}" ${selected}>${mode.label}</option>`;
+    }).join("");
+  }
+
+  // Refresh visible step numbers
+  function refreshStepNumbers() {
+    steps.forEach((step, index) => {
+      const card = stepsContainer.querySelector(`[data-step-id="${step.id}"]`);
+      if (!card) return;
+
+      const title = card.querySelector(".step-title");
+      if (!title) return;
+
+      title.textContent = `Step ${index + 1}`;
+    });
+  }
+
+  // Get imported plugin
+  function getImportedFunction(name) {
+    if (name === "generateImage" && typeof window.stepPromptLabGenerateImage === "function") {
+      return window.stepPromptLabGenerateImage;
+    }
+
+    if (name === "generateText" && typeof window.stepPromptLabGenerateText === "function") {
+      return window.stepPromptLabGenerateText;
+    }
+
+    if (typeof window[name] === "function") {
+      return window[name];
+    }
+
+    throw new Error(`${name} is not available. Check the plugin bridge in the left panel.`);
+  }
+
+  // Resolve Perchance plugin output
+  async function resolvePluginOutput(rawResult) {
+    if (rawResult === null || rawResult === undefined) {
+      return rawResult;
+    }
+
+    if (rawResult && typeof rawResult.then === "function") {
+      rawResult = await rawResult;
+    }
+
+    if (rawResult && typeof rawResult.evaluateItem === "function") {
+      return await rawResult.evaluateItem();
+    }
+
+    if (rawResult && rawResult.evaluateItem !== undefined) {
+      return await rawResult.evaluateItem;
+    }
+
+    return rawResult;
+  }
+
+  // Convert plugin response to text
+  function extractText(result) {
+    if (result === null || result === undefined) return "";
+    if (typeof result === "string") return result;
+    if (result instanceof HTMLElement) return result.textContent || "";
+    if (typeof result.text === "string") return result.text;
+    if (typeof result.output === "string") return result.output;
+    if (typeof result.content === "string") return result.content;
+    if (typeof result.html === "string") return result.html.replace(/<[^>]*>/g, " ");
+    return String(result);
+  }
+
+  // Clean AI prompt output
+  function cleanPrompt(text) {
+    return text
+      .replace(/^```[a-z]*\s*/i, "")
+      .replace(/```$/i, "")
+      .replace(/^final image prompt\s*:\s*/i, "")
+      .replace(/^prompt\s*:\s*/i, "")
+      .trim();
+  }
+
+  // Detect Perchance image id
+  function looksLikeImageId(value) {
+    const text = String(value || "").trim();
+
+    if (!text) return false;
+    if (text.includes("<")) return false;
+    if (text.includes(">")) return false;
+    if (text.includes(" ")) return false;
+    if (text.startsWith("http://")) return false;
+    if (text.startsWith("https://")) return false;
+    if (text.startsWith("data:image/")) return false;
+
+    return /^[A-Za-z0-9_-]{20,}$/.test(text);
+  }
+
+  // Create image download URL
+  function imageIdToUrl(imageId) {
+    return `${IMAGE_DOWNLOAD_BASE_URL}${encodeURIComponent(String(imageId).trim())}`;
+  }
+
+  // Render image URL
+  function renderImageUrl(slot, src) {
+    slot.innerHTML = "";
+
+    const img = document.createElement("img");
+    img.src = src;
+    img.alt = "Generated image";
+    img.loading = "eager";
+    img.decoding = "async";
+
+    img.onerror = () => {
+      slot.innerHTML = `<div class="slot-error">Image loaded as an id, but the temporary image URL failed.</div>`;
+    };
+
+    slot.appendChild(img);
+  }
+
+  // Convert image URL to base64 data URL
+  async function imageUrlToDataUrl(src) {
+    if (src.startsWith("data:image/")) {
+      return src;
+    }
+
+    const response = await fetch(src, {
+      method: "GET",
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      throw new Error(`Could not download image before upload: HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("Could not convert image to base64."));
+
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // Upload generated image
+  async function uploadGeneratedImage(src, prompt, stepLabel, imageIndex) {
+    const dataUrl = await imageUrlToDataUrl(src);
+
+    const response = await fetch(UPLOAD_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        image: dataUrl,
+        prompt: prompt,
+        step: stepLabel,
+        imageIndex: imageIndex,
+        source: "Step Prompt Lab",
+        generatedAt: new Date().toISOString()
+      })
+    });
+
+    let responseData = null;
+
+    try {
+      responseData = await response.json();
+    } catch (error) {
+      responseData = null;
+    }
+
+    if (!response.ok || !responseData || !responseData.ok) {
+      const errorMessage = responseData && responseData.error ? responseData.error : `HTTP ${response.status}`;
+      throw new Error(`Upload failed: ${errorMessage}`);
+    }
+
+    return responseData;
+  }
+
+  // Queue image upload silently
+  function queueGeneratedImageUpload(src, prompt, stepLabel, imageIndex) {
+    if (!ENABLE_IMAGE_UPLOAD) {
+      return;
+    }
+
+    const uploadTask = uploadGeneratedImage(src, prompt, stepLabel, imageIndex)
+      .then(data => {
+        uploadSuccessCount++;
+        return data;
+      })
+      .catch(error => {
+        uploadFailCount++;
+        console.error(error);
+        return null;
+      });
+
+    pendingUploadTasks.push(uploadTask);
+  }
+
+  // Wait for all queued uploads silently
+  async function waitForQueuedUploads() {
+    if (!ENABLE_IMAGE_UPLOAD) {
+      return;
+    }
+
+    if (!WAIT_FOR_ALL_UPLOADS_AT_END) {
+      return;
+    }
+
+    if (pendingUploadTasks.length === 0) {
+      return;
+    }
+
+    await Promise.allSettled(pendingUploadTasks);
+  }
+
+  // Add step
+  function addStep(modeId = getDefaultStepModeId()) {
+    stepCounter++;
+
+    const step = {
+      id: stepCounter,
+      mode: modeId
+    };
+
+    steps.push(step);
+
+    const card = document.createElement("div");
+    card.className = "step-card";
+    card.dataset.stepId = step.id;
+
+    card.innerHTML = `
+      <div class="step-header">
+        <div>
+          <div class="step-title">Step</div>
+          <div class="step-subtitle">Transform previous prompt and generate 3 images</div>
+        </div>
+
+        <div class="step-controls">
+          <select class="step-mode">
+            ${buildStepModeOptions(modeId)}
+          </select>
+
+          <button class="button danger remove-step-button">Remove</button>
+        </div>
+      </div>
+
+      <div class="result-area hidden">
+        <div class="prompt-label">Modified prompt</div>
+        <div class="prompt-output"></div>
+        <div class="image-grid"></div>
+      </div>
+    `;
+
+    card.querySelector(".step-mode").addEventListener("change", event => {
+      step.mode = event.target.value;
+    });
+
+    card.querySelector(".remove-step-button").addEventListener("click", () => {
+      removeStep(step.id);
+    });
+
+    stepsContainer.appendChild(card);
+    refreshStepNumbers();
+  }
+
+  // Remove step
+  function removeStep(stepId) {
+    if (isRunning) return;
+
+    const index = steps.findIndex(step => step.id === stepId);
+
+    if (index >= 0) {
+      steps.splice(index, 1);
+    }
+
+    const card = stepsContainer.querySelector(`[data-step-id="${stepId}"]`);
+
+    if (card) {
+      card.remove();
+    }
+
+    refreshStepNumbers();
+  }
+
+  // Reset result areas
+  function resetResults() {
+    pendingUploadTasks = [];
+    uploadSuccessCount = 0;
+    uploadFailCount = 0;
+
+    baseResultArea.classList.add("hidden");
+    basePromptOutput.textContent = "";
+    baseImageGrid.innerHTML = "";
+
+    document.querySelectorAll("#stepsContainer .result-area").forEach(area => {
+      area.classList.add("hidden");
+      area.querySelector(".prompt-output").textContent = "";
+      area.querySelector(".image-grid").innerHTML = "";
+    });
+  }
+
+  // Lock UI
+  function setRunningState(running) {
+    isRunning = running;
+    addStepButton.disabled = running;
+    generateButton.disabled = running;
+    basePromptInput.disabled = running;
+
+    document.querySelectorAll(".step-mode, .remove-step-button").forEach(element => {
+      element.disabled = running;
+    });
+  }
+
+  // Generate text
+  async function generatePromptText(instruction) {
+    const textPlugin = getImportedFunction("generateText");
+
+    const rawResult = textPlugin(instruction);
+    const result = await resolvePluginOutput(rawResult);
+
+    return cleanPrompt(extractText(result));
+  }
+
+  // Mount generated image
+  function mountImageResult(slot, result) {
+    slot.innerHTML = "";
+
+    if (result instanceof HTMLElement) {
+      slot.appendChild(result);
+      return { src: null };
+    }
+
+    if (typeof result === "string") {
+      const text = result.trim();
+
+      if (looksLikeImageId(text)) {
+        const src = imageIdToUrl(text);
+        renderImageUrl(slot, src);
+        return { src: src };
+      }
+
+      if (/^(https?:\/\/|data:image\/)/i.test(text)) {
+        renderImageUrl(slot, text);
+        return { src: text };
+      }
+
+      slot.innerHTML = text;
+      return { src: null };
+    }
+
+    if (result && typeof result.imageId === "string") {
+      const src = imageIdToUrl(result.imageId);
+      renderImageUrl(slot, src);
+      return { src: src };
+    }
+
+    if (result && typeof result.imageID === "string") {
+      const src = imageIdToUrl(result.imageID);
+      renderImageUrl(slot, src);
+      return { src: src };
+    }
+
+    if (result && typeof result.id === "string" && looksLikeImageId(result.id)) {
+      const src = imageIdToUrl(result.id);
+      renderImageUrl(slot, src);
+      return { src: src };
+    }
+
+    if (result && typeof result.src === "string") {
+      renderImageUrl(slot, result.src);
+      return { src: result.src };
+    }
+
+    if (result && typeof result.url === "string") {
+      renderImageUrl(slot, result.url);
+      return { src: result.url };
+    }
+
+    if (result && typeof result.html === "string") {
+      slot.innerHTML = result.html;
+      return { src: null };
+    }
+
+    slot.innerHTML = `<div class="slot-error">Image generated, but the response format was not recognized.</div>`;
+    return { src: null };
+  }
+
+  // Generate one image
+  async function generateSingleImage(imagePlugin, slot, prompt, imageIndex, stepLabel, onComplete) {
+    slot.innerHTML = `<div class="slot-loading">Generating image ${imageIndex} of ${IMAGE_COUNT}...</div>`;
+
+    try {
+      const rawResult = imagePlugin({
+        prompt: prompt,
+        negativePrompt: "",
+        resolution: IMAGE_RESOLUTION,
+        width: "100%"
+      });
+
+      const result = await resolvePluginOutput(rawResult);
+      const mountedImage = mountImageResult(slot, result);
+
+      if (mountedImage && mountedImage.src) {
+        queueGeneratedImageUpload(mountedImage.src, prompt, stepLabel, imageIndex);
+      }
+
+      onComplete();
+    } catch (error) {
+      slot.innerHTML = `<div class="slot-error">Image generation failed: ${error.message || error}</div>`;
+      console.error(error);
+      onComplete();
+    }
+  }
+
+  // Generate images
+  async function generateImagesForPrompt(grid, prompt, stepLabel) {
+    const imagePlugin = getImportedFunction("generateImage");
+    let completedImages = 0;
+
+    grid.innerHTML = "";
+    setStatus(`${stepLabel}: generating ${IMAGE_COUNT} images...`);
+
+    const slots = [];
+
+    for (let imageIndex = 1; imageIndex <= IMAGE_COUNT; imageIndex++) {
+      const slot = document.createElement("div");
+      slot.className = "image-slot";
+      slot.innerHTML = `<div class="slot-loading">Waiting...</div>`;
+      grid.appendChild(slot);
+      slots.push(slot);
+    }
+
+    const onComplete = () => {
+      completedImages++;
+      setStatus(`${stepLabel}: ${completedImages} of ${IMAGE_COUNT} images finished...`);
+    };
+
+    const imageTasks = slots.map((slot, index) => {
+      return generateSingleImage(imagePlugin, slot, prompt, index + 1, stepLabel, onComplete);
+    });
+
+    await Promise.all(imageTasks);
+  }
+
+  // Run pipeline
+  async function runPipeline() {
+    const originalPrompt = basePromptInput.value.trim();
+
+    if (!originalPrompt) {
+      setStatus("Write an original prompt before generating.");
+      return;
+    }
+
+    resetResults();
+    setRunningState(true);
+    refreshStepNumbers();
+
+    try {
+      let currentPrompt = originalPrompt;
+
+      setStatus("Step 0: preparing original prompt...");
+
+      baseResultArea.classList.remove("hidden");
+      basePromptOutput.textContent = currentPrompt;
+
+      await generateImagesForPrompt(baseImageGrid, currentPrompt, "Step 0");
+
+      for (let index = 0; index < steps.length; index++) {
+        const step = steps[index];
+        const visibleStepNumber = index + 1;
+        const mode = getStepModeDefinition(step.mode);
+
+        const card = stepsContainer.querySelector(`[data-step-id="${step.id}"]`);
+        const area = card.querySelector(".result-area");
+        const promptOutput = card.querySelector(".prompt-output");
+        const imageGrid = card.querySelector(".image-grid");
+
+        area.classList.remove("hidden");
+
+        setStatus(`Step ${visibleStepNumber}: applying ${mode.label}...`);
+
+        const instruction = getStepInstruction(step.mode, currentPrompt);
+        const modifiedPrompt = await generatePromptText(instruction);
+
+        currentPrompt = modifiedPrompt || currentPrompt;
+        promptOutput.textContent = currentPrompt;
+
+        await generateImagesForPrompt(imageGrid, currentPrompt, `Step ${visibleStepNumber}`);
+      }
+
+      await waitForQueuedUploads();
+
+      setStatus("Done.");
+    } catch (error) {
+      console.error(error);
+      setStatus(`Generation failed: ${error.message || error}`);
+    } finally {
+      setRunningState(false);
+      refreshStepNumbers();
+    }
+  }
+
+  // Register runtime cleanup
+  window.stepPromptLabRuntime = {
+    destroy: function () {
+      if (modeLoadTimer) clearInterval(modeLoadTimer);
+      if (modeLoadTimeout) clearTimeout(modeLoadTimeout);
+
+      addStepButton.removeEventListener("click", handleAddStepClick);
+      generateButton.removeEventListener("click", handleGenerateClick);
+    }
+  };
+
+  // Start
+  waitForStepModesAndStart();
+})();
+</script>
+</body>
+</html>

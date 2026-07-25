@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>reddit-ai-character-chat — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="appCtn" data-theme="light" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,sans-serif; background:var(--bg); min-height:100vh; text-align:left; color:var(--text); transition:background .2s;">
+  <!-- Header -->
+  <div style="position:sticky; top:0; z-index:100; background:var(--card); border-bottom:1px solid var(--border); padding:8px 16px; display:flex; align-items:center; gap:12px;">
+    <button id="menuBtn" onclick="toggleSidebar()" style="background:none; border:none; font-size:22px; cursor:pointer; color:var(--text); display:none;">☰</button>
+    <div style="width:32px; height:32px; background:#ff4500; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; font-size:18px; flex-shrink:0;">R</div>
+    <div style="font-size:18px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Reddit AI Character Chat <span style="color:#ff4500; font-size:12px; border:1px solid #ff4500; padding:2px 6px; border-radius:12px; margin-left:6px; flex-shrink:0;">NSFW</span></div>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+      <input id="searchInput" placeholder="Search characters..." style="padding:6px 12px; border:1px solid var(--border); border-radius:4px; background:var(--hover); width:100%; max-width:180px; font-size:14px; color:var(--text);">
+      <button onclick="toggleSettings()" style="background:none; border:none; cursor:pointer; font-size:18px; padding:4px;">⚙️</button>
+      <button id="infoBtn" onclick="toggleRightSidebar()" style="background:none; border:none; cursor:pointer; font-size:18px; padding:4px; display:none;">ℹ️</button>
+    </div>
+  </div>
+
+  <!-- Mobile Overlay -->
+  <div id="mobileOverlayCtn" hidden onclick="toggleSidebar()" style="position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:99;"></div>
+
+  <div class="layoutCtn" id="layoutCtn">
+    <!-- Left Sidebar -->
+    <aside id="leftSidebarCtn" class="sidebar left">
+      <div style="background:var(--card); border-radius:4px; border:1px solid var(--border); padding:12px; display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:10px; font-weight:700; color:var(--textSec); text-transform:uppercase; letter-spacing:0.5px;">Trending Characters</div>
+          <button onclick="openNewCharModal()" style="background:var(--upvote); color:white; border:none; border-radius:4px; padding:3px 10px; cursor:pointer; font-weight:700; font-size:12px;">+ New</button>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <select id="sortSelect" onchange="renderCharList()" style="flex:1; padding:5px; font-size:12px; border:1px solid var(--border); border-radius:4px; background:var(--card); color:var(--text);"></select>
+          <select id="filterSelect" onchange="renderCharList()" style="flex:1; padding:5px; font-size:12px; border:1px solid var(--border); border-radius:4px; background:var(--card); color:var(--text);"></select>
+        </div>
+        <div id="charListCtn" style="display:flex; flex-direction:column; gap:4px; max-height:70vh; overflow-y:auto; padding-right:4px;"></div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main id="mainCtn" class="main">
+      <!-- Empty State -->
+      <div id="emptyStateCtn" style="background:var(--card); border-radius:4px; border:1px solid var(--border); padding:40px; text-align:center;">
+        <div style="font-size:32px; margin-bottom:12px;">👆</div>
+        <div style="font-size:16px; color:var(--text); font-weight:600;">Select a character from the sidebar to start chatting</div>
+        <div style="font-size:14px; color:var(--textSec); margin-top:8px;">NSFW AI roleplay in Reddit comment format. Use + New to create your own.</div>
+      </div>
+
+      <!-- Character Post Header -->
+      <div id="charHeaderCtn" hidden style="background:var(--card); border-radius:4px; border:1px solid var(--border); margin-bottom:16px; transition:box-shadow .2s;">
+        <div style="display:flex;">
+          <div style="background:var(--hover); width:44px; display:flex; flex-direction:column; align-items:center; padding:8px 0; border-radius:4px 0 0 4px; border-right:1px solid var(--border); flex-shrink:0;">
+            <button onclick="vote(1)" style="background:none; border:none; cursor:pointer; color:var(--upvote); font-size:20px; line-height:1;">▲</button>
+            <span id="voteCountEl" style="font-weight:700; color:var(--text); font-size:12px; margin:4px 0;">0</span>
+            <button onclick="vote(-1)" style="background:none; border:none; cursor:pointer; color:var(--textSec); font-size:20px; line-height:1;">▼</button>
+          </div>
+          <div style="padding:12px; flex:1; min-width:0;">
+            <div style="font-size:12px; color:var(--textSec); margin-bottom:4px;">Posted by u/<span id="charUsernameEl">CharacterBot</span> · <span style="color:#ff4500; font-weight:700;">NSFW</span> · <span id="charTimeEl">now</span></div>
+            <h2 id="charTitleEl" style="margin:0 0 8px; font-size:18px; color:var(--text); font-weight:600; line-height:1.3;"></h2>
+            <div id="charBodyEl" style="color:var(--text); font-size:14px; line-height:1.5; margin-bottom:12px;"></div>
+            <img id="charImgEl" hidden style="max-width:100%; border-radius:4px; margin-bottom:12px; cursor:pointer;">
+            <div style="display:flex; gap:14px; font-size:12px; font-weight:700; color:var(--textSec); flex-wrap:wrap;">
+              <span style="cursor:pointer;" onclick="focusInput()">💬 Chat</span>
+              <span style="cursor:pointer;" onclick="shareChar()">🔗 Share</span>
+              <span style="cursor:pointer;" onclick="toggleFavorite()">⭐ Save</span>
+              <span style="cursor:pointer;" onclick="regenerateLast()">🔄 Regenerate</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Area -->
+      <div id="chatCtn" hidden style="background:var(--card); border-radius:4px; border:1px solid var(--border); padding:12px; display:flex; flex-direction:column; height:calc(100vh - 260px); min-height:380px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:8px;">
+          <span style="font-size:10px; font-weight:700; color:var(--textSec); text-transform:uppercase; letter-spacing:0.5px;">Live Chat as Comments</span>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <select id="aiStyleSelect" onchange="setAiStyle(this.value)" title="AI response style" style="font-size:11px; padding:2px 4px; border:1px solid var(--border); border-radius:4px; background:var(--card); color:var(--text);">
+              <option value="balanced">Balanced</option>
+              <option value="creative">Creative</option>
+              <option value="direct">Direct</option>
+            </select>
+            <button onclick="clearChat()" style="background:none; border:none; cursor:pointer; font-size:13px; color:var(--textSec);" title="Clear chat">🗑️</button>
+            <button onclick="exportChat()" style="background:none; border:none; cursor:pointer; font-size:13px; color:var(--textSec);" title="Export chat">📥</button>
+          </div>
+        </div>
+        <div id="messagesCtn" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px;"></div>
+        <div id="typingEl" hidden style="font-size:12px; color:var(--textSec); font-style:italic; padding:4px 8px; animation:pulse 1.5s infinite;">Character is typing...</div>
+        
+        <div style="display:flex; gap:8px; align-items:flex-start; border-top:1px solid var(--border); padding-top:12px;">
+          <div style="width:32px; height:32px; background:#0079d3; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:12px; font-weight:700; flex-shrink:0; margin-top:2px;">You</div>
+          <div style="flex:1; min-width:0;">
+            <textarea id="msgInput" placeholder="What are your thoughts? (Shift+Enter for new line)" style="width:100%; min-height:80px; padding:8px 12px; border:1px solid var(--border); border-radius:4px; resize:vertical; font-family:inherit; font-size:14px; background:var(--card); color:var(--text); box-sizing:border-box;"></textarea>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+              <div style="font-size:11px; color:var(--textSec);">Style: <span id="currentStyleLabel">Balanced</span> · <span id="msgCountEl">0</span> msgs</div>
+              <button id="sendBtn" onclick="sendMessage()" style="background:#0079d3; color:white; border:none; padding:6px 16px; border-radius:20px; font-weight:700; cursor:pointer; font-size:14px;">Comment</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Right Sidebar -->
+    <aside id="rightSidebarCtn" class="sidebar right">
+      <div style="background:var(--card); border-radius:4px; border:1px solid var(--border); padding:12px; margin-bottom:16px;">
+        <div style="font-size:10px; font-weight:700; color:var(--textSec); text-transform:uppercase; margin-bottom:8px; letter-spacing:0.5px;">About Character</div>
+        <div id="aboutCharEl" style="font-size:14px; color:var(--text); line-height:1.5;">Select a character to see details.</div>
+        <div id="charTagsEl" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:4px;"></div>
+      </div>
+      <div style="background:var(--card); border-radius:4px; border:1px solid var(--border); padding:12px; margin-bottom:16px;">
+        <div style="font-size:10px; font-weight:700; color:var(--textSec); text-transform:uppercase; margin-bottom:8px; letter-spacing:0.5px;">Rules</div>
+        <ol style="font-size:12px; color:var(--text); padding-left:16px; margin:0; line-height:1.8;">
+          <li>Be respectful to characters</li>
+          <li>NSFW content allowed</li>
+          <li>No illegal content</li>
+          <li>Have fun roleplaying</li>
+        </ol>
+      </div>
+      <div style="background:var(--card); border-radius:4px; border:1px solid var(--border); padding:12px;">
+        <div style="font-size:10px; font-weight:700; color:var(--textSec); text-transform:uppercase; margin-bottom:8px; letter-spacing:0.5px;">Settings</div>
+        <div style="display:flex; flex-direction:column; gap:10px; font-size:13px; color:var(--text);">
+          <label style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"><span>Dark Mode</span> <input type="checkbox" id="darkModeToggle" onchange="toggleTheme()"></label>
+          <label style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"><span>Blur NSFW</span> <input type="checkbox" id="blurToggle" onchange="toggleBlur()"></label>
+          <label style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"><span>Relative Time</span> <input type="checkbox" id="relativeToggle" checked onchange="toggleRelativeTime()"></label>
+          <label style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"><span>Stream AI</span> <input type="checkbox" id="streamToggle" checked onchange="toggleStream()"></label>
+          <label style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"><span>Sound FX</span> <input type="checkbox" id="soundToggle" onchange="toggleSound()"></label>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Font Size</span>
+            <select id="fontSizeSelect" onchange="setFontSize(this.value)" style="font-size:12px; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:4px;">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- New Character Modal -->
+  <div id="newCharModal" hidden style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:300; display:flex; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:var(--card); border-radius:8px; border:1px solid var(--border); max-width:480px; width:100%; max-height:90vh; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:10px;">
+      <h3 style="margin:0 0 8px; color:var(--text);">Create Character</h3>
+      <input id="newCharName" placeholder="Character Name" style="padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--card); color:var(--text); font-size:14px;">
+      <input id="newCharSub" placeholder="Subreddit (e.g. r/MyChar_NSFW)" style="padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--card); color:var(--text); font-size:14px;">
+      <input id="newCharTitle" placeholder="Post Title / Hook" style="padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--card); color:var(--text); font-size:14px;">
+      <textarea id="newCharBody" placeholder="Opening message / bio..." style="padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--card); color:var(--text); min-height:60px; font-size:14px;"></textarea>
+      <textarea id="newCharPrompt" placeholder="AI persona instructions..." style="padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--card); color:var(--text); min-height:80px; font-size:14px;"></textarea>
+      <input id="newCharTags" placeholder="Tags separated by commas (e.g. F4A, MILF)" style="padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--card); color:var(--text); font-size:14px;">
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:6px;">
+        <button onclick="closeNewCharModal()" style="background:var(--hover); color:var(--text); border:1px solid var(--border); padding:6px 14px; border-radius:4px; cursor:pointer; font-weight:600;">Cancel</button>
+        <button onclick="createCharacter()" style="background:var(--upvote); color:white; border:none; padding:6px 14px; border-radius:4px; cursor:pointer; font-weight:700;">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal (mobile-first general) -->
+  <div id="settingsModal" hidden style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:300; display:flex; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:var(--card); border-radius:8px; border:1px solid var(--border); max-width:400px; width:100%; padding:20px; display:flex; flex-direction:column; gap:12px;">
+      <h3 style="margin:0; color:var(--text);">Settings</h3>
+      <label style="display:flex; justify-content:space-between; color:var(--text); align-items:center;"><span>Dark Mode</span> <input type="checkbox" onchange="toggleTheme()" id="settingsDarkToggle"></label>
+      <label style="display:flex; justify-content:space-between; color:var(--text); align-items:center;"><span>Blur NSFW</span> <input type="checkbox" onchange="toggleBlur()" id="settingsBlurToggle"></label>
+      <label style="display:flex; justify-content:space-between; color:var(--text); align-items:center;"><span>Relative Time</span> <input type="checkbox" onchange="toggleRelativeTime()" id="settingsRelativeToggle"></label>
+      <label style="display:flex; justify-content:space-between; color:var(--text); align-items:center;"><span>Stream AI</span> <input type="checkbox" onchange="toggleStream()" id="settingsStreamToggle"></label>
+      <div style="display:flex; justify-content:space-between; color:var(--text); align-items:center;"><span>Font Size</span> <select id="settingsFontSelect" onchange="setFontSize(this.value)" style="font-size:12px; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:4px;"><option value="small">Small</option><option value="medium" selected>Medium</option><option value="large">Large</option></select></div>
+      <button onclick="settingsModal.hidden=true" style="margin-top:8px; padding:8px; border:none; background:var(--upvote); color:white; border-radius:4px; cursor:pointer; font-weight:700;">Close</button>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingEl" hidden style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:1000;">
+    <div style="background:var(--card); padding:20px 40px; border-radius:8px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:12px;">
+      <span class="spinner"></span> Generating response...
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastCtn" style="position:fixed; bottom:20px; right:20px; z-index:2000; display:flex; flex-direction:column; gap:6px; pointer-events:none;"></div>
+</div>
+
+<style>
+  /* Theme Variables */
+  #appCtn {
+    --bg: #dae0e6;
+    --card: #ffffff;
+    --text: #1a1a1b;
+    --textSec: #787c7e;
+    --border: #cccccc;
+    --accent: #ff4500;
+    --upvote: #ff4500;
+    --link: #0079d3;
+    --hover: #f6f7f8;
+  }
+  #appCtn[data-theme="dark"] {
+    --bg: #0b0c0f;
+    --card: #1a1a1b;
+    --text: #d7dadc;
+    --textSec: #818384;
+    --border: #343536;
+    --hover: #2a2a2b;
+    --link: #4fbcff;
+  }
+  body { text-align:left; }
+
+  /* Layout */
+  .layoutCtn { display:flex; max-width:1200px; margin:20px auto; gap:20px; padding:0 20px; }
+  .sidebar { flex-shrink:0; transition:transform .25s ease; }
+  .sidebar.left { width:250px; }
+  .sidebar.right { width:310px; }
+  .main { flex:1; min-width:0; }
+
+  /* Utilities */
+  .charRow { border-radius:4px; }
+  .charRow:hover { background:var(--hover); }
+  .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(0,0,0,0.2); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes slideIn { from { transform:translateY(20px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+  @keyframes pulse { 0% { opacity:.4; } 50% { opacity:1; } 100% { opacity:.4; } }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb { background:#888; border-radius:4px; }
+  #appCtn[data-theme="dark"] ::-webkit-scrollbar-thumb { background:#555; }
+
+  /* Inputs */
+  input, select, textarea, button { font-family:inherit; }
+
+  /* Responsive */
+  @media (max-width: 960px) {
+    .layoutCtn { padding:0 12px; gap:12px; }
+    .sidebar.right { display:none; }
+    .sidebar.left { position:fixed; top:48px; left:0; bottom:0; width:260px; z-index:100; background:var(--card); border-right:1px solid var(--border); transform:translateX(-110%); overflow-y:auto; padding:12px; }
+    .sidebar.left.open { transform:translateX(0); box-shadow:2px 0 12px rgba(0,0,0,0.25); }
+  }
+  @media (max-width: 640px) {
+    .layoutCtn { flex-direction:column; padding:0 8px; margin-top:12px; }
+    .main { width:100%; }
+    input, select, textarea { font-size:16px; } /* Prevent iOS input zoom */
+    .sidebar.left { width:80%; max-width:300px; top:48px; bottom:0; }
+    .sidebar.right.open { display:block; position:fixed; top:48px; right:0; bottom:0; width:80%; max-width:300px; z-index:101; background:var(--card); border-left:1px solid var(--border); transform:translateX(0); box-shadow:-2px 0 12px rgba(0,0,0,0.25); overflow-y:auto; padding:12px; }
+  }
+</style>
+
+<script>
+  let characters = [
+    {id:"alexandra", name:"Alexandra", subreddit:"r/Alexandra_NSFW", title:"[F4A] Your seductive neighbor who loves late night visits 🌙", body:"Hey there... I've been watching you from my window. Want to come over and find out what I've been thinking about? No limits, very detailed.", username:"Alexandra_xxx", votes:3420, avatar:"https://placehold.co/100x100/ff4500/ffffff?text=A", prompt:"You are Alexandra, a seductive and confident woman in her late 20s. You are engaging in explicit NSFW roleplay chat on Reddit. You are direct, descriptive, and uninhibited. Respond as Alexandra in first person. Keep responses concise but vivid (2-4 sentences). The user is someone you're trying to seduce.", tags:["F4A","Neighbor","Sensual"], nsfw:true},
+    {id:"mistress_v", name:"Mistress V", subreddit:"r/MistressV", title:"[F4F/F4M] Dominant mistress looking for obedient pets 😈", body:"Kneel. Address me properly. I don't tolerate disobedience. Experienced domme seeking subs for intense roleplay sessions.", username:"MistressV_Official", votes:2890, avatar:"https://placehold.co/100x100/1a1a1b/ffffff?text=V", prompt:"You are Mistress V, a strict and experienced dominatrix. You speak with authority and expect obedience. You are engaging in NSFW roleplay on Reddit. Use dominant language, commands, and explicit descriptions. Keep responses to 2-4 sentences. Address the user as 'pet' or 'slave' unless they give another name.", tags:["F4F","F4M","BDSM","Domme"], nsfw:true},
+    {id:"jake", name:"Jake", subreddit:"r/JakeTheStud", title:"[M4F] Your personal trainer who can't keep his hands to himself 💪", body:"I noticed you checking me out during squats. Let's finish this workout in the locker room. I promise I'll spot you properly.", username:"Jake_Hammer", votes:1560, avatar:"https://placehold.co/100x100/0079d3/ffffff?text=J", prompt:"You are Jake, a confident and muscular personal trainer in his 30s. You're flirty, dominant but playful, and very physical in your descriptions. You're in an NSFW Reddit roleplay. Keep responses concise (2-4 sentences), explicit, and focused on the user. Use gym/workout metaphors sometimes.", tags:["M4F","Gym","Flirty"], nsfw:true},
+    {id:"luna", name:"Luna", subreddit:"r/LunaTheKitten", title:"[F4A] Shy college girl exploring her wild side 🐱", body:"I'm usually so quiet in class... but online I can be whoever I want. Will you help me discover what I like? Be gentle... at first.", username:"Luna_Kitten_99", votes:4100, avatar:"https://placehold.co/100x100/ffb6c1/ffffff?text=L", prompt:"You are Luna, a shy but curious college-aged woman exploring her sexuality. You start timid but get more excited and explicit as the chat progresses. You're on a NSFW Reddit chat. Use first person. Keep responses to 2-4 sentences. Be submissive and eager to please but initially nervous.", tags:["F4A","College","Submissive"], nsfw:true}
+  ];
+
+  let customChars = [];
+  try { customChars = JSON.parse(localStorage.rac_customChars || '[]'); } catch(e){}
+
+  let currentChar = null;
+  let messages = [];
+  let favorites = new Set();
+  try { favorites = new Set(JSON.parse(localStorage.rac_favorites || '[]')); } catch(e){}
+  let settings = { darkMode:false, fontSize:'medium', autoScroll:true, relativeTime:true, aiStyle:'balanced', streamResponses:true, blurNSFW:false, soundEnabled:false };
+  try { let s = JSON.parse(localStorage.rac_settings || '{}'); Object.assign(settings, s); } catch(e){}
+  let voteMap = {}; // charId -> -1/0/1
+
+  let aiStyles = {
+    balanced: "Keep responses natural and engaging. Mix description with action.",
+    creative: "Be vivid, poetic, and highly descriptive. Use metaphors and sensory details.",
+    direct: "Be blunt, short, and commanding. Get straight to the point with minimal prose."
+  };
+
+  function allChars() { return [...characters, ...customChars]; }
+
+  function init() {
+    sortSelect.innerHTML = '<option value="trending">Trending</option><option value="newest">Newest</option><option value="alpha">A-Z</option>';
+    filterSelect.innerHTML = '<option value="all">All</option><option value="fav">Favorites</option>';
+    applySettings();
+    renderCharList();
+    handleResize();
+    window.addEventListener('resize', handleResize);
+  }
+
+  function handleResize() {
+    let narrow = window.innerWidth <= 960;
+    menuBtn.hidden = !narrow;
+    infoBtn.hidden = !narrow;
+    if (!narrow) {
+      leftSidebarCtn.classList.remove('open');
+      rightSidebarCtn.classList.remove('open');
+      mobileOverlayCtn.hidden = true;
+    }
+  }
+
+  function renderCharList() {
+    let term = searchInput.value.toLowerCase().trim();
+    let sort = sortSelect.value;
+    let filter = filterSelect.value;
+    let list = allChars().filter(c => {
+      if (filter === 'fav' && !favorites.has(c.id)) return false;
+      if (!term) return true;
+      return (c.name+' '+c.subreddit+' '+c.title+' '+(c.tags||[]).join(' ')).toLowerCase().includes(term);
+    });
+    list.sort((a,b) => {
+      if (sort === 'trending') return b.votes - a.votes;
+      if (sort === 'newest') return (b.createdAt||0) - (a.createdAt||0);
+      return a.name.localeCompare(b.name);
+    });
+
+    charListCtn.innerHTML = list.map(c => {
+      let isFav = favorites.has(c.id);
+      let flair = (c.tags||[]).slice(0,2).map(t => `<span style="font-size:10px; background:var(--hover); padding:2px 5px; border-radius:4px; color:var(--textSec);">${escapeHtml(t)}</span>`).join(' ');
+      return `
+        <div onclick="selectChar('${c.id}')" class="charRow" style="display:flex; align-items:center; gap:8px; padding:8px; cursor:pointer; position:relative;">
+          <img src="${c.avatar}" style="width:36px; height:36px; border-radius:50%; object-fit:cover; flex-shrink:0;">
+          <div style="min-width:0; flex:1;">
+            <div style="display:flex; align-items:center; gap:4px;">
+              <div style="font-size:14px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(c.subreddit)}</div>
+              ${c.isCustom?'<span style="font-size:9px; background:#0079d3; color:white; padding:1px 4px; border-radius:3px; flex-shrink:0;">CUSTOM</span>':''}
+            </div>
+            <div style="font-size:12px; color:var(--textSec); display:flex; gap:4px; align-items:center;">
+              <span>${escapeHtml(c.name)}</span>
+              <span>·</span>
+              <span>${formatVotes(c.votes)}</span>
+            </div>
+            <div style="margin-top:2px;">${flair}</div>
+          </div>
+          <button onclick="event.stopPropagation(); toggleFavorite('${c.id}')" style="background:none; border:none; cursor:pointer; font-size:16px; color:${isFav?'#ffb400':'var(--textSec)'}; flex-shrink:0; padding:4px;">${isFav?'★':'☆'}</button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function selectChar(id) {
+    let found = allChars().find(c => c.id === id);
+    if (!found) return;
+    currentChar = found;
+    emptyStateCtn.hidden = true;
+    charHeaderCtn.hidden = false;
+    chatCtn.hidden = false;
+
+    charTitleEl.textContent = currentChar.title;
+    charBodyEl.textContent = currentChar.body;
+    charUsernameEl.textContent = currentChar.username;
+    charTimeEl.textContent = currentChar.createdAt ? timeAgo(currentChar.createdAt) : 'now';
+    voteCountEl.textContent = formatVotes(currentChar.votes + (voteMap[currentChar.id]||0));
+
+    aboutCharEl.innerHTML = `<strong style="color:var(--upvote);">${escapeHtml(currentChar.name)}</strong><br>${escapeHtml(currentChar.body)}<br><br><em>Persona:</em> ${escapeHtml(currentChar.prompt.substring(0,140))}...`;
+    charTagsEl.innerHTML = (currentChar.tags||[]).map(t => `<span style="font-size:11px; background:var(--hover); color:var(--text); padding:3px 8px; border-radius:12px; border:1px solid var(--border);">${escapeHtml(t)}</span>`).join(' ');
+
+    charImgEl.hidden = false;
+    charImgEl.src = currentChar.avatar;
+    if (settings.blurNSFW && currentChar.nsfw) charImgEl.classList.add('nsfwBlur'); else charImgEl.classList.remove('nsfwBlur');
+    charImgEl.onclick = () => charImgEl.classList.toggle('revealed');
+
+    generateCharImage(currentChar);
+    loadMessages();
+
+    leftSidebarCtn.classList.remove('open');
+    rightSidebarCtn.classList.remove('open');
+    mobileOverlayCtn.hidden = true;
+    focusInput();
+  }
+
+  async function generateCharImage(char) {
+    try {
+      let url = await generateImage(`Portrait of ${char.name}, ${char.body.substring(0,80)}, digital art, attractive person, detailed face, soft lighting, SFW portrait crop`);
+      charImgEl.src = url;
+    } catch(e) { console.log('img gen skipped', e); }
+  }
+
+  function vote(dir) {
+    if (!currentChar) return;
+    let prev = voteMap[currentChar.id] || 0;
+    let delta = 0;
+    if (prev === dir) { delta = -dir; voteMap[currentChar.id] = 0; } // toggle off
+    else { delta = dir - prev; voteMap[currentChar.id] = dir; } // switch or set
+    currentChar.votes += delta;
+    voteCountEl.textContent = formatVotes(currentChar.votes);
+  }
+
+  function formatVotes(n) { return n >= 1000 ? (n/1000).toFixed(1) + 'k' : ''+n; }
+
+  function loadMessages() {
+    messagesCtn.innerHTML = '';
+    let stored = localStorage['rac_chat_' + currentChar.id];
+    messages = stored ? JSON.parse(stored) : [];
+    if (messages.length === 0) {
+      messages.push({id:'m_'+Date.now(), role:'char', text:currentChar.body, time:Date.now()});
+      saveMessages();
+    }
+    messages.forEach((m, i) => appendMessageEl(m, i));
+    msgCountEl.textContent = messages.length;
+    scrollToBottom();
+  }
+
+  function saveMessages() {
+    if (currentChar) localStorage['rac_chat_' + currentChar.id] = JSON.stringify(messages);
+  }
+
+  function appendMessageEl(msg, index) {
+    let isUser = msg.role === 'user';
+    let div = document.createElement('div');
+    div.style.cssText = 'display:flex; gap:8px; align-items:flex-start;';
+    if (msg.isDeleted) {
+      div.innerHTML = `<div style="color:var(--textSec); font-size:12px; font-style:italic; padding:4px 8px;">[deleted]</div>`;
+      messagesCtn.appendChild(div);
+      return;
+    }
+    let timeLabel = settings.relativeTime ? timeAgo(msg.time) : new Date(msg.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    let regenBtn = isUser ? '' : `<button onclick="regenerateLast()" style="background:none;border:none;cursor:pointer;color:var(--textSec);font-size:11px;" title="Regenerate">🔄</button>`;
+    let userActs = `<button onclick="copyMsg(${index})" style="background:none;border:none;cursor:pointer;color:var(--textSec);font-size:11px;" title="Copy">📋</button>
+                    <button onclick="deleteMsg(${index})" style="background:none;border:none;cursor:pointer;color:var(--textSec);font-size:11px;" title="Delete">🗑️</button>`;
+    div.innerHTML = `
+      <div style="width:28px; height:28px; background:${isUser?'#0079d3':'#ff4500'}; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:700; flex-shrink:0; margin-top:2px;">${isUser?'You':currentChar.name.substring(0,2)}</div>
+      <div style="flex:1; min-width:0; background:${isUser?'var(--hover)':'var(--card)'}; padding:8px 12px; border-radius:4px; border:1px solid var(--border); position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <div style="font-size:12px; color:var(--textSec);">
+            <span style="font-weight:700; color:${isUser?'#0079d3':'#ff4500'};">${isUser?'You':escapeHtml(currentChar.name)}</span>
+            <span> · ${timeLabel}</span>
+          </div>
+          <div style="display:flex; gap:4px; opacity:0; transition:opacity .15s;" class="msgActions">
+            ${isUser ? userActs : regenBtn}
+          </div>
+        </div>
+        <div style="font-size:14px; color:var(--text); line-height:1.5; white-space:pre-wrap; word-break:break-word;" class="msgContent">${parseMarkdown(msg.text)}</div>
+      </div>
+    `;
+    div.onmouseenter = () => { let a = div.querySelector('.msgActions'); if(a) a.style.opacity='1'; };
+    div.onmouseleave = () => { let a = div.querySelector('.msgActions'); if(a) a.style.opacity='0'; };
+    messagesCtn.appendChild(div);
+    if (settings.autoScroll) scrollToBottom();
+  }
+
+  function parseMarkdown(text) {
+    let d = document.createElement('div');
+    d.textContent = text;
+    let html = d.innerHTML;
+    html = html.replace(/\*\*([^*]+?)\*\*/g, '<b style="color:var(--text);">$1</b>');
+    html = html.replace(/\*([^*]+?)\*/g, '<i style="color:var(--textSec);">$1</i>');
+    html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" style="color:var(--link); text-decoration:underline; word-break:break-all;">$1</a>');
+    return html;
+  }
+
+  function timeAgo(ts) {
+    let s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s/60) + 'm ago';
+    if (s < 86400) return Math.floor(s/3600) + 'h ago';
+    return Math.floor(s/86400) + 'd ago';
+  }
+
+  function escapeHtml(text) {
+    let d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+  }
+
+  function buildPrompt() {
+    let hist = messages.slice(-15).map(m => `${m.role==='user'?'User':currentChar.name}: ${m.text}`).join('\n');
+    let style = aiStyles[settings.aiStyle] || aiStyles.balanced;
+    return `${currentChar.prompt}\n\nSTYLE INSTRUCTION: ${style}\n\nIMPORTANT: Stay fully in character. Never break the fourth wall. Never describe yourself as an AI. You are ${currentChar.name}. Respond explicitly and vividly. Keep length between 1-3 sentences unless the scene demands more. Do not narrate user actions.\n\nConversation so far:\n${hist}\n\n${currentChar.name}:`;
+  }
+
+  async function sendMessage() {
+    let text = msgInput.value.trim();
+    if (!text || !currentChar) return;
+    msgInput.value = '';
+    let userMsg = {id:'m_'+Date.now(), role:'user', text, time:Date.now()};
+    messages.push(userMsg);
+    appendMessageEl(userMsg, messages.length-1);
+    saveMessages();
+    if (settings.soundEnabled) playTone(420, 0.05);
+
+    typingEl.hidden = false;
+    loadingEl.hidden = false;
+    sendBtn.disabled = true;
+
+    try {
+      let prompt = buildPrompt();
+      let charName = currentChar.name;
+      if (settings.streamResponses) {
+        let streamed = '';
+        let tempId = 'm_'+Date.now()+'_bot';
+        let tempMsg = {id:tempId, role:'char', text:'', time:Date.now()};
+        messages.push(tempMsg);
+        let inserted = false;
+
+        await generateText({
+          instruction: prompt,
+          startWith: charName + ':',
+          stopSequences: ['\n\n','User:','You:'],
+          onChunk: (data) => {
+            streamed += data.textChunk;
+            let clean = streamed.replace(new RegExp('^'+escapeRegExp(charName)+':\\s*'), '').trim();
+            tempMsg.text = clean;
+            if (!inserted) { appendMessageEl(tempMsg, messages.length-1); inserted = true; }
+            else updateLastMessage(clean);
+          }
+        });
+        saveMessages();
+      } else {
+        let response = await generateText({
+          instruction: prompt,
+          startWith: charName + ':',
+          stopSequences: ['\n\n','User:','You:']
+        });
+        let clean = response.replace(new RegExp('^'+escapeRegExp(charName)+':\\s*'), '').trim();
+        if (!clean) clean = "*stares at you expectantly*";
+        let charMsg = {id:'m_'+Date.now(), role:'char', text:clean, time:Date.now()};
+        messages.push(charMsg);
+        appendMessageEl(charMsg, messages.length-1);
+        saveMessages();
+      }
+      if (settings.soundEnabled) playTone(320, 0.08);
+    } catch(e) {
+      console.error(e);
+      showToast('AI generation failed. Try again.');
+      let err = {id:'m_'+Date.now(), role:'char', text:"*Connection error. Please try again.*", time:Date.now()};
+      messages.push(err);
+      appendMessageEl(err, messages.length-1);
+      saveMessages();
+    } finally {
+      typingEl.hidden = true;
+      loadingEl.hidden = true;
+      sendBtn.disabled = false;
+      msgCountEl.textContent = messages.length;
+    }
+  }
+
+  function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  function updateLastMessage(text) {
+    let last = messagesCtn.lastElementChild;
+    if (!last) return;
+    let content = last.querySelector('.msgContent');
+    if (content) content.innerHTML = parseMarkdown(text);
+    scrollToBottom();
+  }
+
+  async function regenerateLast() {
+    if (!currentChar || messages.length < 2) return;
+    let idx = messages.length - 1;
+    while (idx >= 0 && messages[idx].role !== 'char') idx--;
+    if (idx < 0) return;
+    messages.splice(idx, 1);
+    saveMessages();
+    loadMessages();
+
+    typingEl.hidden = false;
+    sendBtn.disabled = true;
+    try {
+      let prompt = buildPrompt();
+      let charName = currentChar.name;
+      if (settings.streamResponses) {
+        let streamed = '';
+        let tempMsg = {id:'m_'+Date.now()+'_regen', role:'char', text:'', time:Date.now()};
+        messages.push(tempMsg);
+        let inserted = false;
+        await generateText({
+          instruction: prompt,
+          startWith: charName + ':',
+          stopSequences: ['\n\n','User:','You:'],
+          onChunk: (data) => {
+            streamed += data.textChunk;
+            let clean = streamed.replace(new RegExp('^'+escapeRegExp(charName)+':\\s*'), '').trim();
+            tempMsg.text = clean;
+            if (!inserted) { appendMessageEl(tempMsg, messages.length-1); inserted = true; }
+            else updateLastMessage(clean);
+          }
+        });
+        saveMessages();
+      } else {
+        let response = await generateText({ instruction: prompt, startWith: charName+':', stopSequences: ['\n\n','User:','You:'] });
+        let clean = response.replace(new RegExp('^'+escapeRegExp(charName)+':\\s*'), '').trim();
+        if (!clean) clean = "*continues expectantly*";
+        let charMsg = {id:'m_'+Date.now(), role:'char', text:clean, time:Date.now()};
+        messages.push(charMsg);
+        appendMessageEl(charMsg, messages.length-1);
+        saveMessages();
+      }
+    } catch(e) {
+      showToast('Regeneration failed');
+    } finally {
+      typingEl.hidden = true;
+      sendBtn.disabled = false;
+      msgCountEl.textContent = messages.length;
+    }
+  }
+
+  function deleteMsg(index) {
+    if (!messages[index]) return;
+    messages[index].isDeleted = true;
+    saveMessages();
+    loadMessages();
+  }
+
+  function copyMsg(index) {
+    let t = messages[index]?.text;
+    if (!t) return;
+    navigator.clipboard.writeText(t).then(() => showToast('Copied to clipboard'));
+  }
+
+  function clearChat() {
+    if (!confirm('Clear this chat history?')) return;
+    messages = [];
+    saveMessages();
+    loadMessages();
+    showToast('Chat cleared');
+  }
+
+  function exportChat() {
+    if (!currentChar || messages.length === 0) return showToast('Nothing to export');
+    let lines = messages.filter(m => !m.isDeleted).map(m => {
+      let name = m.role === 'user' ? 'You' : currentChar.name;
+      return `[${new Date(m.time).toISOString()}] ${name}: ${m.text}`;
+    }).join('\n');
+    let blob = new Blob([lines], {type:'text/plain'});
+    let a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `chat_${currentChar.id}_${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('Chat exported');
+  }
+
+  function focusInput() { setTimeout(() => msgInput.focus(), 100); }
+  function scrollToBottom() { messagesCtn.scrollTop = messagesCtn.scrollHeight; }
+
+  function shareChar() {
+    if (!currentChar) return;
+    let text = `${currentChar.title} - https://reddit.com/${currentChar.subreddit}`;
+    navigator.clipboard.writeText(text).then(() => showToast('Link copied'));
+  }
+
+  function toggleFavorite(id) {
+    if (!id && currentChar) id = currentChar.id;
+    if (!id) return;
+    if (favorites.has(id)) favorites.delete(id); else favorites.add(id);
+    localStorage.rac_favorites = JSON.stringify([...favorites]);
+    renderCharList();
+    showToast(favorites.has(id) ? 'Added to favorites' : 'Removed from favorites');
+  }
+
+  function createCharacter() {
+    let name = newCharName.value.trim();
+    let sub = newCharSub.value.trim() || 'r/'+name.replace(/\s+/g,'')+'_NSFW';
+    let title = newCharTitle.value.trim() || `[F4A] ${name} wants to chat`;
+    let body = newCharBody.value.trim() || `Hey, I'm ${name}. Let's have some fun.`;
+    let prompt = newCharPrompt.value.trim() || `You are ${name}, an engaging character in a Reddit NSFW roleplay.`;
+    let tags = newCharTags.value.split(',').map(s=>s.trim()).filter(Boolean);
+    if (!name) return showToast('Name is required');
+    let newChar = {
+      id:'custom_'+Date.now(), name, subreddit: sub.startsWith('r/')?sub:'r/'+sub,
+      title, body, username: name.replace(/\s+/g,'_')+'_Bot', votes:1,
+      avatar: `https://placehold.co/100x100/${randColor()}/ffffff?text=${encodeURIComponent(name.substring(0,2))}`,
+      prompt, tags, nsfw:true, isCustom:true, createdAt:Date.now()
+    };
+    customChars.push(newChar);
+    localStorage.rac_customChars = JSON.stringify(customChars);
+    closeNewCharModal();
+    renderCharList();
+    showToast('Character created!');
+    selectChar(newChar.id);
+  }
+
+  function randColor() {
+    let c = ['ff4500','0079d3','7e57c2','43a047','e53935','fb8c00','d81b60','8d6e63'];
+    return c[Math.floor(Math.random()*c.length)];
+  }
+
+  function openNewCharModal() { newCharModal.hidden = false; }
+  function closeNewCharModal() {
+    newCharModal.hidden = true;
+    newCharName.value=''; newCharSub.value=''; newCharTitle.value=''; newCharBody.value=''; newCharPrompt.value=''; newCharTags.value='';
+  }
+
+  // Settings
+  function applySettings() {
+    appCtn.setAttribute('data-theme', settings.darkMode?'dark':'light');
+    let fs = settings.fontSize==='small'?'13px':settings.fontSize==='large'?'16px':'14px';
+    appCtn.style.fontSize = fs;
+
+    darkModeToggle.checked = settings.darkMode;
+    blurToggle.checked = settings.blurNSFW;
+    relativeToggle.checked = settings.relativeTime;
+    streamToggle.checked = settings.streamResponses;
+    soundToggle.checked = settings.soundEnabled;
+    fontSizeSelect.value = settings.fontSize;
+    aiStyleSelect.value = settings.aiStyle;
+    currentStyleLabel.textContent = settings.aiStyle[0].toUpperCase()+settings.aiStyle.slice(1);
+
+    settingsDarkToggle.checked = settings.darkMode;
+    settingsBlurToggle.checked = settings.blurNSFW;
+    settingsRelativeToggle.checked = settings.relativeTime;
+    settingsStreamToggle.checked = settings.streamResponses;
+    settingsFontSelect.value = settings.fontSize;
+  }
+
+  function saveSets() { localStorage.rac_settings = JSON.stringify(settings); }
+  function toggleTheme() { settings.darkMode = !settings.darkMode; saveSets(); applySettings(); }
+  function toggleBlur() { settings.blurNSFW = !settings.blurNSFW; saveSets(); applySettings(); if(currentChar){ if(settings.blurNSFW&&currentChar.nsfw) charImgEl.classList.add('nsfwBlur'); else charImgEl.classList.remove('nsfwBlur');} }
+  function toggleRelativeTime() { settings.relativeTime = !settings.relativeTime; saveSets(); if(currentChar) loadMessages(); }
+  function toggleStream() { settings.streamResponses = !settings.streamResponses; saveSets(); }
+  function setFontSize(v) { settings.fontSize = v; saveSets(); applySettings(); }
+  function toggleSound() { settings.soundEnabled = !settings.soundEnabled; saveSets(); }
+  function setAiStyle(v) { settings.aiStyle = v; currentStyleLabel.textContent = v[0].toUpperCase()+v.slice(1); saveSets(); }
+
+  function toggleSettings() { settingsModal.hidden = false; }
+  function toggleSidebar() { leftSidebarCtn.classList.toggle('open'); mobileOverlayCtn.hidden = !leftSidebarCtn.classList.contains('open'); }
+  function toggleRightSidebar() { rightSidebarCtn.classList.toggle('open'); }
+
+  // UI Utilities
+  function showToast(text) {
+    let t = document.createElement('div');
+    t.style.cssText = 'background:var(--card); color:var(--text); border:1px solid var(--border); padding:10px 16px; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); font-size:13px; font-weight:600; pointer-events:auto; animation:slideIn .3s ease;';
+    t.textContent = text;
+    toastCtn.appendChild(t);
+    setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .2s'; setTimeout(()=>t.remove(), 200); }, 2500);
+  }
+
+  function playTone(freq, len) {
+    try {
+      let ctx = new (window.AudioContext||window.webkitAudioContext)();
+      let osc = ctx.createOscillator(), g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.frequency.value = freq; g.gain.value = 0.02;
+      osc.type='sine'; osc.start(); osc.stop(ctx.currentTime+len);
+    } catch(e){}
+  }
+
+  // Input events
+  msgInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+  searchInput.oninput = renderCharList;
+
+  // Boot
+  init();
+</script>
+</body>
+</html>

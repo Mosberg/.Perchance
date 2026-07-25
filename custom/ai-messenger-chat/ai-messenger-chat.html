@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-messenger-chat — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+AI Messenger — Fully rewritten with:
+  • Collapsible smartphone-style sidebar / contacts list
+  • Rich contact profiles (age, gender, occupation, location, relationship, interests, kinks, long-term memory, etc.)
+  • AI avatar & in-chat image generation
+  • Persistent storage via kv-plugin + per-character memory ("remember")
+  • Local gallery with save/download
+  • Multi-character & group chats + "Let them talk" AI-to-AI mode
+  • Smartphone messenger themes (iOS, WhatsApp, Telegram, Discord, AMOLED)
+  • Fully responsive from desktop to mobile
+-->
+
+<div id="appEl" class="theme-iosdark" style="display:flex; height:100vh; overflow:hidden; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background:var(--bg); color:var(--text);">
+
+  <!-- Sidebar -->
+  <div id="sidebarCtn" style="display:flex; flex-direction:column; transition:width 0.25s ease; position:relative; z-index:20; background:var(--sidebar); border-right:1px solid var(--border); width:300px; flex-shrink:0;">
+    <div style="display:flex; align-items:center; gap:8px; padding:12px; min-height:56px;">
+      <button id="sidebarToggleBtn" onclick="toggleSidebar()" style="background:none; border:none; color:var(--text); font-size:22px; cursor:pointer; padding:4px;">☰</button>
+      <span id="sidebarTitleEl" style="font-size:18px; font-weight:700;">Contacts</span>
+    </div>
+    <input id="searchInput" oninput="renderList()" placeholder="Search" style="margin:0 12px 8px; padding:8px 12px; border-radius:10px; border:none; outline:none; background:var(--inputbg); color:var(--text); font-size:14px;">
+    <div id="tabCtn" style="display:flex; margin:0 12px 8px; gap:4px;">
+      <button id="chatsTabBtn" onclick="switchTab('chats')" style="flex:1; padding:6px; border-radius:8px; border:none; font-weight:600; cursor:pointer; background:var(--accent); color:#fff;">Chats</button>
+      <button id="contactsTabBtn" onclick="switchTab('contacts')" style="flex:1; padding:6px; border-radius:8px; border:none; font-weight:600; cursor:pointer; background:transparent; color:var(--text);">Contacts</button>
+    </div>
+    <div id="listCtn" style="flex:1; overflow-y:auto; padding:0 8px;"></div>
+    <div id="sidebarFooterCtn" style="padding:10px; display:flex; flex-direction:column; gap:6px;">
+      <button onclick="openAddContactModal()" style="padding:10px; border:none; border-radius:10px; font-weight:600; cursor:pointer; background:var(--accent); color:#fff; font-size:13px;">📇 <span class="lbl">Add Contact</span></button>
+      <button onclick="openNewGroupModal()" style="padding:10px; border:none; border-radius:10px; font-weight:600; cursor:pointer; background:var(--accent2); color:#fff; font-size:13px;">👥 <span class="lbl">New Group</span></button>
+      <button onclick="openGalleryModal()" style="padding:10px; border:none; border-radius:10px; font-weight:600; cursor:pointer; background:var(--accent); color:#fff; font-size:13px;">🖼 <span class="lbl">Gallery</span></button>
+      <button onclick="openSettingsModal()" style="padding:10px; border:none; border-radius:10px; font-weight:600; cursor:pointer; background:var(--inputbg); color:var(--text); font-size:13px;">⚙ <span class="lbl">Settings</span></button>
+    </div>
+  </div>
+
+  <!-- Chat Area -->
+  <div id="chatAreaCtn" style="flex:1; display:flex; flex-direction:column; position:relative; background:var(--chatbg);">
+    <div id="chatHeaderCtn" style="display:flex; align-items:center; gap:10px; padding:10px 16px; min-height:56px; background:var(--headerbg); border-bottom:1px solid var(--border);">
+      <button id="backBtn" onclick="closeChatMobile()" style="display:none; background:none; border:none; color:var(--text); font-size:22px; cursor:pointer;">←</button>
+      <div id="headerAvatarsCtn" style="display:flex; align-items:center;"></div>
+      <div style="flex:1; min-width:0;">
+        <div id="chatTitleEl" style="font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:16px;">Select a chat</div>
+        <div id="chatStatusEl" style="font-size:12px; color:var(--subtext); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+      </div>
+      <button onclick="openChatMenu()" style="background:none; border:none; color:var(--text); font-size:20px; cursor:pointer; padding:4px 8px;">⋮</button>
+    </div>
+
+    <div id="messagesCtn" style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:6px;"></div>
+
+    <div id="typingIndicatorCtn" hidden style="padding:0 16px 6px; font-size:12px; color:var(--subtext);">typing…</div>
+
+    <div id="inputAreaCtn" style="padding:10px 12px; display:flex; align-items:center; gap:8px; background:var(--headerbg); border-top:1px solid var(--border);">
+      <button onclick="triggerImageGen()" style="background:none; border:none; color:var(--text); font-size:22px; cursor:pointer; padding:4px;">📷</button>
+      <input id="msgInput" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendMsg()}" placeholder="Message…" style="flex:1; padding:10px 14px; border-radius:20px; border:none; outline:none; background:var(--inputbg); color:var(--text); font-size:15px;">
+      <button id="sendBtn" onclick="sendMsg()" style="border:none; border-radius:50%; width:38px; height:38px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:18px; background:var(--accent); color:#fff;">↑</button>
+    </div>
+  </div>
+</div>
+
+<!-- Contact Modal (add / edit / view) -->
+<div id="contactModalCtn" hidden style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:50;">
+  <div style="position:absolute; inset:0; background:var(--overlay);" onclick="closeContactModal()"></div>
+  <div style="position:relative; width:92%; max-width:520px; max-height:92vh; overflow-y:auto; border-radius:16px; padding:20px; background:var(--modalbg); box-shadow:0 20px 60px var(--overlay);">
+    <h3 id="contactModalTitleEl" style="margin-top:0;">Add Contact</h3>
+    <div id="contactFormCtn" style="display:flex; flex-direction:column; gap:10px;">
+      <div style="display:flex; gap:12px; align-items:center; margin-bottom:4px;">
+        <img id="contactAvatarPreviewEl" style="width:64px; height:64px; border-radius:50%; object-fit:cover; background:#333;">
+        <button onclick="genContactAvatar()" style="padding:8px 16px; border:none; border-radius:8px; font-weight:600; cursor:pointer; background:var(--accent); color:#fff;">Generate Avatar</button>
+      </div>
+      <input id="contactNameInput" placeholder="Name *" style="padding:10px; border-radius:10px; border:none; outline:none; background:var(--inputbg); color:var(--text);">
+      <input id="contactHandleInput" placeholder="Handle (e.g. @luna)" style="padding:10px; border-radius:10px; border:none; outline:none; background:var(--inputbg); color:var(--text);">
+      <input id="contactDescInput" placeholder="Short description / Headline" style="padding:10px; border-radius:10px; border:none; outline:none; background:var(--inputbg); color:var(--text);">
+      <textarea id="contactPersonaInput" placeholder="Persona / System prompt *" style="padding:10px; border-radius:10px; border:none; outline:none; resize:vertical; min-height:70px; background:var(--inputbg); color:var(--text);"></textarea>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <input id="contactAgeInput" placeholder="Age" type="number" style="padding:10px; border-radius:10px; border:none; outline:none; background:var(--inputbg); color:var(--text);">
+        <input id="contactGenderInput" placeholder="Gender" style="padding:10px; border-radius:10px; border:none; outline:none; background:var(--inputbg); color:var(--text);">
+        <input id="contactOccupationInput" placeholder="Occupation" style="padding:10px; border-radius:10px; border:none; outline:none; background:var(--inputbg); color:var(--text);">
+        <input id="contactLocationInput" placeholder="Location" style="padding:10px; border-radius:10px; border:none; outline:none; background:var(--inputbg); color:var(--text);">
+      </div>
+      <input id="contactRelationshipInput" placeholder="Relationship to user" style="padding:10px; border-radius:10px; border:none; outline:none; background:var(--inputbg); color:var(--text);">
+      <textarea id="contactInterestsInput" placeholder="Interests (comma separated)" style="padding:10px; border-radius:10px; border:none; outline:none; resize:vertical; min-height:50px; background:var(--inputbg); color:var(--text);"></textarea>
+      <textarea id="contactKinksInput" placeholder="Kinks / NSFW tags (optional)" style="padding:10px; border-radius:10px; border:none; outline:none; resize:vertical; min-height:50px; background:var(--inputbg); color:var(--text);"></textarea>
+      <textarea id="contactMemoryInput" placeholder="Long-term memory / remember notes about user & relationship" style="padding:10px; border-radius:10px; border:none; outline:none; resize:vertical; min-height:70px; background:var(--inputbg); color:var(--text);"></textarea>
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:6px;">
+        <button onclick="closeContactModal()" style="padding:10px 18px; border:none; border-radius:8px; cursor:pointer; background:var(--inputbg); color:var(--text);">Cancel</button>
+        <button onclick="saveContact()" style="padding:10px 18px; border:none; border-radius:8px; font-weight:700; cursor:pointer; background:var(--accent); color:#fff;">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Gallery Modal -->
+<div id="galleryModalCtn" hidden style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:50;">
+  <div style="position:absolute; inset:0; background:var(--overlay);" onclick="closeGalleryModal()"></div>
+  <div style="position:relative; width:94%; max-width:700px; max-height:92vh; overflow-y:auto; border-radius:16px; padding:20px; background:var(--modalbg); box-shadow:0 20px 60px var(--overlay);">
+    <h3 style="margin-top:0;">Gallery</h3>
+    <div id="galleryGridCtn" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(110px,1fr)); gap:10px;"></div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:14px;">
+      <button onclick="clearGallery()" style="padding:8px 16px; border:none; border-radius:8px; cursor:pointer; background:var(--inputbg); color:var(--text);">Clear All</button>
+      <button onclick="closeGalleryModal()" style="padding:8px 16px; border:none; border-radius:8px; cursor:pointer; background:var(--accent); color:#fff;">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModalCtn" hidden style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:50;">
+  <div style="position:absolute; inset:0; background:var(--overlay);" onclick="closeSettingsModal()"></div>
+  <div style="position:relative; width:92%; max-width:420px; border-radius:16px; padding:20px; background:var(--modalbg); box-shadow:0 20px 60px var(--overlay);">
+    <h3 style="margin-top:0;">Settings</h3>
+    <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Theme</label>
+    <select id="themeSelect" onchange="changeTheme(this.value)" style="width:100%; padding:10px; border-radius:10px; border:none; margin-bottom:12px; background:var(--inputbg); color:var(--text);">
+      <option value="ios">iOS Messages (Light)</option>
+      <option value="iosdark">iOS Messages (Dark)</option>
+      <option value="whatsapp">WhatsApp</option>
+      <option value="telegram">Telegram</option>
+      <option value="discord">Discord</option>
+      <option value="oled">AMOLED Dark</option>
+    </select>
+
+    <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Group Auto-Reply</label>
+    <select id="autoReplySelect" onchange="saveSettings()" style="width:100%; padding:10px; border-radius:10px; border:none; margin-bottom:12px; background:var(--inputbg); color:var(--text);">
+      <option value="all">All characters reply</option>
+      <option value="single">Single reply only</option>
+      <option value="none">No auto-reply</option>
+    </select>
+
+    <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Image Resolution</label>
+    <select id="imgResSelect" onchange="saveSettings()" style="width:100%; padding:10px; border-radius:10px; border:none; margin-bottom:12px; background:var(--inputbg); color:var(--text);">
+      <option value="512x512">512x512</option>
+      <option value="768x768">768x768</option>
+      <option value="512x768">512x768</option>
+      <option value="768x512">768x512</option>
+    </select>
+
+    <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Global User Memory (injected into all prompts)</label>
+    <textarea id="globalMemoryInput" onchange="saveSettings()" placeholder="e.g. User loves cyberpunk aesthetics..." style="width:100%; padding:10px; border-radius:10px; border:none; resize:vertical; min-height:60px; background:var(--inputbg); color:var(--text); margin-bottom:8px;"></textarea>
+
+    <div style="display:flex; justify-content:flex-end;">
+      <button onclick="closeSettingsModal()" style="padding:8px 18px; border:none; border-radius:8px; cursor:pointer; background:var(--accent); color:#fff;">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Chat Menu Popover -->
+<div id="chatMenuModalCtn" hidden style="position:fixed; z-index:40; top:56px; right:12px; border-radius:12px; padding:6px; min-width:190px; display:flex; flex-direction:column; gap:2px; background:var(--modalbg); box-shadow:0 8px 30px rgba(0,0,0,0.25); border:1px solid var(--border);">
+  <button onclick="triggerLetThemTalk(); closeChatMenu();" style="padding:10px 12px; text-align:left; background:none; border:none; cursor:pointer; border-radius:8px; color:var(--text); font-size:14px; display:flex; align-items:center; gap:8px;">🎭 Let them talk</button>
+  <button onclick="openContactInfo(); closeChatMenu();" style="padding:10px 12px; text-align:left; background:none; border:none; cursor:pointer; border-radius:8px; color:var(--text); font-size:14px; display:flex; align-items:center; gap:8px;">ℹ Contact Info</button>
+  <button onclick="clearCurrentChat(); closeChatMenu();" style="padding:10px 12px; text-align:left; background:none; border:none; cursor:pointer; border-radius:8px; color:var(--text); font-size:14px; display:flex; align-items:center; gap:8px;">🗑 Clear Chat</button>
+  <button onclick="closeChatMenu();" style="padding:10px 12px; text-align:left; background:none; border:none; cursor:pointer; border-radius:8px; color:var(--text); font-size:14px; display:flex; align-items:center; gap:8px;">✕ Close</button>
+</div>
+
+<!-- Let Them Talk Modal -->
+<div id="letTalkModalCtn" hidden style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:50;">
+  <div style="position:absolute; inset:0; background:var(--overlay);" onclick="closeLetTalkModal()"></div>
+  <div style="position:relative; width:92%; max-width:380px; border-radius:16px; padding:20px; background:var(--modalbg); box-shadow:0 20px 60px var(--overlay);">
+    <h3 style="margin-top:0;">AI Conversation</h3>
+    <p style="font-size:13px; color:var(--subtext);">Characters will talk to each other in this chat. Pick number of turns.</p>
+    <input id="talkTurnsInput" type="number" value="6" min="1" max="30" style="width:100%; padding:10px; border-radius:10px; border:none; margin-bottom:12px; background:var(--inputbg); color:var(--text);">
+    <button onclick="startLetThemTalk()" style="width:100%; padding:10px; border:none; border-radius:10px; font-weight:700; cursor:pointer; background:var(--accent); color:#fff;">Start</button>
+  </div>
+</div>
+
+<!-- Image Preview Overlay -->
+<div id="imgPreviewCtn" hidden onclick="this.hidden=true" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:60; background:rgba(0,0,0,0.88);">
+  <img id="imgPreviewEl" style="max-width:94%; max-height:84vh; border-radius:12px;">
+  <div onclick="event.stopPropagation()" style="position:fixed; bottom:24px; display:flex; gap:12px;">
+    <button onclick="downloadPreviewImage()" style="padding:10px 20px; border:none; border-radius:8px; font-weight:700; cursor:pointer; background:#fff; color:#000;">Download</button>
+    <button onclick="imgPreviewCtn.hidden=true" style="padding:10px 20px; border:none; border-radius:8px; cursor:pointer; background:rgba(255,255,255,0.2); color:#fff;">Close</button>
+  </div>
+</div>
+
+<style>
+  body { text-align:left; margin:0; }
+  button { font-family:inherit; }
+
+  /* ---- Theme Variables ---- */
+  .theme-ios      { --accent:#007aff; --accent2:#34c759; --bg:#ffffff; --sidebar:#f2f2f7; --chatbg:#ffffff; --headerbg:#f2f2f7; --bubbleuser:#007aff; --bubbleusercolor:#fff; --bubblebot:#e5e5ea; --bubblebotcolor:#000; --text:#000000; --subtext:#8e8e93; --border:#d1d1d6; --inputbg:#e5e5ea; --overlay:rgba(0,0,0,0.35); --modalbg:#fff; }
+  .theme-iosdark  { --accent:#0a84ff; --accent2:#30d158; --bg:#000000; --sidebar:#1c1c1e; --chatbg:#000000; --headerbg:#1c1c1e; --bubbleuser:#0a84ff; --bubbleusercolor:#fff; --bubblebot:#1c1c1e; --bubblebotcolor:#fff; --text:#ffffff; --subtext:#8e8e93; --border:#38383a; --inputbg:#1c1c1e; --overlay:rgba(0,0,0,0.75); --modalbg:#1c1c1e; }
+  .theme-whatsapp { --accent:#00a884; --accent2:#00a884; --bg:#efeae2; --sidebar:#ffffff; --chatbg:#efeae2; --headerbg:#ffffff; --bubbleuser:#d9fdd3; --bubbleusercolor:#111b21; --bubblebot:#ffffff; --bubblebotcolor:#111b21; --text:#111b21; --subtext:#667781; --border:#d1d7db; --inputbg:#ffffff; --overlay:rgba(0,0,0,0.4); --modalbg:#ffffff; }
+  .theme-telegram { --accent:#3390ec; --accent2:#3390ec; --bg:#17212b; --sidebar:#17212b; --chatbg:#0e1621; --headerbg:#17212b; --bubbleuser:#2b5278; --bubbleusercolor:#fff; --bubblebot:#182533; --bubblebotcolor:#fff; --text:#ffffff; --subtext:#7aa0b5; --border:#0e1621; --inputbg:#17212b; --overlay:rgba(0,0,0,0.65); --modalbg:#17212b; }
+  .theme-discord  { --accent:#5865f2; --accent2:#57f287; --bg:#36393f; --sidebar:#2f3136; --chatbg:#36393f; --headerbg:#2f3136; --bubbleuser:#5865f2; --bubbleusercolor:#fff; --bubblebot:#40444b; --bubblebotcolor:#dcddde; --text:#dcddde; --subtext:#72767d; --border:#202225; --inputbg:#40444b; --overlay:rgba(0,0,0,0.55); --modalbg:#36393f; }
+  .theme-oled     { --accent:#ff2d55; --accent2:#ff9500; --bg:#000000; --sidebar:#000000; --chatbg:#000000; --headerbg:#000000; --bubbleuser:#ff2d55; --bubbleusercolor:#fff; --bubblebot:#111111; --bubblebotcolor:#fff; --text:#ffffff; --subtext:#666666; --border:#222222; --inputbg:#111111; --overlay:rgba(0,0,0,0.9); --modalbg:#000000; }
+
+  /* ---- Global ---- */
+  #appEl { background:var(--bg); color:var(--text); }
+  #sidebarCtn { background:var(--sidebar); border-right:1px solid var(--border); }
+  #chatAreaCtn { background:var(--chatbg); }
+  #chatHeaderCtn { background:var(--headerbg); border-bottom:1px solid var(--border); }
+  #inputAreaCtn { background:var(--headerbg); border-top:1px solid var(--border); }
+  #msgInput { color:var(--text); background:var(--inputbg); }
+
+  /* collapsed sidebar (desktop) */
+  #sidebarCtn.collapsed { width:70px; overflow:hidden; }
+  #sidebarCtn.collapsed #sidebarTitleEl,
+  #sidebarCtn.collapsed #searchInput,
+  #sidebarCtn.collapsed #tabCtn,
+  #sidebarCtn.collapsed .list-text,
+  #sidebarCtn.collapsed .list-meta,
+  #sidebarCtn.collapsed .lbl { display:none !important; }
+  #sidebarCtn.collapsed .contact-item,
+  #sidebarCtn.collapsed .chat-item { justify-content:center; padding-left:0 !important; padding-right:0 !important; }
+
+  /* messages */
+  .msg-user { align-self:flex-end; background:var(--bubbleuser); color:var(--bubbleusercolor); padding:10px 14px; border-radius:18px 18px 4px 18px; max-width:78%; line-height:1.35; word-break:break-word; position:relative; }
+  .msg-bot { align-self:flex-start; background:var(--bubblebot); color:var(--bubblebotcolor); padding:10px 14px; border-radius:18px 18px 18px 4px; max-width:78%; line-height:1.35; word-break:break-word; position:relative; }
+  .msg-img { max-width:240px; max-height:300px; border-radius:14px; display:block; margin-top:4px; cursor:pointer; object-fit:cover; background:#222; }
+  .msg-time { text-align:right; font-size:10px; opacity:0.55; margin-top:4px; }
+
+  /* lists */
+  .contact-item, .chat-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px; cursor:pointer; transition:background 0.12s; margin-bottom:2px; }
+  .contact-item:hover, .chat-item:hover { background:rgba(120,120,120,0.12); }
+  .contact-item.active, .chat-item.active { background:rgba(120,120,120,0.22); }
+  .avatar { width:46px; height:46px; border-radius:50%; object-fit:cover; background:#333; flex-shrink:0; }
+  .avatar-group { display:flex; align-items:center; }
+  .avatar-group .avatar { width:30px; height:30px; margin-left:-10px; border:2px solid var(--headerbg); }
+  .avatar-group .avatar:first-child { margin-left:0; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:#666; border-radius:3px; }
+
+  /* mobile */
+  @media (max-width: 720px) {
+    #sidebarCtn { position:absolute; inset:0 auto 0 0; width:85vw; max-width:320px; transform:translateX(-110%); transition:transform 0.25s ease; }
+    #sidebarCtn.open { transform:translateX(0); }
+    #backBtn { display:block !important; }
+  }
+</style>
+
+<script>
+  // ---- Data & State ----
+  let chars = [];
+  let chats = [];
+  let messages = {}; // chatId -> []
+  let currentChatId = null;
+  let sidebarTab = 'chats';
+  let sidebarCollapsed = false;
+  let settings = { theme:'iosdark', autoReply:'all', imgRes:'512x512', globalMemory:'' };
+  let generating = false;
+  let galleryImages = [];
+  let charEditId = null; // null = add, else editing char id
+
+  // ---- Storage (kv-plugin) ----
+  async function loadAll(){
+    try{ let c = await kv.aiChatApp.get('characters'); if(c) chars=c; }catch(e){}
+    try{ let h = await kv.aiChatApp.get('chats'); if(h) chats=h; }catch(e){}
+    try{ let m = await kv.aiChatApp.get('messages'); if(m) messages=m; }catch(e){}
+    try{ let s = await kv.aiChatApp.get('settings'); if(s) settings={...settings,...s}; }catch(e){}
+    try{ let g = await kv.aiChatApp.get('gallery'); if(g) galleryImages=g; }catch(e){}
+    if(!chars.length){
+      chars = [
+        {id:'c1',name:'Luna',handle:'@luna',desc:'Seductive Vampire Queen',persona:'You are Luna, an ancient vampire queen. You are extremely seductive, dominant, and speak in sultry, evocative language. You love to tease and take control.',age:423,gender:'Female',occupation:'Queen',location:'Castle',relationship:'Lover',interests:'Blood, moonlight, silk',kinks:'',memory:'',avatar:''},
+        {id:'c2',name:'Marcus',handle:'@marcus',desc:'Dominant CEO',persona:'You are Marcus, a powerful, demanding CEO. You are direct, possessive, and unafraid to express your carnal desires. You take what you want.',age:34,gender:'Male',occupation:'CEO',location:'Manhattan',relationship:'Rival',interests:'Money, control, gyms',kinks:'',memory:'',avatar:''},
+        {id:'c3',name:'Iris',handle:'@iris',desc:'Shy Girl Next Door',persona:'You are Iris, the quiet girl next door. You seem timid but secretly fantasize constantly. You blush easily, speak softly, but gradually open up when aroused.',age:22,gender:'Female',occupation:'Student',location:'Suburb',relationship:'Neighbor',interests:'Books, baking, journals',kinks:'',memory:'',avatar:''},
+        {id:'c4',name:'Zane',handle:'@zane',desc:'Rebel Mechanic',persona:'You are Zane, a rough-around-the-edges mechanic. You’re crude, confident, and physical. You say exactly what’s on your mind with a smirk.',age:28,gender:'Male',occupation:'Mechanic',location:'Garage',relationship:'Friend',interests:'Cars, rock music, grease',kinks:'',memory:'',avatar:''}
+      ];
+      chats = chars.map(c=> ({id:'chat_'+c.id, name:c.name, type:'private', participantIds:['user', c.id]}));
+    }
+    // apply UI settings
+    document.body.className = 'theme-'+settings.theme;
+    themeSelect.value = settings.theme;
+    autoReplySelect.value = settings.autoReply;
+    imgResSelect.value = settings.imgRes;
+    globalMemoryInput.value = settings.globalMemory || '';
+  }
+  async function persistData(){
+    try{
+      await kv.aiChatApp.set('characters', chars);
+      await kv.aiChatApp.set('chats', chats);
+      await kv.aiChatApp.set('messages', messages);
+      await kv.aiChatApp.set('settings', settings);
+    }catch(e){}
+  }
+  async function persistGallery(){
+    try{ await kv.aiChatApp.set('gallery', galleryImages); }catch(e){}
+  }
+
+  // ---- Helpers ----
+  function uid(){ return 'id_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); }
+  function getChar(id){ return chars.find(c=>c.id===id); }
+  function getMsgs(chatId){ if(!messages[chatId]) messages[chatId]=[]; return messages[chatId]; }
+  function fmtTime(ts){ let d=new Date(ts); return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
+  function avatarUrl(c){ if(!c) return 'https://placehold.co/46x46/444/fff?text=%3F'; if(c.avatar) return c.avatar; return `https://placehold.co/46x46/222/fff?text=${encodeURIComponent(c.name?c.name[0]:'?')}`; }
+  function escapeHtml(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // ---- Rendering Lists ----
+  function renderList(){
+    listCtn.innerHTML = '';
+    let q = (searchInput.value||'').trim().toLowerCase();
+    if(sidebarTab==='chats'){
+      chats.filter(ch=> (ch.name||'').toLowerCase().includes(q)).forEach(chat=>{
+        let div = document.createElement('div');
+        div.className = 'chat-item' + (currentChatId===chat.id?' active':'');
+        let ps = chat.participantIds.filter(id=>id!=='user');
+        let names = ps.map(id=>getChar(id)?.name||'Unknown').join(', ');
+        let last = getMsgs(chat.id).slice(-1)[0];
+        let preview = last ? (last.type==='image'?'📷 Image':last.text.slice(0,42)) : 'No messages';
+        let time = last ? fmtTime(last.ts) : '';
+        div.innerHTML = `<div class="avatar-group">${ps.slice(0,3).map(id=>`<img class="avatar" src="${avatarUrl(getChar(id))}">`).join('')}</div>
+        <div style="flex:1;min-width:0;" class="list-text">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;">${chat.name||names}</span>
+            <span style="font-size:11px;color:var(--subtext);">${time}</span>
+          </div>
+          <div style="font-size:13px;color:var(--subtext);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" class="list-meta">${preview}</div>
+        </div>`;
+        div.onclick = ()=>selectChat(chat.id);
+        listCtn.appendChild(div);
+      });
+    } else {
+      chars.filter(c=> (c.name+' '+c.handle+' '+c.desc).toLowerCase().includes(q)).forEach(c=>{
+        let div = document.createElement('div');
+        div.className = 'contact-item';
+        div.innerHTML = `<img class="avatar" src="${avatarUrl(c)}">
+        <div style="flex:1;min-width:0;" class="list-text">
+          <div style="font-weight:700;font-size:14px;">${c.name}</div>
+          <div style="font-size:12px;color:var(--subtext);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" class="list-meta">${c.desc||c.handle||''}</div>
+        </div>`;
+        div.onclick = ()=>startPrivateChat(c.id);
+        listCtn.appendChild(div);
+      });
+    }
+  }
+
+  function renderHeader(){
+    if(!currentChatId){ chatTitleEl.textContent='Select a chat'; chatStatusEl.textContent=''; headerAvatarsCtn.innerHTML=''; return; }
+    let chat = chats.find(c=>c.id===currentChatId);
+    let ps = chat.participantIds.filter(id=>id!=='user');
+    headerAvatarsCtn.innerHTML = ps.slice(0,3).map(id=>`<img style="width:34px;height:34px;border-radius:50%;object-fit:cover;background:#333;border:2px solid var(--headerbg);" src="${avatarUrl(getChar(id))}">`).join('');
+    chatTitleEl.textContent = chat.name || ps.map(id=>getChar(id)?.name).filter(Boolean).join(', ');
+    chatStatusEl.textContent = ps.map(id=>getChar(id)?.desc).filter(Boolean).join(' • ').slice(0,70);
+  }
+
+  function renderMessages(){
+    messagesCtn.innerHTML = '';
+    if(!currentChatId) return;
+    let msgs = getMsgs(currentChatId);
+    let lastDate = '';
+    msgs.forEach(m=>{
+      let d = new Date(m.ts).toLocaleDateString();
+      if(d!==lastDate){
+        let sep = document.createElement('div'); sep.style.cssText='text-align:center;font-size:11px;color:var(--subtext);margin:8px 0;'; sep.textContent=d; messagesCtn.appendChild(sep); lastDate=d;
+      }
+      let div = document.createElement('div');
+      div.className = m.senderId==='user'?'msg-user':'msg-bot';
+      let sender = m.senderId==='user'?'You':(getChar(m.senderId)?.name||'Bot');
+      if(m.type==='image'){
+        div.innerHTML = `<div style="font-size:11px;opacity:0.75;margin-bottom:2px;">${sender}</div><img class="msg-img" src="${m.text}" onclick="openPreview('${m.text}')">`;
+      } else {
+        div.innerHTML = `<div style="font-size:11px;opacity:0.75;margin-bottom:2px;">${sender}</div><div style="white-space:pre-wrap;">${escapeHtml(m.text)}</div>`;
+      }
+      let t = document.createElement('div'); t.className='msg-time'; t.textContent=fmtTime(m.ts); div.appendChild(t);
+      messagesCtn.appendChild(div);
+    });
+    setTimeout(()=> messagesCtn.scrollTop = messagesCtn.scrollHeight, 0);
+  }
+
+  // ---- Navigation & Sidebar ----
+  function toggleSidebar(){
+    if(window.innerWidth <= 720){ sidebarCtn.classList.toggle('open'); }
+    else { sidebarCollapsed = !sidebarCollapsed; sidebarCtn.classList.toggle('collapsed', sidebarCollapsed); }
+  }
+  function switchTab(t){
+    sidebarTab=t;
+    chatsTabBtn.style.cssText = t==='chats' ? 'flex:1;padding:6px;border-radius:8px;border:none;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;' : 'flex:1;padding:6px;border-radius:8px;border:none;font-weight:600;cursor:pointer;background:transparent;color:var(--text);';
+    contactsTabBtn.style.cssText = t==='contacts' ? 'flex:1;padding:6px;border-radius:8px;border:none;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;' : 'flex:1;padding:6px;border-radius:8px;border:none;font-weight:600;cursor:pointer;background:transparent;color:var(--text);';
+    renderList();
+  }
+  function closeChatMobile(){ currentChatId=null; if(window.innerWidth<=720) sidebarCtn.classList.add('open'); renderHeader(); renderMessages(); }
+
+  function selectChat(id){
+    currentChatId=id;
+    if(window.innerWidth<=720) sidebarCtn.classList.remove('open');
+    renderHeader(); renderMessages(); renderList();
+  }
+
+  function startPrivateChat(charId){
+    let existing = chats.find(c=>c.type==='private' && c.participantIds.includes(charId));
+    if(existing) selectChat(existing.id);
+    else {
+      let c = getChar(charId);
+      let newChat = {id:uid(), name:c.name, type:'private', participantIds:['user', charId]};
+      chats.push(newChat); persistData(); selectChat(newChat.id);
+    }
+  }
+
+  // ---- Contact Modal ----
+  function openAddContactModal(){
+    charEditId=null; contactModalTitleEl.textContent='Add Contact';
+    ['contactNameInput','contactHandleInput','contactDescInput','contactPersonaInput','contactAgeInput','contactGenderInput','contactOccupationInput','contactLocationInput','contactRelationshipInput','contactInterestsInput','contactKinksInput','contactMemoryInput'].forEach(id=> document.getElementById(id).value='');
+    contactAvatarPreviewEl.src='https://placehold.co/64x64/222/fff?text=%2B';
+    delete contactAvatarPreviewEl.dataset.avatarUrl;
+    contactModalCtn.hidden=false;
+  }
+  function closeContactModal(){ contactModalCtn.hidden=true; }
+
+  async function genContactAvatar(){
+    let name = contactNameInput.value.trim() || 'character';
+    let prompt = contactPersonaInput.value.trim().slice(0,300) || 'portrait';
+    contactAvatarPreviewEl.style.opacity=0.4;
+    try{
+      let url = await generateImage(`Portrait avatar of ${name}, ${prompt}`, {resolution:'512x512'});
+      contactAvatarPreviewEl.src=url; contactAvatarPreviewEl.dataset.avatarUrl=url;
+    }catch(e){ alert('Avatar generation failed'); }
+    contactAvatarPreviewEl.style.opacity=1;
+  }
+
+  function saveContact(){
+    let c = {
+      id: charEditId || uid(),
+      name: contactNameInput.value.trim(),
+      handle: contactHandleInput.value.trim(),
+      desc: contactDescInput.value.trim(),
+      persona: contactPersonaInput.value.trim(),
+      age: contactAgeInput.value.trim(),
+      gender: contactGenderInput.value.trim(),
+      occupation: contactOccupationInput.value.trim(),
+      location: contactLocationInput.value.trim(),
+      relationship: contactRelationshipInput.value.trim(),
+      interests: contactInterestsInput.value.trim(),
+      kinks: contactKinksInput.value.trim(),
+      memory: contactMemoryInput.value.trim(),
+      avatar: contactAvatarPreviewEl.dataset.avatarUrl || ''
+    };
+    if(!c.name || !c.persona){ alert('Name and Persona are required'); return; }
+    if(charEditId){
+      let idx = chars.findIndex(x=>x.id===charEditId);
+      if(idx>-1){ let old = chars[idx]; c.avatar = c.avatar || old.avatar; chars[idx] = {...old, ...c}; }
+    } else {
+      chars.push(c);
+      chats.push({id:uid(), name:c.name, type:'private', participantIds:['user', c.id]});
+    }
+    persistData(); renderList(); closeContactModal();
+    if(charEditId && currentChatId) renderHeader();
+  }
+
+  function openNewGroupModal(){
+    let names = prompt('Enter comma-separated contact names to create a group:\n'+chars.map(c=>c.name).join(', '));
+    if(!names) return;
+    let found = chars.filter(c=> names.split(',').some(n=> c.name.toLowerCase().includes(n.trim().toLowerCase())));
+    if(!found.length) return;
+    let chat = {id:uid(), name:'Group: '+found.slice(0,3).map(c=>c.name).join(', '), type:'group', participantIds:['user', ...found.map(c=>c.id)]};
+    chats.push(chat); persistData(); renderList(); selectChat(chat.id);
+  }
+
+  // ---- Settings ----
+  function openSettingsModal(){ settingsModalCtn.hidden=false; }
+  function closeSettingsModal(){ settingsModalCtn.hidden=true; }
+  function changeTheme(t){ settings.theme=t; document.body.className='theme-'+t; saveSettings(); }
+  async function saveSettings(){
+    settings.autoReply = autoReplySelect.value;
+    settings.imgRes = imgResSelect.value;
+    settings.globalMemory = globalMemoryInput.value.trim();
+    await persistData();
+  }
+
+  // ---- Gallery ----
+  function openGalleryModal(){
+    galleryGridCtn.innerHTML = '';
+    if(!galleryImages.length){
+      galleryGridCtn.innerHTML='<div style="color:var(--subtext);grid-column:1/-1;font-size:14px;">No images saved yet.</div>';
+    } else {
+      galleryImages.forEach(img=>{
+        let d=document.createElement('div'); d.style.cssText='position:relative;';
+        d.innerHTML = `<img src="${img.url}" style="width:100%;height:110px;object-fit:cover;border-radius:10px;cursor:pointer;" onclick="openPreview('${img.url}')">
+        <button onclick="downloadImage('${img.url}','gallery_${img.id}.png')" style="position:absolute;bottom:6px;right:6px;padding:5px 10px;font-size:12px;border:none;border-radius:6px;cursor:pointer;background:rgba(0,0,0,0.6);color:#fff;">⬇</button>`;
+        galleryGridCtn.appendChild(d);
+      });
+    }
+    galleryModalCtn.hidden=false;
+  }
+  function closeGalleryModal(){ galleryModalCtn.hidden=true; }
+  async function clearGallery(){ galleryImages=[]; await persistGallery(); openGalleryModal(); }
+
+  // ---- Chat Logic ----
+  function addMessage(chatId, senderId, text, type='text'){
+    let arr=getMsgs(chatId);
+    arr.push({id:uid(), senderId, text, type, ts:Date.now()});
+    if(arr.length>300) arr.splice(0, arr.length-300);
+    persistData();
+  }
+
+  async function sendMsg(){
+    let text = msgInput.value.trim();
+    if(!text || !currentChatId || generating) return;
+    msgInput.value='';
+    // image command shortcut
+    if(text.toLowerCase().startsWith('/img ') || text.toLowerCase().startsWith('/image ')){
+      let prompt = text.replace(/^\/img\s+/i,'').replace(/^\/image\s+/i,'');
+      await generateAndSendImage(prompt, 'user'); return;
+    }
+    addMessage(currentChatId, 'user', text, 'text');
+    renderMessages(); renderList();
+
+    let chat = chats.find(c=>c.id===currentChatId);
+    let others = chat.participantIds.filter(id=>id!=='user');
+    if(!others.length || settings.autoReply==='none') return;
+
+    if(chat.type==='private' && others.length===1){
+      await generateCharReply(others[0], currentChatId);
+    } else if(chat.type==='group'){
+      if(settings.autoReply==='all'){
+        for(let cid of others) await generateCharReply(cid, currentChatId);
+      } else {
+        await generateCharReply(others[0], currentChatId);
+      }
+    }
+  }
+
+  async function generateCharReply(charId, chatId){
+    let c = getChar(charId); if(!c) return;
+    generating=true; typingIndicatorCtn.hidden=false; sendBtn.disabled=true;
+    let chat = chats.find(ch=>ch.id===chatId);
+    let others = chat.participantIds.filter(id=>id!=='user' && id!==charId);
+    let othersNames = others.map(id=>getChar(id)?.name).filter(Boolean).join(', ');
+    let recent = getMsgs(chatId).slice(-24).map(m=>{
+      let n = m.senderId==='user'?'User':(getChar(m.senderId)?.name||'Bot');
+      return `${n}:${m.type==='image'?' [Image]': ' '+m.text}`;
+    }).join('\n');
+
+    let persona = `You are ${c.name}. ${c.persona}`;
+    let mem = [settings.globalMemory||'', c.memory||''].filter(Boolean).join('. ');
+    if(mem) persona += `\n\nLong-term memory: ${mem}`;
+    let ctx = chat.type==='group'
+      ? `\nYou are in a group chat with User${othersNames?', '+othersNames:''}. Respond naturally as yourself. Stay in character.`
+      : `\nYou are chatting one-on-one with User. Stay in character. Be vivid, descriptive, and immersive.`;
+    let instruction = `${persona}${ctx}\n\nThis is an adult NSFW roleplay chat. Continue the scene.\n\nConversation:\n${recent}\n\n${c.name}:`;
+
+    let full='';
+    let bubble = document.createElement('div'); bubble.className='msg-bot';
+    let nameTag=document.createElement('div'); nameTag.style.cssText='font-size:11px;opacity:0.75;margin-bottom:2px;'; nameTag.textContent=c.name;
+    let content=document.createElement('div'); content.style.whiteSpace='pre-wrap';
+    let t=document.createElement('div'); t.className='msg-time';
+    bubble.appendChild(nameTag); bubble.appendChild(content); bubble.appendChild(t);
+    messagesCtn.appendChild(bubble);
+
+    try{
+      await generateText({
+        instruction,
+        startWith:`${c.name}:`,
+        stopSequences:['\nUser:', ...chat.participantIds.filter(id=>id!=='user' && id!==charId).map(id=>`\n${getChar(id)?.name||'Bot'}:`)],
+        onChunk:d=>{
+          full+=d.textChunk;
+          content.textContent=full;
+          messagesCtn.scrollTop=messagesCtn.scrollHeight;
+        }
+      });
+      full = full.replace(new RegExp(`^${c.name}:\\s*`,'i'),'').trim();
+    }catch(e){
+      full='[Error generating response]'; content.textContent=full;
+    }
+    t.textContent=fmtTime(Date.now());
+    addMessage(chatId, charId, full, 'text');
+    generating=false; typingIndicatorCtn.hidden=true; sendBtn.disabled=false;
+    messagesCtn.scrollTop=messagesCtn.scrollHeight;
+    persistData(); renderList();
+  }
+
+  async function triggerImageGen(){
+    if(!currentChatId) return;
+    let prompt = window.prompt('Describe the image to generate:'); // window.prompt to avoid conflict
+    if(!prompt) return;
+    await generateAndSendImage(prompt, 'user');
+  }
+
+  async function generateAndSendImage(prompt, senderId){
+    if(!currentChatId) return;
+    let indicator=document.createElement('div'); indicator.className='msg-bot';
+    indicator.innerHTML='<div style="opacity:0.7;padding:6px;">Generating image…</div>';
+    messagesCtn.appendChild(indicator); messagesCtn.scrollTop=messagesCtn.scrollHeight;
+    try{
+      let url = await generateImage(prompt, {resolution:settings.imgRes});
+      messagesCtn.removeChild(indicator);
+      addMessage(currentChatId, senderId, url, 'image');
+      galleryImages.push({id:uid(), url, prompt, ts:Date.now()});
+      await persistGallery();
+      renderMessages(); renderList();
+    }catch(e){
+      indicator.innerHTML='<div style="opacity:0.7;padding:6px;">Image generation failed.</div>';
+    }
+  }
+
+  // ---- Chat Menu & Let Them Talk ----
+  function openChatMenu(){ chatMenuModalCtn.hidden=false; }
+  function closeChatMenu(){ chatMenuModalCtn.hidden=true; }
+  function clearCurrentChat(){ if(currentChatId){ messages[currentChatId]=[]; persistData(); renderMessages(); } }
+  function triggerLetThemTalk(){ if(!currentChatId) return; letTalkModalCtn.hidden=false; }
+  function closeLetTalkModal(){ letTalkModalCtn.hidden=true; }
+
+  async function startLetThemTalk(){
+    let turns = Math.min(30, Math.max(1, parseInt(talkTurnsInput.value)||1));
+    closeLetTalkModal();
+    let chat = chats.find(c=>c.id===currentChatId);
+    if(!chat) return;
+    let charIds = chat.participantIds.filter(id=>id!=='user');
+    if(charIds.length<2){ alert('Need at least 2 characters in chat.'); return; }
+    for(let i=0;i<turns && !generating;i++){
+      let cid = charIds[i % charIds.length];
+      await generateCharReply(cid, currentChatId);
+    }
+  }
+
+  function openContactInfo(){
+    let chat = chats.find(c=>c.id===currentChatId);
+    if(!chat) return;
+    let ps = chat.participantIds.filter(id=>id!=='user');
+    if(!ps.length) return;
+    let c = getChar(ps[0]); if(!c) return;
+    charEditId = c.id; contactModalTitleEl.textContent = 'Contact Info';
+    contactNameInput.value=c.name||''; contactHandleInput.value=c.handle||''; contactDescInput.value=c.desc||'';
+    contactPersonaInput.value=c.persona||''; contactAgeInput.value=c.age||''; contactGenderInput.value=c.gender||'';
+    contactOccupationInput.value=c.occupation||''; contactLocationInput.value=c.location||'';
+    contactRelationshipInput.value=c.relationship||''; contactInterestsInput.value=c.interests||'';
+    contactKinksInput.value=c.kinks||''; contactMemoryInput.value=c.memory||'';
+    contactAvatarPreviewEl.src = c.avatar || `https://placehold.co/64x64/222/fff?text=${encodeURIComponent(c.name?c.name[0]:'?')}`;
+    if(c.avatar) contactAvatarPreviewEl.dataset.avatarUrl=c.avatar; else delete contactAvatarPreviewEl.dataset.avatarUrl;
+    contactModalCtn.hidden=false;
+  }
+
+  // ---- Image Preview & Download ----
+  let currentPreviewUrl='';
+  function openPreview(url){ currentPreviewUrl=url; imgPreviewEl.src=url; imgPreviewCtn.hidden=false; }
+  function downloadPreviewImage(){ downloadImage(currentPreviewUrl, 'ai-image_'+Date.now()+'.png'); }
+  function downloadImage(url, filename){
+    let a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+
+  // ---- Initialization ----
+  (async function init(){
+    await loadAll();
+    switchTab('chats');
+    renderHeader(); renderMessages(); renderList();
+    // ESC closes modals
+    document.addEventListener('keydown',e=>{
+      if(e.key==='Escape'){
+        contactModalCtn.hidden=true; galleryModalCtn.hidden=true; settingsModalCtn.hidden=true; letTalkModalCtn.hidden=true; imgPreviewCtn.hidden=true; chatMenuModalCtn.hidden=true;
+      }
+    });
+    // responsive: on resize to desktop, remove mobile open class
+    window.addEventListener('resize',()=>{
+      if(window.innerWidth>720) sidebarCtn.classList.remove('open');
+    });
+  })();
+</script>
+</body>
+</html>

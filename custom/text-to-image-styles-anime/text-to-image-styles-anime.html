@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>text-to-image-styles-anime — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div style="text-align:left;max-width:1400px;margin:0 auto;padding:20px;font-family:system-ui,-apple-system,sans-serif;color:#eee;">
+  <h2 style="margin-top:0;">Text to Image Styles - Anime</h2>
+  <h3 style="margin-top:0;">Created by Grand Woods</h3>
+  <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+    <input id="descriptionInput" placeholder="Description (e.g. cyberpunk samurai)" oninput="updateOutput()" style="flex:2;min-width:220px;padding:10px;border-radius:6px;border:1px solid #444;background:#222;color:#fff;">
+    <input id="negativeInput" placeholder="Negative prompt (optional)" oninput="updateOutput()" style="flex:1;min-width:180px;padding:10px;border-radius:6px;border:1px solid #444;background:#222;color:#fff;">
+  </div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+    <div style="flex:2;min-width:300px;">
+      <input id="searchInput" placeholder="Search styles..." oninput="renderStyles()" style="width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid #444;background:#222;color:#fff;">
+      <div id="styleGridCtn"></div>
+    </div>
+    <div id="outputCtn" hidden style="flex:1;min-width:320px;background:#1a1a1a;border:1px solid #333;padding:16px;border-radius:10px;">
+      <h3 id="selectedStyleTitle" style="margin-top:0;color:#0f0;"></h3>
+      <img id="selectedStyleImg" style="width:100%;height:160px;object-fit:cover;border-radius:6px;margin-bottom:10px;display:block;background:#111;">
+      <label style="font-size:12px;color:#aaa;">Generated Prompt</label>
+      <textarea id="promptOutputEl" readonly style="width:100%;height:140px;margin-top:4px;padding:8px;font-family:monospace;font-size:12px;background:#0a0a0a;color:#0f0;border:1px solid #333;border-radius:4px;resize:vertical;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+        <button onclick="copyPrompt()" style="padding:6px 12px;border-radius:4px;border:none;background:#333;color:#fff;cursor:pointer;">Copy Prompt</button>
+        <button id="altBtn" onclick="toggleAlt()" style="padding:6px 12px;border-radius:4px;border:none;background:#333;color:#fff;cursor:pointer;display:none;">Use Alt Prompt</button>
+        <button onclick="generatePreview()" style="padding:6px 12px;border-radius:4px;border:none;background:#205020;color:#fff;cursor:pointer;">Generate Preview</button>
+      </div>
+      <label style="font-size:12px;color:#aaa;margin-top:12px;display:block;">Negative Prompt</label>
+      <textarea id="negativeOutputEl" readonly style="width:100%;height:60px;margin-top:4px;padding:8px;font-family:monospace;font-size:12px;background:#0a0a0a;color:#f55;border:1px solid #333;border-radius:4px;resize:vertical;"></textarea>
+      <button onclick="copyNegative()" style="margin-top:6px;padding:6px 12px;border-radius:4px;border:none;background:#333;color:#fff;cursor:pointer;">Copy Negative</button>
+      <div id="modifiersCtn" style="margin-top:12px;"></div>
+      <div id="loadingEl" hidden style="margin-top:10px;color:#0f0;">⏳ Generating image... (this may take a minute)</div>
+      <div id="previewCtn" hidden style="margin-top:10px;"><img id="previewImg" style="width:100%;border-radius:6px;display:block;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let imgBase="https://mosberg.github.io/src/img/art_styles/";
+let selectedStyle=null,useAlt=false,activeMods=new Set();
+
+let animeMods = [
+  {
+    g: "Style",
+    o: [
+      { n: "Ghibli", v: ", Ghibli-inspired anime art style" },
+      { n: "Your Name", v: ", Your Name-inspired anime art style" },
+      { n: "Paprika", v: ", Paprika-inspired anime art style" },
+      { n: "My Hero Academia", v: ", My Hero Academia-inspired anime style" },
+      { n: "Hunter x Hunter", v: ", Hunter x Hunter-inspired anime style" },
+      { n: "Attack on Titan", v: ", Attack on Titan-inspired anime style" }
+    ]
+  },
+  {
+    g: "Effect",
+    o: [
+      { n: "multi-view", v: ", multiple views" },
+      { n: "toon", v: ", cartoon-style bold line work, vibrant colors, cel shading" },
+      { n: "vintage", v: ", cel shading, vintage anime" },
+      { n: "ethereal", v: ", glow, god rays, ethereal, dreamy, heavenly, otherworldly" },
+      { n: "outline", v: ", outline, white outline" }
+    ]
+  }
+];
+
+let cinematicModifiers = [
+  {
+    g: "Shot",
+    o: [
+      { n: "close-up", v: ", cinematic close-up" },
+      { n: "medium shot", v: ", cinematic medium shot" },
+      { n: "wide shot", v: ", cinematic wide shot" },
+      { n: "over-the-shoulder", v: ", over-the-shoulder composition" },
+      { n: "low-angle", v: ", dramatic low-angle shot" },
+      { n: "high-angle", v: ", high-angle cinematic framing" }
+    ]
+  },
+  {
+    g: "Effect",
+    o: [
+      { n: "anamorphic", v: ", anamorphic lens look, cinematic bokeh" },
+      { n: "film grain", v: ", subtle film grain" },
+      { n: "letterbox", v: ", movie still composition" },
+      { n: "motion blur", v: ", dynamic motion blur" }
+    ]
+  }
+];
+
+let fantasyModifiers = [
+  {
+    g: "Theme",
+    o: [
+      { n: "gothic", v: ", gothic fantasy aesthetic" },
+      { n: "holy", v: ", holy light, divine fantasy atmosphere" },
+      { n: "cursed", v: ", cursed aura, ominous fantasy mood" },
+      { n: "arcane", v: ", arcane symbols, magical energy" },
+      { n: "royal", v: ", regal fantasy styling, ornate details" }
+    ]
+  },
+  {
+    g: "Environment",
+    o: [
+      { n: "ruins", v: ", ancient ruins" },
+      { n: "cathedral", v: ", gothic cathedral setting" },
+      { n: "forest", v: ", enchanted forest" },
+      { n: "castle", v: ", dark fantasy castle" },
+      { n: "underworld", v: ", infernal fantasy environment" }
+    ]
+  },
+  {
+    g: "Effect",
+    o: [
+      { n: "magic glow", v: ", glowing magic effects" },
+      { n: "embers", v: ", drifting embers" },
+      { n: "mist", v: ", heavy mist" },
+      { n: "aura", v: ", powerful aura" }
+    ]
+  }
+];
+
+let scifiModifiers = [
+  {
+    g: "Style",
+    o: [
+      { n: "cyberpunk", v: ", cyberpunk anime aesthetic" },
+      { n: "clean futurism", v: ", sleek futuristic design" },
+      { n: "military sci-fi", v: ", military science fiction design language" },
+      { n: "space opera", v: ", grand space opera aesthetic" }
+    ]
+  },
+  {
+    g: "Elements",
+    o: [
+      { n: "hologram", v: ", holographic interface elements" },
+      { n: "neon tech", v: ", glowing technological accents" },
+      { n: "exosuit", v: ", detailed powered armor" },
+      { n: "spaceship", v: ", futuristic spacecraft elements" },
+      { n: "robotics", v: ", advanced robotics detail" }
+    ]
+  },
+  {
+    g: "Effect",
+    o: [
+      { n: "energy core", v: ", glowing energy core" },
+      { n: "scan lines", v: ", subtle scanline effect" },
+      { n: "digital haze", v: ", digital atmosphere" },
+      { n: "plasma", v: ", plasma glow" }
+    ]
+  }
+];
+
+let mangaModifiers = [
+  {
+    g: "Ink",
+    o: [
+      { n: "hatching", v: ", detailed cross-hatching" },
+      { n: "screentone", v: ", screentone shading" },
+      { n: "heavy blacks", v: ", bold black ink shadows" },
+      { n: "clean ink", v: ", clean crisp ink lines" }
+    ]
+  },
+  {
+    g: "Layout",
+    o: [
+      { n: "panel feel", v: ", manga panel composition" },
+      { n: "splash page", v: ", dramatic splash page layout" },
+      { n: "speed lines", v: ", speed lines" },
+      { n: "impact frame", v: ", impact-focused framing" }
+    ]
+  },
+  {
+    g: "Tone",
+    o: [
+      { n: "seinen", v: ", seinen manga tone" },
+      { n: "shonen", v: ", shonen manga intensity" },
+      { n: "josei", v: ", josei manga elegance" }
+    ]
+  }
+];
+
+let paintingModifiers = [
+  {
+    g: "Medium",
+    o: [
+      { n: "gouache", v: ", gouache painting texture" },
+      { n: "watercolor bloom", v: ", watercolor bloom effects" },
+      { n: "ink wash", v: ", watercolor and ink wash" },
+      { n: "textured paper", v: ", textured paper surface" },
+      { n: "oil paint", v: ", rich oil paint texture" }
+    ]
+  },
+  {
+    g: "Brushwork",
+    o: [
+      { n: "loose", v: ", loose expressive brushwork" },
+      { n: "refined", v: ", refined painterly detailing" },
+      { n: "soft blend", v: ", soft color blending" },
+      { n: "visible strokes", v: ", visible brush strokes" }
+    ]
+  },
+  {
+    g: "Mood",
+    o: [
+      { n: "airy", v: ", airy painterly atmosphere" },
+      { n: "luminous", v: ", luminous painted lighting" },
+      { n: "poetic", v: ", poetic visual mood" }
+    ]
+  }
+];
+
+let retroModifiers = [
+  {
+    g: "Era",
+    o: [
+      { n: "eighties", v: ", 1980s anime aesthetic" },
+      { n: "nineties", v: ", 1990s anime aesthetic" },
+      { n: "early 2000s", v: ", early 2000s anime feel" }
+    ]
+  },
+  {
+    g: "Look",
+    o: [
+      { n: "cel paint", v: ", hand-painted cel look" },
+      { n: "vhs", v: ", subtle VHS nostalgia" },
+      { n: "old print", v: ", vintage print texture" },
+      { n: "broadcast", v: ", classic TV anime look" }
+    ]
+  },
+  {
+    g: "Color",
+    o: [
+      { n: "muted retro", v: ", nostalgic muted color palette" },
+      { n: "saturated retro", v: ", bold retro anime colors" }
+    ]
+  }
+];
+
+let cuteModifiers = [
+  {
+    g: "Expression",
+    o: [
+      { n: "sparkly eyes", v: ", sparkly eyes" },
+      { n: "blush", v: ", cute blush" },
+      { n: "happy", v: ", cheerful adorable expression" },
+      { n: "pout", v: ", tiny pout" }
+    ]
+  },
+  {
+    g: "Styling",
+    o: [
+      { n: "mascot", v: ", mascot-like cuteness" },
+      { n: "pastel", v: ", pastel cute palette" },
+      { n: "plush", v: ", plush-like softness" },
+      { n: "sticker", v: ", sticker-like clean silhouette" }
+    ]
+  },
+  {
+    g: "Effect",
+    o: [
+      { n: "hearts", v: ", floating hearts" },
+      { n: "sparkles", v: ", cute sparkles" },
+      { n: "bubbly", v: ", bubbly playful energy" }
+    ]
+  }
+];
+
+let moodModifiers = [
+  {
+    g: "Mood",
+    o: [
+      { n: "cozy", v: ", cozy warm atmosphere" },
+      { n: "dreamy", v: ", dreamy mood" },
+      { n: "melancholy", v: ", soft melancholic feeling" },
+      { n: "romantic", v: ", romantic atmosphere" },
+      { n: "peaceful", v: ", peaceful everyday mood" }
+    ]
+  },
+  {
+    g: "Color",
+    o: [
+      { n: "pastel", v: ", pastel tones" },
+      { n: "warm", v: ", warm color palette" },
+      { n: "cool", v: ", cool soft tones" }
+    ]
+  },
+  {
+    g: "Effect",
+    o: [
+      { n: "glow", v: ", soft glow" },
+      { n: "haze", v: ", atmospheric haze" },
+      { n: "sparkle", v: ", subtle sparkles" }
+    ]
+  }
+];
+
+let lightingModifiers = [
+  {
+    g: "Time",
+    o: [
+      { n: "sunrise", v: ", sunrise lighting" },
+      { n: "daylight", v: ", natural daylight" },
+      { n: "sunset", v: ", sunset glow" },
+      { n: "night", v: ", night scene lighting" },
+      { n: "moonlight", v: ", moonlit atmosphere" }
+    ]
+  },
+  {
+    g: "Quality",
+    o: [
+      { n: "soft light", v: ", soft diffused light" },
+      { n: "dramatic", v: ", dramatic contrast lighting" },
+      { n: "backlit", v: ", strong backlighting" },
+      { n: "ambient", v: ", ambient cinematic light" }
+    ]
+  },
+  {
+    g: "Effect",
+    o: [
+      { n: "god rays", v: ", god rays" },
+      { n: "bloom", v: ", soft bloom" },
+      { n: "lens flare", v: ", subtle lens flare" }
+    ]
+  }
+];
+
+let compositionModifiers = [
+  {
+    g: "Framing",
+    o: [
+      { n: "centered", v: ", centered composition" },
+      { n: "dynamic", v: ", dynamic composition" },
+      { n: "diagonal", v: ", diagonal flow composition" },
+      { n: "portrait", v: ", portrait-focused framing" },
+      { n: "full body", v: ", full-body composition" }
+    ]
+  },
+  {
+    g: "Perspective",
+    o: [
+      { n: "foreshortening", v: ", dramatic foreshortening" },
+      { n: "wide perspective", v: ", wide perspective" },
+      { n: "heroic", v: ", heroic perspective" },
+      { n: "intimate", v: ", intimate framing" }
+    ]
+  },
+  {
+    g: "Motion",
+    o: [
+      { n: "action pose", v: ", dynamic action pose" },
+      { n: "flowing fabric", v: ", flowing clothing and fabric" },
+      { n: "wind", v: ", wind-swept motion" }
+    ]
+  }
+];
+
+let portraitModifiers = [
+  {
+    g: "Focus",
+    o: [
+      { n: "face focus", v: ", face-focused composition" },
+      { n: "bust shot", v: ", bust portrait framing" },
+      { n: "expressive eyes", v: ", expressive eyes" },
+      { n: "detailed face", v: ", highly detailed facial rendering" }
+    ]
+  },
+  {
+    g: "Pose",
+    o: [
+      { n: "elegant pose", v: ", elegant pose" },
+      { n: "natural pose", v: ", natural pose" },
+      { n: "profile", v: ", profile view" },
+      { n: "three-quarter", v: ", three-quarter portrait view" }
+    ]
+  }
+];
+
+let fashionModifiers = [
+  {
+    g: "Styling",
+    o: [
+      { n: "couture", v: ", couture fashion styling" },
+      { n: "streetwear", v: ", stylish streetwear" },
+      { n: "layered fabric", v: ", layered garment detail" },
+      { n: "luxury textiles", v: ", luxurious textile detail" }
+    ]
+  },
+  {
+    g: "Presentation",
+    o: [
+      { n: "runway", v: ", runway-inspired presentation" },
+      { n: "editorial", v: ", editorial fashion mood" },
+      { n: "catalog", v: ", fashion catalog cleanliness" },
+      { n: "premium", v: ", premium styling" }
+    ]
+  }
+];
+
+let actionModifiers = [
+  {
+    g: "Energy",
+    o: [
+      { n: "explosive", v: ", explosive action energy" },
+      { n: "speed", v: ", sense of speed" },
+      { n: "battle", v: ", battle intensity" },
+      { n: "impact", v: ", high-impact motion" }
+    ]
+  },
+  {
+    g: "Effects",
+    o: [
+      { n: "debris", v: ", flying debris" },
+      { n: "sparks", v: ", sparks and impact effects" },
+      { n: "shockwave", v: ", shockwave effect" },
+      { n: "streaks", v: ", motion streaks" }
+    ]
+  }
+];
+
+let graphicModifiers = [
+  {
+    g: "Style",
+    o: [
+      { n: "bold shapes", v: ", bold graphic shapes" },
+      { n: "limited palette", v: ", limited color palette" },
+      { n: "clean edges", v: ", clean hard edges" },
+      { n: "print ready", v: ", print-ready clarity" }
+    ]
+  },
+  {
+    g: "Layout",
+    o: [
+      { n: "poster layout", v: ", poster-like layout" },
+      { n: "centered graphic", v: ", strong centered graphic composition" },
+      { n: "asymmetry", v: ", asymmetric graphic balance" },
+      { n: "negative space", v: ", deliberate negative space" }
+    ]
+  }
+];
+
+let qualityModifiers = [
+  {
+    g: "Finish",
+    o: [
+      { n: "masterpiece", v: ", masterpiece" },
+      { n: "best quality", v: ", best quality" },
+      { n: "high quality", v: ", high quality" },
+      { n: "very detailed", v: ", very detailed" },
+      { n: "ultra detailed", v: ", ultra detailed" },
+      { n: "sharp", v: ", sharp focus" }
+    ]
+  },
+  {
+    g: "Output",
+    o: [
+      { n: "high resolution", v: ", high resolution" },
+      { n: "crisp", v: ", crisp details" },
+      { n: "polished", v: ", polished finish" },
+      { n: "professional", v: ", professional-grade rendering" }
+    ]
+  }
+];
+
+let photoMods = [
+  {
+    g: "Shot",
+    o: [
+      { n: "extreme close-up", v: ", extreme close-up" },
+      { n: "low-angle", v: ", low-angle shot" },
+      { n: "high-angle", v: ", high-angle shot" },
+      { n: "aerial", v: ", aerial shot" },
+      { n: "close-up", v: ", close-up shot" },
+      { n: "portrait", v: ", close-up portrait" },
+      { n: "macro", v: ", macro shot" },
+      { n: "wide-angle", v: ", wide-angle shot" },
+      { n: "establishing", v: ", establishing shot" },
+      { n: "over-the-shoulder", v: ", over-the-shoulder shot" },
+      { n: "telephoto", v: ", telephoto shot" },
+      { n: "handheld", v: ", handheld shot" },
+      { n: "panoramic", v: ", panoramic shot" },
+      { n: "dramatic", v: ", dramatic angle, extreme angle shot" }
+    ]
+  },
+  {
+    g: "Color",
+    o: [
+      { n: "vibrant", v: ", vibrant color grading" },
+      { n: "warm", v: ", warm color grading" },
+      { n: "cool", v: ", cool-toned color grading" },
+      { n: "pastel", v: ", pastel color grading" },
+      { n: "bright", v: ", bright color grading" },
+      { n: "muted", v: ", muted color grading" },
+      { n: "neon", v: ", neon color grading" },
+      { n: "duotone", v: ", duotone color grading" },
+      { n: "monochrome", v: ", monochrome" },
+      { n: "sterile", v: ", cool-toned sterile colors" }
+    ]
+  },
+  {
+    g: "Effect",
+    o: [
+      { n: "bokeh", v: ", bokeh" },
+      { n: "tilt-shift", v: ", tilt-shift effect" },
+      { n: "soft focus", v: ", soft focus" },
+      { n: "background blur", v: ", shallow depth of field" },
+      { n: "chromatic aberrations", v: ", chromatic aberrations" },
+      { n: "light leaks", v: ", light leaks" },
+      { n: "rear projection", v: ", rear projection" },
+      { n: "lens flare", v: ", lens flare" },
+      { n: "long exposure", v: ", long exposure" },
+      { n: "golden hour", v: ", golden hour" },
+      { n: "silhouette", v: ", silhouette" }
+    ]
+  }
+];
+
+let photoShotEffect = [photoMods[0], photoMods[2]];
+
+let furryMods = [
+  {
+    g: "Effect",
+    o: [
+      { n: "humanoid face", v: ", human face, not furry" },
+      { n: "multi-view", v: ", multiple views" },
+      { n: "toon", v: ", cartoon-style bold line work, vibrant colors, cel shading" },
+      { n: "vintage", v: ", cel shading, vintage anime" },
+      { n: "ethereal", v: ", glow, god rays, ethereal, dreamy, heavenly, otherworldly, dream-like, breathtaking, captivating, divine" },
+      { n: "outline", v: ", outline, white outline" }
+    ]
+  }
+];
+
+let landMods = [
+  {
+    g: "Shot",
+    o: [
+      { n: "aerial", v: ", aerial view" },
+      { n: "low-angle", v: ", low-angle view" },
+      { n: "high-angle", v: ", high-angle view" },
+      { n: "wide-angle", v: ", wide-angle view" }
+    ]
+  },
+  {
+    g: "Color",
+    o: [
+      { n: "vibrant", v: ", vibrant color tones" },
+      { n: "warm", v: ", warm-toned colors" },
+      { n: "cool", v: ", cool-toned colors" },
+      { n: "pastel", v: ", pastel tones" },
+      { n: "muted", v: ", muted color grading" },
+      { n: "sunset", v: ", sunset color tones" },
+      { n: "monochrome", v: ", monochrome" }
+    ]
+  },
+  {
+    g: "Effect",
+    o: [
+      { n: "tilt-shift", v: ", tilt-shift effect" },
+      { n: "golden hour", v: ", golden hour" },
+      { n: "mist", v: ", misty" },
+      { n: "reflection", v: ", water reflection" },
+      { n: "sun flare", v: ", sun flare" },
+      { n: "starburst", v: ", starburst effect" },
+      { n: "light trails", v: ", light trails" },
+      { n: "long exposure", v: ", long exposure" },
+      { n: "soft focus", v: ", soft focus" }
+    ]
+  }
+];
+
+let stylesData = [
+  {
+    n: "Painted Anime",
+    p: `[input.description], art by atey ghailan, painterly anime style at pixiv, art by kantoku, in art style of redjuice/necömi/rella/tiv pixiv collab, your name anime art style, masterpiece digital painting, exquisite lighting and composition, inspired by wlop art style, 8k, sharp, very detailed, high resolution, illustration.\n\nOverall, it's an absolute world-class masterpiece painterly anime-inspired digital art. It's an aesthetically pleasing painterly anime-inspired digital artwork with impeccable attention to detail and impressive composition. ^2\npainterly anime artwork, [input.description], world-class masterpiece, fine details, breathtaking artwork, painterly art style, high quality, 8k, very detailed, high resolution, exquisite composition and lighting.\n\nOverall, it's an absolute world-class masterpiece painterly anime artwork. It's an aesthetically pleasing painterly anime artwork with impeccable attention to detail and impressive composition.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat(scifiModifiers, compositionModifiers, qualityModifiers)
+
+  },
+  {
+    n: "Cinematic Anime",
+    p: `[input.description], cinematic anime illustration, filmic composition, dramatic perspective, detailed background, dynamic lighting, volumetric light, rim lighting, anime key visual, polished digital painting, high detail, sharp focus, rich color grading, masterpiece, very detailed, high resolution.\n\nOverall, it's a world-class cinematic anime illustration with striking atmosphere, dramatic framing, and refined lighting.\n[input.description], anime movie still, cinematic shot, beautifully composed scene, dramatic light and shadow, expressive color design, detailed environment, polished anime rendering, high quality, ultra detailed, high resolution, masterpiece.\n\nOverall, it's a breathtaking cinematic anime-style scene with powerful composition and film-like mood.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Effect", o: [
+        { n: "anamorphic", v: ", anamorphic lens look, cinematic bokeh" },
+        { n: "film grain", v: ", subtle film grain" },
+        { n: "letterbox", v: ", movie still composition" },
+        { n: "motion blur", v: ", dynamic motion blur" }
+      ]}
+    ])
+  },
+  {
+    n: "Soft Shoujo",
+    p: `[input.description], soft shoujo anime illustration, delicate linework, pastel color palette, gentle lighting, sparkling atmosphere, expressive eyes, elegant composition, romantic manga aesthetic, polished digital art, high detail, very detailed, high resolution.\n\nOverall, it's a beautiful soft shoujo-inspired anime artwork with graceful color harmony and a dreamy romantic feel.\n[input.description], delicate anime portrait, shoujo manga style, airy colors, subtle blush tones, soft glow, refined features, pretty composition, exquisite detail, high quality, high resolution.\n\nOverall, it's an elegant shoujo-style anime image with softness, charm, and refined presentation.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Mood", o: [
+        { n: "cozy", v: ", cozy warm atmosphere" },
+        { n: "dreamy", v: ", dreamy mood" },
+        { n: "romantic", v: ", romantic atmosphere" },
+        { n: "peaceful", v: ", peaceful everyday mood" }
+      ]},
+      { g: "Color", o: [
+        { n: "pastel", v: ", pastel tones" },
+        { n: "warm", v: ", warm color palette" },
+        { n: "cool", v: ", cool soft tones" }
+      ]}
+    ])
+  },
+  {
+    n: "Dark Fantasy Anime",
+    p: `[input.description], dark fantasy anime illustration, dramatic shadows, ominous atmosphere, gothic detail, moody lighting, intricate costume design, haunting environment, painterly anime rendering, masterpiece, sharp, highly detailed, high resolution.\n\nOverall, it's a world-class dark fantasy anime artwork with powerful atmosphere, striking contrast, and rich detail.\n[input.description], anime dark fantasy scene, gothic anime art style, deep shadows, eerie glow, dramatic composition, detailed textures, polished digital painting, very detailed, high quality, high resolution.\n\nOverall, it's a captivating dark fantasy anime illustration with a haunting mood and cinematic impact.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Theme", o: [
+        { n: "gothic", v: ", gothic fantasy aesthetic" },
+        { n: "holy", v: ", holy light, divine fantasy atmosphere" },
+        { n: "cursed", v: ", cursed aura, ominous fantasy mood" },
+        { n: "arcane", v: ", arcane symbols, magical energy" },
+        { n: "royal", v: ", regal fantasy styling, ornate details" }
+      ]},
+      { g: "Environment", o: [
+        { n: "ruins", v: ", ancient ruins" },
+        { n: "cathedral", v: ", gothic cathedral setting" },
+        { n: "forest", v: ", enchanted forest" },
+        { n: "castle", v: ", dark fantasy castle" },
+        { n: "underworld", v: ", infernal fantasy environment" }
+      ]},
+      { g: "Effect", o: [
+        { n: "magic glow", v: ", glowing magic effects" },
+        { n: "embers", v: ", drifting embers" },
+        { n: "mist", v: ", heavy mist" },
+        { n: "aura", v: ", powerful aura" }
+      ]}
+    ])
+  },
+  {
+    n: "Mecha Anime",
+    p: `[input.description], mecha anime illustration, mechanical detail, futuristic design, hard-surface rendering, clean anime linework, dynamic action composition, glowing tech elements, polished digital artwork, intricate machinery, masterpiece, ultra detailed, sharp, high resolution.\n\nOverall, it's a world-class mecha anime artwork with exceptional mechanical design and high-impact composition.\n[input.description], futuristic anime key visual, mecha design, detailed machinery, sleek armor plating, dynamic perspective, anime sci-fi art, glowing accents, very detailed, crisp, high quality, high resolution.\n\nOverall, it's an impressive mecha anime illustration with technical precision and dramatic energy.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Style", o: [
+        { n: "cyberpunk", v: ", cyberpunk anime aesthetic" },
+        { n: "clean futurism", v: ", sleek futuristic design" },
+        { n: "military scifi", v: ", military science fiction design language" },
+        { n: "space opera", v: ", grand space opera aesthetic" }
+      ]},
+      { g: "Effect", o: [
+        { n: "energy core", v: ", glowing energy core" },
+        { n: "scan lines", v: ", subtle scanline effect" },
+        { n: "digital haze", v: ", digital atmosphere" },
+        { n: "plasma", v: ", plasma glow" }
+      ]}
+    ])
+  },
+  {
+    n: "Slice of Life Anime",
+    p: `[input.description], slice of life anime illustration, warm everyday atmosphere, natural pose, charming expression, cozy setting, soft daylight, clean anime rendering, gentle color palette, detailed scene, polished illustration, high quality, high resolution.\n\nOverall, it's a beautiful slice-of-life anime artwork with warmth, relatability, and pleasing everyday detail.\n[input.description], wholesome anime scene, cozy anime aesthetic, soft colors, natural lighting, expressive character acting, inviting environment, detailed illustration, very polished, high resolution.\n\nOverall, it's a charming slice-of-life anime image with a calm mood and strong visual appeal.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Mood", o: [
+        { n: "cozy", v: ", cozy warm atmosphere" },
+        { n: "dreamy", v: ", dreamy mood" },
+        { n: "melancholy", v: ", soft melancholic feeling" },
+        { n: "romantic", v: ", romantic atmosphere" },
+        { n: "peaceful", v: ", peaceful everyday mood" }
+      ]},
+      { g: "Color", o: [
+        { n: "pastel", v: ", pastel tones" },
+        { n: "warm", v: ", warm color palette" },
+        { n: "cool", v: ", cool soft tones" }
+      ]}
+    ])
+  },
+  {
+    n: "Manga Ink",
+    p: `[input.description], manga illustration, black and white inked artwork, screentone shading, crisp line art, strong contrast, detailed hatching, clean panel-ready drawing, expressive composition, highly detailed, sharp, masterpiece.\n\nOverall, it's a stunning manga-style ink drawing with powerful line control and professional black-and-white rendering.\n[input.description], monochrome manga art, refined ink lines, screentones, dramatic shadows, clean contours, detailed illustration, polished comic-style artwork, high detail, masterpiece.\n\nOverall, it's a striking manga-inspired black-and-white illustration with clarity, depth, and dramatic contrast.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: [
+      { g: "Ink", o: [
+        { n: "hatching", v: ", detailed cross-hatching" },
+        { n: "screentone", v: ", screentone shading" },
+        { n: "heavy blacks", v: ", bold black ink shadows" },
+        { n: "clean ink", v: ", clean crisp ink lines" }
+      ]},
+      { g: "Layout", o: [
+        { n: "panel feel", v: ", manga panel composition" },
+        { n: "splash page", v: ", dramatic splash page layout" },
+        { n: "speed lines", v: ", speed lines" },
+        { n: "impact frame", v: ", impact-focused framing" }
+      ]},
+      { g: "Tone", o: [
+        { n: "seinen", v: ", seinen manga tone" },
+        { n: "shonen", v: ", shonen manga intensity" },
+        { n: "josei", v: ", josei manga elegance" }
+      ]}
+    ]
+  },
+  {
+    n: "Watercolor Anime",
+    p: `[input.description], watercolor anime illustration, soft pigment washes, delicate edges, airy composition, luminous color blending, handmade paper texture, elegant anime rendering, detailed painting, beautiful lighting, high quality, high resolution.\n\nOverall, it's a world-class watercolor anime artwork with graceful color transitions and painterly softness.\n[input.description], anime watercolor painting, gentle brushwork, translucent colors, dreamy atmosphere, soft detail, artistic composition, refined illustration, very detailed, high resolution.\n\nOverall, it's a lovely watercolor anime image with expressive brushwork and a serene painterly finish.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Medium", o: [
+        { n: "gouache", v: ", gouache painting texture" },
+        { n: "watercolor bloom", v: ", watercolor bloom effects" },
+        { n: "ink wash", v: ", watercolor and ink wash" },
+        { n: "textured paper", v: ", textured paper surface" },
+        { n: "oil paint", v: ", rich oil paint texture" }
+      ]},
+      { g: "Brushwork", o: [
+        { n: "loose", v: ", loose expressive brushwork" },
+        { n: "refined", v: ", refined painterly detailing" },
+        { n: "soft blend", v: ", soft color blending" },
+        { n: "visible strokes", v: ", visible brush strokes" }
+      ]},
+      { g: "Mood", o: [
+        { n: "airy", v: ", airy painterly atmosphere" },
+        { n: "luminous", v: ", luminous painted lighting" },
+        { n: "poetic", v: ", poetic visual mood" }
+      ]}
+    ])
+  },
+  {
+    n: "Retro 90s Anime",
+    p: `[input.description], retro 90s anime art style, classic cel animation look, bold shapes, nostalgic color palette, vintage anime character design, hand-painted cel feel, detailed illustration, clean linework, high quality, expressive composition.\n\nOverall, it's a gorgeous retro anime artwork with nostalgic charm and authentic cel-era energy.\n[input.description], vintage anime illustration, 1990s anime aesthetic, cel shading, nostalgic tones, expressive faces, classic anime proportions, polished retro-inspired artwork, detailed, high resolution.\n\nOverall, it's a strong retro anime-style image with classic visual appeal and old-school anime atmosphere.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Era", o: [
+        { n: "eighties", v: ", 1980s anime aesthetic" },
+        { n: "nineties", v: ", 1990s anime aesthetic" },
+        { n: "early 2000s", v: ", early 2000s anime feel" }
+      ]},
+      { g: "Look", o: [
+        { n: "cel paint", v: ", hand-painted cel look" },
+        { n: "vhs", v: ", subtle VHS nostalgia" },
+        { n: "old print", v: ", vintage print texture" },
+        { n: "broadcast", v: ", classic TV anime look" }
+      ]},
+      { g: "Color", o: [
+        { n: "muted retro", v: ", nostalgic muted color palette" },
+        { n: "saturated retro", v: ", bold retro anime colors" }
+      ]}
+    ])
+  },
+  {
+    n: "Chibi Cute",
+    p: `[input.description], chibi anime illustration, super deformed proportions, cute expression, clean line art, vibrant colors, playful composition, adorable character design, polished digital artwork, very detailed, high quality, high resolution.\n\nOverall, it's an irresistibly cute chibi anime artwork with strong character appeal and polished presentation.\n[input.description], adorable anime chibi art, tiny body proportions, oversized head, charming expression, colorful rendering, crisp details, lively composition, polished illustration, high resolution.\n\nOverall, it's a delightful chibi-style anime image with playful energy and excellent finish.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Expression", o: [
+        { n: "sparkly eyes", v: ", sparkly eyes" },
+        { n: "blush", v: ", cute blush" },
+        { n: "happy", v: ", cheerful adorable expression" },
+        { n: "pout", v: ", tiny pout" }
+      ]},
+      { g: "Styling", o: [
+        { n: "mascot", v: ", mascot-like cuteness" },
+        { n: "pastel", v: ", pastel cute palette" },
+        { n: "plush", v: ", plush-like softness" },
+        { n: "sticker", v: ", sticker-like clean silhouette" }
+      ]},
+      { g: "Effect", o: [
+        { n: "hearts", v: ", floating hearts" },
+        { n: "sparkles", v: ", cute sparkles" },
+        { n: "bubbly", v: ", bubbly playful energy" }
+      ]}
+    ])
+  },
+  {
+    n: "Heroic Shonen",
+    p: `[input.description], heroic shonen anime illustration, dynamic pose, dramatic perspective, bold expression, action-heavy composition, energetic linework, vibrant anime colors, polished digital artwork, high detail, masterpiece, very detailed, high resolution.\n\nOverall, it's a high-impact shonen anime artwork with strong movement, intensity, and heroic appeal.\n[input.description], action anime key visual, shonen battle energy, dynamic framing, expressive anatomy, speed and momentum, polished illustration, high quality, ultra detailed, high resolution.\n\nOverall, it's a thrilling shonen-inspired anime image with power, motion, and bold presentation.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Energy", o: [
+        { n: "explosive", v: ", explosive action energy" },
+        { n: "speed", v: ", sense of speed" },
+        { n: "battle", v: ", battle intensity" },
+        { n: "impact", v: ", high-impact motion" }
+      ]},
+      { g: "Effects", o: [
+        { n: "debris", v: ", flying debris" },
+        { n: "sparks", v: ", sparks and impact effects" },
+        { n: "shockwave", v: ", shockwave effect" },
+        { n: "streaks", v: ", motion streaks" }
+      ]}
+    ])
+  },
+  {
+    n: "Elegant Josei",
+    p: `[input.description], elegant josei-inspired anime illustration, refined features, mature fashion styling, graceful composition, tasteful color palette, polished linework, soft sophisticated lighting, high detail, beautiful digital art, high resolution.\n\nOverall, it's a refined josei-style anime artwork with maturity, elegance, and visual grace.\n[input.description], mature anime portrait, tasteful josei aesthetic, polished rendering, soft luxury palette, poised expression, detailed illustration, high quality, high resolution.\n\nOverall, it's a sophisticated anime image with elegance and polished emotional realism.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Focus", o: [
+        { n: "face focus", v: ", face-focused composition" },
+        { n: "bust shot", v: ", bust portrait framing" },
+        { n: "expressive eyes", v: ", expressive eyes" },
+        { n: "detailed face", v: ", highly detailed facial rendering" }
+      ]},
+      { g: "Pose", o: [
+        { n: "elegant pose", v: ", elegant pose" },
+        { n: "natural pose", v: ", natural pose" },
+        { n: "profile", v: ", profile view" },
+        { n: "three quarter", v: ", three-quarter portrait view" }
+      ]},
+      { g: "Styling", o: [
+        { n: "couture", v: ", couture fashion styling" },
+        { n: "streetwear", v: ", stylish streetwear" },
+        { n: "layered fabric", v: ", layered garment detail" },
+        { n: "luxury textiles", v: ", luxurious textile detail" }
+      ]}
+    ])
+  },
+  {
+    n: "School Romance",
+    p: `[input.description], school romance anime illustration, youthful atmosphere, heartfelt expression, polished anime rendering, soft lighting, clean composition, emotionally warm color palette, detailed environment, high quality, high resolution.\n\nOverall, it's a polished school romance anime artwork with warmth, tenderness, and strong emotional charm.\n[input.description], romantic anime scene, school setting, soft blush tones, pretty composition, expressive eyes, gentle daylight, clean linework, detailed illustration, high resolution.\n\nOverall, it's a sweet romance-focused anime image with softness and strong character appeal.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Mood", o: [
+        { n: "cozy", v: ", cozy warm atmosphere" },
+        { n: "dreamy", v: ", dreamy mood" },
+        { n: "melancholy", v: ", soft melancholic feeling" },
+        { n: "romantic", v: ", romantic atmosphere" },
+        { n: "peaceful", v: ", peaceful everyday mood" }
+      ]},
+      { g: "Color", o: [
+        { n: "pastel", v: ", pastel tones" },
+        { n: "warm", v: ", warm color palette" },
+        { n: "cool", v: ", cool soft tones" }
+      ]},
+      { g: "Effect", o: [
+        { n: "glow", v: ", soft glow" },
+        { n: "haze", v: ", atmospheric haze" },
+        { n: "sparkle", v: ", subtle sparkles" }
+      ]}
+    ])
+  },
+  {
+    n: "Magical Girl",
+    p: `[input.description], magical girl anime illustration, sparkling magical effects, elegant transformation aesthetic, ornate costume design, bright polished colors, radiant lighting, beautiful anime rendering, detailed composition, masterpiece, very detailed, high resolution.\n\nOverall, it's a dazzling magical-girl anime artwork with vivid charm, elegance, and fantasy sparkle.\n[input.description], fantasy anime heroine, magical energy, graceful pose, shining accessories, colorful anime art, polished details, luminous composition, high quality, high resolution.\n\nOverall, it's a vibrant magical-girl-style anime image with refined fantasy beauty and strong visual energy.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Theme", o: [
+        { n: "gothic", v: ", gothic fantasy aesthetic" },
+        { n: "holy", v: ", holy light, divine fantasy atmosphere" },
+        { n: "cursed", v: ", cursed aura, ominous fantasy mood" },
+        { n: "arcane", v: ", arcane symbols, magical energy" },
+        { n: "royal", v: ", regal fantasy styling, ornate details" }
+      ]},
+      { g: "Environment", o: [
+        { n: "ruins", v: ", ancient ruins" },
+        { n: "cathedral", v: ", gothic cathedral setting" },
+        { n: "forest", v: ", enchanted forest" },
+        { n: "castle", v: ", dark fantasy castle" },
+        { n: "underworld", v: ", infernal fantasy environment" }
+      ]},
+      { g: "Effect", o: [
+        { n: "magic glow", v: ", glowing magic effects" },
+        { n: "embers", v: ", drifting embers" },
+        { n: "mist", v: ", heavy mist" },
+        { n: "aura", v: ", powerful aura" }
+      ]}
+    ])
+  },
+  {
+    n: "Idol Stage Anime",
+    p: `[input.description], idol anime illustration, stage performance atmosphere, dazzling concert lights, fashionable costume styling, energetic pose, vibrant color design, polished anime rendering, high detail, glamorous composition, high resolution.\n\nOverall, it's a lively idol-style anime artwork with stage energy, spectacle, and visual polish.\n[input.description], anime stage performance, spotlight lighting, charming idol fashion, expressive performance pose, colorful concert mood, clean detailed illustration, high quality, high resolution.\n\nOverall, it's a bright and energetic idol anime image with strong performance appeal.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Styling", o: [
+        { n: "couture", v: ", couture fashion styling" },
+        { n: "streetwear", v: ", stylish streetwear" },
+        { n: "layered fabric", v: ", layered garment detail" },
+        { n: "luxury textiles", v: ", luxurious textile detail" }
+      ]},
+      { g: "Presentation", o: [
+        { n: "runway", v: ", runway-inspired presentation" },
+        { n: "editorial", v: ", editorial fashion mood" },
+        { n: "catalog", v: ", fashion catalog cleanliness" },
+        { n: "premium", v: ", premium styling" }
+      ]}
+    ])
+  },
+  {
+    n: "Sci-Fi Key Visual",
+    p: `[input.description], futuristic anime key visual, sleek sci-fi design, cinematic framing, glowing interfaces, atmospheric lighting, clean detailed rendering, advanced technology motifs, polished illustration, masterpiece, ultra detailed, high resolution.\n\nOverall, it's a striking sci-fi anime artwork with cinematic scale and polished futuristic design.\n[input.description], anime science fiction scene, luminous technology, dramatic perspective, futuristic environment, crisp composition, highly detailed digital art, high quality, high resolution.\n\nOverall, it's a compelling sci-fi anime image with sleek worldbuilding and strong visual structure.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Style", o: [
+        { n: "cyberpunk", v: ", cyberpunk anime aesthetic" },
+        { n: "clean futurism", v: ", sleek futuristic design" },
+        { n: "military scifi", v: ", military science fiction design language" },
+        { n: "space opera", v: ", grand space opera aesthetic" }
+      ]},
+      { g: "Elements", o: [
+        { n: "hologram", v: ", holographic interface elements" },
+        { n: "neon tech", v: ", glowing technological accents" },
+        { n: "exosuit", v: ", detailed powered armor" },
+        { n: "spaceship", v: ", futuristic spacecraft elements" },
+        { n: "robotics", v: ", advanced robotics detail" }
+      ]},
+      { g: "Effect", o: [
+        { n: "energy core", v: ", glowing energy core" },
+        { n: "scan lines", v: ", subtle scanline effect" },
+        { n: "digital haze", v: ", digital atmosphere" },
+        { n: "plasma", v: ", plasma glow" }
+      ]}
+    ])
+  },
+  {
+    n: "Cyberpunk Neon",
+    p: `[input.description], cyberpunk anime illustration, neon-lit city atmosphere, reflective surfaces, night scene, glowing signs, futuristic fashion, intense color contrast, cinematic composition, polished digital artwork, sharp, high detail, high resolution.\n\nOverall, it's a vivid cyberpunk anime artwork with electric atmosphere and striking night-time style.\n[input.description], anime cyberpunk scene, glowing neon light, urban sci-fi mood, detailed city background, dramatic contrast, polished rendering, high quality, very detailed, high resolution.\n\nOverall, it's a stylish cyberpunk anime image with strong color, mood, and cinematic energy.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Style", o: [
+        { n: "cyberpunk", v: ", cyberpunk anime aesthetic" },
+        { n: "clean futurism", v: ", sleek futuristic design" },
+        { n: "military scifi", v: ", military science fiction design language" },
+        { n: "space opera", v: ", grand space opera aesthetic" }
+      ]},
+      { g: "Elements", o: [
+        { n: "hologram", v: ", holographic interface elements" },
+        { n: "neon tech", v: ", glowing technological accents" },
+        { n: "exosuit", v: ", detailed powered armor" },
+        { n: "spaceship", v: ", futuristic spacecraft elements" },
+        { n: "robotics", v: ", advanced robotics detail" }
+      ]},
+      { g: "Effect", o: [
+        { n: "energy core", v: ", glowing energy core" },
+        { n: "scan lines", v: ", subtle scanline effect" },
+        { n: "digital haze", v: ", digital atmosphere" },
+        { n: "plasma", v: ", plasma glow" }
+      ]}
+    ])
+  },
+  {
+    n: "Post-Apocalyptic Anime",
+    p: `[input.description], post-apocalyptic anime illustration, ruined environment, atmospheric dust, dramatic sky, survivalist styling, moody lighting, detailed background storytelling, polished anime rendering, high detail, high resolution.\n\nOverall, it's a gripping post-apocalyptic anime artwork with environmental depth and a strong survival mood.\n[input.description], anime wasteland scene, abandoned city ruins, dramatic atmosphere, weathered details, cinematic composition, polished digital illustration, high quality, very detailed, high resolution.\n\nOverall, it's a powerful apocalypse-themed anime image with strong setting design and emotional weight.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Environment", o: [
+        { n: "ruins", v: ", ancient ruins" },
+        { n: "cathedral", v: ", gothic cathedral setting" },
+        { n: "forest", v: ", enchanted forest" },
+        { n: "castle", v: ", dark fantasy castle" },
+        { n: "underworld", v: ", infernal fantasy environment" }
+      ]},
+      { g: "Effect", o: [
+        { n: "magic glow", v: ", glowing magic effects" },
+        { n: "embers", v: ", drifting embers" },
+        { n: "mist", v: ", heavy mist" },
+        { n: "aura", v: ", powerful aura" }
+      ]}
+    ])
+  },
+  {
+    n: "Historical Kimono Anime",
+    p: `[input.description], historical anime illustration, traditional kimono styling, elegant textile detail, refined posture, delicate color palette, graceful composition, polished anime rendering, cultural atmosphere, high detail, high resolution.\n\nOverall, it's a graceful historical anime artwork with beautiful costume detail and elegant presentation.\n[input.description], anime period scene, kimono fashion, refined composition, delicate lighting, intricate fabric patterns, polished illustration, high quality, high resolution.\n\nOverall, it's an elegant period-inspired anime image with strong textile beauty and classical atmosphere.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Styling", o: [
+        { n: "couture", v: ", couture fashion styling" },
+        { n: "streetwear", v: ", stylish streetwear" },
+        { n: "layered fabric", v: ", layered garment detail" },
+        { n: "luxury textiles", v: ", luxurious textile detail" }
+      ]},
+      { g: "Presentation", o: [
+        { n: "runway", v: ", runway-inspired presentation" },
+        { n: "editorial", v: ", editorial fashion mood" },
+        { n: "catalog", v: ", fashion catalog cleanliness" },
+        { n: "premium", v: ", premium styling" }
+      ]}
+    ])
+  },
+  {
+    n: "Anime Noir",
+    p: `[input.description], anime noir illustration, moody monochrome palette, dramatic shadows, noir lighting, urban tension, rain-soaked atmosphere, cinematic framing, strong contrast, polished detailed artwork, high resolution.\n\nOverall, it's a stylish anime noir artwork with suspense, contrast, and cinematic mood.\n[input.description], noir anime scene, deep shadows, moody city environment, crime-drama tone, monochrome or limited palette, dramatic composition, detailed illustration, high quality, high resolution.\n\nOverall, it's a tense and elegant noir-style anime image with strong lighting and atmosphere.`,
+    ng: `[input.negative]`,
+    img: "https://mosberg.github.io/src/img/art_styles/anime.jpg",
+    mods: animeMods.concat([
+      { g: "Shot", o: [
+        { n: "close up", v: ", cinematic close-up" },
+        { n: "medium shot", v: ", cinematic medium shot" },
+        { n: "wide shot", v: ", cinematic wide shot" },
+        { n: "over shoulder", v: ", over-the-shoulder composition" },
+        { n: "low angle", v: ", dramatic low-angle shot" },
+        { n: "high angle", v: ", high-angle cinematic framing" }
+      ]},
+      { g: "Effect", o: [
+        { n: "anamorphic", v: ", anamorphic lens look, cinematic bokeh" },
+        { n: "film grain", v: ", subtle film grain" },
+        { n: "letterbox", v: ", movie still composition" },
+        { n: "motion blur", v: ", dynamic motion blur" }
+      ]}
+    ])
+  }
+];
+
+function resolvePrompt(t){
+  let d=descriptionInput.value, n=negativeInput.value, out=t;
+  out=out.replace(/\[input\.description\.length\s*>\s*(\d+)\s*\?\s*"([^"]*)"\s*:\s*"([^"]*)"\]/g,(_,num,a,b)=>d.length>+num?a:b);
+  out=out.replace(/\[input\.description\.length\s*<\s*(\d+)\s*\?\s*"([^"]*)"\s*:\s*"([^"]*)"\]/g,(_,num,a,b)=>d.length<+num?a:b);
+  out=out.replace(/\[input\.description\.length\s*<\s*(\d+)\s*\?\s*input\.description\s*:\s*""\]/g,(_,num)=>d.length<+num?d:"");
+  out=out.replace(/\[input\.pokemonType\s*\?\s*input\.pokemonType\s*\+\s*"\s*,\s*"\s*:\s*""\]/g,"");
+  out=out.replace(/\[input\.description\]/g,d);
+  out=out.replace(/\[input\.negative\]/g,n);
+  out=out.replace(/\{a\}/g,"a ");
+  out=out.replace(/\{([^}]+)\|([^}]+)\}/g,(_,a)=>a.split('|')[0]);
+  return out;
+}
+
+function renderStyles(){
+  let q=(searchInput.value||"").toLowerCase();
+  styleGridCtn.innerHTML="";
+  stylesData.forEach((s,i)=>{
+    if(q && !s.n.toLowerCase().includes(q) && !s.p.toLowerCase().includes(q)) return;
+    let card=document.createElement("div");
+    card.style.cssText="background:#222;border-radius:8px;overflow:hidden;cursor:pointer;transition:transform .1s;";
+    card.onmouseenter=()=>card.style.transform="scale(1.02)";
+    card.onmouseleave=()=>card.style.transform="scale(1)";
+    card.onclick=()=>selectStyle(i);
+    let img=document.createElement("img");
+    img.src=s.img.startsWith("http")?s.img:imgBase+s.img;
+    img.style.cssText="width:100%;height:100px;object-fit:cover;display:block;background:#111;";
+    img.onerror=()=>img.src="https://placehold.co/300x150/111/666?text="+encodeURIComponent(s.n);
+    let lbl=document.createElement("div");
+    lbl.textContent=s.n;
+    lbl.style.cssText="padding:8px;font-size:12px;font-weight:600;text-align:center;";
+    card.appendChild(img); card.appendChild(lbl);
+    styleGridCtn.appendChild(card);
+  });
+}
+function selectStyle(i){
+  selectedStyle=stylesData[i];
+  useAlt=false;
+  activeMods=new Set();
+  selectedStyleTitle.textContent=selectedStyle.n;
+  selectedStyleImg.src=selectedStyle.img.startsWith("http")?selectedStyle.img:imgBase+selectedStyle.img;
+  selectedStyleImg.onerror=()=>selectedStyleImg.src="https://placehold.co/600x300/111/666?text="+encodeURIComponent(selectedStyle.n);
+  outputCtn.hidden=false;
+  altBtn.hidden=!selectedStyle.alt;
+  altBtn.textContent="Use Alt Prompt";
+  renderModifiers();
+  updateOutput();
+}
+function renderModifiers(){
+  modifiersCtn.innerHTML="";
+  if(!selectedStyle||!selectedStyle.mods) return;
+  for(let g of selectedStyle.mods){
+    let w=document.createElement("div"); w.style.marginBottom="8px";
+    let t=document.createElement("div"); t.textContent=g.g; t.style.cssText="font-size:12px;color:#aaa;margin-bottom:4px;";
+    w.appendChild(t);
+    let row=document.createElement("div"); row.style.cssText="display:flex;flex-wrap:wrap;gap:4px;";
+    for(let o of g.o){
+      let chip=document.createElement("button");
+      chip.textContent=o.n;
+      chip.style.cssText="font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid #444;background:#222;color:#ddd;cursor:pointer;";
+      if(activeMods.has(o.v)){chip.style.background="#0f0";chip.style.color="#000";}
+      chip.onclick=()=>{if(activeMods.has(o.v))activeMods.delete(o.v);else activeMods.add(o.v);renderModifiers();updateOutput();};
+      row.appendChild(chip);
+    }
+    w.appendChild(row);
+    modifiersCtn.appendChild(w);
+  }
+}
+function updateOutput(){
+  if(!selectedStyle) return;
+  let t=useAlt&&selectedStyle.alt?selectedStyle.alt:selectedStyle.p;
+  let prompt=resolvePrompt(t);
+  for(let v of activeMods) prompt+=v;
+  let neg=resolvePrompt(selectedStyle.ng);
+  promptOutputEl.value=prompt;
+  negativeOutputEl.value=neg;
+}
+function toggleAlt(){useAlt=!useAlt;altBtn.textContent=useAlt?"Use Main":"Use Alt";updateOutput();}
+function copyPrompt(){navigator.clipboard.writeText(promptOutputEl.value).then(()=>{let b=event.target;b.textContent="Copied!";setTimeout(()=>b.textContent="Copy Prompt",1000);});}
+function copyNegative(){navigator.clipboard.writeText(negativeOutputEl.value).then(()=>{let b=event.target;b.textContent="Copied!";setTimeout(()=>b.textContent="Copy Negative",1000);});}
+async function generatePreview(){
+  loadingEl.hidden=false; previewCtn.hidden=true;
+  try{
+    let url=await generateImage(promptOutputEl.value,{resolution:"768x768"});
+    previewImg.src=url; previewCtn.hidden=false;
+  }catch(e){alert("Image generation failed: "+e);}
+  loadingEl.hidden=true;
+}
+renderStyles();
+</script>
+<style>
+body{background:#0d0d0d;}
+#styleGridCtn{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
+</style>
+</body>
+</html>

@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>the-ai-generator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+:root{--bg:#0b0b10;--panel:#151520;--text:#ddd;--muted:#888;--accent:#7b68ee;--border:#2a2a35}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,sans-serif;text-align:left}
+#appCtn{display:flex;flex-direction:column;height:100vh}
+header{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--border)}
+.tabBtn{background:transparent;border:1px solid #444;color:var(--text);padding:5px 12px;border-radius:5px;cursor:pointer;font-size:13px}
+.tabBtn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+#mainCtn{flex:1;display:flex;overflow:hidden}
+#controlPanel{width:340px;min-width:280px;background:var(--panel);border-right:1px solid var(--border);padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+#outputPanel{flex:1;padding:16px;overflow-y:auto;display:flex;flex-direction:column;position:relative}
+input,textarea,select{background:#0f0f14;color:var(--text);border:1px solid #333;border-radius:5px;padding:7px;width:100%;box-sizing:border-box;font-family:inherit;font-size:13px}
+textarea{resize:vertical}
+.groupLabel{font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:0.6px;margin:6px 0 4px;font-weight:600}
+button{cursor:pointer;border:none;border-radius:5px;padding:7px 12px;background:var(--accent);color:#fff;font-size:13px}
+button:disabled{opacity:0.4;cursor:not-allowed}
+.styleBtn{border:1px solid var(--border);background:#0f0f14;transition:.1s}
+.styleBtn:hover{border-color:var(--accent)}
+.styleBtn.selected{border-color:var(--accent);background:#252535}
+.galleryGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.galItem{position:relative;border-radius:7px;overflow:hidden;border:1px solid #333;aspect-ratio:1;background:#111;cursor:pointer}
+.galItem img{width:100%;height:100%;object-fit:cover}
+.galOverlay{position:absolute;inset:0;background:rgba(0,0,0,0.55);opacity:0;transition:opacity .15s;display:flex;flex-direction:column;justify-content:flex-end;padding:8px;gap:4px}
+.galItem:hover .galOverlay{opacity:1}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:50;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:20px;gap:10px}
+.lightbox img{max-width:90vw;max-height:70vh;border-radius:6px}
+.hidden{display:none !important}
+.loader{border:3px solid #333;border-top-color:var(--accent);border-radius:50%;width:22px;height:22px;animation:spin .9s linear infinite;margin:auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.noteItem{padding:8px;border-radius:5px;border:1px solid var(--border);cursor:pointer;font-size:13px}
+.noteItem:hover{border-color:var(--accent)}
+.noteItem.active{background:#252535;border-color:var(--accent)}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
+</style>
+
+<div id="appCtn">
+  <header>
+    <div style="font-weight:700;font-size:16px;">🜂 The AI Generator</div>
+    <div style="flex:1"></div>
+    <button id="tabGenBtn" class="tabBtn active" onclick="switchTab('gen')">Generator</button>
+    <button id="tabGalBtn" class="tabBtn" onclick="switchTab('gallery')">Gallery</button>
+    <button id="tabNoteBtn" class="tabBtn" onclick="switchTab('notebook')">Notebook</button>
+    <button id="tabSetBtn" class="tabBtn" onclick="switchTab('settings')">Settings</button>
+  </header>
+
+  <div id="genCtn" style="display:flex;flex:1;overflow:hidden;">
+    <div id="controlPanel">
+      <div style="display:flex;gap:6px;margin-bottom:6px;">
+        <button id="modeImageBtn" class="tabBtn active" style="flex:1;" onclick="setMode('image')">Image</button>
+        <button id="modeTextBtn" class="tabBtn" style="flex:1;" onclick="setMode('text')">Text</button>
+      </div>
+
+      <div id="imgControls">
+        <div class="groupLabel">Description</div>
+        <textarea id="descInput" rows="3" oninput="S.desc=this.value;saveUI();updatePreview()" placeholder="Describe the scene..."></textarea>
+        <div class="groupLabel">Negative Prompt</div>
+        <textarea id="negInput" rows="2" oninput="S.neg=this.value;saveUI();updatePreview()" placeholder="What to exclude..."></textarea>
+
+        <div style="display:flex;gap:8px;">
+          <div style="flex:1;">
+            <div class="groupLabel">Resolution</div>
+            <select id="resSelect" onchange="S.res=this.value;saveUI()">
+              <option>512x512</option><option>512x768</option><option>768x512</option><option selected>768x768</option>
+            </select>
+          </div>
+          <div style="flex:1;">
+            <div class="groupLabel">Variation</div>
+            <button onclick="randomizeAll()" style="width:100%;background:#333;">🎲 Surprise Me</button>
+          </div>
+        </div>
+
+        <div id="pokemonTypeWrap" hidden>
+          <div class="groupLabel">Pokemon Type</div>
+          <select id="pokemonTypeSelect" onchange="updatePreview()">
+            <option value="">-- None --</option>
+            <option>Fire</option><option>Water</option><option>Grass</option><option>Electric</option><option>Psychic</option><option>Dark</option><option>Dragon</option><option>Ice</option><option>Fairy</option><option>Ghost</option>
+          </select>
+        </div>
+
+        <div class="groupLabel">Art Style</div>
+        <input id="styleFilter" placeholder="Search styles or tags..." oninput="renderStyles()" style="margin-bottom:4px;">
+        <div id="styleListCtn" style="max-height:200px;overflow-y:auto;padding-right:4px;"></div>
+
+        <div id="modifiersCtn"></div>
+
+        <div class="groupLabel">Resolved Prompt</div>
+        <textarea id="promptPreview" readonly rows="3" style="font-size:12px;opacity:0.8;"></textarea>
+        <textarea id="negPreview" readonly rows="2" style="font-size:12px;opacity:0.8;"></textarea>
+
+        <button id="genImgBtn" onclick="generateImageGen()" style="width:100%;margin-top:8px;padding:12px;font-weight:700;">Generate Image</button>
+        <div id="imgLoader" class="loader" hidden></div>
+      </div>
+
+      <div id="textControls" hidden>
+        <div class="groupLabel">Instruction</div>
+        <textarea id="textInstrInput" rows="4" placeholder="Ask the AI to write, summarize, brainstorm..."></textarea>
+        <button id="genTextBtn" onclick="generateTextGen()" style="width:100%;margin-top:8px;padding:12px;font-weight:700;">Generate Text</button>
+        <div id="textLoader" class="loader" hidden></div>
+        <div class="groupLabel">Output</div>
+        <div id="textOutput" style="white-space:pre-wrap;background:#0f0f14;border:1px solid #333;border-radius:5px;padding:12px;min-height:120px;"></div>
+        <button onclick="saveTextToNotebook()" style="width:100%;margin-top:8px;background:#2a2a35;">Save to Notebook</button>
+      </div>
+    </div>
+
+    <div id="outputPanel">
+      <div id="welcomeState" style="color:var(--muted);margin:auto;text-align:center;">
+        <div style="font-size:40px;margin-bottom:10px;">🜂</div>
+        <div>Set a style, write a prompt, and create.</div>
+      </div>
+      <div id="imgOutputWrap" hidden style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <img id="generatedImg" style="max-width:100%;max-height:68vh;border-radius:8px;border:1px solid #444;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+          <button onclick="downloadCurrentImage()" style="background:#2a2a35;">Download</button>
+          <button onclick="saveCurrentToGallery()" style="background:#2a2a35;">Save to Gallery</button>
+          <button onclick="sendImgToNotebook()" style="background:#2a2a35;">Send to Notebook</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="galleryCtn" hidden style="flex:1;overflow-y:auto;padding:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div style="font-weight:700;font-size:18px;">Image Gallery</div>
+      <button onclick="clearGallery()" style="background:#522;">Clear All</button>
+    </div>
+    <div id="galleryGrid" class="galleryGrid"></div>
+    <div id="galleryEmpty" style="color:var(--muted);text-align:center;margin-top:40px;">No saved images yet.</div>
+  </div>
+
+  <div id="notebookCtn" hidden style="flex:1;overflow-y:auto;padding:16px;display:flex;gap:16px;">
+    <div style="width:220px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+      <div style="font-weight:700;">Notes</div>
+      <button onclick="newNote()" style="background:var(--accent);">+ New Note</button>
+      <div id="noteList" style="display:flex;flex-direction:column;gap:4px;overflow-y:auto;"></div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:0;">
+      <input id="noteTitle" placeholder="Note Title">
+      <textarea id="noteBody" placeholder="Prompts, ideas, outputs..." style="flex:1;min-height:200px;"></textarea>
+      <div style="display:flex;gap:8px;">
+        <button onclick="saveNote()" style="flex:1;">Save Note</button>
+        <button onclick="deleteNote()" style="flex:1;background:#522;">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingsCtn" hidden style="flex:1;overflow-y:auto;padding:16px;max-width:700px;margin:0 auto;width:100%;box-sizing:border-box;">
+    <div style="font-weight:700;font-size:18px;margin-bottom:12px;">Settings & Dependencies</div>
+    <label style="display:flex;align-items:center;gap:8px;margin:8px 0;"><input type="checkbox" id="rememberCheck" checked onchange="localStorage.aiGen_remember=this.checked"> Remember inputs & selections</label>
+    <label style="display:flex;align-items:center;gap:8px;margin:8px 0;"><input type="checkbox" id="autoSaveCheck" checked onchange="S.settings.autoSave=this.checked;saveSet()"> Auto-save generations to Gallery</label>
+    <label style="display:flex;align-items:center;gap:8px;margin:8px 0;"><input type="checkbox" id="streamCheck" checked onchange="S.settings.stream=this.checked;saveSet()"> Stream text generation</label>
+    <div class="groupLabel">Import Styles (JSON)</div>
+    <textarea id="importStylesArea" placeholder='Paste JSON array of style group objects. Example: \{"group":"My Styles","color":"#f0f","styles":\[\{"id":"x","label":"X","prompt":"..."\}\]\}' style="min-height:100px;"></textarea>
+    <button onclick="importStyles()" style="margin-top:6px;">Import Styles</button>
+    <div class="groupLabel">Full Data Import / Export</div>
+    <textarea id="importDataArea" placeholder="Paste full exported JSON here..." style="min-height:100px;"></textarea>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button onclick="importFullData()">Import Data</button>
+      <button onclick="exportFullData()">Export Data</button>
+      <button onclick="resetAllData()" style="background:#522;">Reset All</button>
+    </div>
+  </div>
+</div>
+
+<div id="lightbox" class="lightbox hidden" onclick="if(event.target===this)closeLightbox()">
+  <img id="lightboxImg">
+  <div id="lightboxMeta" style="max-width:800px;width:100%;background:var(--panel);padding:12px;border-radius:6px;font-size:13px;border:1px solid var(--border);"></div>
+</div>
+
+<script>
+/* ===== DATA ===== */
+let styleGroups=[{g:"Custom Styles",c:"#f6c344",s:[{i:"noStyle",l:"No style",p:"[input.description].",n:"[input.negative]"},{i:"mtgCard",l:"MTG Card",p:"[input.description], magic the gathering card",n:"[input.negative], low-quality, deformed, blurry, bad art"},{i:"tcgCard",l:"TCG Card",p:"[input.description], pokemon trading card game",n:"[input.negative], low-quality, deformed, blurry, bad art",t:{pokemon:10,tcg:3}},{i:"pixelArt",l:"Pixel Art",p:"[input.description], pixel art",n:"[input.negative], low-quality, deformed, blurry, bad art",t:{pokemon:10,pixel:3}},{i:"cartoon",l:"Cartoon",p:"[input.description], cartoon",n:"[input.negative], low-quality, deformed, blurry, bad art"},{i:"anime",l:"Anime",p:"[input.description], anime",n:"[input.negative], low-quality, deformed, blurry, bad art"},{i:"pokemon",l:"Pokemon",p:"[input.description], pokemon pixel art",n:"[input.negative], low-quality, deformed, blurry, bad art",t:{pokemon:10,pixel:3}}]},{g:"Moss Default Styles",c:"#00ff00",s:[{i:"paintedAnime",l:"Painted Anime",p:`[input.description], art by atey ghailan, painterly anime style at pixiv, art by kantoku, in art style of redjuice/necömi/rella/tiv pixiv collab, your name anime art style, masterpiece digital painting, exquisite lighting and composition, inspired by wlop art style, 8k, sharp, very detailed, high resolution, illustration.`,n:"",t:{anime:100,painting:100,paintedAnime:100,drawing:55,cartoon:50},m:"animeModifiers"},{i:"casualPhoto",l:"Casual Photo",p:`A casual photo of [input.description]. It's a casual photo.`,n:"",t:{photo:98,casualPhoto:100,portrait:80},m:"photoModifiers"},{i:"cinematic",l:"Cinematic",p:`[input.description], cinematic shot, dynamic lighting, 75mm, Technicolor, Panavision, cinemascope, sharp focus, fine details, 8k, HDR, realism, realistic, key visual, film still, cinematic color grading, depth of field.`,n:"",t:{photo:100,portrait:85,render:70,cinematic:100},m:"photoModifiers"},{i:"digitalPainting",l:"Digital Painting",p:`[input.description], breathtaking digital art, trending on artstation, by atey ghailan, by greg rutkowski, by greg tocchini, by james gilleard, 8k, high resolution, best quality.`,n:"",t:{painting:90,landscape:70,digitalPainting:100,drawing:60}},{i:"conceptArt",l:"Concept Art",p:`[input.description], concept art, digital art, illustration, inspired by wlop style, 8k, fine details, sharp, very detailed, high resolution, world-class masterpiece.`,n:"",t:{painting:50,landscape:70},m:"conceptModifiers"},{i:"3dDisney",l:"3D Disney Character",p:`3D cartoon Disney character portrait render. [input.description], bokeh, 4k, highly detailed, Pixar render, CGI Animation, Disney, cute big circular reflective eyes, dof, cinematic film, Disney realism, subtle details, breathtaking Pixar short, fine details, close up, sharp focus, HDR, Disney-style octane render, incredible composition, superb lighting and detail, [input.description].`,n:"",t:{disney:95,render:80,portrait:75,cartoon:90}},{i:"2dDisney",l:"2D Disney Character",p:`2D cartoon Disney character digital art of [input.description]. superb linework, classic 2D Disney style art, inspired by the art styles of Glen Keane and Aaron Blaise, Disney-style character concept with a Disney-style face, trending on artstation, Disney-style version of [input.description].`,n:"",t:{disney:90,portrait:75,cartoon:100,comic:80,drawing:75}},{i:"disneySketch",l:"Disney Sketch",p:`Glen Keane character concept art black and white pencil sketch of [input.description]. rough pencil sketch by Glen Keane, rough pencil sketch, close up, loose Disney-style character concept art sketch, nice sketchy pencil strokes, Disney character design sketch, pencil texture, a concept art pencil sketch of [input.description], by Glen Keane.`,n:"",t:{disney:90,cartoon:85,sketch:80,comic:80,drawing:70}},{i:"conceptSketch",l:"Concept Sketch",p:`black and white technical drawing showcasing {a} [input.description], annotation details, world-class masterpiece black and white, pencil strokes, annotated technical concept art sketch, pencil texture.`,n:"",t:{sketch:75,comic:50,drawing:75}},{i:"painterly",l:"Painterly",p:`painterly digital painting, [input.description], digital painting by Ilya Kuvshinov with painterly brush strokes, by Ilya Kuvshinov, world-class painterly masterpiece.`,n:"",t:{painting:85,landscape:65,digitalPainting:95,drawing:45}},{i:"oilPainting",l:"Oil Painting",p:`breathtaking alla prima oil painting, [input.description], close up, alla prima style, oil on linen, painterly oil on canvas, painterly style, exquisite composition and lighting, modern painterly masterpiece, by alexi zaitsev, award-winning painterly alla prima oil painting.`,n:"",t:{painting:87,oilPainting:100,landscape:60,portrait:65,drawing:40}},{i:"oilRealism",l:"Oil Painting - Realism",p:`breathtaking oil painting, [input.description], photorealistic oil painting, by charlie bowater, fine details, by wlop, trending on artstation, very detailed.`,n:"",t:{painting:87,oilPainting:95,landscape:60,portrait:70,drawing:40}},{i:"oilOld",l:"Oil Painting - Old",p:`[input.description], Oil painting by Jean-François Millet and Gustave Courbet and Jules Breton`,n:"",t:{painting:85,oilPainting:90,vintage:40,landscape:55,portrait:65,drawing:35}},{i:"oil70sPulp",l:"Oil Painting - 70s Pulp",p:`1970s vintage pulp art, ultra realistic, fully restored, exquisite lighting and composition, polished, masterpiece, vintage pulp art, by Earle K. Bergey, by Kelly Freas, by Alex Schomburg, by H. J. Ward, glossy pulp art, Amazing Stories, Weird Tales, 8k, high resolution, best quality, hyper-realistic, Mattias Adolfsson style, detailed stylization, [input.description], ultra realistic, wlop-style, exquisite lighting and composition, polished, world-class masterpiece, digitally enhanced, breathtaking shot, subtle details, superb quality, art by Kuvshinov, Kuvshinov style, detailed stylization.`,n:"[input.negative], scratches, faded, washed out, grainy, dirty",t:{painting:80,oilPainting:85,vintage:50,landscape:20,portrait:60,drawing:35}},{i:"proPhoto",l:"Professional Photo",p:`[input.description], {sharp|soft} focus, depth of field, 8k photo, HDR, professional lighting, taken with Canon EOS R5, DSLR, 75mm lens`,n:"",t:{photo:95,portrait:60},m:"photoModifiers"},{i:"animeDef",l:"Anime",p:`anime art of [input.description], world-class masterpiece, 4k, best quality, anime art.`,n:"",t:{basicAnime:100,anime:60,drawing:50,cartoon:30},m:"animeModifiers"},{i:"drawnAnime",l:"Drawn Anime",p:`anime-style illustration with perfect clean lines, illustration of [input.description], anime drawing/art, bold linework, illustration, cel shaded, anime-style digital illustration. It's an anime-inspired 2D-style anime illustration. Aesthetic high-skill, professional anime illustration, which looks like a screencap from an anime series. It has clean line work and a pleasant, appealing drawn aesthetic style. Overall, it's a world-class illustration with flawless line work, perfect composition, and impeccable attention to detail.`,n:"",t:{anime:60,drawing:85,drawnAnime:100,cartoon:40},m:"animeModifiers"},{i:"animeScreen",l:"Anime Screencap",p:`Anime screencap, [input.description]. It's an anime screencap from a popular anime. Beautiful visual quality, remastered, extremely high quality, very aesthetic, high production value, high-skill masterpiece. The image shows impeccable and beautiful composition and contrast. It's an exquisite anime screencap style image.`,n:"[input.negative], faded, washed out, low quality",t:{anime:65,drawing:80,cartoon:45},m:"animeModifiers"},{i:"cuteAnime",l:"Cute Anime",p:`adorable, cute, kawaii, [input.description], cute moe anime character portrait, adorable, featured on pixiv, kawaii moé masterpiece, cuteness overload, very detailed, sooooo adorable.`,n:"",t:{anime:55,drawing:50,cuteAnime:100,cartoon:30},m:"animeModifiers"},{i:"softAnime",l:"Soft Anime",p:`[input.description], anime masterpiece with soft lighting, gentle intricate style, highly detailed, pixiv, anime art, 4k, art from your name anime, garden of words style art, high quality.`,n:"",t:{anime:50,drawing:50,cartoon:30},m:"animeModifiers"},{i:"fantasyPainting",l:"Fantasy Painting",p:`[input.description], d&d, fantasy, highly detailed, digital painting, artstation, sharp focus, fantasy art, illustration, 8k, in the style of greg rutkowski.`,n:"",t:{painting:50,landscape:80,fantasy:80}},{i:"fantasyLandscape",l:"Fantasy Landscape",p:`[input.description], fantasy matte painting, absolute masterpiece, detailed matte painting by andreas rocha and greg rutkowski, by Brothers Hildebrandt, superb composition, vivid fantasy art, breathtaking fantasy masterpiece.`,n:"",t:{painting:30,poster:30,coverArt:50,vintage:30,landscape:90,fantasy:20},m:"landscapeModifiers"},{i:"fantasyPortrait",l:"Fantasy Portrait",p:`[input.description], d&d, fantasy, highly detailed, digital painting, artstation, sharp focus, fantasy art, character art, illustration, 8k, art by artgerm and greg rutkowski.`,n:"",t:{fantasyPortrait:100,painting:50,fantasy:70,portrait:75}},{i:"ghibli",l:"Studio Ghibli",p:`Studio Ghibli style artwork of [input.description], Studio Ghibli style art film still, sharp, very detailed, high resolution, inspired by Hayao Miyazaki, anime, film still from Spirited Away. In the style of Kiki Delivery Service, with a similar art style to Princess Mononoke. Aesthetically similar to My Neighbor Totoro's art style.`,n:"",t:{ghibli:100,anime:50,cartoon:50}},{i:"50sEnamel",l:"50s Enamel Sign",p:`50s enamel sign of [input.description], 50s advert enamel sign, masterpiece, authentic vintage enamel sign`,n:"",t:{vintage:85}},{i:"vintageComic",l:"Vintage Comic",p:`comic book style art of [input.description], drawing, by Dave Stevens, by Adam Hughes, 1940's, 1950's, hand-drawn, color, high resolution, best quality, closeup`,n:"",t:{vintage:80,comic:90,cartoon:70},m:"vintageComicModifiers"},{i:"francoComic",l:"Franco-Belgian Comic",p:`franco-belgian color comic about [input.description], bande dessinée, franco-belgian comic panel, masterpiece, breathtaking composition, intricate, detailed, best quality`,n:"",t:{vintage:75,comic:85,cartoon:75},m:"francoModifiers"},{i:"tintin",l:"Tintin Comic",p:`color comic panel in the style of Hergé about [input.description], by Hergé, tintin style, french comic panel, franco-belgian style, masterpiece, high-resolution Hergé style`,n:"",t:{vintage:77,comic:87,cartoon:77}},{i:"medieval",l:"Medieval",p:`medieval illuminated manuscript picture of [input.description], medieval illuminated manuscript art, masterpiece medieval color illustration, 16th century, 8k high-resolution scan of 16th century illuminated manuscript painting, detailed medieval masterpiece.`,n:"",t:{vintage:80,painting:70,portrait:40}},{i:"pixelArt",l:"Pixel Art",p:`[input.description.length > 40 ? "(pixel art), " : ""][input.description], best pixel art, neo-geo graphical style, retro nostalgic masterpiece, 128px, 16-bit pixel art [input.description.length < 10 ? "of "+input.description : ""], 2D pixel art style, adventure game pixel art, inspired by the art style of hyper light drifter, masterful dithering, superb composition, beautiful palette, exquisite pixel detail`,n:"",t:{pixelArt:90,vintage:70}},{i:"furryOil",l:"Furry - Oil",p:`[input.description], crisp vibrant detailed soft painterly digital art, volumetric lighting, natural lighting, realistic lighting, vibrant colors, crisp oil painting, painterly realism, depth of field, subtle soft details, vivid, fresh, striking, by chunie, by darkgem, by honovy, by zaush, by anhes, by puinkey, by caraid, by dagasi, by taranfiddler, by atey ghailan.`,n:"",t:{furryOil:100,furry:100},m:"furryModifiers"},{i:"furryCinema",l:"Furry - Cinematic",p:`[input.description], cinematic shot, dynamic lighting, 75mm, Technicolor, Panavision, cinemascope, sharp focus, fine details, 8k, HDR, realism, realistic, key visual, film still, cinematic color grading, depth of field.`,n:"",t:{furry:97,photo:60,portrait:40,render:75,cinematic:65},m:"photoModifiers"},{i:"furryPainted",l:"Furry - Painted",p:`anthro [input.description] digital art, masterpiece, 4k, fine details.`,n:"",t:{furry:96},m:"furryModifiers"},{i:"furryDrawn",l:"Furry - Drawn",p:`anthro [input.description] illustration, hand-drawn, bold linework, anthro illustration, cel shaded, 4k, fine details, masterpiece.`,n:"",t:{furry:95},m:"furryModifiers"},{i:"cuteFigurine",l:"Cute Figurine",p:`[input.description], figurine, modern Disney style, octane render, chibi`,n:"",t:{disney:20,emoji:60}},{i:"3dEmoji",l:"3D Emoji",p:`masterpiece [input.description] cartoon 3D emoji concept render, close-up, facing forward, matte finish, 3D emoji render, app icon, simple design, new iOS 18.4 style [input.description] emoji render, simple background, centered, world-class masterpiece work of art, crisp render, sharp focus, charmingly aesthetic design, 4k, soft lighting, masterpiece emoji-style figurine 3D render, pure white background`,n:"",t:{emoji:90}},{i:"illustration",l:"Illustration",p:`breathtaking illustration of [input.description], illustration, masterpiece, breathtaking illustration.`,n:"",t:{illustration:100,drawing:75}},{i:"cuteIllustration",l:"Cute Illustration",p:`A cute cartoon showing [input.description], in a soft, cute, minimalist, webcomic-style illustration. Line art is somewhat bold but gentle, with clean lines, and subtle variation. Colors are soft, flat, with gentle pastel tones. No shading except for light inner shadows or simple highlights. The background is plain white or contains a light wash of color with subtle textured style. The overall scene is wholesome and endearing like a page from a Liz Climo comic. Composition is centered with space around the character, evoking authentic warmth through the wholesome, soft, web comic style.`,n:"",t:{illustration:99,drawing:75}},{i:"flatIllustration",l:"Flat Illustration",p:`[input.description], illustration, flat, 2D, vector art, masterpiece, made with adobe illustrator, behance competition winner, trending on dribble, 4k, high resolution, crisp lines.`,n:"",t:{illustration:85,drawing:40}},{i:"watercolor",l:"Watercolor",p:`[input.description], (watercolor), high resolution, intricate details, 4k, wallpaper, concept art, watercolor on textured paper.`,n:"",t:{painting:30}},{i:"photo90s",l:"1990s Photo",p:`[input.description], 90s home video, nostalgic 90s photo, taken with kodak disposable camera`,n:"",t:{vintage:80},m:"photoModifiers"},{i:"photo80s",l:"1980s Photo",p:`famous vintage 80s photo, [input.description], grainy photograph, 80s photo with film grain, Kodacolor II 80s photo with vignetting, retro, r/OldSchoolCool, 80s photo with wear and tear and minor creasing and scratches, vintage color photo`,n:"",t:{photo:30,vintage:90,portrait:72},m:"photoModifiers"},{i:"photo70s",l:"1970s Photo",p:`famous vintage 70s photo, [input.description], grainy photograph, 1970s photo with film grain, 70s photo with vignetting, retro, r/OldSchoolCool, 70s photo, vintage photo`,n:"",t:{photo:30,vintage:80},m:"photoModifiers"},{i:"photo60s",l:"1960s Photo",p:`famous vintage 60s photo, [input.description], grainy photograph, 1960s photo with film grain, 60s photo with vignetting, retro, r/OldSchoolCool, 60s photo, vintage photo`,n:"",t:{photo:30,vintage:80},m:"photoModifiers"},{i:"photo50s",l:"1950s Photo",p:`famous vintage 50s photo, [input.description], grainy photograph, 1950s photo with film grain, 1950s photo with vignetting, retro, r/OldSchoolCool, 1950s photo, vintage photo`,n:"",t:{photo:30,vintage:80},m:"photoModifiers"},{i:"photo40s",l:"1940s Photo",p:`famous vintage 1940s photo, [input.description], grainy photograph, 1940s photo with film grain, 1940s photo with vignetting, retro, r/OldSchoolCool, 1940s photo, vintage photo`,n:"",t:{photo:30,vintage:80},m:"photoModifiers"},{i:"photo30s",l:"1930s Photo",p:`famous vintage 1930s photo, [input.description], grainy photograph, 1930s photo with film grain, 1930s photo with vignetting, retro, r/OldSchoolCool, 1930s photo, vintage photo`,n:"",t:{photo:30,vintage:80},m:"photoModifiers"},{i:"photo20s",l:"1920s Photo",p:`famous vintage 1920s photo, [input.description], 1920s photo, restored photograph, {sepia|black and white}, historical archive photo`,n:"",t:{photo:30,vintage:80},m:"photoModifiers"},{i:"vintagePulp",l:"Vintage Pulp Art",p:`1970s vintage pulp art, [input.description], vintage pulp art, by Earle K. Bergey, by Kelly Freas, by Alex Schomburg, by H. J. Ward, glossy pulp art, Amazing Stories, Weird Tales, 8k, high resolution, best quality`,n:"",t:{painting:30,poster:30,coverArt:50,vintage:60,comic:40,cartoon:50}},{i:"50sInfomercialAnime",l:"50s Infomercial Anime",p:`[input.description], 1950s infomercial style, delicate linework, paprika anime art style, chromatic aberration glow, 2d painted cel animation, soft focus, 2D pixiv 1950s`,n:"",t:{painting:30,anime:50,vintage:60,cartoon:50}},{i:"3dPokemon",l:"3D Pokemon",p:`An incredibly perfect high-quality 3D render of a pokemon creature, [input.description], [input.pokemonType ? input.pokemonType+", " : ""]8k render, beautiful pokemon digital art, fakemon, pokemon creature, cryptid, fakemon, masterpiece, soft focus, best quality, high quality. Perfect soft lighting, beautiful composition. It's an impressive CGI image from the upcoming Pokemon Movie (2026).`,n:"",t:{pokemon:60}},{i:"paintedPokemon",l:"Painted Pokemon",p:`Beautiful, very high-quality painterly digital concept art, [input.description], [input.pokemonType ? input.pokemonType+", " : ""]8k digital painting of a pokemon, amazing pokemon creature art by piperdraws, cryptid creations by Piper Thibodeau, by Naoki Saito and {Tokiya|Mitsuhiro Arita}, incredible composition.`,n:"",t:{pokemon:50}},{i:"2dPokemon",l:"2D Pokemon",p:`[input.description], [input.pokemonType ? input.pokemonType+", " : ""]pokemon creature concept, superb line art, beautiful colors and composition, 2D art style, beautiful pokemon digital art, fakemon, by Sowsow, pokemon creature, cryptid, fakemon, masterpiece, by Yuu Nishida, 4k. The Pokémon-like creature is centered within this anime-style 2D image. It's from the upcoming Pokemon Movie (2026) which has the classic 2D Pokemon art style.`,n:"[input.negative], messy, garbled, confusing, incoherent, unclear",t:{pokemon:70,drawing:50,cartoon:35}},{i:"vintageAnime",l:"Vintage Anime",p:`[input.description], 1990s anime, vintage anime, 90's anime style, by hajime sorayama, by greg tocchini, anime masterpiece, pixiv, akira-style art, akira anime art, 4k, high quality.`,n:"",t:{anime:40,vintage:50,drawing:50}},{i:"neonVintageAnime",l:"Neon Vintage Anime",p:`[input.description], neon vintage anime style, 90's anime style, 1990s anime, hajime sorayama, greg tocchini, neon vintage anime masterpiece, anime art, 4k, high quality.`,n:"",t:{anime:30,vintage:50}},{i:"manga",l:"Manga",p:`[input.description], incredible hand-drawn manga, black and white, by Takehiko Inoue, by Katsuhiro Otomo and akira toriyama manga, hand-drawn art by rumiko takahashi and Inio Asano, Ken Akamatsu manga art.`,n:"",t:{anime:40,drawing:50,manga:100,comic:20,cartoon:30}},{i:"fantasyWorldMap",l:"Fantasy World Map",p:`beautiful fantasy map of [input.description], beautiful fantasy map inspired by middle earth and azeroth and discworld and westeros and essos and the witcher world and tamriel and faerûn and thedas, 4k, beautiful colors, crisp, high-resolution artistic map, topographic 3D terrain, artistic map.`,n:"",t:{map:90,fantasy:20}},{i:"fantasyCityMap",l:"Fantasy City Map",p:`an aerial view of a city, TTRPG city map showing the full city, [input.description], fantasy art, by senior environment artist, beautiful fantasy map.`,n:"",t:{map:80,fantasy:20}},{i:"oldWorldMap",l:"Old World Map",p:`fantasy world map of [input.description], fantasy world map, highly detailed digital painting, fantasy art, map illustration, 8k.`,n:"",t:{map:70,fantasy:20}},{i:"3dIsoIcon",l:"3D Isometric Icon",p:`[input.description], 3D isometric render of cute [input.description], 3D app icon, clean isometric design, beautiful design, soft gradient background, soft colors, centered, 3D blender render, masterpiece, best quality, high resolution, 8k octane render, beautiful color scheme, soft smooth lighting, physically based rendering, square image, high polycount`,n:"",t:{icon:90,emoji:86}},{i:"flatIcon",l:"Flat Style Icon",p:`[input.description], creative icon, flat style icon, masterpiece, high resolution, crisp, beautiful composition and color choice, beautiful flat painted style, behance contest-winner, award winning icon illustration, 8k, best quality`,n:"",t:{icon:80}},{i:"flatLogo",l:"Flat Style Logo",p:`beautiful flat-style logo design depicting [input.description], creative flat-style logo design, trending on dribbble, featured on behance, portfolio piece, minimal flat design, breathtaking graphic design, 8k, high resolution vector logo, plain background, amazingly beautiful logo design, winner of best logo award`,n:"",t:{icon:80,logo:80}},{i:"gameArtIcon",l:"Game Art Icon",p:`[input.description], a concept art icon for league of legends, a digital art logo, illustration, league of legends style icon, inspired by wlop style, 8k, dota 2 style icon, fine details, sharp, very detailed icon, high resolution rpg ability/spell/item icon`,n:"",t:{icon:70}},{i:"digPaintIcon",l:"Digital Painting Icon",p:`[input.description], app logo icon, digital art pictogram icon, trending on artstation, app icon by atey ghailan, app icon by greg rutkowski, app icon by greg tocchini, app icon by james gilleard, 8k, high resolution, best quality`,n:"",t:{icon:60}},{i:"conceptIcon",l:"Concept Art Icon",p:`[input.description], a concept art icon, a digital art logo, illustration, league of legends style concept art logo icon, inspired by wlop style, 8k, fine details, sharp, very detailed, high resolution logo icon`,n:"",t:{icon:50}},{i:"cute3dIcon",l:"Cute 3D Icon",p:`[input.description], a cute 3D icon of [input.description], cartoon 3D icon, very cute shape, stylized octane render, 8k, masterpiece, soooo cute, beautiful cute perfection, beautiful soft lighting, soft colors, centered, high resolution, [input.description], soft gradient background`,n:"",t:{icon:40}},{i:"cute3dIconSet",l:"Cute 3D Icon Set",p:`[input.description], a set of lovely little 3D icons, cute 3D icons, very cute shapes, stylized octane render, 8k, masterpiece, soooo cute, beautiful cute perfection, beautiful soft lighting, soft colors, centered, high resolution, [input.description], cute icon set`,n:"",t:{icon:30}},{i:"crayon",l:"Crayon Drawing",p:`[input.description], crayon drawing`,n:""},{i:"pencil",l:"Pencil",p:`black and white pencil drawing, [input.description], black and white, breathtaking pencil illustration, highly detailed, 4k, textured paper, pencil texture, sketch`,n:"",t:{drawing:45}},{i:"tattoo",l:"Tattoo Design",p:`amazing tattoo design, [input.description], breathtaking tattoo design, incredible tattoo design`,n:"",t:{tattoo:100}},{i:"waifu",l:"Waifu",p:`[input.description], waifu character portrait, 1girl, very high resolution, semi-realistic anime art. Intricate and impressive anime artwork with stunningly beautiful composition and style.`,n:"",t:{anime:40,waifu:100,cartoon:20},m:"animeModifiers"},{i:"yugioh",l:"YuGiOh Art",p:`yugioh card art for [input.description], art by genzoman, by Akina Fujiwara, by rossdraws, yugioh monster, close up, painterly details, breathtaking art, centered, masterpiece, amazing composition, [input.description.length < 30 ? input.description : ""].`,n:"",t:{yugioh:100}},{i:"tradJapanese",l:"Traditional Japanese",p:`[input.description], in ukiyo-e art style, traditional japanese masterpiece`,n:"",t:{japanese:100,vintage:50,cartoon:30}},{i:"nihonga",l:"Nihonga Painting",p:`japanese nihonga painting about [input.description], Nihonga, ancient japanese painting, intricate, detailed`,n:"",t:{japanese:95,vintage:55,comic:70}},{i:"claymation",l:"Claymation",p:`[input.description], claymation, incredible claymation style, kubo and the two strings style art, Missing Link 2019 art style, clay texture, clay animation, stop-motion clay`,n:"",t:{claymation:100}},{i:"cartoonDef",l:"Cartoon",p:`[input.description], cartoon-style art, superb linework, nice colors and composition, bold linework, masterpiece, cute art by Dana Terrace, by Rebecca Sugar, by ry-spirit, amazing and wholesome cartoon-style art, cute art style, (trending on artstation)`,n:"",t:{cartoon:95,basicCartoon:100}},{i:"cursedPhoto",l:"Cursed Photo",p:`cursed photo of [input.description], creepy and cursed, absolutely cursed photo, nope nope nope nope, what the actual f, unsettling photo, cursed_thing, cursedimages, no context, cursed image, bad photo, weird photo, very strange, color photo, creepy photo, nightmare fuel`,n:"",t:{creepy:100},m:"cursedModifiers"}]}];
+
+let modLibs={photoModifiers:{shot:[{l:"extreme close-up",v:", extreme close-up"},{l:"low-angle",v:", low-angle shot"},{l:"high-angle",v:", high-angle shot"},{l:"aerial",v:", aerial shot"},{l:"close-up",v:", close-up shot"},{l:"portrait",v:", close-up portrait"},{l:"macro",v:", macro shot"},{l:"wide-angle",v:", wide-angle shot"},{l:"establishing",v:", establishing shot"},{l:"over-the-shoulder",v:", over-the-shoulder shot"},{l:"telephoto",v:", telephoto shot"},{l:"handheld",v:", handheld shot"},{l:"panoramic",v:", panoramic shot"},{l:"dramatic",v:", dramatic angle, extreme angle shot"}],color:[{l:"vibrant",v:", vibrant color grading"},{l:"warm",v:", warm color grading"},{l:"cool",v:", cool-toned color grading"},{l:"pastel",v:", pastel color grading"},{l:"bright",v:", bright color grading"},{l:"muted",v:", muted color grading"},{l:"neon",v:", neon color grading"},{l:"duotone",v:", duotone color grading"},{l:"monochrome",v:", monochrome"},{l:"sterile",v:", cool-toned sterile colors"}],effect:[{l:"bokeh",v:", bokeh"},{l:"tilt-shift",v:", tilt-shift effect"},{l:"soft focus",v:", soft focus"},{l:"background blur",v:", shallow depth of field"},{l:"chromatic aberrations",v:", chromatic aberrations"},{l:"light leaks",v:", light leaks"},{l:"rear projection",v:", rear projection"},{l:"lens flare",v:", lens flare"},{l:"long exposure",v:", long exposure"},{l:"golden hour",v:", golden hour"},{l:"silhouette",v:", silhouette"}]},animeModifiers:{style:[{l:"Ghibli",v:", Ghibli art style, Spirited Away art style"},{l:"Your Name",v:", Your Name art style"},{l:"Paprika",v:", Paprika art style"},{l:"My Hero Academia",v:", My Hero Academia art style"},{l:"Hunter x Hunter",v:", Hunter x Hunter art style"},{l:"Attack on Titan",v:", Attack on Titan art style"}],effect:[{l:"multi-view",v:", multiple views"},{l:"toon",v:", cartoon-style bold line work, vibrant colors, cel shading"},{l:"vintage",v:", cel shading, vintage anime"},{l:"ethereal",v:", glow, god rays, ethereal, dreamy, heavenly, otherworldly, dream-like, breathtaking, captivating, divine"},{l:"outline",v:", outline, white outline"}]},furryModifiers:{effect:[{l:"humanoid face",v:", human face, not furry"},{l:"multi-view",v:", multiple views"},{l:"toon",v:", cartoon-style bold line work, vibrant colors, cel shading"},{l:"vintage",v:", cel shading, vintage anime"},{l:"ethereal",v:", glow, god rays, ethereal, dreamy, heavenly, otherworldly, dream-like, breathtaking, captivating, divine"},{l:"outline",v:", outline, white outline"}]},landscapeModifiers:{shot:[{l:"aerial",v:", aerial view"},{l:"low-angle",v:", low-angle view"},{l:"high-angle",v:", high-angle view"},{l:"wide-angle",v:", wide-angle view"}],color:[{l:"vibrant",v:", vibrant color tones"},{l:"warm",v:", warm-toned colors"},{l:"cool",v:", cool-toned colors"},{l:"pastel",v:", pastel tones"},{l:"muted",v:", muted color grading"},{l:"sunset",v:", sunset color tones"},{l:"monochrome",v:", monochrome"}],effect:[{l:"tilt-shift",v:", tilt-shift effect"},{l:"golden hour",v:", golden hour"},{l:"mist",v:", misty"},{l:"reflection",v:", water reflection"},{l:"sun flare",v:", sun flare"},{l:"starburst",v:", starburst effect"},{l:"light trails",v:", light trails"},{l:"long exposure",v:", long exposure"},{l:"soft focus",v:", soft focus"}]},vintageComicModifiers:{effect:[{l:"retrofuturism",v:", (retrofuturism, atompunk)"},{l:"gritty noir",v:", (gritty noir)"},{l:"pop art",v:", (pop art style)"},{l:"cyberpunk",v:", (cyberpunk aesthetic)"},{l:"steampunk",v:", (steampunk)"},{l:"watercolor",v:", (watercolor wash)"},{l:"sketchy ink",v:", sketchy ink work"},{l:"manga fusion",v:", (manga fusion)"},{l:"psychedelic",v:", psychedelic imagery"},{l:"pulp magazine",v:", pulp magazine look"},{l:"heroic proportions",v:", heroic proportions"}]},francoModifiers:{modifier:[{l:"single-panel",v:", splash panel, full cover image"},{l:"multi-panel",v:", multi-panel comic book page, comic panel layout"},{l:"cyberpunk",v:", (cyberpunk aesthetic)"},{l:"steampunk",v:", (steampunk)"},{l:"manga fusion",v:", (manga fusion)"},{l:"psychedelic",v:", psychedelic imagery"},{l:"pulp magazine",v:", pulp magazine look"},{l:"heroic proportions",v:", heroic proportions"}]},conceptModifiers:{modifier:[{l:"league of legends",v:", league of legends style concept art"},{l:"epic fantasy",v:", epic fantasy concept art by noah bradley"},{l:"sci-fi",v:", sci-fi concept art"},{l:"horror",v:", horror concept art"},{l:"western",v:", western, wild west concept art"}]},cursedModifiers:{modifier:[{l:"found footage",v:", found footage"},{l:"cult",v:", photo from a real cult"},{l:"1920s",v:", 1920s photo"},{l:"old phone",v:", old cell phone photo"},{l:"VHS",v:", old VHS footage"},{l:"CCTV",v:", old CCTV footage, high-angle CCTV image"},{l:"trypophobia",v:", trypophobia"},{l:"backrooms",v:", backrooms"},{l:"black & white",v:", black & white"},{l:"grainy",v:", grainy, noisy static effect"},{l:"extreme close-up",v:", extreme close-up"},{l:"low-angle",v:", low-angle shot"},{l:"dramatic",v:", dramatic angle, extreme angle shot"}]}};
+
+/* ===== STATE ===== */
+let S={
+  mode:localStorage.aiGen_mode||'image',
+  desc:localStorage.aiGen_desc||'',
+  neg:localStorage.aiGen_neg||'',
+  style:localStorage.aiGen_style||'',
+  res:localStorage.aiGen_res||'768x768',
+  mods:JSON.parse(localStorage.aiGen_mods||'{}'),
+  settings:JSON.parse(localStorage.aiGen_settings||'{"autoSave":true,"stream":true}')
+};
+let currentNoteId=null;
+
+/* ===== UTILS ===== */
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function randOpt(m){return m.replace(/\{([^}]+)\}/g,(_,o)=>{let a=o.split('|');return a[Math.floor(Math.random()*a.length)]})}
+function resolveTpl(str,ctx){
+  if(!str)return '';
+  return randOpt(str).replace(/\[([^\]]+)\]/g,(_,ex)=>{
+    try{return new Function('input','return ('+ex+')')(ctx)}catch(e){return ''}
+  });
+}
+function findStyle(id){for(let g of styleGroups)for(let s of g.s)if(s.i===id)return s;return null}
+function allStyles(){let a=[];for(let g of styleGroups)a.push(...g.s);return a}
+
+function saveUI(){
+  if(!rememberCheck.checked)return;
+  localStorage.aiGen_mode=S.mode;
+  localStorage.aiGen_desc=descInput.value;
+  localStorage.aiGen_neg=negInput.value;
+  localStorage.aiGen_style=S.style;
+  localStorage.aiGen_res=resSelect.value;
+  localStorage.aiGen_mods=JSON.stringify(S.mods);
+}
+function saveSet(){localStorage.aiGen_settings=JSON.stringify(S.settings)}
+
+function updatePreview(){
+  let st=findStyle(S.style);
+  pokemonTypeWrap.hidden=!st||!/(pokemonType)/.test(st.p);
+  let ctx={description:descInput.value||'',negative:negInput.value||'',pokemonType:pokemonTypeSelect?pokemonTypeSelect.value:'',input:{description:descInput.value||'',negative:negInput.value||'',pokemonType:pokemonTypeSelect?pokemonTypeSelect.value:''}};
+  let p=st?resolveTpl(st.p,ctx):ctx.description;
+  let n=st&&st.n?resolveTpl(st.n,ctx):ctx.negative;
+  if(st&&st.m&&modLibs[st.m]){
+    let lib=modLibs[st.m];
+    for(let cat in S.mods){
+      let v=S.mods[cat]; if(!v)continue;
+      p+=v;
+    }
+  }
+  promptPreview.value=p; negPreview.value=n;
+}
+
+/* ===== UI RENDER ===== */
+function renderStyles(){
+  let f=styleFilter.value.toLowerCase();
+  let h='';
+  for(let grp of styleGroups){
+    let items=grp.s.filter(st=>{
+      if(!f)return true;
+      if(st.l.toLowerCase().includes(f))return true;
+      if(st.t&&Object.keys(st.t).some(k=>k.includes(f)))return true;
+      return false;
+    });
+    if(!items.length)continue;
+    h+=`<div style="color:${esc(grp.c||'#aaa')};font-size:11px;font-weight:700;text-transform:uppercase;margin:8px 0 4px;">${esc(grp.g)}</div>`;
+    for(let st of items){
+      let sel=st.i===S.style?'border-color:#7b68ee;background:#252535;':'border-color:#2a2a35;background:#111;';
+      h+=`<button class="styleBtn" style="${sel}width:100%;text-align:left;color:#e0e0e0;padding:5px 8px;margin-bottom:3px;border-radius:5px;cursor:pointer;font-size:13px;" onclick="pickStyle('${st.i}')">${esc(st.l)}</button>`;
+    }
+  }
+  styleListCtn.innerHTML=h;
+}
+window.pickStyle=function(id){
+  S.style=id; S.mods={}; renderStyles(); renderModifiers(); updatePreview(); saveUI();
+};
+function renderModifiers(){
+  let st=findStyle(S.style), h='';
+  if(st&&st.m&&modLibs[st.m]){
+    let lib=modLibs[st.m];
+    for(let cat in lib){
+      let opts=lib[cat], cur=S.mods[cat]||'';
+      h+=`<div class="groupLabel">${esc(cat)}</div><select style="width:100%;margin-bottom:6px;" onchange="S.mods[this.dataset.cat]=this.value;saveUI();updatePreview()" data-cat="${esc(cat)}"><option value="">-- none --</option>`+
+        opts.map(o=>`<option value="${esc(o.v)}" ${o.v===cur?'selected':''}>${esc(o.l)}</option>`).join('')+'</select>';
+    }
+  }
+  modifiersCtn.innerHTML=h;
+}
+
+/* ===== GENERATION ===== */
+async function generateImageGen(){
+  let {prompt,negative}=buildFinal();
+  if(!prompt.trim())return;
+  genImgBtn.disabled=true; imgLoader.hidden=false;
+  try{
+    let url=await generateImage(prompt+(negative?'. Negative: '+negative:''),{resolution:S.res});
+    generatedImg.src=url; imgOutputWrap.hidden=false; welcomeState.hidden=true;
+    if(S.settings.autoSave) await saveGallery(url,prompt,negative,findStyle(S.style)?.l);
+    addHistory(prompt,'img');
+  }catch(e){console.error(e)}
+  genImgBtn.disabled=false; imgLoader.hidden=true;
+}
+function buildFinal(){
+  let st=findStyle(S.style);
+  let ctx={description:descInput.value||'',negative:negInput.value||'',pokemonType:pokemonTypeSelect.value||'',input:{description:descInput.value||'',negative:negInput.value||'',pokemonType:pokemonTypeSelect.value||''}};
+  let p=st?resolveTpl(st.p,ctx):ctx.description;
+  let n=st&&st.n?resolveTpl(st.n,ctx):ctx.negative;
+  if(st&&st.m&&modLibs[st.m]){for(let c in S.mods){let v=S.mods[c];if(v)p+=v;}}
+  return {prompt:p,negative:n};
+}
+
+async function generateTextGen(){
+  let instr=textInstrInput.value.trim(); if(!instr)return;
+  genTextBtn.disabled=true; textLoader.hidden=false; textOutput.textContent='';
+  try{
+    if(S.settings.stream){
+      await generateText({instruction:instr,onChunk:d=>textOutput.textContent+=d.textChunk});
+    }else{
+      textOutput.textContent=await generateText(instr);
+    }
+    addHistory(instr,'txt');
+  }catch(e){console.error(e)}
+  genTextBtn.disabled=false; textLoader.hidden=true;
+}
+
+function randomizeAll(){
+  let a=allStyles();
+  let st=a[Math.floor(Math.random()*a.length)];
+  pickStyle(st.i);
+  let topics=['a cyberpunk samurai','an ancient floating castle','a neon dragon over Tokyo','a wizard cat in a library','a bioluminescent forest','a steampunk airship battle','a mysterious portal in the woods','a robot with a flowering藤蔓'];
+  descInput.value=topics[Math.floor(Math.random()*topics.length)];
+  S.desc=descInput.value; updatePreview(); saveUI();
+}
+
+/* ===== TABS & MODE ===== */
+window.switchTab=function(t){
+  ['genCtn','galleryCtn','notebookCtn','settingsCtn'].forEach(id=>document.getElementById(id).hidden=(id!==t+'Ctn'));
+  ['tabGenBtn','tabGalBtn','tabNoteBtn','tabSetBtn'].forEach(id=>document.getElementById(id).classList.toggle('active',id==='tab'+(t==='gen'?'Gen':t==='gallery'?'Gal':t==='notebook'?'Note':'Set')+'Btn'));
+  if(t==='gallery') renderGallery();
+  if(t==='notebook') renderNoteList();
+};
+window.setMode=function(m){
+  S.mode=m;
+  if(m==='image'){
+    imgControls.hidden=false; textControls.hidden=false;
+    modeImageBtn.classList.add('active'); modeTextBtn.classList.remove('active');
+    if(generatedImg.src && generatedImg.src!=='') imgOutputWrap.hidden=false;
+  } else {
+    imgControls.hidden=true; textControls.hidden=false;
+    modeImageBtn.classList.remove('active'); modeTextBtn.classList.add('active');
+    imgOutputWrap.hidden=true;
+  }
+  saveUI();
+};
+
+/* ===== GALLERY ===== */
+async function getGal(){return await kv.aig.get('gallery')||[]}
+async function setGal(arr){await kv.aig.set('gallery',arr)}
+async function saveGallery(url,prompt,neg,styleLabel){
+  let arr=await getGal();
+  arr.unshift({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),url,prompt,negative:neg,styleLabel,created:Date.now()});
+  await setGal(arr);
+}
+window.delGal=async function(id){
+  let arr=(await getGal()).filter(x=>x.id!==id); await setGal(arr); renderGallery();
+};
+window.downloadImg=async function(id){
+  let it=(await getGal()).find(x=>x.id===id); if(!it)return;
+  let a=document.createElement('a'); a.href=it.url; a.download='generated.png'; a.click();
+};
+function downloadCurrentImage(){let a=document.createElement('a');a.href=generatedImg.src;a.download='generated.png';a.click();}
+async function saveCurrentToGallery(){let {prompt,negative}=buildFinal();await saveGallery(generatedImg.src,prompt,negative,findStyle(S.style)?.l);renderGallery();}
+window.openLightbox=async function(id){
+  let it=(await getGal()).find(x=>x.id===id); if(!it)return;
+  lightboxImg.src=it.url;
+  lightboxMeta.innerHTML=`<b>Style:</b> ${esc(it.styleLabel||'None')}<br><b>Prompt:</b> ${esc(it.prompt)}<br><b>Negative:</b> ${esc(it.negative||'—')}<br><small>${new Date(it.created).toLocaleString()}</small>`;
+  lightbox.hidden=false;
+};
+window.closeLightbox=function(){lightbox.hidden=true;};
+async function renderGallery(){
+  let items=await getGal();
+  galleryEmpty.hidden=items.length>0;
+  galleryGrid.innerHTML=items.map(it=>`
+    <div class="galItem">
+      <img src="${it.url}" onclick="openLightbox('${it.id}')">
+      <div class="galOverlay">
+        <div style="font-size:11px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(it.styleLabel||'')}</div>
+        <div style="display:flex;gap:4px;">
+          <button onclick="event.stopPropagation();downloadImg('${it.id}')" style="padding:2px 6px;font-size:11px;">DL</button>
+          <button onclick="event.stopPropagation();delGal('${it.id}')" style="padding:2px 6px;font-size:11px;background:#522;">X</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+async function clearGallery(){if(!confirm('Delete all gallery images?'))return;await kv.aig.delete('gallery');renderGallery();}
+
+/* ===== NOTEBOOK ===== */
+function getNotes(){return JSON.parse(localStorage.aiGen_notes||'[]')}
+function saveNotes(n){localStorage.aiGen_notes=JSON.stringify(n)}
+function renderNoteList(){
+  let n=getNotes();
+  noteList.innerHTML=n.map(x=>`<div class="noteItem ${x.id===currentNoteId?'active':''}" onclick="loadNote('${x.id}')">${esc(x.title||'Untitled')}</div>`).join('');
+}
+window.newNote=function(){currentNoteId=null;noteTitle.value='';noteBody.value='';renderNoteList();};
+window.loadNote=function(id){
+  let n=getNotes().find(x=>x.id===id); if(!n)return;
+  currentNoteId=id; noteTitle.value=n.title; noteBody.value=n.body; renderNoteList();
+};
+window.saveNote=function(){
+  let n=getNotes(), item={id:currentNoteId||Date.now().toString(36),title:noteTitle.value||'Untitled',body:noteBody.value,updated:Date.now()};
+  if(currentNoteId){let i=n.findIndex(x=>x.id===currentNoteId);if(i>-1)n[i]=item;else n.push(item);}else{n.push(item);currentNoteId=item.id;}
+  saveNotes(n); renderNoteList();
+};
+window.deleteNote=function(){
+  if(!currentNoteId)return; let n=getNotes().filter(x=>x.id!==currentNoteId); saveNotes(n); newNote(); renderNoteList();
+};
+window.saveTextToNotebook=function(){noteTitle.value='Generated Text';noteBody.value=textOutput.textContent;saveNote();switchTab('notebook');};
+window.sendImgToNotebook=function(){let {prompt,negative}=buildFinal();noteTitle.value=findStyle(S.style)?.l||'Image Prompt';noteBody.value='Prompt:\n'+prompt+'\n\nNegative:\n'+negative;saveNote();switchTab('notebook');};
+
+/* ===== IMPORT / EXPORT / SETTINGS ===== */
+function importStyles(){
+  let raw=importStylesArea.value.trim(); if(!raw)return;
+  if(raw.startsWith('t2i-styles-')||raw.startsWith('{import:')){alert('Simulated dependency import for "'+raw+'" – defaults already loaded.');return;}
+  try{
+    let data=JSON.parse(raw);
+    if(!Array.isArray(data)) data=[data];
+    for(let entry of data){
+      let g=entry.group||'Imported',c=entry.color||'#aaa';
+      let target=styleGroups.find(x=>x.g===g);
+      if(!target){target={g,c,s:[]};styleGroups.push(target)}
+      target.s.push(...(entry.styles||[]).map(s=>({i:s.id||s.i,l:s.label||s.l,p:s.prompt||s.p,n:s.negative||s.n||'',t:s.tags||s.t||{},m:s.modifiersRef||s.m||''})));
+    }
+    alert('Imported '+(data.length)+' groups.'); renderStyles();
+  }catch(e){alert('Invalid JSON')}
+}
+async function exportFullData(){
+  let notes=getNotes(), gallery=await getGal();
+  let blob=new Blob([JSON.stringify({version:1,settings:S,notes,gallery},null,2)],{type:'application/json'});
+  let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='ai-generator-data.json';a.click();
+}
+function importFullData(){
+  let raw=importDataArea.value.trim(); if(!raw)return;
+  try{
+    let d=JSON.parse(raw);
+    if(d.settings){S=d.settings;saveSet();saveUI();}
+    if(Array.isArray(d.notes)) saveNotes(d.notes);
+    if(Array.isArray(d.gallery)) setGal(d.gallery);
+    alert('Data restored. Reloading.'); location.reload();
+  }catch(e){alert('Invalid import JSON')}
+}
+window.resetAllData=function(){
+  if(!confirm('Wipe ALL local data?'))return;
+  localStorage.clear(); kv.aig.delete('gallery'); location.reload();
+};
+
+/* ===== HISTORY (simple) ===== */
+function addHistory(entry,type){/* could expand into a visible history list */}
+
+/* ===== INIT ===== */
+function init(){
+  descInput.value=S.desc; negInput.value=S.neg; resSelect.value=S.res;
+  rememberCheck.checked=JSON.parse(localStorage.aiGen_remember||'true');
+  autoSaveCheck.checked=S.settings.autoSave; streamCheck.checked=S.settings.stream;
+  renderStyles(); renderModifiers(); updatePreview(); setMode(S.mode);
+  setTimeout(()=>{let el=[...styleListCtn.querySelectorAll('button')].find(b=>b.textContent===findStyle(S.style)?.l);if(el)el.classList.add('selected');},0);
+}
+init();
+</script>
+</body>
+</html>

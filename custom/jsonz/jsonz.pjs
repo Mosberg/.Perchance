@@ -1,0 +1,126 @@
+jsonZ
+  stripJsonc(text) =>
+    text = String(text || "")
+    text = text.replace(/\/\/[^\n\r]*/g, "")
+    text = text.replace(/\/\*[\s\S]*?\*\//g, "")
+    text
+
+  parse(text, fallback) =>
+    let clean = this.stripJsonc(text)
+    try
+      JSON.parse(clean)
+    catch(e)
+      fallback
+
+  parseStrict(text) =>
+    let clean = this.stripJsonc(text)
+    JSON.parse(clean)
+
+  stringify(value, space) =>
+    try
+      JSON.stringify(value, null, space || 0)
+    catch(e)
+      ""
+
+  clone(value) =>
+    try
+      JSON.parse(JSON.stringify(value))
+    catch(e)
+      value
+
+  typeOf(value) =>
+    if(value === null) "null"
+    else if(Array.isArray(value)) "array"
+    else typeof value
+
+  isArray(v) => Array.isArray(v)
+  isObject(v) => v && typeof v === "object" && !Array.isArray(v)
+  isString(v) => typeof v === "string"
+  isNumber(v) => typeof v === "number" && !isNaN(v)
+  isBoolean(v) => typeof v === "boolean"
+  isNull(v) => v === null
+  isUndefined(v) => v === undefined
+
+  ensureArray(v) =>
+    if(Array.isArray(v)) v
+    else if(v === undefined || v === null) []
+    else [v]
+
+  ensureObject(v) =>
+    if(this.isObject(v)) v
+    else {}
+
+  splitPath(path) =>
+    if(Array.isArray(path)) path
+    else String(path || "").split(".")
+
+  get(obj, path, fallback) =>
+    let parts = this.splitPath(path)
+    let cur = obj
+    for(let i = 0; i < parts.length; i++)
+      let k = parts[i]
+      if(cur == null || !(k in cur)) return fallback
+      cur = cur[k]
+    cur
+
+  set(obj, path, value) =>
+    obj = obj || {}
+    let parts = this.splitPath(path)
+    let cur = obj
+    for(let i = 0; i < parts.length - 1; i++)
+      let k = parts[i]
+      if(!this.isObject(cur[k])) cur[k] = {}
+      cur = cur[k]
+    cur[parts[parts.length - 1]] = value
+    obj
+
+  delete(obj, path) =>
+    let parts = this.splitPath(path)
+    let cur = obj
+    for(let i = 0; i < parts.length - 1; i++)
+      let k = parts[i]
+      if(!(k in cur)) return obj
+      cur = cur[k]
+    delete cur[parts[parts.length - 1]]
+    obj
+
+  mergeDeep(target, source) =>
+    target = this.ensureObject(target)
+    source = this.ensureObject(source)
+    Object.keys(source).forEach(k => {
+      let sv = source[k]
+      let tv = target[k]
+      if(this.isObject(sv) && this.isObject(tv))
+        target[k] = this.mergeDeep(tv, sv)
+      else if(Array.isArray(sv) && Array.isArray(tv))
+        target[k] = tv.concat(sv)
+      else
+        target[k] = sv
+    })
+    target
+
+  keys(obj) =>
+    if(this.isObject(obj)) Object.keys(obj)
+    else []
+
+  values(obj) =>
+    if(this.isObject(obj)) Object.keys(obj).map(k => obj[k])
+    else []
+
+  entries(obj) =>
+    if(this.isObject(obj)) Object.keys(obj).map(k => [k, obj[k]])
+    else []
+
+  html(text) => String(text || "")
+
+  escapeHtml(text) =>
+    String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;")
+
+  htmlBlock(text, className) =>
+    let cls = className ? " class=\"" + className + "\"" : ""
+    "<div" + cls + ">" + String(text || "") + "</div>"

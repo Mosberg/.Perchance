@@ -1,0 +1,1076 @@
+// text2image-framework
+// Standalone framework with advanced modules:
+// - share-link export/import
+// - modifier groups
+// - persona/chat hooks
+// - visual style selection
+
+textToImagePlugin = {import:text-to-image-plugin}
+commentsPlugin = {import:comments-plugin}
+createMediaGalleryPlugin = {import:create-media-gallery-plugin}
+selectLeaf = {import:select-leaf-plugin}
+fullscreenButton = {import:fullscreen-button-plugin}
+upload = {import:upload-plugin}
+aiText = {import:ai-text-plugin}
+
+$output(settings) =>
+	if(!settings) settings = {};
+
+	if(!settings.pageTitle) settings.pageTitle = "TextToImage Framework";
+	if(!settings.subtitle) settings.subtitle = "Advanced generation workspace with share links, modifiers, and persona/chat tools.";
+	if(!settings.theme) settings.theme = "aurora";
+	if(settings.showComments === undefined) settings.showComments = false;
+	if(settings.enableShareLinks === undefined) settings.enableShareLinks = true;
+	if(settings.enableModifierGroups === undefined) settings.enableModifierGroups = true;
+	if(settings.enablePersonaHooks === undefined) settings.enablePersonaHooks = true;
+	if(settings.enableRandomInputButton === undefined) settings.enableRandomInputButton = true;
+	if(settings.enableAiSuggestButton === undefined) settings.enableAiSuggestButton = true;
+	if(settings.enableRandomAppendButton === undefined) settings.enableRandomAppendButton = true;
+	if(!settings.commentOptions) settings.commentOptions = {channel:"t2i-framework", hideFullscreenButton:true};
+	if(!settings.imageOptions) settings.imageOptions = {};
+	if(!settings.imageButtons) settings.imageButtons = {};
+	if(settings.imageButtons.privateSave === undefined) settings.imageButtons.privateSave = true;
+	if(!settings.defaultPrompt) settings.defaultPrompt = "cinematic portrait, dramatic lighting, highly detailed";
+	if(!settings.defaultNegativePrompt) settings.defaultNegativePrompt = "blurry, low quality, watermark, text";
+	if(!settings.defaultSeed) settings.defaultSeed = "";
+	if(!settings.defaultImageCount) settings.defaultImageCount = 6;
+	if(!settings.aiSuggestMode) settings.aiSuggestMode = "append";
+	if(!settings.aiSuggestInstruction) settings.aiSuggestInstruction = "Generate one concise image-prompt continuation based on the user's current prompt and selected style. Return only the prompt text and no explanations.";
+	if(settings.aiSuggestMaxCharacters === undefined) settings.aiSuggestMaxCharacters = 220;
+	if(!settings.randomPromptPool) settings.randomPromptPool = ["cinematic portrait, dramatic rim light, high detail", "fantasy hero in a ruined temple, volumetric light", "stylized anime character, vibrant color palette", "pixel art creature design, clean silhouette"];
+	if(!settings.randomAppendPool) settings.randomAppendPool = ["highly detailed", "dynamic composition", "sharp focus", "rich color grading", "volumetric lighting"];
+	if(!settings.styleOptions) {
+		settings.styleOptions = [
+			{name:"none", label:"None"},
+			{name:"cinematic", label:"Cinematic", promptSuffix:"cinematic color grading, 35mm film look", swatch:"linear-gradient(135deg, #5fa8ff, #ffd166)"},
+			{name:"anime", label:"Anime", promptSuffix:"anime style, cel shading, expressive line art", negativeSuffix:"photorealistic", swatch:"linear-gradient(135deg, #ff7aa2, #8ec5ff)"},
+			{name:"photoreal", label:"Photoreal", promptSuffix:"photorealistic, realistic skin texture, ultra detailed", swatch:"linear-gradient(135deg, #8de1b5, #7fa0ff)"},
+			{name:"fantasy", label:"Fantasy", promptSuffix:"epic fantasy concept art, atmospheric lighting", swatch:"linear-gradient(135deg, #a78bfa, #f59e0b)"},
+		];
+	}
+	if(!settings.modifierGroups) {
+		settings.modifierGroups = [
+			{
+				id: "camera",
+				label: "Camera",
+				mode: "append",
+				options: [
+					{name:"None", prompt:"", negative:""},
+					{name:"Wide Angle", prompt:"wide angle lens, dramatic perspective", negative:""},
+					{name:"Portrait Lens", prompt:"85mm portrait lens, shallow depth of field", negative:""},
+					{name:"Macro", prompt:"macro photography, extreme detail", negative:""},
+				],
+			},
+			{
+				id: "lighting",
+				label: "Lighting",
+				mode: "append",
+				options: [
+					{name:"None", prompt:"", negative:""},
+					{name:"Golden Hour", prompt:"golden hour lighting, warm highlights", negative:""},
+					{name:"Neon", prompt:"neon rim lighting, urban glow", negative:"flat lighting"},
+					{name:"Studio", prompt:"studio softbox setup, crisp shadows", negative:""},
+				],
+			},
+      {
+				id: "mood",
+				label: "Mood",
+				mode: "append",
+				options: [
+					{name:"None", prompt:"", negative:""},
+					{name:"Mysterious", prompt:"mysterious atmosphere, soft shadows", negative:""},
+					{name:"Energetic", prompt:"dynamic energy, vibrant colors", negative:""},
+					{name:"Serene", prompt:"calm and peaceful, soft lighting", negative:""},
+				],
+			},
+		];
+	}
+	if(!settings.persona) settings.persona = {};
+	if(settings.persona.enableAiDescription === undefined) settings.persona.enableAiDescription = false;
+	if(!settings.persona.defaultInstruction) settings.persona.defaultInstruction = "Create a concise, vivid persona with name, personality, and backstory inspired by the image prompt.";
+	if(!settings.persona.chatBaseUrl) settings.persona.chatBaseUrl = "https://perchance.org/ai-character-chat";
+
+	if(!window.input) window.input = {};
+	if(window.input.description === undefined) window.input.description = String(settings.defaultPrompt || "");
+	if(window.input.negative === undefined) window.input.negative = String(settings.defaultNegativePrompt || "");
+
+	let themeMap = {
+		aurora: {bgA:"#0d1b2a", bgB:"#1b263b", bgC:"#274060", panel:"rgba(16,26,40,0.78)", text:"#e7eef6", muted:"#9bb0ca", line:"rgba(170,196,228,0.3)", accent:"#59d4ff", accent2:"#ffd166"},
+		sunrise: {bgA:"#2d1b2e", bgB:"#6d2e46", bgC:"#b56576", panel:"rgba(54,27,42,0.78)", text:"#fff3eb", muted:"#f2d3c0", line:"rgba(255,218,191,0.35)", accent:"#9df7e5", accent2:"#ffd6a5"},
+		slate: {bgA:"#14171f", bgB:"#202534", bgC:"#2d3143", panel:"rgba(22,27,38,0.78)", text:"#f1f4fa", muted:"#b6becc", line:"rgba(160,174,199,0.3)", accent:"#80ed99", accent2:"#ffd166"},
+	};
+	let theme = themeMap[settings.theme] || themeMap.aurora;
+
+	if(!window.__t2iFrameworkState48739) {
+		window.__t2iFrameworkState48739 = {
+			version: "5.0.0",
+			buildDate: "2026-04-12",
+			privateGallery: null,
+		};
+	}
+
+	if(settings.imageButtons.privateSave && !window.__t2iFrameworkState48739.privateGallery) {
+		window.__t2iFrameworkState48739.privateGallery = createMediaGalleryPlugin();
+	}
+
+	window.__t2iFrameworkSettings48739 = settings;
+	window.__t2iFrameworkTextPlugin48739 = textToImagePlugin;
+	window.__t2iFrameworkCommentsPlugin48739 = commentsPlugin;
+
+	window.__t2iGetStyleCatalog48739 = function() {
+		return window.__t2iResolvedStyles48739 || [];
+	};
+
+	window.__t2iGetStyleNodeByKey48739 = function(styleKey) {
+		let styleMap = window.__t2iArtStyleMap48739 || {};
+		return styleMap[styleKey] || null;
+	};
+
+	window.__t2iEvaluateStyleField48739 = function(field) {
+		if(field === undefined || field === null) return "";
+		if(field.evaluateItem !== undefined) return String(field.evaluateItem);
+		return String(field);
+	};
+
+	window.__t2iGetStyleByName48739 = function(styleName) {
+		let catalog = window.__t2iGetStyleCatalog48739();
+		for(let style of catalog) {
+			if(style.name === styleName) return style;
+		}
+		return {name:"none", label:"None"};
+	};
+
+	window.__t2iGetSelectedStyleNode48739 = function() {
+		let styleKey = document.querySelector("#t2iStyleEl48739")?.value || "";
+		return window.__t2iGetStyleNodeByKey48739(styleKey);
+	};
+
+	window.__t2iSyncInputVars48739 = function() {
+		if(!window.input) window.input = {};
+		let promptVal = document.querySelector("#t2iPromptEl48739")?.value;
+		let negVal = document.querySelector("#t2iNegativeEl48739")?.value;
+		if(promptVal !== undefined) {
+			window.input.description = String(promptVal);
+		} else if(window.input.description === undefined) {
+			window.input.description = String(settings.defaultPrompt || "");
+		}
+		if(negVal !== undefined) {
+			window.input.negative = String(negVal);
+		} else if(window.input.negative === undefined) {
+			window.input.negative = String(settings.defaultNegativePrompt || "");
+		}
+	};
+
+	window.__t2iGetStyleModifierGroups48739 = function(styleNode) {
+		if(!styleNode || !styleNode.modifiers) return [];
+		let modifiersRoot = styleNode.modifiers;
+		if(!modifiersRoot.getChildNames) return [];
+		let groups = [];
+		for(let groupName of modifiersRoot.getChildNames) {
+			let groupNode = modifiersRoot[groupName];
+			if(!groupNode || !groupNode.getChildNames) continue;
+			let options = [];
+			for(let optionName of groupNode.getChildNames) {
+				let optionValue = window.__t2iEvaluateStyleField48739(groupNode[optionName]);
+				options.push({name: String(optionName), value: String(optionValue || "")});
+			}
+			if(options.length > 0) {
+				groups.push({
+					id: String(groupName).replace(/[^a-zA-Z0-9_-]/g, "_"),
+					label: String(groupName),
+					options,
+				});
+			}
+		}
+		return groups;
+	};
+
+	window.__t2iRenderStyleModifierInputs48739 = function() {
+		let rowEl = document.querySelector("#t2iStyleModifiersRow48739");
+		if(!rowEl) return;
+		let styleNode = window.__t2iGetSelectedStyleNode48739();
+		let groups = window.__t2iGetStyleModifierGroups48739(styleNode);
+		if(groups.length === 0) {
+			rowEl.innerHTML = "";
+			rowEl.style.display = "none";
+			return;
+		}
+		rowEl.style.display = "grid";
+		rowEl.innerHTML = groups.map(g => {
+			let opts = g.options.map(o => `<option value="${o.value}">${o.name}</option>`).join("\n");
+			return `<div class="t2iField48739 t2iSpan3"><label>${g.label}</label><select id="t2iStyleMod_${g.id}_48739">${opts}</select></div>`;
+		}).join("\n");
+	};
+
+	window.__t2iPickRandomItem48739 = function(pool) {
+		if(pool === undefined || pool === null) return "";
+		try {
+			if(pool.getChildNames || pool.selectAll || pool.evaluateItem !== undefined) {
+				return String(selectLeaf(pool).evaluateItem || "").trim();
+			}
+		} catch(e) {
+			console.error(e);
+		}
+		if(Array.isArray(pool)) {
+			if(pool.length === 0) return "";
+			return String(pool[Math.floor(Math.random() * pool.length)] || "").trim();
+		}
+		return String(pool || "").trim();
+	};
+
+	window.__t2iRandomInput48739 = function() {
+		let promptEl = document.querySelector("#t2iPromptEl48739");
+		if(!promptEl) return;
+		let styleNode = window.__t2iGetSelectedStyleNode48739();
+		let pool = styleNode?.randomPrompt || styleNode?.random || settings.randomPromptPool;
+		let picked = window.__t2iPickRandomItem48739(pool);
+		if(!picked) return;
+		promptEl.value = picked;
+		promptEl.dispatchEvent(new Event("input", {bubbles:true}));
+	};
+
+	window.__t2iRandomAppend48739 = function() {
+		let promptEl = document.querySelector("#t2iPromptEl48739");
+		if(!promptEl) return;
+		let styleNode = window.__t2iGetSelectedStyleNode48739();
+		let pool = styleNode?.randomAppend || settings.randomAppendPool;
+		let picked = window.__t2iPickRandomItem48739(pool);
+		if(!picked) return;
+		let cur = (promptEl.value || "").trim();
+		if(!cur) {
+			promptEl.value = picked;
+		} else {
+			promptEl.value = `${cur}${picked.startsWith(",") ? "" : ", "}${picked}`;
+		}
+		promptEl.dispatchEvent(new Event("input", {bubbles:true}));
+	};
+
+	window.__t2iAiSuggest48739 = async function(btn) {
+		let promptEl = document.querySelector("#t2iPromptEl48739");
+		let styleEl = document.querySelector("#t2iStyleEl48739");
+		let negEl = document.querySelector("#t2iNegativeEl48739");
+		if(!promptEl) return;
+		let oldBtnText = btn ? btn.textContent : "AI Suggest";
+		if(btn) {
+			btn.disabled = true;
+			btn.textContent = "Thinking...";
+		}
+		try {
+			let styleLabel = styleEl?.selectedOptions?.[0]?.textContent || styleEl?.value || "none";
+			let currentPrompt = (promptEl.value || "").trim();
+			let currentNegative = (negEl?.value || "").trim();
+			let fullInstruction = `${settings.aiSuggestInstruction}\n\nPrompt: ${currentPrompt}\nNegative: ${currentNegative}\nStyle: ${styleLabel}`;
+			let out = await aiText({instruction: fullInstruction, maxCharacters: Number(settings.aiSuggestMaxCharacters || 220)});
+			let suggestion = String(out?.text || out || "").trim();
+			if(!suggestion) return;
+			if(settings.aiSuggestMode === "replace" || !currentPrompt) {
+				promptEl.value = suggestion;
+			} else {
+				promptEl.value = `${currentPrompt}, ${suggestion}`;
+			}
+			promptEl.dispatchEvent(new Event("input", {bubbles:true}));
+		} catch(e) {
+			console.error(e);
+			alert("AI suggestion failed.");
+		} finally {
+			if(btn) {
+				btn.disabled = false;
+				btn.textContent = oldBtnText;
+			}
+		}
+	};
+
+	window.__t2iApplyStylePrompt48739 = function(basePrompt, styleName) {
+		window.__t2iSyncInputVars48739();
+		let styleNode = window.__t2iGetStyleNodeByKey48739(styleName);
+		if(styleNode && styleNode.prompt !== undefined) {
+			if(!window.input) window.input = {};
+			window.input.description = String(basePrompt || "");
+			if(window.input.negative === undefined) window.input.negative = String(settings.defaultNegativePrompt || "");
+			let evaluatedPrompt = window.__t2iEvaluateStyleField48739(styleNode.prompt);
+			return evaluatedPrompt || basePrompt;
+		}
+		if(!styleName || styleName === "none") return basePrompt;
+		let style = window.__t2iGetStyleByName48739(styleName);
+		return [style.promptPrefix, basePrompt, style.promptSuffix].filter(Boolean).join(", ");
+	};
+
+	window.__t2iApplyStyleNegative48739 = function(baseNegative, styleName) {
+		window.__t2iSyncInputVars48739();
+		let styleNode = window.__t2iGetStyleNodeByKey48739(styleName);
+		if(styleNode && styleNode.negative !== undefined) {
+			if(!window.input) window.input = {};
+			window.input.negative = String(baseNegative || "");
+			if(window.input.description === undefined) window.input.description = String(settings.defaultPrompt || "");
+			let evaluatedNegative = window.__t2iEvaluateStyleField48739(styleNode.negative);
+			return evaluatedNegative || baseNegative;
+		}
+		if(!styleName || styleName === "none") return baseNegative;
+		let style = window.__t2iGetStyleByName48739(styleName);
+		return [baseNegative, style.negativeSuffix].filter(Boolean).join(", ");
+	};
+
+	window.__t2iRandomStyle48739 = function() {
+		let selectEl = document.querySelector("#t2iStyleEl48739");
+		if(!selectEl) return;
+
+		let randomKey = "";
+		if(window.__t2iArtStyleOptionsRoot48739) {
+			try {
+				let picked = selectLeaf(window.__t2iArtStyleOptionsRoot48739);
+				let pickedName = String((picked && picked.getName) || "");
+				randomKey = (window.__t2iArtStyleKeyByName48739 || {})[pickedName] || "";
+			} catch(e) {
+				console.error(e);
+			}
+		}
+
+		if(!randomKey && selectEl.options.length > 0) {
+			let idx = Math.floor(Math.random() * selectEl.options.length);
+			randomKey = selectEl.options[idx].value;
+		}
+
+		if(randomKey) {
+			selectEl.value = randomKey;
+			window.__t2iRefreshStyleCards48739();
+		}
+	};
+
+	window.__t2iCollectModifierEffects48739 = function() {
+		let groups = window.__t2iFrameworkSettings48739.modifierGroups || [];
+		let promptPrefix = [];
+		let promptSuffix = [];
+		let negativeSuffix = [];
+		let selected = {};
+
+		for(let group of groups) {
+			let id = group.id || group.label || "group";
+			let el = document.querySelector(`#t2iMod_${id}_48739`);
+			let selectedName = el?.value || "";
+			selected[id] = selectedName;
+			let option = (group.options || []).find(o => o.name === selectedName) || (group.options || [])[0] || {};
+			let mode = group.mode || "append";
+			if(option.prompt) {
+				if(mode === "prepend") {
+					promptPrefix.push(option.prompt);
+				} else {
+					promptSuffix.push(option.prompt);
+				}
+			}
+			if(option.negative) negativeSuffix.push(option.negative);
+		}
+
+		let styleNode = window.__t2iGetSelectedStyleNode48739();
+		let styleModifierGroups = window.__t2iGetStyleModifierGroups48739(styleNode);
+		for(let group of styleModifierGroups) {
+			let el = document.querySelector(`#t2iStyleMod_${group.id}_48739`);
+			let val = String(el?.value || "").trim();
+			if(val) promptSuffix.push(val);
+			selected[`style:${group.id}`] = val;
+		}
+
+		return {
+			promptPrefix: promptPrefix.filter(Boolean).join(", "),
+			promptSuffix: promptSuffix.filter(Boolean).join(", "),
+			negativeSuffix: negativeSuffix.filter(Boolean).join(", "),
+			selected,
+		};
+	};
+
+	window.__t2iBuildImageOptions48739 = function() {
+		let promptEl = document.querySelector("#t2iPromptEl48739");
+		let negativeEl = document.querySelector("#t2iNegativeEl48739");
+		let seedEl = document.querySelector("#t2iSeedEl48739");
+		let styleEl = document.querySelector("#t2iStyleEl48739");
+		let widthEl = document.querySelector("#t2iWidthEl48739");
+		let heightEl = document.querySelector("#t2iHeightEl48739");
+		let guidanceEl = document.querySelector("#t2iGuidanceEl48739");
+		let stepsEl = document.querySelector("#t2iStepsEl48739");
+
+		let prompt = (promptEl?.value || "").trim();
+		let negativePrompt = (negativeEl?.value || "").trim();
+		let style = styleEl?.value || "none";
+		let seed = (seedEl?.value || "").trim();
+
+		let modEffects = window.__t2iCollectModifierEffects48739();
+		let styledPrompt = window.__t2iApplyStylePrompt48739(prompt, style);
+		let styledNegative = window.__t2iApplyStyleNegative48739(negativePrompt, style);
+
+		let options = {};
+		for(let k in window.__t2iFrameworkSettings48739.imageOptions) {
+			options[k] = window.__t2iFrameworkSettings48739.imageOptions[k];
+		}
+
+		options.prompt = [modEffects.promptPrefix, styledPrompt, modEffects.promptSuffix].filter(Boolean).join(", ");
+		options.negativePrompt = [styledNegative, modEffects.negativeSuffix].filter(Boolean).join(", ");
+		if(seed !== "") options.seed = seed;
+
+		let width = Number(widthEl?.value || 0);
+		let height = Number(heightEl?.value || 0);
+		let guidanceScale = Number(guidanceEl?.value || 0);
+		let steps = Number(stepsEl?.value || 0);
+		if(!isNaN(width) && width > 0) options.width = width;
+		if(!isNaN(height) && height > 0) options.height = height;
+		if(!isNaN(guidanceScale) && guidanceScale > 0) options.guidanceScale = guidanceScale;
+		if(!isNaN(steps) && steps > 0) options.numInferenceSteps = steps;
+
+		return options;
+	};
+
+	window.__t2iGetSnapshot48739 = function() {
+		let styleEl = document.querySelector("#t2iStyleEl48739");
+		let countEl = document.querySelector("#t2iCountEl48739");
+		let modEffects = window.__t2iCollectModifierEffects48739();
+		return {
+			v: 1,
+			prompt: document.querySelector("#t2iPromptEl48739")?.value || "",
+			negativePrompt: document.querySelector("#t2iNegativeEl48739")?.value || "",
+			seed: document.querySelector("#t2iSeedEl48739")?.value || "",
+			style: styleEl?.value || "none",
+			count: Number(countEl?.value || window.__t2iFrameworkSettings48739.defaultImageCount || 6),
+			width: document.querySelector("#t2iWidthEl48739")?.value || "",
+			height: document.querySelector("#t2iHeightEl48739")?.value || "",
+			guidanceScale: document.querySelector("#t2iGuidanceEl48739")?.value || "",
+			steps: document.querySelector("#t2iStepsEl48739")?.value || "",
+			modifiers: modEffects.selected || {},
+		};
+	};
+
+	window.__t2iApplySnapshot48739 = function(data) {
+		if(!data) return;
+		let apply = (id, value) => {
+			let el = document.querySelector(id);
+			if(el && value !== undefined && value !== null) el.value = String(value);
+		};
+		apply("#t2iPromptEl48739", data.prompt);
+		apply("#t2iNegativeEl48739", data.negativePrompt);
+		apply("#t2iSeedEl48739", data.seed);
+		apply("#t2iStyleEl48739", data.style);
+		window.__t2iRenderStyleModifierInputs48739();
+		apply("#t2iCountEl48739", data.count);
+		apply("#t2iWidthEl48739", data.width);
+		apply("#t2iHeightEl48739", data.height);
+		apply("#t2iGuidanceEl48739", data.guidanceScale);
+		apply("#t2iStepsEl48739", data.steps);
+
+		let mods = data.modifiers || {};
+		for(let key in mods) {
+			let el = null;
+			if(String(key).startsWith("style:")) {
+				el = document.querySelector(`#t2iStyleMod_${String(key).slice(6)}_48739`);
+			} else {
+				el = document.querySelector(`#t2iMod_${key}_48739`);
+			}
+			if(el) el.value = mods[key];
+		}
+		window.__t2iRefreshStyleCards48739();
+	};
+
+	window.__t2iEncodeSnapshot48739 = function(data) {
+		try {
+			return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+		} catch(e) {
+			console.error(e);
+			return "";
+		}
+	};
+
+	window.__t2iDecodeSnapshot48739 = function(encoded) {
+		try {
+			return JSON.parse(decodeURIComponent(escape(atob(encoded))));
+		} catch(e) {
+			console.error(e);
+			return null;
+		}
+	};
+
+	window.__t2iBuildShareUrl48739 = function() {
+		let data = window.__t2iGetSnapshot48739();
+		let encoded = window.__t2iEncodeSnapshot48739(data);
+		if(!encoded) return "";
+		let base = `${location.origin}${location.pathname}`;
+		return `${base}#t2i=${encoded}`;
+	};
+
+	window.__t2iExportShareLink48739 = async function() {
+		let link = window.__t2iBuildShareUrl48739();
+		if(!link) {
+			alert("Failed to build share link.");
+			return;
+		}
+		document.querySelector("#t2iShareLinkEl48739").value = link;
+		if(navigator.clipboard && navigator.clipboard.writeText) {
+			try {
+				await navigator.clipboard.writeText(link);
+				alert("Share link copied to clipboard.");
+				return;
+			} catch(e) {
+				console.error(e);
+			}
+		}
+		alert("Share link generated in the text box.");
+	};
+
+	window.__t2iImportShareLink48739 = function() {
+		let text = (document.querySelector("#t2iShareLinkEl48739")?.value || "").trim();
+		if(!text) {
+			alert("Paste a share link first.");
+			return;
+		}
+		let token = "";
+		if(text.startsWith("http")) {
+			let hash = text.split("#")[1] || "";
+			if(hash.startsWith("t2i=")) token = hash.slice(4);
+		} else if(text.startsWith("t2i=")) {
+			token = text.slice(4);
+		} else {
+			token = text;
+		}
+		let data = window.__t2iDecodeSnapshot48739(token);
+		if(!data) {
+			alert("Invalid share data.");
+			return;
+		}
+		window.__t2iApplySnapshot48739(data);
+		alert("Settings imported.");
+	};
+
+	window.__t2iImportFromHash48739 = function() {
+		let hash = location.hash || "";
+		if(!hash.startsWith("#t2i=")) return;
+		let encoded = hash.replace("#t2i=", "");
+		let data = window.__t2iDecodeSnapshot48739(encoded);
+		if(data) window.__t2iApplySnapshot48739(data);
+	};
+
+	window.__t2iRandomizeSeed48739 = function() {
+		let seedEl = document.querySelector("#t2iSeedEl48739");
+		if(!seedEl) return;
+		seedEl.value = String(Math.floor(Math.random()*900000000) + 100000000);
+	};
+
+	window.__t2iClearOutput48739 = function() {
+		let outputEl = document.querySelector("#t2iOutputEl48739");
+		if(outputEl) outputEl.innerHTML = "<div class='t2i-empty48739'>Output cleared.</div>";
+	};
+
+	window.__t2iToggleStyleGrid48739 = function(btn) {
+		let gridEl = document.querySelector("#t2iStyleVisualGrid48739");
+		if(!gridEl) return;
+		let currentDisplay = gridEl.style.display || window.getComputedStyle(gridEl).display;
+		if(currentDisplay === "none") {
+			gridEl.style.display = "grid";
+			if(btn) btn.textContent = "Hide Style Grid";
+		} else {
+			gridEl.style.display = "none";
+			if(btn) btn.textContent = "Show Style Grid";
+		}
+	};
+
+	window.__t2iSetStyle48739 = function(styleName) {
+		let selectEl = document.querySelector("#t2iStyleEl48739");
+		if(selectEl) selectEl.value = styleName;
+		window.__t2iRefreshStyleCards48739();
+	};
+
+	window.__t2iRefreshStyleCards48739 = function() {
+		let selectEl = document.querySelector("#t2iStyleEl48739");
+		let selected = selectEl?.value || "none";
+		window.__t2iRenderStyleModifierInputs48739();
+		document.querySelectorAll(".t2i-style-card48739").forEach(el => {
+			if(el.dataset.styleName === selected) {
+				el.classList.add("active");
+			} else {
+				el.classList.remove("active");
+			}
+		});
+	};
+
+	window.__t2iGeneratePersona48739 = async function(btn, imageCtn) {
+		if(!window.__t2iFrameworkSettings48739.enablePersonaHooks) return;
+		let frame = imageCtn?.querySelector("iframe");
+		let out = frame?.textToImagePluginOutput;
+		if(!out) {
+			alert("Please wait until the image is finished generating.");
+			return;
+		}
+		btn.disabled = true;
+		let oldText = btn.textContent;
+		btn.textContent = "Persona...";
+
+		let prompt = out.inputs?.prompt || "";
+		let name = "";
+		let description = "";
+
+		if(window.__t2iFrameworkSettings48739.persona.enableAiDescription) {
+			try {
+				let response = await aiText({
+					instruction: `${window.__t2iFrameworkSettings48739.persona.defaultInstruction}\n\nImage prompt: ${prompt}\n\nRespond using this format:\nName: ...\nDescription: ...`,
+					maxCharacters: 900,
+				});
+				let text = String(response?.text || response || "");
+				name = ((text.match(/Name:\s*(.+)/i) || [])[1] || "Unnamed Character").trim();
+				description = ((text.match(/Description:\s*([\s\S]+)/i) || [])[1] || text).trim();
+			} catch(e) {
+				console.error(e);
+			}
+		}
+
+		if(!description) {
+			name = "Generated Persona";
+			description = `A character inspired by this image prompt: ${prompt}`;
+		}
+
+		imageCtn.dataset.personaName = name;
+		imageCtn.dataset.personaDescription = description;
+		btn.textContent = "Persona Ready";
+		setTimeout(() => {
+			btn.textContent = oldText;
+			btn.disabled = false;
+		}, 700);
+
+		if(typeof window.__t2iFrameworkSettings48739.persona.onCreate === "function") {
+			try {
+				window.__t2iFrameworkSettings48739.persona.onCreate({name, description, imageCtn, output: out});
+			} catch(e) {
+				console.error(e);
+			}
+		}
+	};
+
+	window.__t2iOpenChat48739 = function(imageCtn) {
+		if(!window.__t2iFrameworkSettings48739.enablePersonaHooks) return;
+		let frame = imageCtn?.querySelector("iframe");
+		let out = frame?.textToImagePluginOutput;
+		if(!out) {
+			alert("Image data is not ready yet.");
+			return;
+		}
+		let name = imageCtn.dataset.personaName || "Generated Character";
+		let description = imageCtn.dataset.personaDescription || `Character inspired by: ${out.inputs?.prompt || "image prompt"}`;
+		let payload = {
+			name,
+			description,
+			imagePrompt: out.inputs?.prompt || "",
+			imageDataUrl: out.dataUrl || "",
+			timestamp: Date.now(),
+		};
+		let encoded = encodeURIComponent(JSON.stringify(payload));
+		let url = `${window.__t2iFrameworkSettings48739.persona.chatBaseUrl}#${encoded}`;
+		window.open(url, "_blank", "noopener,noreferrer");
+	};
+
+	window.__t2iPrivateSave48739 = async function(btn, imageCtn) {
+		try {
+			if(!window.__t2iFrameworkState48739.privateGallery) {
+				alert("Private gallery is disabled.");
+				return;
+			}
+			let frame = imageCtn?.querySelector("iframe");
+			let out = frame?.textToImagePluginOutput;
+			if(!out) {
+				alert("Please wait until the image is finished generating.");
+				return;
+			}
+			btn.disabled = true;
+			let imageBlob = await fetch(out.dataUrl).then(r => r.blob());
+			await window.__t2iFrameworkState48739.privateGallery.add(imageBlob, {
+				info: {
+					prompt: out.inputs?.prompt,
+					negativePrompt: out.inputs?.negativePrompt,
+					seed: out.inputs?.seed,
+				}
+			});
+			btn.textContent = "Saved";
+			setTimeout(() => {
+				btn.textContent = "Private Save";
+				btn.disabled = false;
+			}, 700);
+		} catch(e) {
+			console.error(e);
+			alert("Failed to save image.");
+			btn.disabled = false;
+		}
+	};
+
+	window.__t2iOpenPrivateGallery48739 = function() {
+		if(!window.__t2iFrameworkState48739.privateGallery) {
+			alert("Private gallery is disabled.");
+			return;
+		}
+		window.__t2iFrameworkState48739.privateGallery.show();
+	};
+
+	window.__t2iGenerate48739 = async function() {
+		let countEl = document.querySelector("#t2iCountEl48739");
+		let outputEl = document.querySelector("#t2iOutputEl48739");
+		let btn = document.querySelector("#t2iGenerateBtn48739");
+		if(!outputEl || !btn) return;
+		let numImages = Number(countEl?.value || window.__t2iFrameworkSettings48739.defaultImageCount || 6);
+		if(isNaN(numImages) || numImages < 1) numImages = 1;
+		if(numImages > 24) numImages = 24;
+		btn.disabled = true;
+		btn.textContent = "Generating...";
+
+		let actionButtons = [];
+		if(window.__t2iFrameworkSettings48739.enablePersonaHooks) {
+			actionButtons.push(`<button onclick="window.__t2iGeneratePersona48739(this, this.closest('.t2i-image-ctn48739'))">Persona</button>`);
+			actionButtons.push(`<button onclick="window.__t2iOpenChat48739(this.closest('.t2i-image-ctn48739'))">Chat Link</button>`);
+		}
+		if(window.__t2iFrameworkSettings48739.imageButtons.privateSave) {
+			actionButtons.push(`<button onclick="window.__t2iPrivateSave48739(this, this.closest('.t2i-image-ctn48739'))">Private Save</button>`);
+		}
+		let actions = actionButtons.join("");
+
+		let template = `<div class="t2i-image-ctn48739">[window.__t2iFrameworkTextPlugin48739(window.__t2iBuildImageOptions48739())]<div class="t2i-image-actions48739">${actions}</div></div>`;
+		outputEl.innerHTML = template.repeat(numImages).evaluateItem;
+
+		btn.disabled = false;
+		btn.textContent = "Generate";
+	};
+
+	window.__t2iToggleComments48739 = function() {
+		let commentsWrap = document.querySelector("#t2iCommentsWrap48739");
+		if(!commentsWrap) return;
+		let hiddenNow = commentsWrap.dataset.hidden === "1";
+		if(hiddenNow) {
+			commentsWrap.dataset.hidden = "0";
+			commentsWrap.style.display = "";
+		} else {
+			commentsWrap.dataset.hidden = "1";
+			commentsWrap.style.display = "none";
+		}
+	};
+
+	window.__t2iMountComments48739 = function() {
+		let host = document.querySelector("#t2iComments48739");
+		if(!host || host.dataset.mounted === "1") return;
+		host.dataset.mounted = "1";
+		host.innerHTML = window.__t2iFrameworkCommentsPlugin48739(window.__t2iFrameworkSettings48739.commentOptions || {});
+	};
+
+	window.__t2iBoot48739 = function() {
+		window.__t2iMountComments48739();
+		window.__t2iRefreshStyleCards48739();
+		window.__t2iImportFromHash48739();
+	};
+
+	let styleCatalog = [];
+	let styleMap = {};
+	let styleNameToKey = {};
+	let styleOptionHtml = "";
+
+	if(settings.artStyle?.options?.getChildNames) {
+		function collectStylesFromList(listNode, groupName, groupColor, keyPrefix) {
+			if(!listNode || !listNode.getChildNames) return [];
+			let found = [];
+			for(let styleName of listNode.getChildNames) {
+				if(String(styleName).startsWith("meta:")) continue;
+				let styleNode = listNode[styleName];
+				if(!styleNode) continue;
+				if(styleNode.prompt === undefined && styleNode.negative === undefined) continue;
+				let key = `${keyPrefix}::${styleName}`;
+				styleMap[key] = styleNode;
+				if(!styleNameToKey[styleName]) styleNameToKey[styleName] = key;
+				styleCatalog.push({
+					name: key,
+					label: styleName,
+					group: groupName,
+					swatch: groupColor ? `linear-gradient(135deg, ${groupColor}, #0ea5e9)` : "",
+					image: "",
+					promptPrefix: "",
+					promptSuffix: "",
+					negativeSuffix: "",
+				});
+				found.push(`<option value="${key}">${styleName}</option>`);
+			}
+			return found;
+		}
+
+		let optGroups = [];
+		let optionsRoot = settings.artStyle.options;
+		for(let groupName of optionsRoot.getChildNames) {
+			let groupNode = optionsRoot[groupName];
+			if(!groupNode || !groupNode.getChildNames) continue;
+			let groupColor = "";
+			try {
+				groupColor = String(groupNode.color?.evaluateItem || groupNode.color || "");
+			} catch(e) {
+				groupColor = "";
+			}
+
+			let groupOptions = [];
+			groupOptions = groupOptions.concat(collectStylesFromList(groupNode, groupName, groupColor, String(groupName)));
+
+			let importedFrom = null;
+			try {
+				importedFrom = groupNode["meta:import"]?.from;
+			} catch(e) {
+				importedFrom = null;
+			}
+			if(importedFrom) {
+				groupOptions = groupOptions.concat(collectStylesFromList(importedFrom, groupName, groupColor, `${groupName}::imported`));
+			}
+
+			if(groupOptions.length > 0) {
+				optGroups.push(`<optgroup label="${groupName}">${groupOptions.join("\n")}</optgroup>`);
+			}
+		}
+
+		styleOptionHtml = optGroups.join("\n");
+	}
+
+	if(styleCatalog.length === 0) {
+		styleCatalog = settings.styleOptions.map(item => {
+			if(typeof item === "string") return {name:item, label:item, promptPrefix:"", promptSuffix:"", negativeSuffix:"", swatch:"", image:""};
+			return {
+				name: item.name || item.label || "style",
+				label: item.label || item.name || "Style",
+				promptPrefix: item.promptPrefix || "",
+				promptSuffix: item.promptSuffix || "",
+				negativeSuffix: item.negativeSuffix || "",
+				swatch: item.swatch || "",
+				image: item.image || "",
+			};
+		});
+		styleOptionHtml = styleCatalog.map(style => `<option value="${style.name}">${style.label}</option>`).join("\n");
+	}
+
+	window.__t2iResolvedStyles48739 = styleCatalog;
+	window.__t2iArtStyleMap48739 = styleMap;
+	window.__t2iArtStyleKeyByName48739 = styleNameToKey;
+	window.__t2iArtStyleOptionsRoot48739 = settings.artStyle?.options || null;
+
+	let styleVisualHtml = styleCatalog.map(style => {
+		let preview = style.image
+			? `<div class="t2i-style-preview48739" style="background-image:url('${style.image}')"></div>`
+			: `<div class="t2i-style-preview48739" style="background:${style.swatch || "linear-gradient(135deg, #4f46e5, #10b981)"}"></div>`;
+		return `<button type="button" class="t2i-style-card48739" data-style-name="${style.name}" onclick="window.__t2iSetStyle48739('${style.name}')">${preview}<span>${style.label}</span></button>`;
+	}).join("\n");
+
+	let modifierGroupHtml = "";
+	if(settings.enableModifierGroups) {
+		modifierGroupHtml = (settings.modifierGroups || []).map(group => {
+			let id = group.id || group.label || "group";
+			let label = group.label || id;
+			let options = (group.options || []).map(o => `<option value="${o.name}">${o.name}</option>`).join("\n");
+			return `<div class="t2iField48739 t2iSpan4"><label>${label}</label><select id="t2iMod_${id}_48739">${options}</select></div>`;
+		}).join("\n");
+	}
+
+	let shareModuleHtml = "";
+	if(settings.enableShareLinks) {
+		shareModuleHtml = `
+		<div class="t2i-share-row48739">
+			<input id="t2iShareLinkEl48739" type="text" placeholder="Share link or token" />
+			<button type="button" onclick="window.__t2iExportShareLink48739()">Export</button>
+			<button type="button" onclick="window.__t2iImportShareLink48739()">Import</button>
+		</div>`;
+	}
+
+	let bootScript = `<img style="position:fixed;opacity:0;pointer-events:none;top:-5000px;left:-5000px;width:1px;height:1px;" src="" onerror="window.__t2iBoot48739(); this.remove();">`;
+
+	return `<style>
+		:root {
+			--t2i-bg-a: ${theme.bgA};
+			--t2i-bg-b: ${theme.bgB};
+			--t2i-bg-c: ${theme.bgC};
+			--t2i-panel: ${theme.panel};
+			--t2i-text: ${theme.text};
+			--t2i-muted: ${theme.muted};
+			--t2i-line: ${theme.line};
+			--t2i-accent: ${theme.accent};
+			--t2i-accent2: ${theme.accent2};
+		}
+		#t2iBg48739 {
+			position: fixed;
+			inset: 0;
+			z-index: -2;
+			background:
+				radial-gradient(1200px 700px at -10% -10%, color-mix(in srgb, var(--t2i-accent) 24%, transparent), transparent 66%),
+				radial-gradient(1000px 620px at 110% -10%, color-mix(in srgb, var(--t2i-accent2) 24%, transparent), transparent 72%),
+				linear-gradient(165deg, var(--t2i-bg-a), var(--t2i-bg-b) 55%, var(--t2i-bg-c));
+		}
+		#t2iRoot48739 {
+			color: var(--t2i-text);
+			max-width: 1220px;
+			margin: 0 auto;
+			padding: 0.8rem;
+			font-family: "Space Grotesk", "Segoe UI", sans-serif;
+		}
+		#t2iCard48739 {
+			background: var(--t2i-panel);
+			border: 1px solid var(--t2i-line);
+			border-radius: 16px;
+			padding: 0.85rem;
+			backdrop-filter: blur(8px);
+			box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+		}
+		#t2iTitle48739 { margin:0.2rem 0 0; text-align:center; font-size:clamp(1.15rem, 2.1vw, 1.7rem); }
+		#t2iSubtitle48739 { margin:0.25rem 0 0.8rem; text-align:center; font-size:0.92rem; color:var(--t2i-muted); }
+		#t2iControls48739 { display:grid; gap:0.55rem; }
+		.t2iRow48739 { display:grid; grid-template-columns:repeat(12, minmax(0, 1fr)); gap:0.5rem; }
+		.t2iField48739 { display:grid; gap:0.3rem; }
+		.t2iSpan12 { grid-column:span 12; }
+		.t2iSpan6 { grid-column:span 6; }
+		.t2iSpan4 { grid-column:span 4; }
+		.t2iSpan3 { grid-column:span 3; }
+		.t2iField48739 label { font-size:0.79rem; letter-spacing:0.02em; color:var(--t2i-muted); }
+		.t2iField48739 input, .t2iField48739 textarea, .t2iField48739 select {
+			width:100%; box-sizing:border-box; padding:0.52rem 0.6rem; border-radius:10px; border:1px solid var(--t2i-line);
+			background:color-mix(in srgb, var(--t2i-panel) 88%, transparent); color:var(--t2i-text);
+		}
+		.t2iField48739 textarea { min-height:4.2rem; resize:vertical; }
+		.t2i-prompt-actions48739 { display:flex; gap:0.35rem; flex-wrap:wrap; margin-top:0.32rem; }
+		.t2i-prompt-actions48739 .random-input-btn, .t2i-prompt-actions48739 .ai-suggest-btn, .t2i-prompt-actions48739 .random-append-btn {
+			border:1px solid var(--t2i-line); background:color-mix(in srgb, var(--t2i-panel) 80%, transparent); color:var(--t2i-text);
+			padding:0.26rem 0.55rem; border-radius:999px; cursor:pointer; font-size:0.78rem;
+		}
+		#t2iButtons48739 { display:flex; gap:0.42rem; flex-wrap:wrap; justify-content:center; margin-top:0.3rem; }
+		#t2iButtons48739 button, #t2iPrivateGalleryBtn48739, .t2i-share-row48739 button {
+			border:1px solid var(--t2i-line); background:color-mix(in srgb, var(--t2i-panel) 80%, transparent); color:var(--t2i-text);
+			padding:0.36rem 0.68rem; border-radius:999px; cursor:pointer;
+		}
+    #t2iTopActionButtons48739 { display:flex; gap:0.42rem; flex-wrap:wrap; justify-content:center; margin-top:0.3rem; }
+		#t2iTopActionButtons48739 button, #t2iPrivateGalleryBtn48739, .t2i-share-row48739 button {
+			border:1px solid var(--t2i-line); background:color-mix(in srgb, var(--t2i-panel) 80%, transparent); color:var(--t2i-text);
+			padding:0.36rem 0.68rem; border-radius:999px; cursor:pointer;
+		}
+		#t2iGenerateBtn48739 { border-color: color-mix(in srgb, var(--t2i-accent) 45%, var(--t2i-line)); }
+		#t2iStyleVisualGrid48739 { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:0.45rem; }
+		#t2iStyleModifiersRow48739 { display:grid; grid-template-columns:repeat(12, minmax(0, 1fr)); gap:0.5rem; }
+		.t2i-style-card48739 {
+			display:grid; gap:0.32rem; border:1px solid var(--t2i-line); background:color-mix(in srgb, var(--t2i-panel) 72%, transparent);
+			padding:0.42rem; border-radius:12px; color:var(--t2i-text); cursor:pointer; text-align:left;
+		}
+		.t2i-style-card48739.active { border-color: color-mix(in srgb, var(--t2i-accent) 70%, var(--t2i-line)); box-shadow:0 0 0 1px color-mix(in srgb, var(--t2i-accent) 45%, transparent) inset; }
+		.t2i-style-preview48739 { width:100%; aspect-ratio: 16/9; border-radius:8px; background-size:cover; background-position:center; }
+		.t2i-style-card48739 span { font-size:0.82rem; color:var(--t2i-muted); }
+		.t2i-share-row48739 { display:flex; gap:0.35rem; margin-top:0.35rem; flex-wrap:wrap; align-items:center; }
+		.t2i-share-row48739 input {
+			flex:1 1 300px; min-width:220px; box-sizing:border-box; padding:0.52rem 0.6rem;
+			border-radius:10px; border:1px solid var(--t2i-line); background:color-mix(in srgb, var(--t2i-panel) 88%, transparent); color:var(--t2i-text);
+		}
+		#t2iOutputEl48739 {
+			margin-top:0.85rem; display:flex; flex-wrap:wrap; justify-content:center; gap:0.42rem; min-height:8rem; padding:0.35rem;
+			border:1px solid var(--t2i-line); border-radius:12px; background:color-mix(in srgb, var(--t2i-panel) 68%, transparent);
+		}
+		.t2i-image-ctn48739 { position:relative; margin:0.2rem; }
+		.t2i-image-actions48739 { margin-top:0.24rem; text-align:center; display:flex; gap:0.3rem; justify-content:center; flex-wrap:wrap; }
+		.t2i-image-actions48739 button {
+			font-size:0.78rem; border:1px solid var(--t2i-line); background:color-mix(in srgb, var(--t2i-panel) 85%, transparent);
+			color:var(--t2i-text); padding:0.26rem 0.52rem; border-radius:999px; cursor:pointer;
+		}
+		.t2i-empty48739 { font-size:0.9rem; color:var(--t2i-muted); padding:1.4rem; }
+		#t2iCommentsWrap48739 {
+			margin-top:1rem; border:1px solid var(--t2i-line); border-radius:12px; padding:0.35rem;
+			background:color-mix(in srgb, var(--t2i-panel) 66%, transparent);
+		}
+		#t2iPrivateGalleryWrap48739 {
+			position:fixed; left:0; right:0; bottom:0.55rem; text-align:center; z-index:90; pointer-events:none;
+		}
+		#t2iPrivateGalleryInner48739 { display:inline-flex; gap:0.35rem; align-items:center; pointer-events:auto; }
+		#t2iPrivateGalleryBtn48739 { pointer-events:auto; }
+		@media (max-width: 860px) {
+			.t2iSpan6, .t2iSpan4, .t2iSpan3 { grid-column:span 12; }
+		}
+    #t2iScrollTopBtn48739 { pointer-events:auto; border:1px solid var(--t2i-line); border-radius:12px; padding:0.35rem;
+			background:color-mix(in srgb, var(--t2i-panel) 66%, transparent);}
+	</style>
+
+	<div id="t2iBg48739"></div>
+	<div id="t2iRoot48739">
+		<div id="t2iCard48739">
+			<h1 id="t2iTitle48739">${settings.pageTitle}</h1>
+			<p id="t2iSubtitle48739">${settings.subtitle}</p>
+
+			<div id="t2iControls48739">
+				<div class="t2iRow48739">
+					<div class="t2iField48739 t2iSpan12">
+						<label>Prompt</label>
+						<textarea id="t2iPromptEl48739">${settings.defaultPrompt}</textarea>
+						<div class="t2i-prompt-actions48739">
+							${settings.enableRandomInputButton ? `<button type="button" class="random-input-btn" onclick="window.__t2iRandomInput48739()">Random Input</button>` : ""}
+							${settings.enableAiSuggestButton ? `<button type="button" class="ai-suggest-btn" onclick="window.__t2iAiSuggest48739(this)">AI Suggest</button>` : ""}
+							${settings.enableRandomAppendButton ? `<button type="button" class="random-append-btn" onclick="window.__t2iRandomAppend48739()">Random Append</button>` : ""}
+						</div>
+					</div>
+					<div class="t2iField48739 t2iSpan12">
+						<label>Negative Prompt</label>
+						<textarea id="t2iNegativeEl48739">${settings.defaultNegativePrompt}</textarea>
+					</div>
+				</div>
+
+				<div class="t2iRow48739">
+					<div class="t2iField48739 t2iSpan4">
+						<label>Style</label>
+						<select id="t2iStyleEl48739" onchange="window.__t2iRefreshStyleCards48739()">${styleOptionHtml}</select>
+					</div>
+					<div class="t2iField48739 t2iSpan4">
+						<label>Seed</label>
+						<input id="t2iSeedEl48739" type="text" value="${settings.defaultSeed}" />
+					</div>
+					<div class="t2iField48739 t2iSpan4">
+						<label>Image Count</label>
+						<input id="t2iCountEl48739" type="number" min="1" max="24" value="${settings.defaultImageCount}" />
+					</div>
+				</div>
+
+				<div class="t2iRow48739">
+					<div class="t2iField48739 t2iSpan3">
+						<label>Width</label>
+						<input id="t2iWidthEl48739" type="number" min="64" step="64" value="${settings.imageOptions.width || ""}" />
+					</div>
+					<div class="t2iField48739 t2iSpan3">
+						<label>Height</label>
+						<input id="t2iHeightEl48739" type="number" min="64" step="64" value="${settings.imageOptions.height || ""}" />
+					</div>
+					<div class="t2iField48739 t2iSpan3">
+						<label>Guidance</label>
+						<input id="t2iGuidanceEl48739" type="number" min="1" step="0.5" value="${settings.imageOptions.guidanceScale || ""}" />
+					</div>
+					<div class="t2iField48739 t2iSpan3">
+						<label>Steps</label>
+						<input id="t2iStepsEl48739" type="number" min="1" step="1" value="${settings.imageOptions.numInferenceSteps || ""}" />
+					</div>
+				</div>
+
+        <div id="t2iButtons48739">
+  				<button onclick="window.__t2iToggleStyleGrid48739(this)">Hide Style Grid</button>
+  				<button onclick="window.__t2iRandomStyle48739()">Random Style</button>
+  				<button onclick="window.__t2iRandomizeSeed48739()">Random Seed</button>
+  			</div>
+
+				<div id="t2iStyleVisualGrid48739">${styleVisualHtml}</div>
+
+				<div id="t2iStyleModifiersRow48739"></div>
+
+				${settings.enableModifierGroups ? `<div class="t2iRow48739">${modifierGroupHtml}</div>` : ""}
+
+				${shareModuleHtml}
+			</div>
+
+			<div id="t2iTopActionButtons48739">
+				<button id="t2iGenerateBtn48739" onclick="window.__t2iGenerate48739()">Generate</button>
+				<button onclick="window.__t2iClearOutput48739()">Clear Output</button>
+				<button onclick="window.__t2iToggleStyleGrid48739(this)">Hide Style Grid</button>
+				<button onclick="window.__t2iToggleComments48739()">Toggle Comments</button>
+			</div>
+
+			<div id="t2iOutputEl48739"><div class="t2i-empty48739">Set prompt and click Generate.</div></div>
+
+			<div id="t2iCommentsWrap48739" data-hidden="${settings.showComments ? "0" : "1"}" style="${settings.showComments ? "" : "display:none;"}">
+				<div id="t2iComments48739"></div>
+			</div>
+		</div>
+	</div>
+
+	<div id="t2iPrivateGalleryWrap48739">
+		<div id="t2iPrivateGalleryInner48739">
+			<button id="t2iPrivateGalleryBtn48739" ${settings.imageButtons.privateSave ? "" : "hidden"} onclick="window.__t2iOpenPrivateGallery48739()">Private Gallery</button>
+			<button id="t2iScrollTopBtn48739" onclick="window.scrollTo({top:0, behavior:'smooth'})">Top</button>
+		</div>
+	</div>
+
+	${bootScript}
+	`.replaceAll("{", "\\{").replaceAll("}", "\\}")

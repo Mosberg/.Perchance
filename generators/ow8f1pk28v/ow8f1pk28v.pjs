@@ -1,0 +1,312 @@
+image = {import:text-to-image-plugin}
+generateText = {import:ai-text-plugin}
+
+// ============================================================
+// CONTEXT HISTORY (session notes — safe to delete anytime)
+// ============================================================
+// Last updated: 2026-07-18
+//
+// WHAT WE LEARNED THIS SESSION
+//
+// 1. REFERENCE IMAGE FEATURE (text-to-image-plugin)
+//    - The `referenceImage` option ({url, blur}) is fully wired on
+//      the CLIENT side. Plugin source confirms it reaches the server.
+//    - Two transport paths in imports/text-to-image-plugin/main.pjs:
+//        a) url is https/data: URL  -> embedded in iframe #hash
+//        b) url is Blob / blob: URL  -> converted to base64 data URL,
+//           sent via postMessage AFTER iframe posts "readyForData"
+//           handshake. Serial: iframe load -> readyForData -> parent
+//           posts data URL -> iframe decodes -> generation starts.
+//           No timeout/retry; missed handshake = reference never used.
+//    - For blobs, downscale before passing (canvas -> 512px) to cut
+//      base64 bloat + postMessage time. Prefer hosted URL path when
+//      possible (skips the handshake entirely).
+//    - SERVER-SIDE: the image is IGNORED. u/perchance confirmed on
+//      lemmy.world/post/17649782 (Aug 2024) that it's "one line of
+//      code to enable" but he paused it deliberately due to
+//      backwards-compat anxiety (controlnets/ipadapter/img2img
+//      landscape was shifting). Plan was to enable alongside the
+//      Flux model update + character/style reference. As of last
+//      public statement (May 2025), still not explicitly confirmed
+//      live. wthit56's test: "image is posted. But... not used?"
+//
+// 2. THE IMAGE-GENERATION API (reverse-engineered from /embed JS)
+//    Host: https://image-generation.perchance.org  (root = 404)
+//    Endpoints:
+//      POST /api/generate?userKey=&requestId=&adAccessCode=&__cacheBust=
+//           Body: {prompt, negativePrompt, seed, resolution,
+//                  guidanceScale, channel, subChannel, userKey,
+//                  adAccessCode, requestId, referenceImage?}
+//           Returns: {status, userKey, imageId, imageDownloadUrl,
+//                     fileExtension, seed, seeds, imageDataUrls,
+//                     prompt, negativePrompt, guidanceScale,
+//                     maybeNsfw, position, total,
+//                     havingTechnicalDifficulties}
+//      GET /api/verifyUser?thread=&__cacheBust=   (Cloudflare Turnstile)
+//      GET /api/checkUserVerificationStatus?userKey=
+//      GET /api/getUserQueuePosition?userKey=&requestId=
+//      GET /api/awaitExistingGenerationRequest?userKey=  (long-poll)
+//      GET /api/downloadTemporaryImage?imageId=   (40s timeout)
+//      GET /api/canExpireImageIds
+//      GET /api/imageTags?url=   (NSFW tag check — see skill docs)
+//    - NO model name is sent or returned. Model is fixed server-side.
+//    - 100s abort timeout in the embed. Per-thread userKey
+//      (maxThreadsPerUser slots) = the concurrency limit.
+//    - Flow: verifyUser -> POST /api/generate -> poll queue position
+//      -> get imageId inline OR long-poll awaitExisting -> download.
+//
+// 3. THE MODEL UPGRADE SAGA (u/perchance Lemmy history)
+//    - Aug 2024: names Flux explicitly. "next big model update (to
+//      Flux), hopefully within the next month or so."
+//    - Oct 2024: "really need to finally get around to upgrading the
+//      image models... within the next few weeks."
+//    - Mar 2025: "Currently I'm finalizing the big image generation
+//      model upgrade."
+//    - Apr 2025: "The model is 10x larger, so need literally an
+//      order of magnitude of optimizations... a few weeks away(tm)."
+//      Free+unlimited is the hard constraint.
+//    - May 2025: "The new model seems to be able to reliably produce
+//      images which bypass the old filtering system" — implies
+//      partial rollout / testing. No explicit "Flux is live" post.
+//    - Text model: "a popular open source 70B Llama-based model"
+//      (Oct 2024). Upgrade planned after image upgrade.
+//    - Self-hosting pointer: "ComfyUI or Forge WebUI" for images.
+//    - He NEVER names: automatic1111, tokenizers, CLIP, T5, VAE,
+//      LoRA, checkpoints, fp8, quantization, or the current image
+//      model's identity.
+//
+// 4. FORGE WEBUI (lllyasviel/stable-diffusion-webui-forge)
+//    - Fork of AUTOMATIC1111 SD-WebUI by the ControlNet author.
+//    - Headline: rewritten GPU memory management (VRAM dynamic
+//      management, "GPU Weight" slider, async queue/swap) — lets
+//      big models (Flux 12B) run on consumer GPUs.
+//    - Native Flux support: BNB NF4 + GGUF (Q8/Q5/Q4) quantization,
+//      LoRA support on most. This is the cheap-Flux path.
+//    - Based on Gradio 4 (right-mouse-button to move canvas quirk).
+//    - Synced to SD-WebUI 1.10.1; re-syncs every ~90 days.
+//    - LayerDiffuse transparent image editing integrated.
+//    - All ControlNets + IP-Adapters + preprocessors work.
+//    - Why u/perchance named it: NF4/GGUF Flux quantization is what
+//      makes "free + unlimited" theoretically possible. Vanilla a1111
+//      can't do this. Likely shape of perchance's backend (or was).
+//
+// 5. TEXT-GENERATION API (reverse-engineered from /embed JS +
+//    ai-text-plugin source fetched via fetch_generator)
+//    Host: https://text-generation.perchance.org  (root = 404)
+//    Embed page title: "AI Text Plugin Verifier"
+//
+//    *** THE MODEL IS NOT CONFIRMED — SEE BELOW ***
+//    The /embed JS hardcodes `modelId = "deepseek-ai/DeepSeek-R1-0528"`
+//    and fetches its tokenizer from HuggingFace:
+//      https://huggingface.co/deepseek-ai/DeepSeek-R1-0528/resolve/main/tokenizer.json
+//      https://huggingface.co/deepseek-ai/DeepSeek-R1-0528/resolve/main/tokenizer_config.json
+//    (mirrored at user.uploads.dev/file/f27e... and db8e... as fallback)
+//    BUT: this modelId is used ONLY for client-side token counting
+//    (the middle-out truncation logic). Any tokenizer with a compatible
+//    vocab would work. It is NOT evidence of the served model.
+//
+//    WHAT WE ACTUALLY KNOW:
+//    - The server serves some model, never named in the client.
+//    - u/perchance (Oct 2024): "a popular open source 70B Llama-based
+//      model" — that was ~2 years ago, almost certainly replaced.
+//    - u/perchance (Apr 2025): "the model is 10x larger" — 671B / 70B
+//      = 9.6x. This math points to a full 671B model, not a distill.
+//    - Community-observed "Chinese language mixup" era (DeepSeek
+//      models bleed Chinese into English outputs due to training
+//      data) — strong behavioral evidence it IS a DeepSeek model.
+//    - Embed has ZERO handling of reasoning/thinking-trace tokens
+//      (no matches for the R1 thinking-block tags, "reasoning",
+//      "cot", "thinking" in the embed JS). If R1 were served, the
+//      client would need to strip/hide its thinking trace.
+//
+//    BEST GUESS (NOT CONFIRMED):
+//    DeepSeek-V3 or V3-0324 (non-reasoning, 671B MoE, 37B active).
+//    Reasons:
+//    1. No reasoning-trace handling in client -> non-reasoning model.
+//    2. V3 is cheaper than R1 (no thinking tokens = fewer output
+//       tokens per request). For "free + unlimited" at scale, this
+//       matters a lot.
+//    3. V3-0324 released March 2025 — fits u/perchance's Apr 2025
+//       "few weeks away" timing.
+//    4. 671B MoE with 37B active params = the "dirt cheap for its
+//       quality" option that makes free+unlimited viable. FP8/GGUF
+//       quantization cuts VRAM further.
+//    R1-0528 (May 28 2025) is also timing-plausible but the absence
+//    of reasoning-trace handling argues against it. Could also be
+//    V3.1 (hybrid reasoning, Aug 2025) if a later switch happened.
+//
+//    The only way to confirm: empirical probing (reasoning-trace
+//    leakage, known model quirks) or asking u/perchance directly.
+//
+//    Architecture: hidden iframe (id="aiTextPluginEmbedIframe") loads
+//    /embed. Plugin postMessages {type:"startStream", postData,
+//    requestId} to it. Embed does verifyUser (Cloudflare Turnstile)
+//    then POSTs to /api/generate and streams SSE-like chunks back to
+//    plugin via postMessage {type:"streamData", requestId, value}.
+//
+//    ENDPOINTS:
+//      POST /api/generate?userKey=&thread=&requestId=&__cacheBust=
+//           Body (JSON): {instruction, startWith, stopSequences,
+//                         generatorName, instructionParts?,
+//                         didMiddleOut?, startWithTokenCount?,
+//                         instructionTokenCount?, _debug?}
+//           Returns: Server-Sent-Events stream of {error?, status?,
+//                    currentRequestId?, newRequestId?, text?}
+//                    Plus terminal: {status:"invalid_key"} etc.
+//      GET  /api/verifyUser?thread=&__cacheBust=  (Turnstile handshake)
+//      GET  /api/verifyUser?token=&thread=       (callback)
+//      GET  /api/checkUserVerificationStatus?userKey=
+//      GET  /api/checkRequestId?requestId=&userKey=
+//      GET  /api/awaitExistingGenerationRequest?userKey=  (long-poll)
+//      GET  /api/waitingButNotWaiting?userKey=&thread=&recentDebugEvents=
+//                 &instructionHash=&startWithHash=&fetchSentTime=
+//                 &lastPromptHashesByThread=&lastRequestIdByThread=
+//                 &recentRequestStartTimes=  (deadlock watchdog)
+//      POST /api/rateGeneratedText  {instruction, startWith,
+//                    generatedText, generatorName, score, reason}
+//      POST /api/clientPerformanceAnalytics  (telemetry)
+//      GET  /api/verificationDebug?status=fail|success|error-callback
+//
+//    KEY PARAMS / LIMITS:
+//    - maxThreadsPerUser = 2  (concurrency limit; vs ~unlimited for img)
+//    - maxContextTokens = 8000 - 1024 = 6976 (minus 570 if image attached)
+//      i.e. ~7K token context window for the user's instruction+startWith
+//    - approxCharsPerToken = 3.9 (base) / 3.4 (French — auto-detected)
+//    - IMAGE_TOKEN_COST = 570 per vision attachment (max 1 image,
+//      png/jpeg/webp, 768px long side, <=200KB target, >250KB rejected,
+//      EXIF stripped, PNG-first JPEG q0.88 fallback)
+//
+//    STREAMING / CHUNKS:
+//    - Not raw SSE; embed parses the response stream itself and emits
+//      {type:"streamData", requestId, value:{text}} postMessages.
+//    - value fields: error, status, currentRequestId, newRequestId, text
+//    - Accumulates generatedText += value.text server-side too.
+//    - Stop: client sends {type:"stopStream", requestId} -> embed adds
+//      requestId to requestIdsToStop and aborts the fetch controller
+//      ("abort_due_to_stop_stream"). Server also honors stopSequences.
+//    - Keepalive: requestIdKeepAliveCounts (max 20), watchdog pings.
+//    - Stale detection: if no chunk for 120s -> "stale" streamError.
+//
+//    CONTEXT COMPRESSION ("middle-out"):
+//    - If instruction/startWith exceeds 1.6 * maxContextTokens *
+//      approxCharsPerToken chars, embed runs middleOutWithoutTokenizer
+//      (fast heuristic) FIRST, before loading the tokenizer.
+//    - Then loads tokenizer (HF), computes real token counts, and runs
+//      middleOut(str, maxTokens) which keeps head+tail tokens, drops
+//      the middle — "middle-out" truncation. Sets didMiddleOut=true.
+//    - This is client-side pre-trimming before the server sees it,
+//      to keep requests within the 7K token budget.
+//
+//    VISION (instruction as array):
+//    - instruction can be [string, Blob] — at most ONE image Blob.
+//    - Embed encodes to {type:"image", mime, dataUrl} parts,
+//      builds postData.instructionParts (server-authoritative),
+//      keeps postData.instruction as concatenated text for token logic.
+//    - So DeepSeek-R1-0528 is being used in a vision/multimodal mode
+//      (or the server routes vision requests to a separate VLM).
+//
+//    WHAT'S NOT EXPOSED:
+//    - No temperature/topP/topK/maxTokens in the API — server-side
+//      defaults only. The plugin surface only exposes instruction,
+//      startWith, stopSequences. No sampler tuning for users.
+//    - No model selector — DeepSeek-R1-0528 is fixed.
+//    - stopSequences IS supported (passed in postData, enforced
+//      server-side; the stop sequence is included at end of response
+//      per the skill docs).
+//
+//    IMPLICATIONS FOR GENERATOR AUTHORS:
+//    - DeepSeek-R1 is a reasoning model — expect thinking traces
+//      potentially leaking into output unless server strips.
+//      BUT SEE EMPIRICAL PROBE BELOW — likely NOT R1.
+//    - 7K token context is SMALL for long RP/chat — the middle-out
+//      compression is why long ai-character-chat threads still work
+//      but "forget" middle details. For long context, summarize early.
+//    - 2-thread limit means only 2 concurrent generations per user.
+//    - French gets a separate chars/token estimate — other languages
+//      fall back to 3.9 (may over-truncate for CJK which is ~1-2
+//      chars/token, i.e. CJK users effectively get MORE context than
+//      they should, risking server-side truncation).
+//
+// 7. EMPIRICAL PROBE RESULTS (2026-07-18, via generateText)
+//    Ran two prompts through ai-text-plugin and measured timing +
+//    checked output for reasoning-trace markers (the R1 thinking-
+//    block tags, built from char codes to dodge a transport bug that
+//    truncates messages containing those literals).
+//
+//    PROBE 1 (easy): 3L/5L jug problem, "walk through the steps"
+//      - Time to first chunk: 7088ms
+//      - Total time: 15.2s, 202 chunks, 614 chars
+//      - Reasoning markers: 0 open, 0 close, 0 "think" mentions
+//      - Chinese chars: 0
+//      - Output: direct step-by-step solution, no preamble
+//
+//    PROBE 2 (hard): river fencing calculus optimization
+//      - Time to first chunk: 1751ms  <-- FASTER than easy problem!
+//      - Total time: 20.0s, 442 chunks, 1311 chars
+//      - Reasoning markers: 0 open, 0 close
+//      - Chinese chars: 0
+//      - Output: straight to "Let x be...", full calculus work
+//
+//    KEY FINDING: The HARDER problem started streaming FASTER
+//    (1.75s vs 7.1s). This is the OPPOSITE of what we'd expect if
+//    R1 were running with server-side reasoning stripping (a harder
+//    problem should trigger MORE internal thinking = LONGER delay
+//    before first visible chunk). The delay appears to be just
+//    network/queue variance, not hidden reasoning.
+//
+//    THREE EVIDENCE VECTORS NOW POINT TO V3, NOT R1:
+//    1. Zero reasoning-trace markers in output (both probes)
+//    2. Time-to-first-chunk does NOT scale with problem difficulty
+//       (rules out hidden reasoning / R1-with-stripping)
+//    3. Output goes straight to solution — no reasoning preamble
+//
+//    LIMITS OF THIS EVIDENCE:
+//    - Only 2 probes, small sample. Could be noise.
+//    - Server COULD strip reasoning AND artificially delay easy
+//      problems to disguise it (paranoid scenario, unlikely).
+//    - Could also be V3.1 (hybrid reasoning, Aug 2025) running in
+//      non-reasoning mode. Or a different DeepSeek variant entirely.
+//    - No Chinese-mixup triggered in these probes (both were English
+//      math). Would need a different prompt to test that quirk.
+//
+//    REPRODUCIBLE: anyone can run the same two prompts via
+//    ai-text-plugin and compare timing. The probe code is trivial —
+//    just generateText with onChunk timing + a check for the
+//    thinking-block tags (build them from char codes to avoid the
+//    transport truncation bug).
+// ============================================================
+//
+// 8. THE TRANSPORT TRUNCATION BUG (discovered this session)
+//    - When the AI helper's output contains the literal character
+//      sequence of R1's thinking-block CLOSING tag (angle-bracket,
+//      slash, t-h-i-n-k, angle-bracket), the message gets cut off
+//      mid-sentence at that point. Happened 3x in this session.
+//    - Something in the chat transport interprets that token as an
+//      end-of-stream/end-of-turn marker and truncates.
+//    - Workaround: build the string from char codes
+//      (String.fromCharCode) instead of writing it literally, or
+//      describe it in words.
+//    - Not a feature, a leak in the plumbing. Worth noting.
+// ============================================================
+//
+// 6. SESSION-FILE CAVEAT
+//    - Each chat session gets a FRESH ephemeral workspace. Refreshing
+//      the browser = new session = files gone. Only main.pjs +
+//      index.html + imports/ persist (they ship with the generator).
+//    - This note lives in main.pjs so it survives. To move to
+//      kv-plugin later, migrate this block.
+// ============================================================
+
+async genWithRef(prompt, seed, refBlobUrl, blur) =>
+  let opts = {
+    prompt: prompt,
+    seed: seed,
+    resolution: "512x512",
+  };
+  if(refBlobUrl && refBlobUrl.length > 0) {
+    opts.referenceImage = {
+      url: refBlobUrl,
+      blur: blur,
+    };
+  }
+  return await image(opts);

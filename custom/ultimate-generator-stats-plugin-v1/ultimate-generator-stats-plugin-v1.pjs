@@ -1,0 +1,159 @@
+generatorStatsV1 (generatorName, dataType) =>
+  if(generatorName === null) generatorName = window.generatorName;
+  if(dataType == undefined) {
+    dataType = generatorName;
+    generatorName = window.generatorName;
+  }
+
+  if(dataType === undefined) return "(error: missing parameter)";
+
+  if(
+    dataType !== "views" &&
+    dataType !== "lastEditTime" &&
+    dataType !== "viewsRaw" &&
+    dataType !== "viewsShort" &&
+    dataType !== "viewsCompact" &&
+    dataType !== "lastEditTimeShort" &&
+    dataType !== "lastEditTimeMs" &&
+    dataType !== "lastEditTimeIso" &&
+    dataType !== "lastEditTimestamp" &&
+    dataType !== "badge" &&
+    dataType !== "json"
+  ) {
+    return "(error: invalid dataType)";
+  }
+
+  if(!window.generatorStatsPluginCache) window.generatorStatsPluginCache = {};
+
+  if(typeof window.generatorStatsPluginCache[generatorName] === "string") {
+    return "<span>" + window.generatorStatsPluginCache[generatorName] + "</span>";
+  }
+
+  if(window.generatorStatsPluginCache[generatorName]) {
+    return "<span>" + formatData(window.generatorStatsPluginCache[generatorName])[dataType] + "</span>";
+  }
+
+  let elId = ("genstats-" + Math.random()).replace(".","");
+  let html = "<span id='" + elId + "'>...</span>";
+
+  (async () => {
+    let url = "/api/getGeneratorStats?name=" + encodeURIComponent(generatorName);
+    let res = await fetch(url);
+    let json = await res.json();
+
+    if(json.status !== "success") {
+      let msg = "(" + json.status + ")";
+      window.generatorStatsPluginCache[generatorName] = msg;
+      let el = document.querySelector("#" + elId);
+      if(el) el.innerHTML = msg;
+      return;
+    }
+
+    window.generatorStatsPluginCache[generatorName] = json.data;
+
+    let interval = setInterval(() => {
+      let el = document.querySelector("#" + elId);
+      if(el) {
+        el.innerHTML = formatData(json.data)[dataType];
+        clearInterval(interval);
+      }
+    }, 50);
+  })();
+
+  return html;
+
+
+
+formatData (g) =>
+  g = JSON.parse(JSON.stringify(g));
+
+  if(!g.views) g.views = 0;
+
+  let viewsRaw = g.views;
+
+  let viewsShort;
+  if(viewsRaw > 999) {
+    viewsShort = (viewsRaw/1000).toFixed(1) + "k";
+  } else {
+    viewsShort = viewsRaw;
+  }
+
+  let viewsCompact = viewsRaw;
+  if(viewsCompact >= 1000) {
+    let units = ["", "K", "M", "B", "T"];
+    let u = 0;
+    let n = viewsCompact;
+    while(n >= 1000 && u < units.length - 1) {
+      n = n / 1000;
+      u = u + 1;
+    }
+    viewsCompact = n.toFixed(1) + units[u];
+  }
+
+  g.views = viewsShort;
+  g.viewsRaw = viewsRaw;
+  g.viewsShort = viewsShort;
+  g.viewsCompact = viewsCompact;
+
+  let ts = g.lastEditTime ? g.lastEditTime : 0;
+  let diffMs = Date.now() - ts;
+  if(diffMs < 0) diffMs = 0;
+  let diffSec = diffMs / 1000;
+
+  let relLong;
+  if(diffSec > 60*60*24*30*12) {
+    let t = Math.round(diffSec/(60*60*24*30*12));
+    relLong = t + " year" + (t==1?"":"s") + " ago";
+  } else if(diffSec > 60*60*24*30) {
+    let t = Math.round(diffSec/(60*60*24*30));
+    relLong = t + " month" + (t==1?"":"s") + " ago";
+  } else if(diffSec > 60*60*24) {
+    let t = Math.round(diffSec/(60*60*24));
+    relLong = t + " day" + (t==1?"":"s") + " ago";
+  } else if(diffSec > 60*60) {
+    let t = Math.round(diffSec/(60*60));
+    relLong = t + " hour" + (t==1?"":"s") + " ago";
+  } else if(diffSec > 60) {
+    let t = Math.round(diffSec/60);
+    relLong = t + " minute" + (t==1?"":"s") + " ago";
+  } else {
+    let t = Math.round(diffSec);
+    relLong = t + " second" + (t==1?"":"s") + " ago";
+  }
+
+  let relShort;
+  let s = Math.round(diffSec);
+  if(s >= 60*60*24*365) {
+    relShort = Math.round(s/(60*60*24*365)) + "y";
+  } else if(s >= 60*60*24*30) {
+    relShort = Math.round(s/(60*60*24*30)) + "mo";
+  } else if(s >= 60*60*24) {
+    relShort = Math.round(s/(60*60*24)) + "d";
+  } else if(s >= 60*60) {
+    relShort = Math.round(s/(60*60)) + "h";
+  } else if(s >= 60) {
+    relShort = Math.round(s/60) + "m";
+  } else {
+    relShort = s + "s";
+  }
+
+  let iso;
+  try {
+    let d = new Date(ts);
+    if(d.toISOString) iso = d.toISOString();
+    else iso = "" + ts;
+  } catch(e) {
+    iso = "" + ts;
+  }
+
+  g.lastEditTime = relLong;
+  g.lastEditTimeShort = relShort;
+  g.lastEditTimeMs = diffMs;
+  g.lastEditTimeIso = iso;
+  g.lastEditTimestamp = ts;
+
+  g.badge = g.viewsShort + " views • edited " + relLong;
+
+  g.json = JSON.stringify(g);
+
+  return g;

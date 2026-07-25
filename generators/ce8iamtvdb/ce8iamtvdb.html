@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ce8iamtvdb — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="appCtn" style="max-width:600px; margin:40px auto; padding:20px; font-family:sans-serif; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+  <h1 style="color:#ff7139; text-align:center; margin-bottom:20px;">Firefox Android Generator</h1>
+  
+  <button id="generateBtn" style="width:100%; padding:15px; font-size:18px; background-color:#ff7139; color:white; border:none; border-radius:4px; cursor:pointer; transition:background 0.2s;">Generate Simulation</button>
+  
+  <div id="loadingEl" hidden style="text-align:center; margin-top:20px; color:#666;">Calculating compatibility...</div>
+
+  <div id="resultCtn" hidden style="margin-top:20px; padding:20px; background:#f4f4f4; border-radius:4px;">
+    <h3 style="margin-top:0; border-bottom:1px solid #ccc; padding-bottom:10px;">Simulation Results</h3>
+    
+    <div style="margin-bottom:15px;">
+      <strong>Android Version:</strong> <span id="osOutputEl">--</span>
+    </div>
+    
+    <div style="margin-bottom:15px;">
+      <strong>Selected ABIs:</strong> <span id="abiOutputEl">--</span>
+    </div>
+
+    <div style="margin-bottom:15px;">
+      <strong>NEON Support:</strong> <span id="neonOutputEl">--</span>
+    </div>
+
+    <div style="margin-top:20px; padding:15px; background:#fff; border-left:4px solid #ff7139;">
+      <strong>Resulting Firefox Version:</strong><br>
+      <span id="ffOutputEl" style="font-size:24px; font-weight:bold; color:#333;">--</span>
+    </div>
+
+    <div id="poolInfoEl" style="font-size:12px; color:#888; margin-top:10px; text-align:right;"></div>
+  </div>
+
+<script>
+  // --- Data Definitions ---
+  
+  // 5. All possible variables for Android versions
+  let androidVersions = [
+    "2.0", "2.0.1", "2.1", "2.2", "2.2.1", "2.2.2", "2.2.3", "2.3", "2.3.1", "2.3.2", "2.3.3", "2.3.4", "2.3.5", "2.3.6", "2.3.7", 
+    "3.0", "3.1", "3.2", "3.2.1", "3.2.2", "3.2.4", "3.2.6", 
+    "4.0", "4.0.1", "4.0.2", "4.0.3", "4.0.4", 
+    "4.1", "4.1.1", "4.1.2", "4.2", "4.2.1", "4.2.2", "4.3", "4.3.1", "4.4", "4.4.1", "4.4.2", "4.4.3", "4.4.4", 
+    "5.0", "5.0.1", "5.0.2", "5.1", "5.1.1", 
+    "6.0", "6.0.1", 
+    "7.0", "7.1", "7.1.1", "7.1.2", 
+    "8.0", "8.1", "9.0", "10", "11", "12", "12.1", 
+    "13", "14", "15", "16", "16.0.1", "16.1", "17"
+  ];
+
+  // 6. All possible variables for Firefox versions
+  let firefoxVersions = [
+    "4.0", "4.0.1", "5.0", "6.0", "6.0.1", "6.0.2", "7.0", "7.0.1", "8.0", "9.0", "10.0", "10.0.1", "10.0.2", 
+    "14.0", "14.0.1", "14.0.2", "15.0", "15.0.1", "16.0", "16.0.1", "16.0.2", "17.0", "17.0.1", "18.0", "18.0.1", 
+    "19.0", "19.0.1", "19.0.2", "20.0", "20.0.1", "21.0", "22.0", "23.0", "24.0", "25.0", "25.0.1", "26.0", 
+    "26.0.1", "27.0", "28.0", "29.0", "29.0.1", "30.0", "31.0", "32.0", "32.0.1", "33.0", "33.1", "34.0", "35.0", 
+    "35.0.1", "36.0", "36.0.1", "37.0", "37.0.1", "37.0.2", "38.0", "38.0.1", "39.0", "40.0", "41.0", "42.0", "43.0", 
+    "44.0", "45.0", "45.0.1", "45.0.2", "46.0", "46.0.1", "47.0", "48.0", "49.0", "50.0", "50.0.1", "50.0.2", "51.0", 
+    "52.0", "52.0.1", "53.0", "53.0.1", "53.0.2", "54.0", "54.0.1", "55.0", "55.0.1", "55.0.2", "56.0", "57.0", "58.0", 
+    "58.0.1", "58.0.2", "59.0", "59.0.1", "59.0.2", "60.0", "60.0.1", "61.0", "62.0", "63.0", "64.0", "65.0", "66.0", 
+    "66.0.1", "66.0.2", "67.0", "68.0", "68.1", "68.2", "68.3", "68.4", "68.5", "68.6", "68.7", "68.8", "68.9", 
+    "68.10", "68.11.0", "79.0", "80.0", "81.0", "82.0", "83.0", "84.0", "85.0", "86.0", "87.0", "88.0", "89.0", "90.0", 
+    "91.0", "92.0", "93.0", "94.0", "95.0", "95.1", "95.2", "96.0", "97.0", "98.0", "99.0", "100.0", "101.0", "102.0", "103.0", "104.0", 
+    "105.0", "106.0", "107.0", "108.0", "109.0", "110.0", "111.0", "112.0", "113.0", "114.0", "115.0", "116.0", "117.0", 
+    "118.0", "119.0", "120.0", "121.0", "122.0", "123.0", "124.0", "125.0", "126.0", "127.0", "128.0", "129.0", "130.0", 
+    "131.0", "132.0", "133.0", "134.0", "134.0.1", "135.0", "135.0.1", "136.0", "136.0.1", "137.0", "138.0", "139.0", "139.0.3", 
+    "140.0", "140.0.4", "141.0", "141.0.3", "142.0", "142.0.1", "143.0", "143.0.4", "144.0", "144.0.2", "145.0", 
+    "145.0.2", "146.0", "146.0.1", "147.0", "147.0.1", "147.0.2", "147.0.3", "147.0.4", "148.0", "148.0.1", "148.0.2", "149.0", "149.0.1",
+    "149.0.2", "150.0", "150.0.1", "150.0.2", "150.0.3", "151.0", "151.0.2", "151.0.3", "151.0.4", "152.0", "152.0.1", "152.0.2", "152.0.4",
+    "152.0.5", "152.0.6", "153.0"
+  ];
+
+  // 1. Data Foundation: ABI Rules
+  let abiRules = {
+    "armeabi-v7a": { minOS: "2.0", maxOS: "17", minFF: "4.0", maxFF: "153.0", neonCap: "52.0.1" },
+    "arm64-v8a": { minOS: "5.0", maxOS: "17", minFF: "55.0", maxFF: "153.0" },
+    "x86": { minOS: "2.3", maxOS: "9.0", minFF: "26.0", maxFF: "143.0.4" },
+    "x86-64": { minOS: "5.0", maxOS: "17", minFF: "63.0", maxFF: "153.0" },
+    "armeabi": { minOS: "2.0", maxOS: "4.3.1", minFF: "19.0", maxFF: "31.0" },
+  };
+
+  // Helper: Parse version string to comparable array [major, minor, patch]
+  function parseVer(v) {
+    return v.split('.').map(Number);
+  }
+
+  // Helper: Compare versions. Returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2
+  function compareVer(v1, v2) {
+    let p1 = parseVer(v1);
+    let p2 = parseVer(v2);
+    for(let i=0; i<Math.max(p1.length, p2.length); i++) {
+      let n1 = p1[i] || 0;
+      let n2 = p2[i] || 0;
+      if(n1 < n2) return -1;
+      if(n1 > n2) return 1;
+    }
+    return 0;
+  }
+
+  // Helper: Check if version v is >= min and <= max
+  function isVerInRange(v, min, max) {
+    return compareVer(v, min) >= 0 && compareVer(v, max) <= 0;
+  }
+
+  // Helper: Get OS Firefox Constraints based on Step 4
+  function getOSConstraints(os) {
+    // 4. Android OS vs Firefox Version Mapping
+    // Returns { minFF, maxFF } or null
+    if (["2.0", "2.0.1"].includes(os)) return { min: "4.0", max: "6.0.2" };
+    if (["2.1"].includes(os)) return { min: "4.0", max: "10.0.2" };
+    if (["2.2", "2.2.1", "2.2.2", "2.2.3"].includes(os)) return { min: "4.0", max: "31.0" };
+    if (["2.3", "2.3.1", "2.3.2", "2.3.3", "2.3.4", "2.3.5", "2.3.6", "2.3.7"].includes(os)) return { min: "4.0", max: "47.0" };
+    if (["3.0", "3.1", "3.2", "3.2.1", "3.2.2", "3.2.4", "3.2.6"].includes(os)) return { min: "4.0", max: "45.0.2" };
+    if (["4.0", "4.0.1", "4.0.2"].includes(os)) return { min: "14.0", max: "45.0.2" };
+    if (["4.0.3", "4.0.4"].includes(os)) return { min: "14.0", max: "55.0.2" };
+    if (["4.1", "4.1.1", "4.1.2", "4.2", "4.2.1", "4.2.2", "4.3", "4.3.1", "4.4", "4.4.1", "4.4.2", "4.4.3", "4.4.4"].includes(os)) return { min: "14.0", max: "68.11.0" };
+    if (["5.0", "5.0.1", "5.0.2", "5.1", "5.1.1", "6.0", "6.0.1", "7.0", "7.1", "7.1.1", "7.1.2"].includes(os)) return { min: "32.0", max: "143.0.4" };
+    if (["8.0", "8.1", "9.0"].includes(os)) return { min: "32.0", max: "153.0" };
+    if (["10", "11", "12", "12.1", "13", "14"].includes(os)) return { min: "53.0", max: "153.0" };
+    if (["15", "16", "16.0.1", "16.1", "17"].includes(os)) return { min: "63.0", max: "153.0" };
+    return null;
+  }
+
+  // Helper: Compare Android Versions using semantic versioning
+  function isOSInRange(target, min, max) {
+    return compareVer(target, min) >= 0 && compareVer(target, max) <= 0;
+  }
+
+  // --- Main Logic ---
+
+  generateBtn.onclick = async function() {
+    // Reset UI
+    resultCtn.hidden = true;
+    loadingEl.hidden = false;
+    generateBtn.disabled = true;
+    
+    // Artificial delay to allow UI to update
+    await new Promise(r => setTimeout(r, 100));
+
+    try {
+      generateInternal();
+    } catch (error) {
+      console.error(error);
+      loadingEl.textContent = "Error occurred:", (error);
+    } finally {
+      loadingEl.hidden = true;
+      generateBtn.disabled = false;
+    }
+  };
+
+  function generateInternal() {
+    let attempts = 0;
+    let maxAttempts = 50;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+
+      // 1. Randomize OS and NEON first
+      // Apply the same logic that chooses the browser versions, to the OS versions.
+      let osPool = [...androidVersions];
+      osPool.sort((a, b) => compareVer(b, a)); // Sort Newest to Oldest
+
+      let osIndex = 0;
+      let randomOS = null;
+
+      // New Mechanism: Cycle through versions
+      while (osIndex < osPool.length) {
+        let rng = Math.floor(Math.random() * 100) + 1;
+        if (rng >= 95) {
+          randomOS = osPool[osIndex];
+          break;
+        }
+        osIndex++;
+      }
+      // If loop finishes without a result, stop at the last version (oldest)
+      if (!randomOS) {
+        randomOS = osPool[osPool.length - 1];
+      }
+
+      let hasNeon = Math.random() < 0.5;
+
+      // 2. Determine Valid ABIs based on NEON and OS Constraints
+      let compatibleAbis = [];
+
+      if (hasNeon) {
+        // If NEON is true, all ABIs can be used except armeabi and mips (per instruction)
+        compatibleAbis = Object.keys(abiRules).filter(abi => abi !== "armeabi" && abi !== "mips");
+      } else {
+        // If NEON is false, only specific ABIs are allowed
+        // Base list: armeabi-v7a, x86, armeabi, mips
+        compatibleAbis = ["armeabi-v7a", "x86", "armeabi"];
+
+        // Exclusion: x86 excluded on Android 5.0+
+        if (compareVer(randomOS, "5.0") >= 0) {
+          compatibleAbis = compatibleAbis.filter(a => a !== "x86");
+        }
+
+        // Exclusion: armeabi-v7a excluded on Android 6.0+
+        if (compareVer(randomOS, "6.0") >= 0) {
+          compatibleAbis = compatibleAbis.filter(a => a !== "armeabi-v7a");
+        }
+      }
+
+      // Filter by the ABI's own OS compatibility rules (e.g., armeabi max OS 4.4)
+      let validAbis = compatibleAbis.filter(abi => {
+        let rules = abiRules[abi];
+        return rules && isOSInRange(randomOS, rules.minOS, rules.maxOS);
+      });
+
+      if (validAbis.length === 0) {
+        continue; // Retry with different OS/NEON combo
+      }
+
+      // 3. Randomly select 1 to 3 ABIs from the valid list
+      let n = Math.floor(Math.random() * 3) + 1; // 1 to 3
+      // Limit n to the number of available valid ABIs to avoid errors
+      if (n > validAbis.length) n = validAbis.length;
+
+      // Shuffle and pick
+      let shuffledAbis = validAbis.sort(() => 0.5 - Math.random());
+      let selectedAbis = shuffledAbis.slice(0, n);
+
+      // 4. Union Logic for Firefox Versions (Support mixed ABI pairs)
+      // Instead of strict intersection, we look for versions supported by ANY of the selected ABIs.
+      // This allows an unsupported ABI (e.g., x86 capped at 143) to stay alive if paired with a supported ABI (e.g., arm64-v8a goes to 151).
+      let possibleVersions = [];
+      let osConstraints = getOSConstraints(randomOS);
+
+      if (!osConstraints) continue;
+
+      for (let abi of selectedAbis) {
+        let rules = abiRules[abi];
+        
+        // Determine FF Range for this ABI
+        let abiMinFF = rules.minFF;
+        let abiMaxFF = rules.maxFF;
+
+        // Apply NEON cap (if applicable)
+        // Only armeabi-v7a has a NEON cap.
+        if (abi === "armeabi-v7a" && !hasNeon && rules.neonCap) {
+          abiMaxFF = rules.neonCap;
+        }
+
+        // Intersect with OS Constraints to find valid range for THIS specific ABI
+        let finalMin = compareVer(abiMinFF, osConstraints.min) > 0 ? abiMinFF : osConstraints.min;
+        let finalMax = compareVer(abiMaxFF, osConstraints.max) < 0 ? abiMaxFF : osConstraints.max;
+
+        // Find all versions in this specific range
+        let abiValidVersions = firefoxVersions.filter(ver => isVerInRange(ver, finalMin, finalMax));
+        
+        // Add to the global possible versions (Union logic)
+        possibleVersions.push(...abiValidVersions);
+      }
+
+      // Deduplicate versions since multiple ABIs might support the same version
+      let uniqueVersions = [...new Set(possibleVersions)];
+      
+      let versionPool = uniqueVersions;
+
+      // Final Selection
+      if (versionPool.length > 0) {
+        // Sort pool descending (Newest -> Oldest) so we can "go down the list"
+        versionPool.sort((a, b) => compareVer(b, a));
+
+        let selectedIndex = 0;
+        let resultVer = null;
+
+        // New Mechanism: Cycle through versions
+        while (selectedIndex < versionPool.length) {
+          // RNG from 1 to 100
+          let rng = Math.floor(Math.random() * 100) + 1;
+
+          if (rng >= 95) {
+            // Success! Stop at this version
+            resultVer = versionPool[selectedIndex];
+            break;
+          }
+
+          // Failed check (rng < 95), go down 1 version
+          selectedIndex++;
+        }
+
+        // If loop finishes without a result (cycled through all versions without hitting 95+),
+        // we stop at the last version (oldest compatible).
+        if (!resultVer) {
+          resultVer = versionPool[versionPool.length - 1];
+        }
+
+        // UI Output
+        osOutputEl.textContent = randomOS;
+        abiOutputEl.textContent = selectedAbis.join(", ");
+        neonOutputEl.textContent = hasNeon ? "Yes" : "No";
+        ffOutputEl.textContent = resultVer;
+        poolInfoEl.textContent = `Pool size: ${versionPool.length}`;
+        resultCtn.hidden = false;
+        return; // Success
+      }
+    }
+
+    // If loop finishes without return
+    resultCtn.hidden = false;
+    osOutputEl.textContent = "Error";
+    abiOutputEl.textContent = "Too many retries";
+    neonOutputEl.textContent = "--";
+    ffOutputEl.textContent = "Incompatible Configuration";
+  }
+
+</script>
+</div>
+</body>
+</html>

@@ -1,0 +1,256 @@
+$meta
+  title = Command Router Kit
+  description = Command registration, aliasing, middleware, and dispatch orchestration for modular generators.
+  image = https://user.uploads.dev/file/8c7563d0ece7c9ed36c8a83f8361a7a7.webp
+  tags = command routing, middleware, modular architecture, runtime control
+
+ensureCommandRouterStore() =>
+  if(!window.__commandRouterKitV1) {
+    window.__commandRouterKitV1 = {
+      routes: {},
+      aliases: {},
+      middleware: [],
+      history: []
+    };
+  }
+  return window.__commandRouterKitV1;
+
+normalizeCommand(name) =>
+  const raw = name === undefined || name === null ? "" : String(name).trim().toLowerCase();
+  return raw;
+
+toArray(value) =>
+  if(Array.isArray(value)) {
+    return value;
+  }
+  if(value === undefined || value === null || value === "") {
+    return [];
+  }
+  if(typeof value === "string") {
+    return value.split(",").map(part => part.trim()).filter(Boolean);
+  }
+  return [value];
+
+parse(inputText, separator) =>
+  const text = String(inputText || "").trim();
+  if(text === "") {
+    return { command: "", args: [] };
+  }
+
+  const sep = separator === undefined ? " " : String(separator);
+  if(sep === " ") {
+    const parts = text.split(/\s+/).filter(Boolean);
+    return {
+      command: normalizeCommand(parts[0]),
+      args: parts.slice(1)
+    };
+  }
+
+  const parts = text.split(sep).map(part => part.trim());
+  return {
+    command: normalizeCommand(parts[0]),
+    args: parts.slice(1).filter(Boolean)
+  };
+
+resolveCommand(name) =>
+  const command = normalizeCommand(name);
+  if(command === "") return "";
+
+  const store = ensureCommandRouterStore();
+  if(store.routes.hasOwnProperty(command)) {
+    return command;
+  }
+
+  if(store.aliases.hasOwnProperty(command)) {
+    return normalizeCommand(store.aliases[command]);
+  }
+
+  return "";
+
+register(commandName, handler, mode) =>
+  const name = normalizeCommand(commandName);
+  if(name === "") return "error: empty command";
+
+  const store = ensureCommandRouterStore();
+  if(typeof handler !== "function") {
+    return "error: handler must be a function";
+  }
+
+  if(store.routes.hasOwnProperty(name) && mode !== "replace") {
+    return "error: command exists";
+  }
+
+  store.routes[name] = handler;
+  return name;
+
+registerValue(commandName, value, mode) =>
+  const name = normalizeCommand(commandName);
+  if(name === "") return "error: empty command";
+
+  const store = ensureCommandRouterStore();
+  if(store.routes.hasOwnProperty(name) && mode !== "replace") {
+    return "error: command exists";
+  }
+
+  store.routes[name] = () => value;
+  return name;
+
+alias(aliasName, targetName, mode) =>
+  const aliasKey = normalizeCommand(aliasName);
+  const target = normalizeCommand(targetName);
+  if(aliasKey === "" || target === "") return "error: invalid alias";
+
+  const store = ensureCommandRouterStore();
+  if(store.aliases.hasOwnProperty(aliasKey) && mode !== "replace") {
+    return "error: alias exists";
+  }
+
+  store.aliases[aliasKey] = target;
+  return aliasKey;
+
+use(middlewareFn) =>
+  const store = ensureCommandRouterStore();
+  if(typeof middlewareFn !== "function") {
+    return "error: middleware must be a function";
+  }
+
+  store.middleware.push(middlewareFn);
+  return store.middleware.length;
+
+run(commandText, context, separator) =>
+  const parsed = parse(commandText, separator);
+  return dispatch(parsed.command, parsed.args, context);
+
+dispatch(commandName, args, context) =>
+  const store = ensureCommandRouterStore();
+  const resolved = resolveCommand(commandName);
+  if(resolved === "") {
+    return { ok: false, error: "unknown command", command: normalizeCommand(commandName) };
+  }
+
+  const payload = {
+    command: resolved,
+    args: toArray(args),
+    context: context === undefined ? {} : context
+  };
+
+  for(let i = 0; i < store.middleware.length; i += 1) {
+    const changed = store.middleware[i](payload);
+    if(changed && typeof changed === "object") {
+      if(changed.command !== undefined) {
+        payload.command = normalizeCommand(changed.command);
+      }
+      if(changed.args !== undefined) {
+        payload.args = toArray(changed.args);
+      }
+      if(changed.context !== undefined) {
+        payload.context = changed.context;
+      }
+      if(changed.stop === true) {
+        const blocked = {
+          ok: false,
+          blocked: true,
+          command: payload.command,
+          args: payload.args
+        };
+        store.history.push(blocked);
+        return blocked;
+      }
+    }
+  }
+
+  const route = store.routes[payload.command];
+  if(typeof route !== "function") {
+    return { ok: false, error: "route is not callable", command: payload.command };
+  }
+
+  let result;
+  try {
+    result = route(payload.args, payload.context, payload.command);
+  } catch(error) {
+    const failed = {
+      ok: false,
+      command: payload.command,
+      args: payload.args,
+      error: String(error && error.message ? error.message : error)
+    };
+    store.history.push(failed);
+    return failed;
+  }
+
+  const success = {
+    ok: true,
+    command: payload.command,
+    args: payload.args,
+    result: result
+  };
+  store.history.push(success);
+  return success;
+
+has(commandName) =>
+  const resolved = resolveCommand(commandName);
+  return resolved !== "";
+
+remove(commandName) =>
+  const name = normalizeCommand(commandName);
+  if(name === "") return false;
+
+  const store = ensureCommandRouterStore();
+  let removed = false;
+
+  if(store.routes.hasOwnProperty(name)) {
+    delete store.routes[name];
+    removed = true;
+  }
+
+  if(store.aliases.hasOwnProperty(name)) {
+    delete store.aliases[name];
+    removed = true;
+  }
+
+  return removed;
+
+list(separator) =>
+  const sep = separator === undefined ? "," : String(separator);
+  return Object.keys(ensureCommandRouterStore().routes).join(sep);
+
+aliases(separator) =>
+  const sep = separator === undefined ? "," : String(separator);
+  return Object.keys(ensureCommandRouterStore().aliases).join(sep);
+
+history(limit) =>
+  const store = ensureCommandRouterStore();
+  let max = Number(limit);
+  if(!Number.isFinite(max) || max <= 0) {
+    max = store.history.length;
+  }
+  return store.history.slice(Math.max(0, store.history.length - max));
+
+clear(mode) =>
+  const store = ensureCommandRouterStore();
+  const routesRemoved = Object.keys(store.routes).length;
+  const aliasesRemoved = Object.keys(store.aliases).length;
+
+  store.routes = {};
+  store.aliases = {};
+
+  if(mode === "all") {
+    store.middleware = [];
+    store.history = [];
+  }
+
+  return {
+    routesRemoved: routesRemoved,
+    aliasesRemoved: aliasesRemoved,
+    middlewareCount: store.middleware.length,
+    historyCount: store.history.length
+  };
+
+exportState() =>
+  const store = ensureCommandRouterStore();
+  return {
+    routes: Object.keys(store.routes),
+    aliases: store.aliases,
+    middlewareCount: store.middleware.length,
+    historyCount: store.history.length
+  };

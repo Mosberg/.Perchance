@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-nsfw-character- — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="ageVerifyCtn" style="position:fixed; inset:0; background:rgba(0,0,0,0.96); z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; text-align:center;">
+  <h2>Age Verification Required</h2>
+  <p>This application contains mature themes and AI-generated companion content.<br>You must be 18 years or older to proceed.</p>
+  <button id="ageVerifyBtn" style="padding:12px 28px; font-size:16px; cursor:pointer; margin-top:12px;" onclick="verifyAge()">I am 18+ / Enter</button>
+</div>
+
+<div id="navBarEl" style="display:flex; gap:10px; padding:10px; background:#1a1a20; border-bottom:1px solid #333;">
+  <button onclick="showView('library')">📚 Library</button>
+  <button onclick="resetEditor(); showView('editor')">➕ New Character</button>
+  <button onclick="showView('chat')">💬 Chat</button>
+</div>
+
+<div id="libraryCtn" style="padding:16px;">
+  <h2>Character Library</h2>
+  <div id="charGridCtn" style="display:flex; flex-wrap:wrap; gap:12px; margin-top:10px;"></div>
+</div>
+
+<div id="editorCtn" hidden style="padding:16px; max-width:640px;">
+  <h2>Character Editor</h2>
+  <div id="editorFormCtn" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+    <input id="charNameInput" placeholder="Character Name">
+    <input id="charCreatorInput" placeholder="Creator Name">
+    <input id="charTagsInput" placeholder="Tags (comma separated)">
+    <input id="charTraitsInput" placeholder="Core Traits (comma separated)">
+    <input id="charQuirksInput" placeholder="Speech Quirks (comma separated)">
+    <input id="charKinksInput" placeholder="NSFW Kinks / Preferences (comma separated)">
+    <input id="charLimitsInput" placeholder="NSFW Limits / Hard No's (comma separated)">
+    <textarea id="charDescInput" placeholder="Visual Base Description (appearance, clothing, vibe...)" rows="4"></textarea>
+    <input id="charStylesInput" placeholder="Style References (e.g. anime, digital art, realistic)">
+    <label>Pose Bias: <span id="poseValEl">0.5</span></label>
+    <input id="charPoseInput" type="range" min="0" max="1" step="0.1" value="0.5" oninput="poseValEl.textContent=this.value">
+    <label>Explicit / Modesty Bias: <span id="modestyValEl">0.5</span></label>
+    <input id="charModestyInput" type="range" min="0" max="1" step="0.1" value="0.5" oninput="modestyValEl.textContent=this.value">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">
+      <button id="saveCharBtn" onclick="saveCharacter()">💾 Save Character</button>
+      <button id="previewCharBtn" onclick="generateCharPreview()">🎨 Preview Image</button>
+      <button onclick="showView('library')">↩ Cancel</button>
+    </div>
+    <img id="previewImgEl" style="max-width:320px; max-height:320px; display:none; border:1px solid #444; border-radius:6px; margin-top:8px;">
+  </div>
+</div>
+
+<div id="chatCtn" hidden style="padding:16px; display:flex; flex-direction:column; height:calc(100vh - 60px);">
+  <div style="display:flex; gap:12px; padding:10px; background:#1a1a20; border:1px solid #333; border-radius:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+    <select id="charSelectInput" onchange="loadChatForChar(this.value)" style="min-width:140px;"><option value="">Select Character...</option></select>
+    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input id="nsfwToggleInput" type="checkbox" checked onchange="toggleNsfw()"> NSFW Enabled</label>
+    <label>Level: <select id="nsfwLevelInput"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+    <span>❤️ Intimacy: <span id="intimacyValEl">0</span>/100</span>
+    <button onclick="clearChat()" style="margin-left:auto;">🗑 Clear</button>
+  </div>
+  <div id="chatHistoryCtn" style="flex:1; overflow-y:auto; padding:10px; background:#0f0f14; border:1px solid #272733; border-radius:6px;"></div>
+  <div style="display:flex; gap:8px; margin-top:10px;">
+    <input id="chatInput" style="flex:1;" placeholder="Type a message... (e.g. 'Hello' or '*winks*')" onkeydown="if(event.key==='Enter') sendMessage()">
+    <button id="sendBtn" onclick="sendMessage()">Send</button>
+  </div>
+</div>
+
+<div id="loadingEl" style="position:fixed; top:12px; right:12px; background:#2a2a35; color:#fff; padding:8px 14px; border-radius:6px; z-index:9998; font-size:14px; border:1px solid #444;" hidden>⏳ Loading...</div>
+
+<style>
+  body { text-align:left; background:#0b0b0f; color:#ddd; font-family: system-ui, -apple-system, sans-serif; margin:0; }
+  button { cursor:pointer; background:#2a2a35; color:#fff; border:1px solid #444; padding:6px 12px; border-radius:4px; font-size:13px; }
+  button:hover { background:#33333f; border-color:#666; }
+  input, textarea, select { background:#16161e; color:#ddd; border:1px solid #333; padding:8px; border-radius:4px; font-family:inherit; }
+  .charCard { background:#16161e; border:1px solid #272733; padding:12px; border-radius:8px; width:220px; }
+  .charCard strong { font-size:16px; color:#fff; }
+  .msgUser { background:#1a2333; padding:8px 10px; border-radius:6px; margin:4px 0; border-left:3px solid #4a90d9; word-break:break-word; }
+  .msgBot { background:#231a1a; padding:8px 10px; border-radius:6px; margin:4px 0; border-left:3px solid #d94a4a; word-break:break-word; }
+  .msgImg { max-width:260px; border-radius:6px; margin:4px 0; display:block; border:1px solid #333; }
+</style>
+
+<script>
+  let characters = [];
+  let currentCharId = null;
+  let intimacyLevel = 0;
+  let nsfwEnabled = true;
+  let chatHistories = {};
+
+  if(localStorage.ageVerified === "true"){ ageVerifyCtn.hidden = true; init(); }
+  function verifyAge(){ localStorage.ageVerified = "true"; ageVerifyCtn.hidden = true; init(); }
+
+  async function init(){
+    let keys = await kv.characters.keys();
+    if(keys.length){ let s = await kv.characters.getMany(keys); characters = s.filter(Boolean); }
+    else characters = [];
+    renderLibrary();
+  }
+
+  function showView(view){
+    libraryCtn.hidden = view !== 'library';
+    editorCtn.hidden = view !== 'editor';
+    chatCtn.hidden = view !== 'chat';
+    if(view === 'chat') updateCharSelect();
+  }
+
+  function resetEditor(){
+    currentCharId = null;
+    charNameInput.value = charCreatorInput.value = charTagsInput.value = charTraitsInput.value = charQuirksInput.value = charKinksInput.value = charLimitsInput.value = charDescInput.value = charStylesInput.value = '';
+    charPoseInput.value = 0.5; poseValEl.textContent = '0.5';
+    charModestyInput.value = 0.5; modestyValEl.textContent = '0.5';
+    previewImgEl.style.display = 'none';
+  }
+
+  function collectCharFromForm(){
+    return {
+      id: currentCharId || crypto.randomUUID(),
+      meta: {
+        name: charNameInput.value || 'Unnamed',
+        creator: charCreatorInput.value || 'Anonymous',
+        version: '1.0',
+        tags: charTagsInput.value.split(',').map(s=>s.trim()).filter(Boolean)
+      },
+      persona: {
+        coreTraits: charTraitsInput.value.split(',').map(s=>s.trim()).filter(Boolean),
+        speechPatterns: { frequency: 0.7, quirks: charQuirksInput.value.split(',').map(s=>s.trim()).filter(Boolean) },
+        nsfwPreferences: {
+          kinks: charKinksInput.value.split(',').map(s=>s.trim()).filter(Boolean),
+          limits: charLimitsInput.value.split(',').map(s=>s.trim()).filter(Boolean)
+        }
+      },
+      visuals: {
+        baseDescription: charDescInput.value,
+        styleReferences: charStylesInput.value.split(',').map(s=>s.trim()).filter(Boolean),
+        generationHints: {
+          poseBias: parseFloat(charPoseInput.value),
+          modestyBias: parseFloat(charModestyInput.value)
+        }
+      }
+    };
+  }
+
+  async function saveCharacter(){
+    let char = collectCharFromForm();
+    await kv.characters.set(char.id, char);
+    let idx = characters.findIndex(c=>c.id===char.id);
+    if(idx>=0) characters[idx]=char; else characters.push(char);
+    currentCharId = char.id;
+    renderLibrary();
+    showView('library');
+  }
+
+  function renderLibrary(){
+    charGridCtn.innerHTML = '';
+    if(!characters.length){ charGridCtn.innerHTML = '<p style="color:#888;">No characters yet. Create one!</p>'; return; }
+    for(let c of characters){
+      let d = document.createElement('div'); d.className = 'charCard';
+      d.innerHTML = `<strong>${esc(c.meta.name)}</strong><br><small style="color:#888;">by ${esc(c.meta.creator)}</small><br><small style="color:#666;">${esc(c.meta.tags.join(', ')||'no tags')}</small><div style="margin-top:8px; display:flex; gap:4px;"><button onclick="editCharacter('${c.id}')">Edit</button><button onclick="deleteCharacter('${c.id}')">Del</button><button onclick="startChat('${c.id}')">Chat</button></div>`;
+      charGridCtn.appendChild(d);
+    }
+  }
+  function esc(t){ let d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+
+  async function deleteCharacter(id){ if(!confirm('Delete this character?')) return; await kv.characters.delete(id); characters=characters.filter(c=>c.id!==id); renderLibrary(); }
+
+  function editCharacter(id){
+    let c = characters.find(x=>x.id===id); if(!c) return;
+    currentCharId = c.id;
+    charNameInput.value = c.meta.name; charCreatorInput.value = c.meta.creator; charTagsInput.value = c.meta.tags.join(', ');
+    charTraitsInput.value = c.persona.coreTraits.join(', '); charQuirksInput.value = c.persona.speechPatterns.quirks.join(', ');
+    charKinksInput.value = c.persona.nsfwPreferences.kinks.join(', '); charLimitsInput.value = c.persona.nsfwPreferences.limits.join(', ');
+    charDescInput.value = c.visuals.baseDescription; charStylesInput.value = c.visuals.styleReferences.join(', ');
+    charPoseInput.value = c.visuals.generationHints.poseBias; poseValEl.textContent = c.visuals.generationHints.poseBias;
+    charModestyInput.value = c.visuals.generationHints.modestyBias; modestyValEl.textContent = c.visuals.generationHints.modestyBias;
+    previewImgEl.style.display = 'none';
+    showView('editor');
+  }
+
+  function updateCharSelect(){
+    charSelectInput.innerHTML = '<option value="">Select Character...</option>';
+    for(let c of characters){ let o=document.createElement('option'); o.value=c.id; o.textContent=c.meta.name; charSelectInput.appendChild(o); }
+    if(currentCharId) charSelectInput.value = currentCharId;
+  }
+
+  function startChat(id){ currentCharId=id; updateCharSelect(); if(!chatHistories[id]) chatHistories[id]=[]; renderChat(); showView('chat'); intimacyLevel=0; intimacyValEl.textContent=0; }
+  function loadChatForChar(id){ if(!id) return; currentCharId=id; if(!chatHistories[id]) chatHistories[id]=[]; renderChat(); }
+
+  function renderChat(){
+    chatHistoryCtn.innerHTML='';
+    let msgs = chatHistories[currentCharId]||[];
+    for(let m of msgs){
+      if(m.type==='image'){ let img=document.createElement('img'); img.className='msgImg'; img.src=m.content; chatHistoryCtn.appendChild(img); }
+      else { let div=document.createElement('div'); div.className=m.role==='user'?'msgUser':'msgBot'; div.textContent=(m.role==='user'?'You':m.name)+': '+m.content; chatHistoryCtn.appendChild(div); }
+    }
+    chatHistoryCtn.scrollTop = chatHistoryCtn.scrollHeight;
+  }
+
+  function toggleNsfw(){ nsfwEnabled = nsfwToggleInput.checked; }
+  function clearChat(){ if(currentCharId) chatHistories[currentCharId]=[]; renderChat(); }
+
+  async function generateCharPreview(){
+    let c = collectCharFromForm();
+    loadingEl.hidden = false; loadingEl.textContent = '⏳ Generating preview...';
+    try {
+      let url = await generateImage(`Portrait of ${c.meta.name}, ${c.visuals.baseDescription}, ${c.visuals.styleReferences.join(', ')||'digital art'}, high quality, detailed`);
+      previewImgEl.src = url; previewImgEl.style.display = 'block';
+    } catch(e){ console.error(e); }
+    loadingEl.hidden = true;
+  }
+
+  async function sendMessage(){
+    let text = chatInput.value.trim(); if(!text || !currentCharId) return;
+    let c = characters.find(x=>x.id===currentCharId); if(!c) return;
+    chatInput.value = '';
+    chatHistories[currentCharId].push({role:'user', content:text});
+    renderChat();
+    loadingEl.hidden = false; loadingEl.textContent = '⏳ Generating response...';
+
+    let level = nsfwEnabled ? nsfwLevelInput.value : '0';
+    let persona = `You are ${c.meta.name}. Personality: ${c.persona.coreTraits.join(', ')}. Speech quirks: ${c.persona.speechPatterns.quirks.join(', ')}.`;
+    let nsfwCtx = nsfwEnabled ? `NSFW Level ${level}/5. Kinks: ${c.persona.nsfwPreferences.kinks.join(', ')}.` : 'Keep responses SFW.';
+    let limits = c.persona.nsfwPreferences.limits.length ? `Never mention these limits: ${c.persona.nsfwPreferences.limits.join(', ')}.` : '';
+    let history = (chatHistories[currentCharId]||[]).slice(-12).map(m => `${m.role==='user'?'User':c.meta.name}: ${m.content}`).join('\n');
+    let prompt = `${persona}\nVisual: ${c.visuals.baseDescription}.\nIntimacy: ${intimacyLevel}/100.\n${nsfwCtx}\n${limits}\nChat history:\n${history}\n${c.meta.name}:`;
+
+    try {
+      let reply = await generateText({instruction: prompt, stopSequences:["\n\n","User:"], maxTokens: 350});
+      reply = reply.trim();
+      if(reply.startsWith(c.meta.name+':')) reply = reply.slice(c.meta.name.length+1).trim();
+      chatHistories[currentCharId].push({role:'assistant', name:c.meta.name, content: reply});
+      renderChat();
+
+      let triggers = ["smiles","laughs","undresses","wink","poses","blushes","teases","bends","kiss"];
+      let lower = reply.toLowerCase();
+      let shouldImg = triggers.some(t => lower.includes(t));
+      if(!shouldImg && nsfwEnabled && parseInt(level)>=3 && Math.random()>0.6) shouldImg = true;
+
+      if(shouldImg){
+        loadingEl.textContent = '⏳ Generating image...';
+        let action = reply.split(/[.!?]/)[0].substring(0,120);
+        let imgPrompt = `${c.visuals.baseDescription}, ${action}, ${c.visuals.styleReferences.join(', ')||'digital art'}, high quality, detailed`;
+        let url = await generateImage(imgPrompt, {resolution: '512x768'});
+        chatHistories[currentCharId].push({role:'assistant', type:'image', content: url});
+        renderChat();
+      }
+
+      intimacyLevel = Math.min(100, intimacyLevel + (nsfwEnabled?3:1));
+      intimacyValEl.textContent = intimacyLevel;
+    } catch(e){
+      console.error(e);
+      let err=document.createElement('div'); err.style.color='#f44'; err.textContent='Error generating response.'; chatHistoryCtn.appendChild(err);
+    }
+    loadingEl.hidden = true;
+  }
+
+  window.verifyAge = verifyAge; window.showView = showView; window.resetEditor = resetEditor; window.saveCharacter = saveCharacter;
+  window.deleteCharacter = deleteCharacter; window.editCharacter = editCharacter; window.startChat = startChat; window.loadChatForChar = loadChatForChar;
+  window.toggleNsfw = toggleNsfw; window.clearChat = clearChat; window.sendMessage = sendMessage; window.generateCharPreview = generateCharPreview;
+</script>
+</body>
+</html>

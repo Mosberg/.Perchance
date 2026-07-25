@@ -1,0 +1,57 @@
+// This is the JavaScript function that powers this plugin:
+$output (list, mode) =>
+	let clone = list.createClone;
+  
+  fixValues(clone, mode);
+  
+	return clone;
+
+fixValues(node, mode) =>
+  for(let key of node.getPropertyKeys) {
+    // must use defineProperty because we can't overwrite getters without it
+    let propValue = node[key];
+    let value;
+    if(typeof propValue === "string" || typeof propValue === "number" || typeof propValue === "boolean" || typeof propValue === "symbol" || propValue === undefined || propValue === null) {
+      value = propValue;
+    } else if(Array.isArray(propValue)) {
+      if(propValue.length === 0) {
+        value = `(error: createInstance plugin tried to selectOne from an empty array for the '${key}' property of '${node.getName}')`;
+      } else {
+        value = propValue.selectOne;
+      }
+    } else if(propValue.getPropertyKeys && propValue.getPropertyKeys.length > 0 && propValue.getLength === 0) {
+      value = propValue.createClone; // it doesn't have any items - just properties, so we just set the value to prop directly
+      if(mode === "deep") {
+        fixValues(value, mode); // <-- if using "deep" mode, recursively fix values of this propValue
+      }
+    } else if(propValue.getPropertyKeys) { // <-- hackliy check that it's a perchance node
+      value = propValue.selectOne;
+    } else {
+      value = propValue; // a POJO or a function, or something?
+    }
+    Object.defineProperty(node, key, {
+      value,
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+	
+// You can learn JavaScript here:
+// https://www.codecademy.com/learn/javascript
+
+
+// NOTES:
+
+// Changed on 1st of April 2019 so that when `propValue` turns out to be something on which "selectOne" doesn't
+// really make sense, it just sets it directly to propValue rather than propValue.selectOne. More specifically, if it
+// has no children and instead just has all properties, then we set it directly to that object, rather than
+// selectOne-ing it.
+// https://www.reddit.com/r/perchance/comments/b7p4w8/createinstance_rolltable_and_inconsistent_results/
+
+
+// Important counter-intuitive thing to take note of: https://www.reddit.com/r/perchance/comments/nh31xq/the_best_hack_for_methods_in_list_instances/gz0rebt
+// the "deep" option of the createInstance plugin is kinda messed up. I should warn people that the [child] list should ONLY have properties - no sub-lists. That basically solves everything, but it's a bit annoying in many cases. Ideally I'd have only called selectOne on a list if it has no properties (i.e. with equals sign). If it has properties it should be treated just as part of the hierarchical blueprint, and those sub-items should get fixed, rather than having selectOne called on it.
+// I basically need a new plugin. createInstance2 = {import:create-instance-2-plugin}
+// That's the ideal solution here.
+// https://perchance.org/hiad2okk9w

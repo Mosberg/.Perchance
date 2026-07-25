@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>r-bunnytrials — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="appCtn" style="max-width:640px; margin:0 auto; padding:16px; font-family:system-ui, -apple-system, sans-serif; background:#faf5ff; min-height:100vh; color:#1f2937;">
+  <div style="text-align:center; margin-bottom:20px;">
+    <div style="font-size:32px; font-weight:800; color:#7c3aed; letter-spacing:-1px;">r/BunnyTrials</div>
+    <div style="color:#8b5cf6; font-size:14px; margin-top:4px;">AI Trial Generator</div>
+  </div>
+
+  <div id="controlsCtn" style="background:#ffffff; border-radius:16px; padding:16px; box-shadow:0 4px 20px rgba(124,58,237,0.08); border:1px solid #e9d5ff; margin-bottom:16px;">
+    <div style="font-weight:700; color:#6b21a8; margin-bottom:10px; font-size:14px;">Category</div>
+    <div id="categoryCtn" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;"></div>
+
+    <div style="display:flex; gap:12px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+      <label style="font-size:13px; color:#6b21a8; font-weight:600;">Difficulty:
+        <select id="difficultyInput" style="margin-left:6px; padding:6px 10px; border-radius:8px; border:1px solid #d8b4fe; background:#faf5ff; color:#6b21a8; font-weight:600;">
+          <option>Chill</option><option>Normal</option><option>Hard</option><option>Bunny Madness</option>
+        </select>
+      </label>
+      <label style="font-size:13px; color:#6b21a8; font-weight:600;">Chaos:
+        <input id="chaosInput" type="range" min="1" max="10" value="5" style="accent-color:#7c3aed; vertical-align:middle;">
+        <span id="chaosValEl" style="display:inline-block; width:20px; text-align:center;">5</span>
+      </label>
+      <label style="font-size:13px; color:#6b21a8; font-weight:600;">Mode:
+        <select id="modeInput" style="margin-left:6px; padding:6px 10px; border-radius:8px; border:1px solid #d8b4fe; background:#faf5ff; color:#6b21a8; font-weight:600;">
+          <option>Duel (2)</option><option>Double Duel (4)</option>
+        </select>
+      </label>
+    </div>
+
+    <div style="display:flex; gap:8px;">
+      <button id="generateBtn" onclick="generateTrial()" style="flex:1; padding:12px; background:#7c3aed; color:#fff; border:none; border-radius:12px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(124,58,237,0.25);">⚡ Random Trial</button>
+      <button id="aiBtn" onclick="aiTrial()" style="flex:1; padding:12px; background:#a78bfa; color:#fff; border:none; border-radius:12px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(167,139,250,0.25);">🤖 AI Remix</button>
+      <button id="spinBtn" onclick="spinWheel()" style="padding:12px 16px; background:#fff; color:#7c3aed; border:2px solid #c4b5fd; border-radius:12px; font-weight:700; cursor:pointer;">🎲 Spin</button>
+    </div>
+  </div>
+
+  <div id="loadingEl" hidden style="text-align:center; padding:30px; color:#7c3aed; font-weight:700;">🐰 Summoning bunnies...</div>
+
+  <div id="cardCtn"></div>
+
+  <div style="margin-top:16px; text-align:center;">
+    <button onclick="copyTrial()" style="padding:10px 18px; background:#fff; color:#7c3aed; border:1px solid #ddd6fe; border-radius:10px; font-weight:700; cursor:pointer; margin-right:8px;">📋 Copy JSON</button>
+    <button onclick="saveTrial()" style="padding:10px 18px; background:#fff; color:#7c3aed; border:1px solid #ddd6fe; border-radius:10px; font-weight:700; cursor:pointer;">💾 Save to KV</button>
+  </div>
+
+  <div style="margin-top:20px;">
+    <div style="font-weight:800; color:#6b21a8; font-size:14px; margin-bottom:8px;">📜 Recent Trials</div>
+    <div id="historyCtn" style="display:flex; flex-direction:column; gap:10px;"></div>
+  </div>
+</div>
+
+<script>
+  let currentTrial = null;
+  let isSpinning = false;
+
+  let pools = {
+    Text: {icon:"📝", opts:["Always tell the truth","Always lie","Speak only in questions","Forget 1 memory/day","Remember everything","Read minds but only boring thoughts"]},
+    Money: {icon:"💰", opts:["$1,000,000 lump sum","$5,000/week for life","Unlimited gift cards","Magic penny (doubles daily)","Own a money printer","Crypto wallet that only wins"]},
+    Superpowers: {icon:"🦸", opts:["Flight","Invisibility","Teleportation","Super strength","Time freeze","Shapeshift into a bunny"]},
+    Characters: {icon:"🎭", opts:["Mario","Sonic","Goku","Batman","SpongeBob","Garfield","Aang","Darth Vader"]},
+    Emojis: {icon:"😂", opts:["🐰","🥕","💜","🔥","🍑","✨","🗿","🦖"]},
+    Food: {icon:"🍕", opts:["Pizza forever","Infinite tacos","Sushi buffet","Chocolate fountain","Spicy ramen","Bubble tea IV drip"]},
+    Animals: {icon:"🐾", opts:["Bunny army","One immortal cat","Talking dog","Pet rock that judges you","Giant hamster mount","Pigeon spy network"]},
+    Flags: {icon:"🏴‍☠️", opts:["Jolly Roger","White flag","Checkered flag","Purple banner","🏳️‍🌈","White rabbit flag"]},
+    Structures: {icon:"🏗️", opts:["Eiffel Tower","Cardboard fort","Igloo","Treehouse with WiFi","Bouncy castle","Underwater dome"]},
+    BunnyTrials: {icon:"🐇", opts:["Carrot launcher 9000","Ear wiggle hypnosis","Bunny hop parkour","Cotton tail shield","Binky bomb","Lop-eared radar"]}
+  };
+
+  let titleTemplates = [
+    "Would you rather {a} or {b}?",
+    "Choose one: {a} vs {b}",
+    "Pick your poison: {a} or {b}",
+    "Bunny Trial: {a} & {b}",
+    "r/BunnyTrials Verdict: {a} or {b}",
+    "You must pick: {a} vs {b}",
+    "Ultimate dilemma: {a} or {b}",
+    "The council offers {a} or {b}"
+  ];
+
+  let prompts = [
+    "Both options last for 24 hours. No loopholes.",
+    "You cannot tell anyone about your choice.",
+    "The bunny council will judge your pick.",
+    "Side effects may include existential dread.",
+    "One is a trap. One is a treat. Choose wisely.",
+    "This trial is legally binding in 12 dimensions.",
+    "You must use your pick in public.",
+    "Your rival gets the opposite. Good luck."
+  ];
+
+  let tagsPool = ["#WouldYouRather","#BunnyTrials","#ChooseOne","#Chaos","#RedditMoment","#TrialByCombat","#BunnyApproved","#NoLoopholes"];
+
+  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+  function pickN(arr,n){ let a=[...arr]; let r=[]; while(r.length<n&&a.length){ let i=Math.floor(Math.random()*a.length); r.push(a.splice(i,1)[0]);} return r; }
+
+  function renderCategories(){
+    let ctn = categoryCtn;
+    ctn.innerHTML = "";
+    Object.keys(pools).forEach(cat => {
+      let chip = document.createElement("button");
+      chip.textContent = pools[cat].icon + " " + cat;
+      chip.dataset.cat = cat;
+      chip.style.cssText = "padding:6px 12px; border-radius:20px; border:1px solid #e9d5ff; background:#fff; color:#7c3aed; font-weight:600; font-size:12px; cursor:pointer; user-select:none;";
+      chip.onclick = () => {
+        chip.dataset.on = chip.dataset.on==="1"?"0":"1";
+        chip.style.background = chip.dataset.on==="1"?"#7c3aed":"#fff";
+        chip.style.color = chip.dataset.on==="1"?"#fff":"#7c3aed";
+      };
+      ctn.appendChild(chip);
+    });
+  }
+  renderCategories();
+
+  chaosInput.oninput = () => chaosValEl.textContent = chaosInput.value;
+
+  function getSelectedCats(){
+    return Array.from(categoryCtn.children).filter(c=>c.dataset.on==="1").map(c=>c.dataset.cat) || Object.keys(pools);
+  }
+
+  function buildTrial(){
+    let cats = getSelectedCats();
+    if(!cats.length) cats = Object.keys(pools);
+    let cat = pick(cats);
+    let pool = pools[cat];
+    let mode = modeInput.value;
+    let count = mode.includes("2") ? 2 : 4;
+    let opts = pickN(pool.opts, Math.min(count, pool.opts.length));
+    while(opts.length < count) opts.push(pick(pool.opts));
+
+    let sides = [];
+    if(count===2){
+      sides = [{tiles:[{name:opts[0], icon:pool.icon}]}, {tiles:[{name:opts[1], icon:pool.icon}]}];
+    } else {
+      sides = [{tiles:[{name:opts[0], icon:pool.icon},{name:opts[1], icon:pool.icon}]}, {tiles:[{name:opts[2], icon:pool.icon},{name:opts[3], icon:pool.icon}]}];
+    }
+
+    let tmpl = pick(titleTemplates);
+    let title = tmpl.replace("{a}", opts[0]).replace("{b}", opts[1]||opts[0]);
+    if(count===4) title = "Bunny Trial: " + cat + " Showdown";
+
+    return {
+      title,
+      category: cat,
+      prompt: pick(prompts),
+      options: sides,
+      icon: pool.icon,
+      difficulty: difficultyInput.value,
+      chaosLevel: parseInt(chaosInput.value),
+      tags: pickN(tagsPool, 2)
+    };
+  }
+
+  function cardHTML(t){
+    let optsHtml = t.options.map((side,si) => {
+      let tiles = side.tiles.map(tile => `
+        <div style="flex:1; min-width:110px; background:#faf5ff; border:2px solid #e9d5ff; border-radius:12px; padding:12px; text-align:center;">
+          <div style="font-size:28px; margin-bottom:6px;">${tile.icon}</div>
+          <div style="font-weight:700; color:#5b21b6; font-size:13px;">${tile.name}</div>
+        </div>
+      `).join("");
+      return `<div style="display:flex; gap:8px; flex:1;">${tiles}</div>`;
+    }).join(`<div style="align-self:center; font-weight:800; color:#7c3aed; font-size:18px; padding:0 6px;">VS</div>`);
+
+    let chaosBars = Array(10).fill(0).map((_,i)=>`<div style="flex:1; height:8px; border-radius:4px; background:${i<t.chaosLevel?'#7c3aed':'#e9d5ff'};"></div>`).join("");
+
+    return `
+      <div style="background:#ffffff; border-radius:16px; padding:18px; box-shadow:0 6px 24px rgba(124,58,237,0.1); border:1px solid #f3e8ff; margin-bottom:14px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+          <span style="background:#7c3aed; color:#fff; font-size:11px; font-weight:800; padding:4px 8px; border-radius:6px;">r/BunnyTrials</span>
+          <span style="background:#f3e8ff; color:#6b21a8; font-size:11px; font-weight:700; padding:4px 8px; border-radius:6px;">${t.icon} ${t.category}</span>
+          <span style="background:#fff; border:1px solid #e9d5ff; color:#7c3aed; font-size:11px; font-weight:700; padding:4px 8px; border-radius:6px;">${t.difficulty}</span>
+          <span style="margin-left:auto; font-size:12px; color:#a78bfa; font-weight:700;">🔥 ${t.chaosLevel}/10</span>
+        </div>
+        <div style="font-size:18px; font-weight:800; color:#1f2937; margin-bottom:8px; line-height:1.25;">${t.title}</div>
+        <div style="color:#6b7280; font-size:13px; margin-bottom:14px; font-style:italic;">${t.prompt}</div>
+        <div style="display:flex; align-items:stretch; gap:10px; margin-bottom:14px; flex-wrap:wrap;">${optsHtml}</div>
+        <div style="display:flex; gap:4px; margin-bottom:10px;">${chaosBars}</div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          ${t.tags.map(tag=>`<span style="font-size:11px; color:#8b5cf6; background:#f3e8ff; padding:3px 8px; border-radius:12px; font-weight:700;">${tag}</span>`).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function generateTrial(){
+    if(isSpinning) return;
+    currentTrial = buildTrial();
+    cardCtn.innerHTML = cardHTML(currentTrial);
+  }
+
+  async function aiTrial(){
+    if(isSpinning) return;
+    loadingEl.hidden = false;
+    cardCtn.innerHTML = "";
+    let base = buildTrial();
+    try {
+      let res = await generateText(`Rewrite this trial title to be funnier and more chaotic (keep it short): "${base.title}". Also write a funnier prompt (one sentence). Return exactly in this format:
+Title: ...
+Prompt: ...`);
+      let titleMatch = res.match(/Title:\s*(.+)/i);
+      let promptMatch = res.match(/Prompt:\s*(.+)/i);
+      if(titleMatch) base.title = titleMatch[1].trim();
+      if(promptMatch) base.prompt = promptMatch[1].trim();
+    } catch(e){}
+    currentTrial = base;
+    cardCtn.innerHTML = cardHTML(currentTrial);
+    loadingEl.hidden = true;
+  }
+
+  async function spinWheel(){
+    if(isSpinning) return;
+    isSpinning = true;
+    spinBtn.disabled = true;
+    spinBtn.textContent = "Spinning...";
+    let steps = 12;
+    let interval = setInterval(()=>{
+      let t = buildTrial();
+      cardCtn.innerHTML = cardHTML(t);
+      steps--;
+      if(steps<=0){
+        clearInterval(interval);
+        currentTrial = t;
+        isSpinning = false;
+        spinBtn.disabled = false;
+        spinBtn.textContent = "🎲 Spin";
+      }
+    }, 120);
+  }
+
+  async function copyTrial(){
+    if(!currentTrial) return generateTrial();
+    let text = JSON.stringify(currentTrial, null, 2);
+    try { await navigator.clipboard.writeText(text); alert("Copied trial JSON!"); } catch(e){}
+  }
+
+  async function saveTrial(){
+    if(!currentTrial) return generateTrial();
+    let arr = await kv.bunnyTrials.get("history") || [];
+    arr.unshift(currentTrial);
+    if(arr.length>20) arr.pop();
+    await kv.bunnyTrials.set("history", arr);
+    renderHistory();
+  }
+
+  async function renderHistory(){
+    let arr = await kv.bunnyTrials.get("history") || [];
+    historyCtn.innerHTML = arr.slice(0,5).map(t=>`
+      <div style="background:#fff; border:1px solid #e9d5ff; border-radius:10px; padding:10px; font-size:13px; color:#5b21b6; font-weight:600; cursor:pointer;" onclick="loadHistory('${t.title.replace(/'/g,"\\'")}')">
+        ${t.icon} ${t.title} <span style="color:#a78bfa; font-size:11px; margin-left:6px;">${t.category}</span>
+      </div>
+    `).join("");
+  }
+  function loadHistory(title){
+    // no-op for brevity
+  }
+  renderHistory();
+
+  generateTrial();
+</script>
+
+<style>
+  body { text-align:left; background:#faf5ff; }
+  button:hover { opacity:0.92; transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+</style>
+</body>
+</html>

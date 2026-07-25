@@ -1,0 +1,69 @@
+// This is the JavaScript function that powers this plugin:
+$output(tense) =>
+  if(!tense) tense = "present";
+  // if(!window.__toBe_74285629027576) window.__toBe_74285629027576 = getToBeFunction();
+  // let toBe = window.__toBe_74285629027576;
+  let elementId = "toBeId_" + Math.random().toString().slice(2) + Math.random().toString().slice(2);
+  
+  function updateNodeText(node) {
+    let leftSideText = "";
+    let currentNode = node.previousSibling; 
+    while(currentNode) {
+      let newText = currentNode.textContent.replace(/[\t\n\r$%&*@#,!=+\-.?:;'"(){}\[\]\/<>`~_|]/g, "");
+      leftSideText = newText + leftSideText; 
+      currentNode = currentNode.previousSibling;
+      if(/\b[^\s]+\b/.test(leftSideText)) break; // if we have enough text, break
+    }
+    let leftSideWord = leftSideText.trim().split(/[\s]/g).pop();
+    // console.log(toBe(leftSideWord), leftSideWord);
+    let out = leftSideWord.trim() ? toBe(leftSideWord, tense) : "";
+    let theCase = node.dataset.case;
+    if(theCase === "upperCase") out = out.upperCase;
+    if(theCase === "titleCase") out = out.titleCase;
+    if(theCase === "sentenceCase") out = out.sentenceCase;
+    node.textContent = out;
+  }
+  
+  setTimeout(() => {
+    let thisNode = document.querySelector(`.${elementId}`);
+    if(!thisNode) return; // element was not added, or was deleted
+    updateNodeText(thisNode);
+    new MutationObserver(function(mutations, observer) {
+      if(!document.body.contains(thisNode)) observer.disconnect(); // <-- We need to disconnect this observer if this element no longer exists, because we're observing this elements *parent*, no the element itself. So if clicking "randomize" deleted the nodes inside the parent (but not the parent itself), then we'd end up with a growing list of "broken" observers. Instead of the document.body.contains() approach, we could also look through the mutations list for removed nodes (like in this code: https://stackoverflow.com/a/50397148/11950764), but this approach is simpler.
+      for(let mutation of mutations) {
+        if(mutation.type === "characterData" && mutation.target.type === "#text" && mutation.target.parentNode === thisNode) return; // <-- beause otherwise editing thisNode's text content (done in updateNodeText) triggers this mutation observer.
+      }
+      updateNodeText(thisNode);
+    }).observe(thisNode.parentNode, { childList: true, subtree: true, characterData: true });
+  }, 1);
+  
+  return {
+    lowerCase: `<span class="${elementId}" data-case="lowerCase"></span>`,
+    upperCase: `<span class="${elementId}" data-case="upperCase"></span>`, 
+    titleCase: `<span class="${elementId}" data-case="titleCase"></span>`,
+    sentenceCase: `<span class="${elementId}" data-case="sentenceCase"></span>`,
+    toString: function() {
+      return this.lowerCase;
+    },
+  };
+
+
+toBe(leftSideWord, tense) =>
+  if(!tense) tense = "present";
+  let w = leftSideWord.toLowerCase().trim();
+  if(tense === "present") {
+    if(w === "he") return "is";
+    if(w === "she") return "is";
+    if(w === "they") return "are";
+    if(w === "i") return "am";
+    if(w === "we") return "are";
+    return "is";
+  }
+  if(tense === "past") {
+    if(w === "he") return "was";
+    if(w === "she") return "was";
+    if(w === "they") return "were";
+    if(w === "i") return "was";
+    if(w === "we") return "were";
+    return "was";
+  }

@@ -1,0 +1,1706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>story-outline-gen-with-book — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- AI Story Outline & Book Generator
+  Mobile-first rewrite with streaming output, consolidated prompt building,
+  and context-aware chapter generation.
+-->
+
+<style>
+  :root {
+    --primary: #2b6cb0;
+    --primary-dark: #2c5282;
+    --danger: #c53030;
+    --warning: #d69e2e;
+    --bg: #f7fafc;
+    --card-bg: #fff;
+    --border: #e2e8f0;
+    --border-dark: #cbd5e0;
+    --text: #1a202c;
+    --text-muted: #718096;
+    --radius: 8px;
+    --font: system-ui, -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  body { text-align: left; margin: 0; }
+
+  #appCtn {
+    font-family: var(--font);
+    color: var(--text);
+    padding: 12px;
+    max-width: 900px;
+    margin: 0 auto;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  @media (min-width: 768px) {
+    #appCtn { padding: 24px; }
+  }
+
+  h1 { margin: 0 0 16px; font-size: 1.4rem; }
+  @media (min-width: 768px) { h1 { font-size: 1.75rem; } }
+
+  .nav-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+  .nav-bar button {
+    flex: 1; padding: 12px 16px;
+    border: 1px solid var(--primary); background: var(--card-bg); color: var(--primary);
+    border-radius: var(--radius); cursor: pointer;
+    font-size: 1rem; font-weight: 600; min-height: 44px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .nav-bar button.active { background: var(--primary); color: #fff; }
+  .nav-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .app-page { display: none; }
+  .app-page.active { display: block; }
+
+  label.label { display: block; font-weight: 700; margin-bottom: 4px; }
+  .small-note { color: var(--text-muted); font-size: 0.85rem; margin-top: 2px; margin-bottom: 4px; }
+
+  input[type="text"], input[type="number"], textarea, select {
+    width: 100%; padding: 12px; font-size: 16px;
+    border: 1px solid var(--border-dark); border-radius: var(--radius);
+    background: var(--card-bg); color: var(--text);
+  }
+  textarea { resize: vertical; }
+
+  .control-group { margin-bottom: 14px; }
+  .control-row { display: flex; flex-direction: column; gap: 12px; }
+  @media (min-width: 600px) {
+    .control-row { flex-direction: row; }
+    .control-row > .control-group { flex: 1; }
+  }
+
+  details.advanced {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 14px; background: var(--bg); overflow: hidden;
+  }
+  details.advanced > summary {
+    padding: 12px 16px; cursor: pointer; font-weight: 700;
+    user-select: none; list-style: none;
+  }
+  details.advanced > summary::-webkit-details-marker { display: none; }
+  details.advanced > summary::after { content: "▶"; float: right; transition: transform 0.2s; font-size: 0.75rem; }
+  details.advanced[open] > summary::after { transform: rotate(90deg); }
+  details.advanced > .advanced-inner { padding: 12px 16px; }
+
+  .genre-grid {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    max-height: 200px; overflow-y: auto;
+    border: 1px solid var(--border-dark); border-radius: var(--radius);
+    padding: 10px; background: var(--card-bg);
+  }
+  .genre-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.9rem; background: var(--bg);
+    padding: 6px 10px; border-radius: 6px; cursor: pointer;
+    user-select: none; border: 1px solid transparent;
+  }
+  .genre-tag:has(input:checked) { background: #ebf4ff; border-color: var(--primary); }
+  .genre-tag input { margin: 0; cursor: pointer; }
+
+  .slider-row { display: flex; align-items: center; gap: 10px; }
+  .slider-row span { font-size: 0.85rem; color: var(--text-muted); white-space: nowrap; }
+  .slider-row input[type="range"] { flex: 1; }
+
+  .btn {
+    padding: 12px 20px; border: none; border-radius: var(--radius);
+    cursor: pointer; font-size: 1rem; font-weight: 600; min-height: 44px;
+    transition: opacity 0.15s;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-outline { background: var(--card-bg); color: var(--primary); border: 1px solid var(--primary); }
+  .btn-small { padding: 8px 14px; font-size: 0.85rem; min-height: 36px; }
+
+  .action-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+
+  .loader { display: flex; align-items: center; gap: 8px; color: var(--text-muted); margin: 12px 0; }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border-dark); border-top-color: var(--primary);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .stream-preview {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px; margin: 12px 0; white-space: pre-wrap; line-height: 1.6;
+    max-height: 400px; overflow-y: auto; font-size: 0.95rem;
+  }
+
+  .chapter-card {
+    background: var(--bg); border-left: 4px solid var(--primary);
+    padding: 14px 16px; margin-bottom: 12px; border-radius: var(--radius);
+  }
+  .chapter-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 6px; color: var(--text); }
+  .chapter-body { line-height: 1.6; color: #2d3748; white-space: pre-wrap; }
+
+  .tabs-row {
+    display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    gap: 4px; border-bottom: 2px solid var(--border-dark);
+    scrollbar-width: thin;
+  }
+  .tabs-row::-webkit-scrollbar { height: 4px; }
+  .tabs-row::-webkit-scrollbar-thumb { background: var(--border-dark); border-radius: 2px; }
+  .book-chapter-tab {
+    padding: 10px 16px; border: 1px solid var(--border-dark); border-bottom: none;
+    background: var(--bg); border-radius: var(--radius) var(--radius) 0 0;
+    cursor: pointer; font-size: 0.9rem; white-space: nowrap; flex-shrink: 0;
+    color: var(--text-muted);
+  }
+  .book-chapter-tab.active {
+    background: var(--card-bg); color: var(--primary); font-weight: 700;
+    border-bottom: 2px solid var(--card-bg); margin-bottom: -2px;
+  }
+  .book-chapter-tab.locked { opacity: 0.4; cursor: not-allowed; }
+  .book-content-area {
+    background: var(--card-bg); border: 1px solid var(--border-dark); border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius); padding: 16px; min-height: 200px;
+  }
+  .generated-text { line-height: 1.75; color: var(--text); white-space: pre-wrap; }
+  .empty-msg { color: var(--text-muted); font-style: italic; }
+
+  .save-row { display: flex; gap: 8px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+  .save-row input { flex: 1; min-width: 120px; }
+
+  .outline-preview-mini {
+    background: var(--bg); border-left: 4px solid var(--primary);
+    padding: 10px 12px; margin: 12px 0; border-radius: 6px;
+    font-size: 0.9rem; max-height: 160px; overflow-y: auto;
+  }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: none; align-items: center; justify-content: center; z-index: 9999; padding: 12px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--card-bg); padding: 20px; border-radius: var(--radius);
+    max-width: 560px; width: 100%; max-height: 85vh; overflow-y: auto;
+  }
+  .modal-box h3 { margin: 0 0 12px; }
+  .modal-list { list-style: none; padding: 0; margin: 12px 0; }
+  .modal-list li {
+    padding: 10px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .modal-list li > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .modal-list .btn-group { display: flex; gap: 6px; flex-shrink: 0; }
+
+  .style-card {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px; margin-bottom: 12px; background: var(--bg);
+  }
+  .style-card .style-name { font-weight: 700; color: var(--primary); font-size: 1.05rem; }
+  .style-card .style-genre { color: var(--text-muted); font-size: 0.85rem; }
+  .style-card .style-desc { font-size: 0.85rem; color: #4a5568; margin: 6px 0; font-style: italic; }
+  .style-card .style-sample {
+    background: var(--card-bg); border-left: 3px solid var(--border-dark);
+    padding: 8px 10px; font-size: 0.9rem; color: #2d3748; line-height: 1.5; white-space: pre-wrap;
+  }
+
+  .style-search { margin-bottom: 12px; }
+
+  .story-title-display {
+    font-size: 1.3rem; font-weight: 700; color: var(--primary);
+    margin: 0 0 12px; line-height: 1.3;
+  }
+
+  .chapter-card.editable { padding: 10px 12px; }
+  .chapter-card.editable .chapter-title-input {
+    width: 100%; font-weight: 700; font-size: 1.05rem; margin-bottom: 6px;
+    padding: 6px 8px; border: 1px solid var(--primary); border-radius: 4px;
+  }
+  .chapter-card.editable .chapter-body-input {
+    width: 100%; line-height: 1.6; padding: 8px; font-size: 0.95rem;
+    border: 1px solid var(--border-dark); border-radius: 4px; min-height: 80px;
+  }
+
+  .context-warning {
+    background: #fffbeb; border: 1px solid var(--warning); border-radius: var(--radius);
+    padding: 10px 14px; margin: 8px 0; font-size: 0.85rem; color: #744210;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .context-warning::before { content: "⚠"; font-size: 1rem; }
+
+  .export-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+  .kbd-hint {
+    font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;
+  }
+  .kbd {
+    display: inline-block; padding: 1px 6px; font-size: 0.75rem;
+    border: 1px solid var(--border-dark); border-radius: 3px;
+    background: var(--bg); font-family: monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --primary: #63b3ed;
+      --primary-dark: #4299e1;
+      --danger: #fc8181;
+      --warning: #f6ad55;
+      --bg: #1a202c;
+      --card-bg: #2d3748;
+      --border: #4a5568;
+      --border-dark: #4a5568;
+      --text: #e2e8f0;
+      --text-muted: #a0aec0;
+    }
+    .genre-tag:has(input:checked) { background: #2a4365; border-color: var(--primary); }
+    .chapter-body { color: #cbd5e0; }
+    .style-card .style-desc { color: #a0aec0; }
+    .style-card .style-sample { color: #cbd5e0; }
+    .context-warning { background: #2d3748; color: #f6ad55; }
+    .generated-text { color: var(--text); }
+    .chapter-title { color: var(--text); }
+  }
+</style>
+
+<div id="appCtn">
+  <h1>AI Story Outline &amp; Book Generator</h1>
+
+  <div class="nav-bar" id="navBar">
+    <button id="navOutlineBtn" onclick="switchPage('outline')" class="active">Outline</button>
+    <button id="navBookBtn" onclick="switchPage('book')">Book</button>
+  </div>
+
+  <!-- OUTLINE PAGE -->
+  <div id="outlinePage" class="app-page active">
+    <p class="small-note" style="margin-bottom:14px;">Describe a story idea, pick genres, and generate a chapter-by-chapter outline.</p>
+
+    <div class="control-group">
+      <label class="label" for="promptInput">Story Idea</label>
+      <textarea id="promptInput" rows="4" placeholder="A librarian discovers a book that writes itself based on the reader's fears..."></textarea>
+    </div>
+
+    <div class="control-group">
+      <label class="label">Genres</label>
+      <div class="small-note">Guides the AI's content, tropes, and atmosphere.</div>
+      <div id="genreCtn" class="genre-grid"></div>
+    </div>
+
+    <details class="advanced">
+      <summary>Advanced Settings</summary>
+      <div class="advanced-inner">
+        <div class="control-group">
+          <label class="label" for="narrativeFocusInput">Narrative Focus &amp; Priorities</label>
+          <div class="small-note">What matters most? Be explicit: e.g., "Focus on the bond between X and Y. Prioritize found-family over romance."</div>
+          <textarea id="narrativeFocusInput" rows="3" placeholder="e.g., prioritize inner conflict over action, slow-burn only, found-family dynamics..."></textarea>
+        </div>
+
+        <div class="control-group">
+          <label class="label" for="avoidInput">Avoid / Do Not Include</label>
+          <div class="small-note">List anything you want the AI to steer clear of.</div>
+          <textarea id="avoidInput" rows="2" placeholder="e.g., no time travel, no love triangles, no graphic violence..."></textarea>
+        </div>
+
+        <div class="control-row">
+          <div class="control-group">
+            <label class="label" for="chapterCountInput">Chapters</label>
+            <input id="chapterCountInput" type="number" min="1" max="50" value="5">
+          </div>
+          <div class="control-group">
+            <label class="label" for="lengthSelect">Synopsis Length</label>
+            <select id="lengthSelect">
+              <option value="brief">Brief (1-2 sentences)</option>
+              <option value="medium">Medium (1 paragraph)</option>
+              <option value="detailed">Detailed (2-3 paragraphs)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control-row">
+          <div class="control-group">
+            <label class="label" for="toneSelect">Tone</label>
+            <select id="toneSelect">
+              <option value="any">Any / Neutral</option>
+              <option value="lighthearted">Lighthearted</option>
+              <option value="dark">Dark / Grim</option>
+              <option value="serious">Serious</option>
+              <option value="whimsical">Whimsical</option>
+              <option value="melancholic">Melancholic</option>
+              <option value="hopeful">Hopeful</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label class="label" for="complexitySelect">Complexity</label>
+            <select id="complexitySelect">
+              <option value="simple">Simple</option>
+              <option value="moderate" selected>Moderate</option>
+              <option value="complex">Complex</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label class="label" for="conflictSelect">Conflict Level</label>
+            <select id="conflictSelect">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label class="label">Writing Style</label>
+          <div style="display:flex; gap:8px; align-items:stretch;">
+            <select id="writerStyleSelect" style="flex:1;">
+              <option value="">Any / Neutral</option>
+            </select>
+            <button onclick="openStyleModal()" class="btn btn-outline btn-small" style="white-space:nowrap;">Browse</button>
+          </div>
+          <div id="selectedStylePreview" class="small-note" style="margin-top:6px;"></div>
+        </div>
+
+        <div class="control-group">
+          <label class="label">Prompt Adherence vs Creativity</label>
+          <div class="slider-row">
+            <span>Creative</span>
+            <input id="adherenceSlider" type="range" min="0" max="100" value="50">
+            <span>Strict</span>
+          </div>
+          <div class="small-note" id="adherenceLabelEl">Balanced: moderate creative freedom while respecting the core idea.</div>
+        </div>
+      </div>
+    </details>
+
+    <div class="action-row">
+      <button id="generateBtn" onclick="generateOutline()" class="btn btn-primary">Generate Outline</button>
+      <button id="stopBtn" hidden onclick="currentGen.stop()" class="btn btn-danger">Stop</button>
+    </div>
+
+    <div id="outlineLoadingEl" hidden class="loader">
+      <div class="spinner"></div>
+      <span>Generating outline...</span>
+    </div>
+
+    <div id="outlineStreamEl" hidden class="stream-preview"></div>
+    <h2 id="storyTitleDisplay" class="story-title-display" hidden></h2>
+    <div id="chaptersCtn" style="margin-top:16px;"></div>
+
+    <div id="outlineActions" hidden class="save-row">
+      <input id="outlineSaveNameInput" type="text" placeholder="Outline name...">
+      <button onclick="saveCurrentOutline()" class="btn btn-primary btn-small">Save Outline</button>
+      <button onclick="toggleOutlineEdit()" id="editOutlineBtn" class="btn btn-outline btn-small">Edit</button>
+      <button onclick="openLoadModal('outline')" class="btn btn-outline btn-small">Load Saved</button>
+    </div>
+  </div>
+
+  <!-- BOOK PAGE -->
+  <div id="bookPage" class="app-page">
+    <p class="small-note" style="margin-bottom:14px;">Build a full book from an outline. Chapters generate in order, preserving continuity.</p>
+
+    <div class="action-row" style="margin-bottom:8px;">
+      <select id="outlineSelect" onchange="onOutlineSelectChange()" style="flex:1; min-width:160px;">
+        <option value="">-- Load a saved outline --</option>
+      </select>
+      <button onclick="loadOutlineListIntoSelect()" class="btn btn-outline btn-small">Refresh</button>
+      <button onclick="useCurrentOutlineForBook()" class="btn btn-primary btn-small">Use Current</button>
+    </div>
+
+    <div id="bookOutlinePreview" class="outline-preview-mini" hidden></div>
+
+    <div id="bookControls" hidden style="margin-top:12px;">
+      <div class="control-row">
+        <div class="control-group">
+          <label class="label" for="bookChapterLengthSelect">Chapter Length</label>
+          <select id="bookChapterLengthSelect">
+            <option value="short">Short (~500 words)</option>
+            <option value="medium" selected>Medium (~1500 words)</option>
+            <option value="long">Long (~3000 words)</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="bookGenresInfoEl" class="small-note" style="margin-bottom:10px;"></div>
+
+      <details class="advanced">
+        <summary>Book Overrides (optional)</summary>
+        <div class="advanced-inner">
+          <div class="control-group">
+            <label class="label" for="bookNarrativeFocusInput">Narrative Focus Override</label>
+            <div class="small-note">Override outline priorities for this book.</div>
+            <textarea id="bookNarrativeFocusInput" rows="2" placeholder="Leave blank to use outline priorities..."></textarea>
+          </div>
+          <div class="control-group">
+            <label class="label" for="bookAvoidInput">Avoid Override</label>
+            <textarea id="bookAvoidInput" rows="2" placeholder="Leave blank to use outline avoid list..."></textarea>
+          </div>
+          <div class="control-group">
+            <label class="label">Adherence Override</label>
+            <div class="slider-row">
+              <span>Creative</span>
+              <input id="bookAdherenceSlider" type="range" min="0" max="100" value="50">
+              <span>Strict</span>
+            </div>
+            <div class="small-note" id="bookAdherenceLabelEl">Balanced: moderate creative freedom while respecting the core idea.</div>
+          </div>
+        </div>
+      </details>
+
+      <div id="contextWarningEl" class="context-warning" hidden></div>
+      <div id="tabsRow" class="tabs-row"></div>
+      <div id="bookContentArea" class="book-content-area">
+        <p class="empty-msg">Select a chapter tab above, then click Generate Chapter.</p>
+      </div>
+
+      <div class="action-row" style="margin-top:12px;">
+        <button id="generateChapterBtn" onclick="generateCurrentBookChapter()" class="btn btn-primary">Generate Chapter</button>
+        <button id="retryChapterBtn" hidden onclick="generateCurrentBookChapter()" class="btn btn-danger">Retry</button>
+        <button id="regenerateChapterBtn" hidden onclick="regenerateBookChapter()" class="btn btn-outline">Regenerate</button>
+        <button id="stopBookBtn" hidden onclick="currentBookGen.stop()" class="btn btn-danger">Stop</button>
+      </div>
+      <div id="bookLoadingEl" hidden class="loader">
+        <div class="spinner"></div>
+        <span>Generating chapter...</span>
+      </div>
+    </div>
+
+    <div id="bookActions" hidden class="save-row">
+      <input id="bookSaveNameInput" type="text" placeholder="Book name...">
+      <button onclick="saveCurrentBook()" class="btn btn-primary btn-small">Save Book</button>
+      <button onclick="openLoadModal('book')" class="btn btn-outline btn-small">Load Saved</button>
+    </div>
+    <div id="exportRow" hidden class="export-row">
+      <button onclick="exportBook('txt')" class="btn btn-outline btn-small">Export TXT</button>
+      <button onclick="exportBook('md')" class="btn btn-outline btn-small">Export Markdown</button>
+      <button onclick="exportBook('epub')" class="btn btn-outline btn-small">Export EPUB</button>
+    </div>
+    <div class="kbd-hint"><span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> generate &middot; <span class="kbd">←</span> <span class="kbd">→</span> switch chapters &middot; <span class="kbd">Esc</span> close dialogs</div>
+  </div>
+</div>
+
+<!-- Load Modal -->
+<div id="loadModal" class="modal-overlay" onclick="if(event.target===loadModal)closeLoadModal()">
+  <div class="modal-box">
+    <h3 id="loadModalTitle">Load</h3>
+    <ul id="loadModalList" class="modal-list"></ul>
+    <div style="text-align:right;">
+      <button onclick="closeLoadModal()" class="btn btn-outline btn-small">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Style Modal -->
+<div id="styleModal" class="modal-overlay" onclick="if(event.target===styleModal)closeStyleModal()">
+  <div class="modal-box" style="max-width:680px;">
+    <h3>Writing Styles</h3>
+    <input type="text" id="styleSearchInput" class="style-search" placeholder="Search by author or genre..." oninput="filterStyles()">
+    <div id="styleModalContent" style="max-height:55vh; overflow-y:auto; margin:12px 0;"></div>
+    <div style="text-align:right;">
+      <button onclick="closeStyleModal()" class="btn btn-outline btn-small">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const GENRES = [
+    "Romance", "Romantic Comedy", "Historical Romance", "Fantasy", "Urban Fantasy",
+    "High Fantasy", "Science Fiction", "Dystopian", "Post-Apocalyptic", "Mystery",
+    "Cozy Mystery", "Thriller", "Horror", "Supernatural", "Paranormal",
+    "Adventure", "Action", "Drama", "Contemporary Fiction", "Literary Fiction",
+    "Young Adult", "New Adult", "Noir", "Satire", "Comedy",
+    "Family Saga", "Western", "Steampunk", "Fairy Tale", "Folklore"
+  ];
+
+  const WRITER_STYLES = [
+    {
+      key: "hemingway",
+      name: "Ernest Hemingway",
+      genre: "Literary Realism",
+      styleInstructions: "Use short, declarative sentences. Avoid adjectives and adverbs where possible. Show emotion through action and physical detail rather than stating feelings. Employ the 'iceberg theory'—omit the underlying theme explicitly and let subtext carry the weight.",
+      sampleParagraph: `The road was narrow. She walked it in the evening. She had been traveling for hours and she was tired. There was a sound in the woods but she did not stop. At the end of the path there was a light in a window. She did not know what was there. She kept walking.`
+    },
+    {
+      key: "austen",
+      name: "Jane Austen",
+      genre: "Romance / Satire",
+      styleInstructions: "Employ an ironic, omniscient narrator who comments on social manners and class. Use balanced sentences, wit, and careful moral observation. Focus on marriage, propriety, and the contrast between appearance and reality.",
+      sampleParagraph: `It was with no small degree of fatigue that our heroine proceeded down the narrow lane as the sun withdrew its kindly light. Having endured many hours of travel, she felt the weariness settle most disagreeably into her bones. A curious noise issued from the neighbouring wood; however, possessing a properly regulated mind, she did not indulge in any hysterical pause. At the lane's end, a solitary candle burned in an upper chamber, promising either hospitality or intrigue. What awaited her, she could not conceive; yet forward she went, as any sensible woman with a decided purpose must.`
+    },
+    {
+      key: "king",
+      name: "Stephen King",
+      genre: "Horror / Thriller",
+      styleInstructions: "Write in a colloquial American voice with deep interiority. Use sensory detail and slow-burn suspense. Focus on ordinary people in extraordinary situations. Let dread build through accumulation of realistic detail rather than immediate shock.",
+      sampleParagraph: `She'd been walking since noon, and her feet had started to mutter complaints that would soon become full-throated screams. The road was a ribbon of cracked asphalt winding through the darkening woods. When the sound came—a brittle snapping, like someone stepping on a dry branch—she didn't turn. Her eyes stayed fixed on the light up ahead, a single yellow square glowing in the second story of the old farmhouse. It could be safety. It could be something else. She didn't know, and that was the worst part. But she kept walking anyway, because stopping was worse.`
+    },
+    {
+      key: "tolkien",
+      name: "J.R.R. Tolkien",
+      genre: "High Fantasy",
+      styleInstructions: "Use archaic and elevated diction with an elegiac, mythological tone. Employ formal syntax, invented place-names, and a sense of deep history. Nature is grand and often personified; evil is ancient and cosmic.",
+      sampleParagraph: `The road dwindled into a slender track as the sun sank beyond the western eaves of the world, and the traveler, having journeyed since the morning's first light, felt the heaviness of the long road upon her. A fell sound there came from the darkling wood that bordered her path, yet she stayed her course and did not look aside. Behold, at the journey's end, a solitary lamp burned in the high chamber of a dwelling long shut against the gathering gloom. What doom or welcome awaited therein, she knew not; still she pressed onward, as the old tales tell that the steadfast must.`
+    },
+    {
+      key: "woolf",
+      name: "Virginia Woolf",
+      genre: "Modernist / Stream of Consciousness",
+      styleInstructions: "Focus on the fluidity of inner thought and the shifting texture of consciousness. Use lyrical, poetic sentences that loop back on themselves. Time is elastic; the external world is secondary to emotional and sensory impression.",
+      sampleParagraph: `The evening fell, or rather it settled upon her consciousness like a shawl dropped by some unseen hand, and she found herself upon a narrow road—when had she turned onto it?—her body a vessel of remembered fatigue, hours collapsing into a single sensation of bone and breath. A sound—from the woods? from within?—but one does not pause for sounds; time does not pause, and she was time itself, moving. There, a light, not downstairs where ordinary life occurred, but upstairs, where secrets lived. What awaited? The question dissolved before it formed. Forward, always forward, into the funneling dark.`
+    },
+    {
+      key: "chandler",
+      name: "Raymond Chandler",
+      genre: "Noir / Hardboiled",
+      styleInstructions: "Write in a cynical, first-person voice full of similes and wisecracks. Describe urban decay, rain, and shadows. Keep dialogue terse and steeped in subtext. The protagonist is wounded but honorable beneath the armor of sarcasm.",
+      sampleParagraph: `The road was narrow and the light was going fast, bleeding out of the sky like a gutshot prizefighter. She'd been walking since God knows when, and her bones were singing the blues in four-part harmony. Something made a noise in the woods—maybe a branch, maybe a boyfriend with a grudge—but she didn't break stride. Up ahead, a light burned in an upstairs window, solitary and not necessarily friendly. It could've been salvation or it could've been the big squeeze. She didn't know. She didn't care. She put one foot in front of the other because that was the only trick she knew.`
+    },
+    {
+      key: "faulkner",
+      name: "William Faulkner",
+      genre: "Southern Gothic",
+      styleInstructions: "Use long, sprawling sentences that weave multiple clauses into a hypnotic rhythm. Shift perspectives and collapse past into present. Themes of family, race, and the weight of history should press upon every description.",
+      sampleParagraph: `She walked the narrow road because she had to, because the past is never past and the road, which is not merely a road but the accumulated dust of all roads she had ever walked, led her forward into an evening that was not merely evening but the culmination of all evenings, and having traveled for hours—though who can say how many, for time in the South is measured not in hours but in memory and grief—she felt the weariness in her bones, which were not her bones alone but her father's bones and her mother's bones, and when the sound came from the wood, which is to say from the dark wood that is the human heart, she did not stop, because stopping would have been an admission, and at the end, there was a light burning in an upstairs window, and she went toward it not knowing what waited there, which is the only way anyone ever approaches anything, if they are honest.`
+    },
+    {
+      key: "dickens",
+      name: "Charles Dickens",
+      genre: "Victorian Social Novel",
+      styleInstructions: "Be verbose and theatrical. Use coincidence, sentimentality, and sharply drawn caricature. Address the reader directly. Expose social injustice through melodrama and humor. Names and descriptions should be emblematic.",
+      sampleParagraph: `The traveler, being a woman of some determination but little fortune, found herself upon a narrow and most inconvenient road as the evening came on apace. She had been traveling, if traveling it could be called, for many hours—hours during which the sun, that great friend of the poor, had gradually withdrawn his beneficent beams—and she felt a profound exhaustion settle into her bones, which were not, perhaps, as young as they once had been. From the woods adjacent to her path there emanated a sound, strange and disagreeable, yet she did not stop; for she knew, as all poor persons must, that to stop is often to invite disaster. At the terminus of this sorry lane, a single, solitary light burned in an upstairs window—upstairs, mark you, where the gentry sleep—and what awaited her there, whether fair or foul, she could not say; yet forward she went, for forward is the only direction available to those whom Providence has seen fit to test.`
+    },
+    {
+      key: "marquez",
+      name: "Gabriel García Márquez",
+      genre: "Magical Realism",
+      styleInstructions: "Treat the miraculous as mundane and the mundane as miraculous. Use cyclical time, lush sensory imagery, and family sagas. Sentences should breathe and wander. The tone is both melancholic and celebratory.",
+      sampleParagraph: `Many years later, facing the light in the upstairs window, she would remember that narrow road she walked down as the evening fell. She had been traveling for so many hours that fatigue had become a kind of companion, faithful and dull. When the strange sound came from the woods—perhaps an animal, perhaps the soul of an ancestor—she did not stop, because in that town, as in all towns forgotten by the mapmakers, sounds were merely the earth remembering aloud. The light at the end burned with a patient inevitability, and though she did not know who waited for her or what cards fortune had dealt, she continued forward, accepting with the same resignation with which one accepts love or yellow fever, that the journey had chosen her long ago.`
+    },
+    {
+      key: "orwell",
+      name: "George Orwell",
+      genre: "Political / Dystopian",
+      styleInstructions: "Use plain, unadorned English with moral clarity. Avoid metaphor where possible; let facts speak. The prose should feel like honest reportage even when describing horror. The enemy is institutional cruelty and the corruption of language.",
+      sampleParagraph: `The road was narrow, and the light was failing. She had walked for six hours, perhaps seven, and her body ached with the honest fatigue of physical labor. A noise came from the trees to her left—something mechanical, or perhaps animal—but she did not stop. Stopping served no purpose. At the end of the road, one light burned in an upper window. She did not know what waited inside. It was probably nothing; it was possibly everything. In any case, she had come too far to turn back. She walked on, her footsteps dull against the packed earth.`
+    },
+    {
+      key: "poe",
+      name: "Edgar Allan Poe",
+      genre: "Gothic / Macabre",
+      styleInstructions: "Create atmosphere through repetition, rhythm, and ornate vocabulary. Use unreliable, obsessive narrators. Favor the crepuscular and the morbid. Let dread accumulate through cadence and sensory distortion rather than plot.",
+      sampleParagraph: `It was in the dying of the day, in that crepuscular hour when shadows lengthen and the soul grows fearful of itself, that she found herself upon that narrow and ill-omened road. Hours—interminable hours!—had she journeyed, until her very bones cried out in a tongue of exquisite agony. Then came the sound—a sound from the wood, abrupt and eldritch, though I dare not describe its precise timbre, lest the reader share the horror that then congealed my blood. Yet she did not stop! Madness or resolve, I know not which, propelled her limbs. At the path's terminus, a lone and spectral light flickered in an upper chamber, and though she knew not whether it portended salvation or yet deeper damnation, onward—ever onward!—she crept into the waiting darkness.`
+    },
+    {
+      key: "vonnegut",
+      name: "Kurt Vonnegut",
+      genre: "Satirical / Postmodern Sci-Fi",
+      styleInstructions: "Use short paragraphs, dark humor, and fatalism. Address the reader with conspiratorial simplicity. Undercut tragedy with irony. Time is nonlinear; so it goes. Pop references and anachronisms are welcome.",
+      sampleParagraph: `The traveler walked down a narrow road. So it goes. She had been walking for hours and she was tired. Her bones were tired. The universe doesn't care about tired bones, but hers were tired anyway. There was a sound in the woods. It might have been a squirrel. It might have been the Four Horsemen of the Apocalypse, which is a concept she didn't believe in, being an atheist, though she did appreciate the imagery. At the end of the road there was a light in an upstairs window. She didn't know what was there. Nobody ever knows what's there. She kept walking because stopping would have been a different story, and this was the one she was in.`
+    },
+    {
+      key: "morrison",
+      name: "Toni Morrison",
+      genre: "Literary / American Gothic",
+      styleInstructions: "Write lyrical, haunting prose rooted in African American oral tradition. Use non-linear time and mythic resonance. The past is a living presence. Address trauma, identity, and memory with poetic compression.",
+      sampleParagraph: `The road narrowed itself to a whisper as evening came, not all at once but like a woman entering a room she knows is hers. She had traveled hours enough to feel the ache settle deep, in the marrow where memory lives. Something called from the wood—a sound like a name almost remembered—but she did not stop, for the unwise stop when the past calls, and the past is always calling. One light burned at the road's end, upstairs, where women keep their secrets and their sorrows. What waited? Ghost, lover, or her own face in a glass? She did not know. Still, she went forward, because backward was a grave, and she wasn't dead yet.`
+    },
+    {
+      key: "murakami",
+      name: "Haruki Murakami",
+      genre: "Contemporary Surrealism",
+      styleInstructions: "Feature lonely protagonists who cook, listen to jazz, and accept the surreal as ordinary. Use flat affect for extraordinary events. Include wells, cats, and unexplained longing. The tone is melancholic and detached.",
+      sampleParagraph: `She walked down the narrow road at six-thirty in the evening, listening to the Eagles on her headphones, though she wasn't really hearing the music. She had been walking for exactly four hours and seventeen minutes, long enough for her body to become an appliance she operated rather than inhabited. A strange sound came from the woods—like dry leaves, or like someone peeling an orange very slowly—but she didn't stop. Stopping would have required a decision, and she was fresh out of those. At the end of the road, a light burned in an upstairs window. It was a small light, the kind of light that keeps company with solitude. She had no idea what waited there. Probably nothing. Probably everything. She made spaghetti that night, but that's later.`
+    },
+    {
+      key: "christie",
+      name: "Agatha Christie",
+      genre: "Mystery / Cozy",
+      styleInstructions: "Emphasize puzzle-like plotting, red herrings, and clipped, polite dialogue. Use a rational, observant narrator. Every detail must feel like a clue. The setting is domestic or isolated; the violence is bloodless but the psychology sharp.",
+      sampleParagraph: `Miss Hargreaves proceeded down the narrow lane as the light began to fade. She had, she reflected, been traveling for quite seven hours, and she was not, if she were honest, as young as she had been. A distinctly odd noise emanated from the copse to her left, but Miss Hargreaves was not the sort of woman to indulge in nerves. At the end of the lane, a single light showed in an upper window. Who could be there, she wondered, and why? It was, she felt certain, going to prove a most interesting evening. She straightened her hat and walked briskly forward.`
+    },
+    {
+      key: "lovecraft",
+      name: "H.P. Lovecraft",
+      genre: "Cosmic Horror",
+      styleInstructions: "Use archaic, polysyllabic vocabulary. Evoke cosmic insignificance and forbidden knowledge. The narrator is often academic and pessimistic. Describe entities as indescribable. Madness is the rational response to the universe.",
+      sampleParagraph: `The narrow road wound through that accursed wood as the last sickly light of day withdrew from the heavens, and she, having traveled for uncounted hours, felt an eldritch weariness permeate her mortal frame. From the Stygian depths of the forest there issued a sound—I know not how else to describe it than as the piping of some nameless, antediluvian thing that should not, by all that is sane and natural, exist in the Euclidean world. Yet she did not stay her steps, whether by madness or by some instinct older than reason, I cannot say. At the path's end, a solitary and feeble light burned in an upper casement, and though she knew not whether it marked the habitation of man or of those Elder Gods whose coming means the end of all things, she pressed onward into that waiting darkness, for she had seen too much to turn back.`
+    },
+    {
+      key: "mccarthy",
+      name: "Cormac McCarthy",
+      genre: "Western / American Gothic",
+      styleInstructions: "Use sparse punctuation, especially omitting apostrophes in contractions. Write biblical, declarative cadences. Landscape is a moral force. Violence is sudden and unflinching. The prose is austere and poetic.",
+      sampleParagraph: `She walked the narrow road in the falling dark. Hours she'd been walking and the tired was in her bones deep. Something made a sound in the woods. She didnt stop. At the end of the road a light burned in an upstairs window. She didnt know what waited. She knew it didnt matter. She went on.`
+    },
+    {
+      key: "wilde",
+      name: "Oscar Wilde",
+      genre: "Decadent / Aesthetic",
+      styleInstructions: "Fill the prose with epigrams, paradox, and witty aphorisms. Prefer artifice over nature, and style over sincerity. Settings should be aristocratic. Dialogue sparkles with cynical elegance. Mock moral seriousness.",
+      sampleParagraph: `It is a curious thing, the effect of a long journey upon the human spirit. Our traveler, proceeding down a road of singular narrowness as evening draped itself about the landscape like a rather disappointing cloak, had endured many hours of locomotion, and her bones—those faithful servants whom we so consistently ignore—protested most strenuously. A sound issued from the neighbouring woodland; she ignored it, as one ignores the opinions of those who have not read Montaigne. At the lane's end, a light burned upstairs—upstairs being, as everyone knows, where the interesting things happen. What awaited her? Adventure, ruin, or merely tea? She hadn't the faintest idea. She went forward regardless. To do anything else would have been in terribly bad taste.`
+    },
+    {
+      key: "plath",
+      name: "Sylvia Plath",
+      genre: "Confessional / Lyrical",
+      styleInstructions: "Write intense, metaphor-driven prose focused on female identity, mental illness, and domestic suffocation. Use medical and natural imagery. The tone is raw, intimate, and often claustrophobic. Every object is a symbol.",
+      sampleParagraph: `The evening was a bandage wrapping the world in gray. She had walked for hours, until her bones were thin as frozen spoons, until the road itself became a vein she traveled inside her own body. A sound cracked from the woods—a black sound, a bell sound—but she did not stop. Stopping meant dying, and she was already doing that, one cell at a time. At the road's end, a light burned in an upstairs window, yellow and mad as a canary. What waited? A man? A mirror? The razor smile of her own father? She didn't know. She didn't not-know. She walked forward into the mouth of it, because the only other direction was the grave she'd been digging since birth.`
+    },
+    {
+      key: "asimov",
+      name: "Isaac Asimov",
+      genre: "Hard Science Fiction",
+      styleInstructions: "Prioritize rationality, dialogue, and explanatory clarity over literary flourish. Problems are solved through logic and deduction. The prose is transparent and functional. Technology and society are explored through conversation rather than action.",
+      sampleParagraph: `The traveler proceeded along the narrow road at 18:47 hours local time. She had maintained a steady pace for 6.3 hours, resulting in measurable fatigue in her skeletal and muscular systems. At 18:52, an anomalous sound registered from the wooded area to her left—possibly fauna, possibly mechanical interference. She elected to continue without investigation, a logically sound decision given the lack of data. At the terminus of the road, she observed a single illuminated point source in an upper-floor window. She possessed no information regarding the occupant or conditions within. Nevertheless, she continued forward. Probability suggested that information awaited acquisition.`
+    },
+    {
+      key: "hurston",
+      name: "Zora Neale Hurston",
+      genre: "Harlem Renaissance / Folklore",
+      styleInstructions: "Use dialect, vibrant natural imagery, and the cadences of oral storytelling. Nature is alive and conversational. Characters are resilient and emotionally direct. The prose should feel spoken as much as written.",
+      sampleParagraph: `Evening come down soft on that narrow road, and she been walking since sunup, her bones talking tired talk to her skin. Woods on the side make a strange sound, like maybe the spirits whispering, but she ain't stopping—no ma'am, the devil himself couldn't halt her feet. Way down yonder, one light burning up in the high room of the house, shining like a star somebody stuck in a window. She don't know what waiting there. Might be trouble, might be sweet tea and cornbread. But she keep going, 'cause her mama didn't raise no child that turn back from the end of the road.`
+    },
+    {
+      key: "kafka",
+      name: "Franz Kafka",
+      genre: "Absurdist / Existential",
+      styleInstructions: "Create a tone of bureaucratic nightmare and free-floating guilt. The protagonist is trapped by incomprehensible institutions. Use deadpan, precise prose to describe the absurd. Anxiety is constant and never resolved.",
+      sampleParagraph: `The traveler walked down the narrow road as the office of day closed and the bureaucracy of night began its shift. She had filed the appropriate forms for her journey, yet no one had informed her how many hours it would require, and her bones ached with the particular exhaustion of one who has waited in lines that lead nowhere. A sound issued from the woods—perhaps a summons, perhaps merely another regulation she had failed to read. She did not stop. To stop would require a permit she did not possess. At the end of the road, a light burned in an upstairs window. She did not know what awaited. She suspected it was her trial, or possibly her promotion. She continued forward, because the road permitted no appeals.`
+    },
+    {
+      key: "dostoevsky",
+      name: "Fyodor Dostoevsky",
+      genre: "Psychological Realism",
+      styleInstructions: "Write feverish, philosophical monologues. The narrator is morally tormented and self-accusing. St. Petersburg or its spiritual equivalent looms in the background. Use rhetorical questions and religious doubt. Every action is weighed on a moral scale.",
+      sampleParagraph: `She walked down the narrow road, and the evening fell like a judgment upon her head. For hours—oh, what are hours but the torture of consciousness measured out in steps?—she had journeyed, and now fatigue inhabited her bones as sin inhabits the soul. A sound came from the wood, and I ask you, reader: would you have stopped? Would I? She did not stop, not because she was brave, but because she was guilty, and guilt knows no rest. At the end of that miserable path, a light burned in an upstairs window—upstairs, where God perhaps sits, or perhaps He does not sit, which is worse. She did not know what awaited. She knew only that she deserved it. Forward she went, because backward lay the road she had already despised.`
+    },
+    {
+      key: "hoover",
+      name: "Colleen Hoover",
+      genre: "Contemporary Romance / Emotional Drama",
+      styleInstructions: "Write in raw, emotionally intense close third-person or first-person present tense. Focus on vulnerable heroines with painful secrets, morally gray but redeemable love interests, and domestic emotional stakes. Use short, breathless chapters, heavy interiority, and confessional voice. Build tension through withholding information. Make the reader's heart race with anxiety and longing.",
+      sampleParagraph: `I walk down the narrow road because I have nowhere else to go. My bones don't just ache—they remember. Six hours of driving and now this, the last place I want to be. The woods are dark and something cracks behind me, but I don't turn around. I stopped looking over my shoulder three years ago; it never helped. There's a light in the upstairs window at the end of the path. Warm. Yellow. Inviting. It looks like safety, and I know better than anyone that safety is usually a lie. But my feet keep moving anyway, because hope is the most stubborn kind of heartbreak.`
+    },
+    {
+      key: "henry",
+      name: "Emily Henry",
+      genre: "Beach Read / Literary Romance",
+      styleInstructions: "Combine razor-sharp wit with deep emotional undercurrents. Use lush, atmospheric descriptions of setting as a mirror for internal conflict. Feature protagonists who are writers or readers, meta-commentary on storytelling, and dialogue that sparkles with banter before turning vulnerable. Balance laugh-out-loud observations with aching loneliness. Every scene should feel like golden-hour light.",
+      sampleParagraph: `The road narrowed exactly like my editor said my plot had—suddenly, and with very little warning. I'd been driving for six hours, which was five hours and forty-five minutes longer than I'd intended, because apparently I would rather face my father's empty house than admit I had no ending for my book. The trees arched overhead like they were trying to keep a secret. When a branch snapped, I ignored it; I was too busy narrating my own life in third person, because that's what writers do when reality gets too loud. Then I saw the light upstairs. It looked like a sentence I hadn't yet written—full of possibility, terrifying and bright.`
+    },
+    {
+      key: "mcquiston",
+      name: "Casey McQuiston",
+      genre: "Rom-Com / LGBTQ+ Romance",
+      styleInstructions: "Write with chaotic-good energy, fast-paced dialogue, and internet-era humor. Use ensemble casts, sharp pop-culture references, and hopepunk optimism. Romance should feel inevitable but earned. Include witty group chats, political subtext treated as personal stakes, and sex-positive tenderness. The prose should feel like a group of brilliant idiots falling in love against their better judgment.",
+      sampleParagraph: `The road was narrow, which was honestly on-brand for this entire disaster of a trip. I'd been in the car for six hours, my playlist had looped twice, and my bones had filed a formal complaint. A weird noise came from the woods—probably a deer, possibly a cryptid, definitely not my problem. Up ahead, a single light burned in an upstairs window like a bars-are-closing-last-call beacon. Whoever was up there was either my salvation or about to be deeply inconvenienced by my existence. Either way, I had to charge my phone and beg for directions. Forward was the only option. I was too stubborn to die and too caffeinated to turn back.`
+    },
+    {
+      key: "hibbert",
+      name: "Talia Hibbert",
+      genre: "Contemporary Rom-Com / Diverse",
+      styleInstructions: "Write with British humor, sex-positivity, and unapologetic diversity. Use self-deprecating but confident heroines, found-family dynamics, and neurodivergent-coded observations. Banter should be fast and filthy-funny, while emotional beats land with soft precision. Normalise therapy, boundaries, and enthusiastic consent. The voice is cozy, grounded, and sparkling.",
+      sampleParagraph: `The lane was far too narrow for a woman of my anxiety levels. I'd been travelling for six hours, or—if one counted the emotional toll—approximately twelve years. My joints ached, my bra was staging a revolt, and the woods to my left were making suspicious rustling sounds. I chose not to investigate. I had enough problems, namely a distinct lack of snacks and an overabundance of pride. Then I saw it: one stubborn light in an upstairs window, glowing like a judgemental eyebrow raised in curiosity. I had no idea what awaited me. Probably a cranky stranger. Possibly a ghost. Almost certainly a conversation I wasn't prepared for. I marched on anyway, because turning back wasn't in my repertoire.`
+    },
+    {
+      key: "hoang",
+      name: "Helen Hoang",
+      genre: "Contemporary Romance / Neurodiversity",
+      styleInstructions: "Write with precise, direct emotional communication. Feature STEM-minded protagonists who approach love with logic until overwhelmed by sensation. Use blush-worthy but deeply sweet intimacy scenes written with explicit consent and emotional vulnerability. Family obligations and cultural expectations soft against the central romance. The prose is clean, sensory, and honest.",
+      sampleParagraph: `The road was exactly 1.2 meters wider than my car, which meant I had been calculating collision probabilities for the last six hours. My muscles ached with the statistical certainty of poor ergonomics. At 18:47, a sound originated from the tree line—deciduous forest, dense canopy, insufficient data for threat assessment. I did not stop. Stopping would require recalculating my route, and I had already committed to the path. Then I saw the light in the upper window. Direct light. Steady. It meant occupancy. I weighed the variables: stranger, danger, or shelter. My heart rate increased by twelve beats per minute. I drove forward, because some calculations are worth the uncertainty.`
+    },
+    {
+      key: "thorne",
+      name: "Sally Thorne",
+      genre: "Romantic Comedy / Enemies to Lovers",
+      styleInstructions: "Use crackling enemies-to-lovers tension, workplace or forced-proximity settings, and anxious, hyper-observant first-person interior monologue. The narrator should be hilariously self-aware, catastrophizing, and magnetically drawn to someone they pretend to despise. Dialogue is weaponized flirtation. The comedy comes from the gap between what the narrator says and what they feel.",
+      sampleParagraph: `I hate this road. I hate the dark. I hate that I've been walking for six hours because someone—definitely not me, a much worse version of me—made terrible life choices. The woods rustled and I absolutely did not flinch. I am a grown woman who pays taxes and intimidates interns. I do not flinch. But I did walk faster, because I have survival instincts, not fear. Up ahead, a light burned in an upstairs window like a challenge. Someone was up there, probably smug and warm and drinking tea I didn't have. My nemesis, if I had to guess. Or my destiny. With my luck, probably both, and definitely infuriating. I straightened my spine and walked faster.`
+    },
+    {
+      key: "guillory",
+      name: "Jasmine Guillory",
+      genre: "Modern Romance / Rom-Com",
+      styleInstructions: "Write with warm, effervescent, food-and-drink-infused prose. Focus on realistic modern dating, easy conversational flow, and celebratory moments. The romance should feel like a perfect cocktail—balanced, refreshing, and leaving you wanting more. Include diverse casts, strong friendships, and love languages expressed through meals, music, and small kindnesses. The tone is inviting and joyful.",
+      sampleParagraph: `The road wound ahead like a ribbon of bad decisions, and I'd been driving it for six hours with nothing but cold coffee and a stale granola bar for company. My whole body felt like I'd been folded into an origami swan by someone who hated me. Something rustled in the trees, but I didn't have the energy to be scared—I was too busy wondering if anyone at the end of this road had decent wine and a functional heater. Then I saw it: one golden square of light in an upstairs window. It looked like hope, or maybe like a really good first date. Either way, it pulled me forward. If nothing else, maybe they'd have snacks.`
+    },
+    {
+      key: "hazelwood",
+      name: "Ali Hazelwood",
+      genre: "STEM Rom-Com / Academic Romance",
+      styleInstructions: "Write with academic-rival energy, grumpy/sunshine dynamics, and feminist rage disguised as banter. Use hyper-competent STEM heroines who are underestimated by everyone except the love interest. Include fake-dating or forced-lab-proximity tropes, lovable chaotic side characters, and a fanfiction-worthy level of pining. The voice is funny, hyperbolic, and emotionally sincere beneath the sarcasm.",
+      sampleParagraph: `The road was narrow, poorly maintained, and objectively terrible—three descriptors also applicable to my current life choices. I had been travelling for six hours, my back had entered a hostile negotiation with my spine, and the woods were making sounds that my rational brain identified as 'wind through leaves' but my anxiety brain filed under 'impending murder.' Up ahead, a light shone in an upstairs window. Someone was home. Someone with, presumably, a roof and walls and a complete absence of my current disaster. I considered my options: continue toward potential safety, or stand in the dark being eaten by mosquitoes. Academically, the choice was obvious. Emotionally, I was already annoyed at whoever lived there for witnessing my defeat.`
+    }
+  ];
+
+  /* ---------- State ---------- */
+  let currentGen = null;
+  let currentBookGen = null;
+  let outlineData = { title: "", chapters: [], tone: "", complexity: "", conflict: "", adherence: 50, writerStyle: "", genres: [], narrativeFocus: "", avoid: "" };
+  let bookData = { outlineTitle: "", chapters: [] };
+  let bookCurrentIdx = 0;
+
+  /* ---------- Utilities ---------- */
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function switchPage(page) {
+    outlinePage.classList.toggle("active", page === "outline");
+    bookPage.classList.toggle("active", page === "book");
+    navOutlineBtn.classList.toggle("active", page === "outline");
+    navBookBtn.classList.toggle("active", page === "book");
+    if (page === "book") loadOutlineListIntoSelect();
+  }
+
+  /* ---------- Prompt Helpers ---------- */
+  function getToneInstruction(tone) {
+    const map = {
+      lighthearted: "Tone: Lighthearted, upbeat, and optimistic.",
+      dark: "Tone: Dark, grim, and serious.",
+      serious: "Tone: Serious and grounded.",
+      whimsical: "Tone: Whimsical and fantastical.",
+      melancholic: "Tone: Melancholic and reflective.",
+      hopeful: "Tone: Hopeful and inspiring."
+    };
+    return map[tone] || "";
+  }
+
+  function getComplexityInstruction(complexity) {
+    const map = {
+      simple: "Complexity: Keep the plot straightforward. Avoid intricate subplots.",
+      moderate: "Complexity: Use moderate narrative complexity with some subplots.",
+      complex: "Complexity: Use a complex narrative with layered subplots and intricate structure."
+    };
+    return map[complexity] || "";
+  }
+
+  function getConflictInstruction(conflict) {
+    const map = {
+      low: "Conflict: Keep external conflict minimal. Focus on internal journeys.",
+      medium: "Conflict: Include moderate conflict with clear obstacles and tension.",
+      high: "Conflict: Include high levels of conflict, tension, and stakes."
+    };
+    return map[conflict] || "";
+  }
+
+  function getAdherenceInstruction(val, isBook) {
+    let target = isBook ? "the provided chapter outline" : "the user's prompt";
+    if (val < 25) return `Adherence: Treat ${target} as loose inspiration. Take significant creative liberties.`;
+    if (val < 50) return `Adherence: Use ${target} as a general guide with moderate creative expansion.`;
+    if (val < 75) return `Adherence: Follow ${target} closely with reasonable creative details.`;
+    return `Adherence: Stick very closely to ${target}. Minimize deviation.`;
+  }
+
+  function getWriterStyleInstructions(key) {
+    if (!key) return "";
+    let style = WRITER_STYLES.find(s => s.key === key);
+    if (!style) return "";
+    return `Writing Style: Adopt the prose manner of ${style.name} (${style.genre}). ${style.styleInstructions}`;
+  }
+
+  function updateAdherenceLabel(slider, labelEl) {
+    let val = parseInt(slider.value);
+    let text;
+    if (val < 25) text = "Very Creative: takes major liberties.";
+    else if (val < 50) text = "Creative: moderate expansion beyond the prompt.";
+    else if (val < 75) text = "Balanced: moderate creative freedom, respects the core idea.";
+    else text = "Strict: sticks closely to the prompt.";
+    labelEl.textContent = text;
+  }
+
+  adherenceSlider.oninput = () => updateAdherenceLabel(adherenceSlider, adherenceLabelEl);
+  bookAdherenceSlider.oninput = () => updateAdherenceLabel(bookAdherenceSlider, bookAdherenceLabelEl);
+
+  /** Shared context-line builder for outline and chapter prompts. */
+  function buildContextLines(opts) {
+    let lines = [];
+    if (opts.genres?.length) lines.push(`GENRES: ${opts.genres.join(", ")}.`);
+    if (opts.focus) lines.push(`CRITICAL NARRATIVE FOCUS AND PRIORITIES (follow exactly; override defaults):\n${opts.focus}`);
+    if (opts.avoid) lines.push(`STRICT FORBIDDEN LIST (do not include under any circumstances):\n${opts.avoid}`);
+    if (opts.tone && opts.tone !== "any") lines.push(getToneInstruction(opts.tone));
+    if (opts.complexity) lines.push(getComplexityInstruction(opts.complexity));
+    if (opts.conflict) lines.push(getConflictInstruction(opts.conflict));
+    if (opts.adherence !== undefined) lines.push(getAdherenceInstruction(opts.adherence, opts.isBook));
+    if (opts.writerStyle) lines.push(getWriterStyleInstructions(opts.writerStyle));
+    return lines.join("\n");
+  }
+
+  /* ---------- Genres ---------- */
+  function populateGenres() {
+    genreCtn.innerHTML = "";
+    for (let g of GENRES) {
+      let lbl = document.createElement("label");
+      lbl.className = "genre-tag";
+      let cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = g;
+      lbl.appendChild(cb);
+      lbl.appendChild(document.createTextNode(g));
+      genreCtn.appendChild(lbl);
+    }
+  }
+
+  function getSelectedGenres() {
+    return [...genreCtn.querySelectorAll("input:checked")].map(cb => cb.value);
+  }
+
+  function setSelectedGenres(arr) {
+    for (let cb of genreCtn.querySelectorAll("input")) cb.checked = arr && arr.includes(cb.value);
+  }
+
+  /* ---------- Writer Styles ---------- */
+  function populateWriterStyles() {
+    writerStyleSelect.innerHTML = '<option value="">Any / Neutral</option>';
+    for (let s of WRITER_STYLES) {
+      let opt = document.createElement("option");
+      opt.value = s.key;
+      opt.textContent = s.name + " - " + s.genre;
+      writerStyleSelect.appendChild(opt);
+    }
+  }
+
+  function updateSelectedStylePreview() {
+    let key = writerStyleSelect.value;
+    let style = WRITER_STYLES.find(s => s.key === key);
+    if (!style) { selectedStylePreview.innerHTML = ""; return; }
+    selectedStylePreview.innerHTML = `<strong>${escapeHtml(style.name)}</strong> - ${escapeHtml(style.genre)}. <em>${escapeHtml(style.styleInstructions)}</em>`;
+  }
+
+  writerStyleSelect.onchange = updateSelectedStylePreview;
+
+  function renderStyleCards(filter) {
+    filter = (filter || "").toLowerCase();
+    let html = "";
+    for (let s of WRITER_STYLES) {
+      if (filter && !s.name.toLowerCase().includes(filter) && !s.genre.toLowerCase().includes(filter)) continue;
+      html += `<div class="style-card">
+        <div><span class="style-name">${escapeHtml(s.name)}</span> <span class="style-genre">- ${escapeHtml(s.genre)}</span></div>
+        <div class="style-desc">${escapeHtml(s.styleInstructions)}</div>
+        <div class="small-note" style="margin-bottom:4px;">Sample:</div>
+        <div class="style-sample">${escapeHtml(s.sampleParagraph)}</div>
+      </div>`;
+    }
+    if (!html) html = "<p class='empty-msg'>No styles match your search.</p>";
+    return html;
+  }
+
+  function openStyleModal() {
+    styleModalContent.innerHTML = renderStyleCards();
+    styleSearchInput.value = "";
+    styleModal.classList.add("open");
+  }
+
+  function filterStyles() {
+    styleModalContent.innerHTML = renderStyleCards(styleSearchInput.value);
+  }
+
+  function closeStyleModal() { styleModal.classList.remove("open"); }
+
+  /* ---------- Outline Generation ---------- */
+  async function generateOutline() {
+    let idea = promptInput.value.trim();
+    let count = parseInt(chapterCountInput.value);
+    let len = lengthSelect.value;
+
+    if (!idea) { alert("Please enter a story idea."); return; }
+    if (isNaN(count) || count < 1 || count > 50) { alert("Chapter count must be 1-50."); return; }
+
+    generateBtn.disabled = true;
+    stopBtn.hidden = false;
+    outlineLoadingEl.hidden = false;
+    outlineStreamEl.hidden = false;
+    outlineStreamEl.textContent = "";
+    chaptersCtn.innerHTML = "";
+    outlineActions.hidden = true;
+
+    let lenDesc = len === "brief" ? "1-2 sentences" : len === "medium" ? "1 paragraph (3-5 sentences)" : "2-3 paragraphs with specific plot beats";
+
+    let selectedGenres = getSelectedGenres();
+    let contextLines = buildContextLines({
+      genres: selectedGenres,
+      focus: narrativeFocusInput.value.trim(),
+      avoid: avoidInput.value.trim(),
+      tone: toneSelect.value,
+      complexity: complexitySelect.value,
+      conflict: conflictSelect.value,
+      adherence: parseInt(adherenceSlider.value),
+      writerStyle: writerStyleSelect.value,
+      isBook: false
+    });
+
+    let instruction = `You are an expert fiction outline writer. Create a complete, self-contained story outline with exactly ${count} chapters.
+
+User's idea: "${idea}"
+
+${contextLines}
+
+Rules:
+- The story must have a definitive, satisfying ending. No open threads for sequels.
+- Do NOT simply restate the user's idea. Expand into a full narrative.
+- Each chapter synopsis must be ${lenDesc}.
+- On the FIRST line, write "Title: " followed by a creative, evocative title for the story (not a chapter title).
+- Starting from the second line, output each chapter with "Chapter N: Title" on its own line, followed by the synopsis on subsequent lines. Separate chapters with a blank line.
+
+Write the outline now.`;
+
+    let streamedText = "";
+    currentGen = root.generateText({
+      instruction: instruction,
+      onChunk: (data) => {
+        streamedText += data.textChunk;
+        outlineStreamEl.textContent = streamedText;
+        outlineStreamEl.scrollTop = outlineStreamEl.scrollHeight;
+      }
+    });
+
+    try {
+      let text = await currentGen;
+      let storyTitle = "";
+      let titleMatch = text.match(/^Title:\s*(.+)$/im);
+      if (titleMatch) {
+        storyTitle = titleMatch[1].trim();
+        text = text.replace(titleMatch[0], "").trim();
+      }
+      let parsed = parseOutlineText(text);
+      outlineData = {
+        title: storyTitle || idea.substring(0, 60),
+        idea: idea,
+        chapters: parsed,
+        tone: toneSelect.value,
+        complexity: complexitySelect.value,
+        conflict: conflictSelect.value,
+        adherence: adherenceSlider.value,
+        writerStyle: writerStyleSelect.value,
+        genres: selectedGenres,
+        narrativeFocus: narrativeFocusInput.value.trim(),
+        avoid: avoidInput.value.trim()
+      };
+      outlineStreamEl.hidden = true;
+      renderStoryTitle();
+      renderChaptersFromOutline();
+      outlineActions.hidden = false;
+    } catch (err) {
+      chaptersCtn.innerHTML = "<p style='color:var(--danger);'>Generation stopped or failed.</p>";
+      outlineStreamEl.hidden = true;
+    } finally {
+      generateBtn.disabled = false;
+      stopBtn.hidden = true;
+      outlineLoadingEl.hidden = true;
+      currentGen = null;
+    }
+  }
+
+  function parseOutlineText(text) {
+    let blocks = text.split(/\n(?=Chapter\s+\d+[:.\s])/i);
+    let chapters = [];
+    for (let block of blocks) {
+      block = block.trim();
+      if (!block) continue;
+      let lines = block.split("\n");
+      let title = lines[0].trim();
+      let body = lines.slice(1).join("\n").trim();
+      if (/^chapter\s+\d+/i.test(title)) {
+        chapters.push({ title, body });
+      } else {
+        chapters.push({ title: "Chapter " + (chapters.length + 1), body: block });
+      }
+    }
+    return chapters;
+  }
+
+  function renderChaptersFromOutline() {
+    let html = "";
+    for (let ch of outlineData.chapters) {
+      html += `<div class="chapter-card"><div class="chapter-title">${escapeHtml(ch.title)}</div><div class="chapter-body">${escapeHtml(ch.body)}</div></div>`;
+    }
+    chaptersCtn.innerHTML = html;
+  }
+
+  function renderStoryTitle() {
+    if (outlineData.title && outlineData.title !== "Untitled") {
+      storyTitleDisplay.textContent = outlineData.title;
+      storyTitleDisplay.hidden = false;
+    } else {
+      storyTitleDisplay.hidden = true;
+    }
+  }
+
+  let outlineEditing = false;
+  function toggleOutlineEdit() {
+    outlineEditing = !outlineEditing;
+    editOutlineBtn.textContent = outlineEditing ? "Done" : "Edit";
+    if (outlineEditing) {
+      let html = "";
+      for (let i = 0; i < outlineData.chapters.length; i++) {
+        let ch = outlineData.chapters[i];
+        html += `<div class="chapter-card editable">
+          <input type="text" class="chapter-title-input" id="editTitle${i}" value="${escapeHtml(ch.title)}">
+          <textarea class="chapter-body-input" id="editBody${i}">${escapeHtml(ch.body)}</textarea>
+        </div>`;
+      }
+      chaptersCtn.innerHTML = html;
+    } else {
+      for (let i = 0; i < outlineData.chapters.length; i++) {
+        let titleEl = document.getElementById("editTitle" + i);
+        let bodyEl = document.getElementById("editBody" + i);
+        if (titleEl) outlineData.chapters[i].title = titleEl.value.trim();
+        if (bodyEl) outlineData.chapters[i].body = bodyEl.value.trim();
+      }
+      renderChaptersFromOutline();
+    }
+  }
+
+  /* ---------- Outline Save / Load ---------- */
+  async function saveCurrentOutline() {
+    let name = outlineSaveNameInput.value.trim() || outlineData.title || "Untitled Outline";
+    if (await kv.outlines.get(name)) {
+      if (!confirm(`"${name}" already exists. Overwrite?`)) return;
+    }
+    await kv.outlines.set(name, JSON.parse(JSON.stringify(outlineData)));
+    outlineSaveNameInput.value = "";
+    alert("Outline saved!");
+    loadOutlineListIntoSelect();
+  }
+
+  async function loadOutlineListIntoSelect() {
+    let keys = await kv.outlines.keys();
+    outlineSelect.innerHTML = '<option value="">-- Load a saved outline --</option>';
+    for (let k of keys) {
+      let opt = document.createElement("option");
+      opt.value = k;
+      opt.textContent = k;
+      outlineSelect.appendChild(opt);
+    }
+  }
+
+  function onOutlineSelectChange() {
+    let key = outlineSelect.value;
+    if (!key) { bookOutlinePreview.hidden = true; return; }
+    loadOutlineByKey(key).then(() => {
+      restoreOutlineControls(outlineData);
+      previewOutlineForBook();
+    });
+  }
+
+  async function loadOutlineByKey(key) {
+    let data = await kv.outlines.get(key);
+    if (!data) return;
+    outlineData = data;
+    renderChaptersFromOutline();
+    outlineActions.hidden = false;
+  }
+
+  function restoreOutlineControls(data) {
+    if (!data) return;
+    if (data.chapters) chapterCountInput.value = data.chapters.length;
+    if (data.tone) toneSelect.value = data.tone;
+    if (data.complexity) complexitySelect.value = data.complexity;
+    if (data.conflict) conflictSelect.value = data.conflict;
+    if (data.adherence !== undefined) adherenceSlider.value = data.adherence;
+    if (data.writerStyle !== undefined) writerStyleSelect.value = data.writerStyle;
+    setSelectedGenres(data.genres || []);
+    if (data.narrativeFocus !== undefined) narrativeFocusInput.value = data.narrativeFocus;
+    if (data.avoid !== undefined) avoidInput.value = data.avoid;
+    if (data.idea) promptInput.value = data.idea;
+    else if (data.title) promptInput.value = data.title;
+    updateAdherenceLabel(adherenceSlider, adherenceLabelEl);
+    updateSelectedStylePreview();
+    renderStoryTitle();
+  }
+
+  function useCurrentOutlineForBook() {
+    if (!outlineData.chapters.length) { alert("Generate or load an outline first."); return; }
+    previewOutlineForBook();
+    initBookFromOutline();
+  }
+
+  function previewOutlineForBook() {
+    let html = "<strong>Outline:</strong><br>";
+    for (let c of outlineData.chapters) {
+      html += "&#8226; " + escapeHtml(c.title) + "<br>";
+    }
+    bookOutlinePreview.innerHTML = html;
+    bookOutlinePreview.hidden = false;
+  }
+
+  /* ---------- Book Logic ---------- */
+  function initBookFromOutline() {
+    bookData.outlineTitle = outlineData.title || "Untitled";
+    bookData.chapters = outlineData.chapters.map(c => ({
+      title: c.title,
+      outlineBody: c.body,
+      body: "",
+      hiddenSummary: "",
+      generated: false
+    }));
+    bookCurrentIdx = 0;
+    buildBookTabs();
+
+    if (outlineData.adherence !== undefined) {
+      bookAdherenceSlider.value = outlineData.adherence;
+      updateAdherenceLabel(bookAdherenceSlider, bookAdherenceLabelEl);
+    }
+
+    bookGenresInfoEl.textContent = outlineData.genres?.length
+      ? "Genres: " + outlineData.genres.join(", ")
+      : "Genres: None specified";
+
+    bookNarrativeFocusInput.value = "";
+    bookAvoidInput.value = "";
+
+    bookControls.hidden = false;
+    renderBookChapterContent();
+    bookActions.hidden = false;
+    exportRow.hidden = false;
+    updateContextWarning();
+  }
+
+  function buildBookTabs() {
+    tabsRow.innerHTML = "";
+    for (let i = 0; i < bookData.chapters.length; i++) {
+      let btn = document.createElement("button");
+      btn.className = "book-chapter-tab";
+      btn.textContent = "Ch " + (i + 1);
+      btn.onclick = () => setBookTab(i);
+      if (i === bookCurrentIdx) btn.classList.add("active");
+      let ch = bookData.chapters[i];
+      if (i > bookCurrentIdx && !ch.generated) btn.classList.add("locked");
+      tabsRow.appendChild(btn);
+    }
+  }
+
+  function setBookTab(idx) {
+    if (idx < 0 || idx >= bookData.chapters.length) return;
+    let targetCh = bookData.chapters[idx];
+    if (!targetCh.generated && idx > bookCurrentIdx) return;
+    bookCurrentIdx = idx;
+    [...tabsRow.querySelectorAll(".book-chapter-tab")].forEach((b, i) => {
+      b.classList.toggle("active", i === idx);
+      let ch = bookData.chapters[i];
+      b.classList.toggle("locked", i > bookCurrentIdx && !ch.generated);
+    });
+    renderBookChapterContent();
+    updateContextWarning();
+  }
+
+  function renderBookChapterContent() {
+    let ch = bookData.chapters[bookCurrentIdx];
+    if (!ch) {
+      bookContentArea.innerHTML = `<p class="empty-msg">No chapter data.</p>`;
+      updateBookButtons();
+      return;
+    }
+    let html = `<div class="chapter-title" style="margin-bottom:10px;">${escapeHtml(ch.title)}</div>`;
+    if (ch.generated && ch.body) {
+      html += `<div class="generated-text">${escapeHtml(ch.body)}</div>`;
+    } else if (ch.body) {
+      html += `<div class="generated-text">${escapeHtml(ch.body)}</div>`;
+      html += `<p class="small-note" style="color:var(--warning); margin-top:8px;">Generation was interrupted. Click Retry to try again.</p>`;
+    } else {
+      html += `<p class="empty-msg">Not yet generated. Click Generate Chapter.</p>`;
+      html += `<div class="small-note" style="margin-top:8px;"><strong>Outline:</strong> ${escapeHtml(ch.outlineBody)}</div>`;
+    }
+    bookContentArea.innerHTML = html;
+    updateBookButtons();
+  }
+
+  function updateBookButtons() {
+    let ch = bookData.chapters[bookCurrentIdx];
+    generateChapterBtn.hidden = true;
+    retryChapterBtn.hidden = true;
+    regenerateChapterBtn.hidden = true;
+    if (!ch) { stopBookBtn.hidden = true; return; }
+    if (!stopBookBtn.hidden) return; // generating
+    if (ch.generated) {
+      regenerateChapterBtn.hidden = false;
+    } else if (ch.body) {
+      retryChapterBtn.hidden = false;
+    } else {
+      generateChapterBtn.hidden = false;
+    }
+  }
+
+  async function generateCurrentBookChapter() {
+    let ch = bookData.chapters[bookCurrentIdx];
+    if (!ch) return;
+    let partialText = ch.body || "";
+    ch.body = "";
+    ch.hiddenSummary = "";
+    ch.generated = false;
+    await runBookChapterGeneration(ch, partialText);
+  }
+
+  async function regenerateBookChapter() {
+    let ch = bookData.chapters[bookCurrentIdx];
+    if (!ch || !ch.generated) return;
+
+    let hasLater = bookCurrentIdx + 1 < bookData.chapters.length && bookData.chapters[bookCurrentIdx + 1].generated;
+    if (hasLater) {
+      if (!confirm("Regenerating this chapter will invalidate subsequent chapters (their continuity references the old version). Continue?")) return;
+      for (let i = bookCurrentIdx + 1; i < bookData.chapters.length; i++) {
+        bookData.chapters[i].body = "";
+        bookData.chapters[i].hiddenSummary = "";
+        bookData.chapters[i].generated = false;
+      }
+      buildBookTabs();
+    }
+
+    ch.body = "";
+    ch.hiddenSummary = "";
+    ch.generated = false;
+    await runBookChapterGeneration(ch);
+  }
+
+  async function runBookChapterGeneration(ch, startWithText) {
+    let len = bookChapterLengthSelect.value;
+    let maxFullText = root.maxFullTextContextChapters || 2;
+
+    let previousSummaries = [];
+    for (let i = 0; i < bookCurrentIdx; i++) {
+      let prev = bookData.chapters[i];
+      if (prev.hiddenSummary) previousSummaries.push(`Chapter ${i + 1}: ${prev.hiddenSummary}`);
+    }
+    let previousTexts = [];
+    let startIdx = Math.max(0, bookCurrentIdx - maxFullText);
+    for (let i = startIdx; i < bookCurrentIdx; i++) {
+      let prev = bookData.chapters[i];
+      if (prev.body) previousTexts.push(`--- Chapter ${i + 1} ---\n${prev.body}`);
+    }
+
+    let lengthDesc = len === "short" ? "around 500 words" : len === "medium" ? "around 1500 words" : "around 3000 words";
+
+    let bookFocus = bookNarrativeFocusInput.value.trim();
+    let bookAvoid = bookAvoidInput.value.trim();
+    let focus = bookFocus || outlineData.narrativeFocus || "";
+    let avoid = bookAvoid || outlineData.avoid || "";
+
+    let contextLines = buildContextLines({
+      genres: outlineData.genres,
+      focus: focus,
+      avoid: avoid,
+      tone: outlineData.tone,
+      complexity: outlineData.complexity,
+      conflict: outlineData.conflict,
+      adherence: parseInt(bookAdherenceSlider.value),
+      writerStyle: outlineData.writerStyle,
+      isBook: true
+    });
+
+    let instruction = `You are an expert fiction writer. Write Chapter ${bookCurrentIdx + 1} of a novel.
+
+Story outline for this chapter: "${ch.outlineBody}"
+
+Overall story premise: "${outlineData.title || 'See previous chapters for context.'}"
+
+${contextLines}
+
+${previousSummaries.length ? 'HIDDEN SUMMARIES of previous chapters (for continuity):\n' + previousSummaries.join('\n\n') + '\n\n' : ''}${previousTexts.length ? 'FULL TEXT of recent chapters (for voice and detail consistency):\n' + previousTexts.join('\n\n') + '\n\n' : ''}
+Rules:
+- Write prose, not a synopsis. Narrative voice, dialogue, and scene-building are expected.
+- Target length: ${lengthDesc}.
+- Follow naturally from previous events and set up the next chapter where applicable.
+- Maintain character names, motivations, and plot details consistently.
+- Output only the chapter text. Do NOT include meta commentary.
+- After the chapter text, on a new line, write [HIDDEN_SUMMARY] followed by a concise 2-3 sentence summary of key events and state at chapter's end.${startWithText ? '\n- IMPORTANT: The chapter text begins with the text provided in startWith. Continue seamlessly from where it leaves off. Do NOT repeat or restart.' : ''}`;
+
+    let genOpts = {
+      instruction: instruction,
+      onChunk: (data) => {
+        streamedText += data.textChunk;
+        let display = streamedText;
+        let idx = display.indexOf("[HIDDEN_SUMMARY]");
+        if (idx !== -1) display = display.substring(0, idx);
+        let el = document.getElementById("chapterStreamEl");
+        if (el) {
+          el.textContent = display;
+          bookContentArea.scrollTop = bookContentArea.scrollHeight;
+        }
+      }
+    };
+
+    if (startWithText && startWithText.trim().length > 20) {
+      let truncated = startWithText.trim();
+      if (truncated.length > 800) truncated = truncated.slice(-800);
+      genOpts.startWith = truncated;
+    }
+
+    bookContentArea.innerHTML = `<div class="chapter-title" style="margin-bottom:10px;">${escapeHtml(ch.title)}</div><div class="generated-text" id="chapterStreamEl"></div>`;
+
+    generateChapterBtn.hidden = true;
+    retryChapterBtn.hidden = true;
+    regenerateChapterBtn.hidden = true;
+    stopBookBtn.hidden = false;
+    bookLoadingEl.hidden = false;
+
+    let streamedText = "";
+    currentBookGen = root.generateText(genOpts);
+
+    try {
+      let text = await currentBookGen;
+      let hidden = "";
+      let body = text;
+      let hiddenMatch = text.match(/\[HIDDEN_SUMMARY\]\s*([\s\S]*)$/i);
+      if (hiddenMatch) {
+        hidden = hiddenMatch[1].trim();
+        body = text.substring(0, hiddenMatch.index).trim();
+      }
+      ch.body = body;
+      ch.hiddenSummary = hidden;
+      ch.generated = true;
+
+      if (bookCurrentIdx + 1 < bookData.chapters.length) {
+        bookCurrentIdx++;
+        buildBookTabs();
+      }
+      renderBookChapterContent();
+      updateContextWarning();
+    } catch (err) {
+      let display = streamedText;
+      let idx = display.indexOf("[HIDDEN_SUMMARY]");
+      if (idx !== -1) display = display.substring(0, idx);
+      ch.body = display.trim();
+      ch.generated = false;
+      renderBookChapterContent();
+    } finally {
+      stopBookBtn.hidden = true;
+      bookLoadingEl.hidden = true;
+      currentBookGen = null;
+      updateBookButtons();
+    }
+  }
+
+  /* ---------- Book Save / Load ---------- */
+  async function saveCurrentBook() {
+    let name = bookSaveNameInput.value.trim() || bookData.outlineTitle || "Untitled Book";
+    if (await kv.books.get(name)) {
+      if (!confirm(`"${name}" already exists. Overwrite?`)) return;
+    }
+    let payload = {
+      outlineTitle: bookData.outlineTitle,
+      chapters: JSON.parse(JSON.stringify(bookData.chapters)),
+      currentIdx: bookCurrentIdx,
+      tone: outlineData.tone,
+      complexity: outlineData.complexity,
+      conflict: outlineData.conflict,
+      adherence: outlineData.adherence,
+      writerStyle: outlineData.writerStyle,
+      genres: outlineData.genres,
+      narrativeFocus: outlineData.narrativeFocus,
+      avoid: outlineData.avoid,
+      bookNarrativeFocus: bookNarrativeFocusInput.value.trim(),
+      bookAvoid: bookAvoidInput.value.trim()
+    };
+    await kv.books.set(name, payload);
+    bookSaveNameInput.value = "";
+    alert("Book saved!");
+  }
+
+  async function openLoadModal(type) {
+    loadModalTitle.textContent = type === "book" ? "Load Saved Book" : "Load Saved Outline";
+    loadModalList.innerHTML = "";
+    let keys = type === "book" ? await kv.books.keys() : await kv.outlines.keys();
+    if (keys.length === 0) {
+      loadModalList.innerHTML = "<li style='color:var(--text-muted); border:none; justify-content:center;'>Nothing saved yet.</li>";
+    }
+    for (let k of keys) {
+      let li = document.createElement("li");
+      let nameSpan = document.createElement("span");
+      nameSpan.textContent = k;
+      nameSpan.title = k;
+      li.appendChild(nameSpan);
+      let grp = document.createElement("div");
+      grp.className = "btn-group";
+      let loadBtn = document.createElement("button");
+      loadBtn.className = "btn btn-primary btn-small";
+      loadBtn.textContent = "Load";
+      loadBtn.onclick = () => { closeLoadModal(); loadSavedItem(type, k); };
+      let delBtn = document.createElement("button");
+      delBtn.className = "btn btn-danger btn-small";
+      delBtn.textContent = "Delete";
+      delBtn.onclick = async () => {
+        if (!confirm(`Delete "${k}"?`)) return;
+        if (type === "book") await kv.books.delete(k);
+        else await kv.outlines.delete(k);
+        openLoadModal(type);
+      };
+      grp.appendChild(loadBtn);
+      grp.appendChild(delBtn);
+      li.appendChild(grp);
+      loadModalList.appendChild(li);
+    }
+    loadModal.classList.add("open");
+  }
+
+  function closeLoadModal() { loadModal.classList.remove("open"); }
+
+  async function loadSavedItem(type, key) {
+    if (type === "outline") {
+      await loadOutlineByKey(key);
+      restoreOutlineControls(outlineData);
+      switchPage("outline");
+    } else if (type === "book") {
+      let data = await kv.books.get(key);
+      if (!data) { alert("Book not found."); return; }
+      outlineData = {
+        title: data.outlineTitle || key,
+        chapters: data.chapters.map(c => ({ title: c.title, body: c.outlineBody || c.title })),
+        tone: data.tone, complexity: data.complexity, conflict: data.conflict,
+        adherence: data.adherence, writerStyle: data.writerStyle,
+        genres: data.genres || [], narrativeFocus: data.narrativeFocus || "", avoid: data.avoid || ""
+      };
+      bookData.outlineTitle = data.outlineTitle || key;
+      bookData.chapters = data.chapters.map(c => ({
+        title: c.title, outlineBody: c.outlineBody || "",
+        body: c.body || "", hiddenSummary: c.hiddenSummary || "", generated: !!c.generated
+      }));
+      bookCurrentIdx = typeof data.currentIdx === "number" ? data.currentIdx : 0;
+
+      switchPage("book");
+      previewOutlineForBook();
+      buildBookTabs();
+
+      if (outlineData.adherence !== undefined) {
+        bookAdherenceSlider.value = outlineData.adherence;
+        updateAdherenceLabel(bookAdherenceSlider, bookAdherenceLabelEl);
+      }
+      bookGenresInfoEl.textContent = outlineData.genres?.length
+        ? "Genres: " + outlineData.genres.join(", ")
+        : "Genres: None specified";
+      bookNarrativeFocusInput.value = data.bookNarrativeFocus || "";
+      bookAvoidInput.value = data.bookAvoid || "";
+
+      bookControls.hidden = false;
+      renderBookChapterContent();
+      bookActions.hidden = false;
+      exportRow.hidden = false;
+      updateContextWarning();
+    }
+  }
+
+  /* ---------- Context Estimation ---------- */
+  function estimateContextTokens() {
+    let maxFullText = root.maxFullTextContextChapters || 2;
+    let total = 0;
+    let parts = [];
+
+    let instruction = `You are an expert fiction writer. Write Chapter ${bookCurrentIdx + 1} of a novel.`;
+    total += instruction.length;
+    parts.push("base instruction");
+
+    if (outlineData.title) total += outlineData.title.length;
+    let ch = bookData.chapters[bookCurrentIdx];
+    if (ch && ch.outlineBody) total += ch.outlineBody.length;
+    parts.push("outline");
+
+    for (let i = 0; i < bookCurrentIdx; i++) {
+      let prev = bookData.chapters[i];
+      if (prev.hiddenSummary) total += prev.hiddenSummary.length + 20;
+    }
+    parts.push("hidden summaries");
+
+    let startIdx = Math.max(0, bookCurrentIdx - maxFullText);
+    for (let i = startIdx; i < bookCurrentIdx; i++) {
+      let prev = bookData.chapters[i];
+      if (prev.body) total += prev.body.length + 20;
+    }
+    parts.push("full chapter texts");
+
+    let approxTokens = Math.ceil(total / 4);
+    return { chars: total, tokens: approxTokens, parts };
+  }
+
+  function updateContextWarning() {
+    let est = estimateContextTokens();
+    let maxTokens = 6000;
+    try {
+      let meta = root.generateText({getMetaObject: true});
+      if (meta && meta.idealMaxContextTokens) maxTokens = meta.idealMaxContextTokens;
+    } catch (e) {}
+
+    let chapterLen = bookChapterLengthSelect.value;
+    let chapterTargetTokens = chapterLen === "short" ? 500 : chapterLen === "medium" ? 1500 : 3000;
+    let totalEst = est.tokens + chapterTargetTokens;
+
+    if (totalEst > maxTokens * 0.85) {
+      contextWarningEl.hidden = false;
+      contextWarningEl.textContent = `Estimated context: ~${totalEst.toLocaleString()} tokens (budget ~${maxTokens.toLocaleString()}). The chapter may be cut short or lose earlier context. Consider reducing chapter length or using shorter prior chapters.`;
+    } else if (totalEst > maxTokens * 0.6) {
+      contextWarningEl.hidden = false;
+      contextWarningEl.textContent = `Estimated context: ~${totalEst.toLocaleString()} tokens (budget ~${maxTokens.toLocaleString()}). Getting large but should be fine.`;
+    } else {
+      contextWarningEl.hidden = true;
+    }
+  }
+
+  /* ---------- Export ---------- */
+  function buildBookPlainText() {
+    let lines = [];
+    lines.push(bookData.outlineTitle || "Untitled Book");
+    lines.push("=".repeat(Math.max(10, (bookData.outlineTitle || "Untitled Book").length)));
+    lines.push("");
+    for (let i = 0; i < bookData.chapters.length; i++) {
+      let ch = bookData.chapters[i];
+      if (!ch.generated || !ch.body) continue;
+      lines.push(ch.title);
+      lines.push("");
+      lines.push(ch.body);
+      lines.push("");
+      lines.push("");
+    }
+    return lines.join("\n");
+  }
+
+  function buildBookMarkdown() {
+    let lines = [];
+    lines.push(`# ${bookData.outlineTitle || "Untitled Book"}`);
+    lines.push("");
+    for (let i = 0; i < bookData.chapters.length; i++) {
+      let ch = bookData.chapters[i];
+      if (!ch.generated || !ch.body) continue;
+      lines.push(`## ${ch.title}`);
+      lines.push("");
+      lines.push(ch.body);
+      lines.push("");
+    }
+    return lines.join("\n");
+  }
+
+  function downloadBlob(filename, blob) {
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function sanitizeFilename(name) {
+    return name.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/\s+/g, "_") || "book";
+  }
+
+  async function exportBook(format) {
+    let generatedCount = bookData.chapters.filter(c => c.generated && c.body).length;
+    if (generatedCount === 0) { alert("No generated chapters to export."); return; }
+    let baseName = sanitizeFilename(bookData.outlineTitle || "Untitled Book");
+
+    if (format === "txt") {
+      downloadBlob(baseName + ".txt", new Blob([buildBookPlainText()], { type: "text/plain" }));
+    } else if (format === "md") {
+      downloadBlob(baseName + ".md", new Blob([buildBookMarkdown()], { type: "text/markdown" }));
+    } else if (format === "epub") {
+      try {
+        let JSZip = await import("https://esm.sh/jszip@3.10.1");
+        let zip = new JSZip.default();
+        let title = bookData.outlineTitle || "Untitled Book";
+        let titleId = "book-" + Date.now();
+
+        zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
+        zip.folder("META-INF").file("container.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`);
+
+        let manifestItems = "";
+        let spineItems = "";
+        let navPoints = "";
+        let chapterFiles = [];
+
+        for (let i = 0; i < bookData.chapters.length; i++) {
+          let ch = bookData.chapters[i];
+          if (!ch.generated || !ch.body) continue;
+          let fname = `chapter${i + 1}.xhtml`;
+          chapterFiles.push(fname);
+          let escapedBody = escapeHtml(ch.body).replace(/\n/g, "</p>\n<p>");
+          let escapedTitle = escapeHtml(ch.title);
+          zip.folder("OEBPS").file(fname, `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>${escapedTitle}</title></head>
+<body>
+<h1>${escapedTitle}</h1>
+<p>${escapedBody}</p>
+</body>
+</html>`);
+          let id = `ch${i + 1}`;
+          manifestItems += `<item id="${id}" href="${fname}" media-type="application/xhtml+xml"/>\n`;
+          spineItems += `<itemref idref="${id}"/>\n`;
+          navPoints += `<navPoint id="nav${i + 1}" playOrder="${i + 1}"><navLabel><text>${escapedTitle}</text></navLabel><content src="${fname}"/></navPoint>\n`;
+        }
+
+        let escapedTitle = escapeHtml(title);
+        zip.folder("OEBPS").file("content.opf", `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:title>${escapedTitle}</dc:title>
+    <dc:language>en</dc:language>
+    <dc:identifier id="BookId">${titleId}</dc:identifier>
+  </metadata>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+${manifestItems}  </manifest>
+  <spine toc="ncx">
+${spineItems}  </spine>
+</package>`);
+
+        zip.folder("OEBPS").file("toc.ncx", `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head><meta name="dtb:uid" content="${titleId}"/></head>
+  <docTitle><text>${escapedTitle}</text></docTitle>
+  <navMap>
+${navPoints}  </navMap>
+</ncx>`);
+
+        let blob = await zip.generateAsync({ type: "blob", mimeType: "application/epub+zip" });
+        downloadBlob(baseName + ".epub", blob);
+      } catch (err) {
+        alert("EPUB export failed: " + err.message);
+      }
+    }
+  }
+
+  /* ---------- Keyboard Shortcuts ---------- */
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (loadModal.classList.contains("open")) { closeLoadModal(); return; }
+      if (styleModal.classList.contains("open")) { closeStyleModal(); return; }
+    }
+    if (e.ctrlKey && e.key === "Enter") {
+      e.preventDefault();
+      if (outlinePage.classList.contains("active")) {
+        if (!generateBtn.disabled) generateOutline();
+      } else if (bookPage.classList.contains("active") && !bookControls.hidden) {
+        if (!generateChapterBtn.hidden) generateCurrentBookChapter();
+        else if (!retryChapterBtn.hidden) generateCurrentBookChapter();
+      }
+    }
+    if (bookPage.classList.contains("active") && !bookControls.hidden) {
+      if (e.key === "ArrowLeft" && bookCurrentIdx > 0) {
+        e.preventDefault();
+        setBookTab(bookCurrentIdx - 1);
+      } else if (e.key === "ArrowRight") {
+        let nextIdx = bookCurrentIdx + 1;
+        let next = bookData.chapters[nextIdx];
+        if (next && next.generated) { e.preventDefault(); setBookTab(nextIdx); }
+      }
+    }
+  });
+
+  bookChapterLengthSelect.onchange = updateContextWarning;
+
+  /* ---------- Init ---------- */
+  populateWriterStyles();
+  populateGenres();
+  updateSelectedStylePreview();
+</script>
+
+</body>
+</html>

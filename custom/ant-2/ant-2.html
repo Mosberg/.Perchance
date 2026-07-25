@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ant-2 — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Ant Colony Manager - Complete Phaser 5 (3.80) Game
+- Includes: Boot, Preload, Menu, Game, UI, Pause Scenes.
+- Procedural textures (no external images).
+- Basic Audio Synthesis (no external audio files).
+- Pathfinding and Fog of War.
+- Modular Class Structure.
+- Integrated Perchance Plugins: kv (storage), stats (tracking), generateText (AI events).
+-->
+
+<!-- CSS Styles -->
+<style>
+  :root { --bg-color: #1a1a1a; --ui-bg: #2d2d2d; --text-color: #f0f0f0; --accent: #e67e22; }
+  body { margin: 0; padding: 0; overflow: hidden; background: var(--bg-color); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: var(--text-color); user-select: none; }
+  #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+  .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+  .overlay.hidden { display: none !important; }
+  h1 { font-size: 4rem; margin-bottom: 0.5rem; color: var(--accent); text-transform: uppercase; letter-spacing: 5px; text-shadow: 2px 2px #000; }
+  h2 { color: #ccc; margin-bottom: 2rem; }
+  .btn { background: var(--accent); color: #fff; border: none; padding: 15px 40px; font-size: 1.5rem; cursor: pointer; margin: 10px; border-radius: 5px; transition: transform 0.1s, background 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+  .btn:hover { background: #d35400; transform: scale(1.05); }
+  .btn:active { transform: scale(0.95); }
+  .settings-panel { background: var(--ui-bg); padding: 30px; border-radius: 10px; border: 2px solid var(--accent); min-width: 300px; }
+  .setting-row { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; font-size: 1.2rem; }
+  input[type="range"] { width: 150px; cursor: pointer; }
+  #hudLayerEl { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+  .resource-bar { display: flex; gap: 20px; padding: 10px 20px; background: rgba(0, 0, 0, 0.6); border-radius: 0 0 10px 10px; font-size: 1.2rem; font-weight: bold; pointer-events: auto; position: absolute; top: 0; left: 50%; transform: translateX(-50%); }
+  .res-item { display: flex; align-items: center; gap: 8px; }
+  .icon { width: 20px; height: 20px; border-radius: 50%; display: inline-block; }
+  .controls-panel { position: absolute; bottom: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; pointer-events: auto; }
+  .control-btn { background: #444; color: white; border: 1px solid #666; padding: 8px 12px; cursor: pointer; border-radius: 4px; font-size: 0.9rem; }
+  .control-btn.active { background: var(--accent); border-color: var(--accent); }
+  .control-btn:hover { background: #555; }
+  #tutorialOverlayEl { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.9); padding: 20px; border-radius: 8px; max-width: 600px; text-align: left; pointer-events: auto; border: 1px solid #555; z-index: 20; color: #ddd; }
+  #aiEventLogEl { position: absolute; top: 60px; right: 20px; width: 250px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; pointer-events: none; font-size: 0.9rem; color: #aaa; max-height: 150px; overflow-y: auto; }
+  .log-entry { margin-bottom: 5px; border-left: 2px solid var(--accent); padding-left: 5px; animation: fadeIn 0.5s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+  #aiTipEl { margin-top: 15px; color: #4CAF50; font-style: italic; font-size: 0.9rem; max-width: 600px; }
+</style>
+
+<!-- DOM Elements -->
+<div id="game-container"></div>
+
+<!-- HUD -->
+<div id="hudLayerEl" class="hidden">
+  <div class="resource-bar">
+    <div class="res-item"><span class="icon" style="background:#2ecc71;"></span> Food: <span id="foodElEl">0</span></div>
+    <div class="res-item"><span class="icon" style="background:#f1c40f;"></span> Ants: <span id="antsElEl">0</span>/<span id="capElEl">10</span></div>
+    <div class="res-item"><span class="icon" style="background:#e74c3c;"></span> HP: <span id="hpElEl">100</span>%</div>
+    <div class="res-item">⏱️ <span id="timeElEl">00:00</span></div>
+  </div>
+  <div id="aiEventLogEl"></div>
+  <div class="controls-panel">
+    <div style="color:#aaa; font-size:0.8rem; margin-bottom:5px;">TOOLS</div>
+    <button class="control-btn active" id="tool-dig-btn" onclick="window.setTool('DIG')">⛏️ Dig</button>
+    <button class="control-btn" id="tool-move-btn" onclick="window.setTool('MOVE')">✋ Move/Select</button>
+    <div style="color:#aaa; font-size:0.8rem; margin:5px 0;">BUILD (Cost: <span id="build-cost-el">20</span>)</div>
+    <button class="control-btn" onclick="window.setTool('BUILD_STORAGE')">📦 Storage</button>
+    <button class="control-btn" onclick="window.setTool('BUILD_BROOD')">🥚 Brood Chamber</button>
+    <button class="control-btn" onclick="window.setTool('BUILD_BARRACKS')">⚔️ Barracks</button>
+    <div style="color:#aaa; font-size:0.8rem; margin:5px 0;">ROLES</div>
+    <button class="control-btn" onclick="window.setRole('WORKER')">🐜 Worker</button>
+    <button class="control-btn" onclick="window.setRole('SOLDIER')">🛡️ Soldier</button>
+  </div>
+  <div id="tutorialOverlayEl" hidden>
+    <h3 style="margin-top:0; color:#fff;">How to Play</h3>
+    <p>1. <b>Click Dirt</b> (brown) to dig tunnels.</p>
+    <p>2. <b>Select Ants</b> (drag box) and right-click to move.</p>
+    <p>3. Use <b>Tools</b> below to build rooms and assign roles.</p>
+    <p>4. Don't let the Queen die! Watch out for random events.</p>
+    <button class="btn" style="padding:5px 20px; font-size:1rem;" onclick="tutorialOverlayEl.hidden=true">Got it</button>
+  </div>
+</div>
+
+<!-- Main Menu -->
+<div id="mainMenuEl" class="overlay">
+  <h1>Ant Colony Manager</h1>
+  <h2>Survive. Expand. Conquer.</h2>
+  <button id="startBtnEl" class="btn">Start Colony</button>
+  <button id="optionsBtnEl" class="btn">Options</button>
+  <button id="helpBtnEl" class="btn">How to Play</button>
+  <div id="aiTipEl">Loading daily tip...</div>
+  <p style="margin-top:20px; color:#777; font-size:0.8rem;">Version 1.1 (Perchance AI Enhanced)</p>
+</div>
+
+<!-- Options Menu -->
+<div id="optionsMenuEl" class="overlay hidden">
+  <div class="settings-panel">
+    <h2 style="margin-top:0;">Settings</h2>
+    <div class="setting-row">
+      <span>Music Volume</span>
+      <input type="range" id="musicVolEl" min="0" max="1" step="0.1" value="0.5">
+    </div>
+    <div class="setting-row">
+      <span>SFX Volume</span>
+      <input type="range" id="sfxVolEl" min="0" max="1" step="0.1" value="0.8">
+    </div>
+    <div class="setting-row">
+      <span>Game Speed</span>
+      <select id="game-speed-select" style="padding:5px;">
+        <option value="1">Normal</option>
+        <option value="2">Fast</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <span>Difficulty</span>
+      <select id="difficulty-select" style="padding:5px;">
+        <option value="normal">Normal</option>
+        <option value="hard">Hard</option>
+      </select>
+    </div>
+    <button id="closeOptionsBtnEl" class="btn" style="margin-top:20px;">Back</button>
+  </div>
+</div>
+
+<!-- Pause Menu -->
+<div id="pauseMenuEl" class="overlay hidden">
+  <h1>Paused</h1>
+  <button id="resumeBtnEl" class="btn">Resume</button>
+  <button id="quitBtnEl" class="btn">Quit to Menu</button>
+</div>
+
+<!-- Game Logic -->
+<script type="module">
+  // Import Phaser
+  import Phaser from 'https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser-esm.min.js';
+
+  // --- PERCHANCE PLUGIN HELPERS ---
+  // Access via root to ensure availability in module scope
+  const kv = root.kv; 
+  const stats = root.stats;
+  const generateText = root.generateText;
+
+  // --- SETTINGS MANAGER (KV PLUGIN) ---
+  const Settings = {
+    get: async (key, defaultVal) => {
+      try {
+        const val = await kv.gameSettings.get(key);
+        return val !== undefined ? val : defaultVal;
+      } catch(e) { return defaultVal; }
+    },
+    set: async (key, val) => {
+      try { await kv.gameSettings.set(key, val); } catch(e) { console.error(e); }
+    }
+  };
+
+  // --- STATS TRACKER ---
+  const trackStat = async (key, value) => {
+    try { await stats.log(key, value); } catch(e) {}
+  };
+
+  // --- CONSTANTS & CONFIG ---
+  const TILE_SIZE = 32;
+  const MAP_WIDTH = 50;
+  const MAP_HEIGHT = 50;
+  const SURFACE_HEIGHT = 5;
+  
+  // Colors
+  const C_DIRT = 0x5D4037;
+  const C_ROCK = 0x424242;
+  const C_TUNNEL = 0x3E2723;
+  const C_QUEEN = 0x9C27B0;
+  const C_WORKER = 0x212121;
+  const C_SOLDIER = 0xC62828;
+  const C_FOOD = 0x76FF03;
+  const C_ENEMY_SPIDER = 0xE91E63;
+  
+  // --- AUDIO SYNTHESIZER ---
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  
+  // Global settings object for runtime access
+  const currentSettings = {
+    musicVol: 0.5,
+    sfxVol: 0.8,
+    difficulty: 'normal',
+    gameSpeed: 1
+  };
+
+  const Sound = {
+    playTone: (freq, type, duration, vol = 0.1) => {
+      if (currentSettings.sfxVol === 0) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(vol * currentSettings.sfxVol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    },
+    click: () => Sound.playTone(600, 'sine', 0.1),
+    dig: () => Sound.playTone(100, 'square', 0.1),
+    build: () => Sound.playTone(300, 'triangle', 0.3),
+    attack: () => Sound.playTone(150, 'sawtooth', 0.1, 0.05),
+    collect: () => Sound.playTone(800, 'sine', 0.15)
+  };
+
+  // --- UTILS ---
+  window.setTool = (tool) => {
+    if(window.gameScene) window.gameScene.setTool(tool);
+    document.querySelectorAll('.control-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('tool-' + tool.toLowerCase().replace('build_', '').replace('_', '-') + '-btn');
+    if(btn) btn.classList.add('active');
+  };
+
+  window.setRole = (role) => {
+    if(window.gameScene) window.gameScene.setRole(role);
+  };
+
+  // --- GAME CLASSES ---
+
+  class Ant extends Phaser.GameObjects.Sprite {
+    constructor(scene, x, y, type = 'WORKER') {
+      super(scene, x, y, `ant_${type.toLowerCase()}`);
+      this.scene = scene;
+      this.type = type;
+      this.setDepth(10);
+      this.state = 'IDLE'; // IDLE, MOVE, DIG, FORAGE, RETURN, FIGHT, NURSE
+      this.target = null;
+      this.carrying = 0;
+      this.hp = 100;
+      this.maxHp = 100;
+      this.speed = type === 'SOLDIER' ? 100 : (type === 'SCOUT' ? 150 : 80);
+      this.vision = type === 'SCOUT' ? 150 : 80;
+      this.damage = type === 'SOLDIER' ? 20 : 5;
+      
+      scene.add.existing(this);
+      scene.physics.add.existing(this);
+      this.body.setSize(16, 16);
+    }
+
+    update(time, delta) {
+      if (this.hp <= 0) {
+        this.destroy();
+        return;
+      }
+
+      // Simple AI State Machine
+      switch (this.state) {
+        case 'IDLE':
+          this.findTask();
+          break;
+        case 'MOVE':
+          this.moveToTarget();
+          break;
+        case 'DIG':
+          this.dig();
+          break;
+        case 'FORAGE':
+          this.forage();
+          break;
+        case 'RETURN':
+          this.returnStorage();
+          break;
+        case 'FIGHT':
+          this.fight();
+          break;
+        case 'NURSE':
+          this.nurse();
+          break;
+      }
+      
+      this.x = Phaser.Math.Clamp(this.x, 0, MAP_WIDTH * TILE_SIZE);
+      this.y = Phaser.Math.Clamp(this.y, 0, MAP_HEIGHT * TILE_SIZE);
+    }
+
+    moveToTarget() {
+      if (!this.target || (this.target.hp <= 0 && this.target instanceof Enemy)) { 
+        this.state = 'IDLE';
+        this.target = null;
+        this.body.stop();
+        return;
+      }
+
+      const dist = Phaser.Math.Distance.Between(this.x, this.y, this.target.x || this.target.pixelX, this.target.y || this.target.pixelY);
+      
+      if (dist < 5) {
+        this.arrive();
+      } else {
+        this.scene.physics.moveToObject(this, this.target instanceof Phaser.GameObjects.Sprite ? this.target : {x:this.target.pixelX, y:this.target.pixelY}, this.speed * currentSettings.gameSpeed);
+      }
+      this.setFlipX(this.body.velocity.x < 0);
+    }
+
+    arrive() {
+      this.body.stop();
+      if (this.state === 'DIG') {
+        if (this.scene.digTile(this.target.tx, this.target.ty)) {
+          Sound.dig();
+          this.target = null;
+          this.state = 'IDLE';
+        }
+      } else if (this.state === 'FORAGE') {
+        if (this.target) {
+          this.carrying = 10;
+          this.scene.removeFood(this.target);
+          Sound.collect();
+          this.state = 'RETURN';
+          this.target = this.scene.findNearestRoom(this.x, this.y, 'STORAGE') || this.scene.queen;
+        }
+      } else if (this.state === 'RETURN') {
+        this.scene.addFood(this.carrying);
+        this.carrying = 0;
+        this.state = 'IDLE';
+        this.target = null;
+      }
+    }
+
+    findTask() {
+      if (this.carrying > 0) {
+        this.state = 'RETURN';
+        this.target = this.scene.findNearestRoom(this.x, this.y, 'STORAGE') || this.scene.queen;
+        return;
+      }
+
+      if (this.type === 'SOLDIER') {
+        const enemy = this.scene.findNearestEnemy(this.x, this.y, 300);
+        if (enemy) {
+          this.state = 'FIGHT';
+          this.target = enemy;
+          return;
+        }
+      }
+
+      if (this.type === 'WORKER') {
+        const digJob = this.scene.getDigJob();
+        if (digJob && Math.random() < 0.05) { 
+           this.state = 'DIG';
+           this.target = { tx: digJob.x, ty: digJob.y, pixelX: digJob.x * TILE_SIZE, pixelY: digJob.y * TILE_SIZE };
+           return;
+        }
+        const food = this.scene.findNearestFood(this.x, this.y);
+        if (food) {
+          this.state = 'FORAGE';
+          this.target = food;
+          return;
+        }
+      }
+      
+      if (this.type === 'NURSE') {
+        const brood = this.scene.findNearestRoom(this.x, this.y, 'BROOD');
+        if (brood && Phaser.Math.Distance.Between(this.x, this.y, brood.x, brood.y) < 200) {
+           this.state = 'NURSE';
+           return;
+        }
+      }
+
+      if (Math.random() < 0.02) {
+        this.target = {
+          x: Phaser.Math.Between(this.x - 100, this.x + 100),
+          y: Phaser.Math.Between(this.y - 100, this.y + 100)
+        };
+        this.state = 'MOVE';
+      }
+    }
+
+    fight() {
+      if (!this.target || this.target.hp <= 0) {
+        this.state = 'IDLE';
+        this.target = null;
+        return;
+      }
+      const dist = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
+      if (dist < 20) {
+        if (time.now > (this.lastAttack || 0) + 500) {
+          this.target.takeDamage(this.damage);
+          Sound.attack();
+          this.lastAttack = time.now;
+        }
+      } else {
+        this.scene.physics.moveToObject(this, this.target, this.speed * currentSettings.gameSpeed);
+      }
+    }
+
+    dig() { this.moveToTarget(); }
+    forage() { this.moveToTarget(); }
+    returnStorage() { this.moveToTarget(); }
+    nurse() { if (Math.random() < 0.01) Sound.playTone(400, 'sine', 0.05); }
+    
+    takeDamage(amount) {
+      this.hp -= amount;
+      this.setTint(0xff0000);
+      this.scene.time.delayedCall(100, () => this.clearTint());
+    }
+  }
+
+  class Enemy extends Phaser.GameObjects.Sprite {
+    constructor(scene, x, y, type) {
+      super(scene, x, y, type === 'SPIDER' ? 'enemy_spider' : 'enemy_beetle');
+      this.scene = scene;
+      this.type = type;
+      this.hp = type === 'SPIDER' ? 50 : 100;
+      this.maxHp = this.hp;
+      this.damage = type === 'SPIDER' ? 10 : 25;
+      this.speed = type === 'SPIDER' ? 60 : 40;
+      scene.add.existing(this);
+      scene.physics.add.existing(this);
+      this.body.setSize(24, 24);
+    }
+    
+    update(time) {
+      const target = this.scene.queen;
+      if (target) {
+        const dist = Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y);
+        if (dist < 20) {
+           if (time.now > (this.lastAttack || 0) + 1000) {
+             this.scene.damageQueen(this.damage);
+             this.lastAttack = time.now;
+           }
+        } else {
+           this.scene.physics.moveToObject(this, target, this.speed * currentSettings.gameSpeed);
+        }
+      }
+    }
+    
+    takeDamage(amount) {
+      this.hp -= amount;
+      this.setTint(0xffffff);
+      this.scene.time.delayedCall(50, () => this.clearTint());
+      if (this.hp <= 0) {
+        this.destroy();
+        this.scene.enemies.remove(this, true, true);
+        trackStat('enemies_defeated', 1); // Track stat
+      }
+    }
+  }
+
+  // --- SCENES ---
+
+  class BootScene extends Phaser.Scene {
+    constructor() { super('BootScene'); }
+    async create() {
+      // Load settings from KV
+      currentSettings.musicVol = await Settings.get('musicVol', 0.5);
+      currentSettings.sfxVol = await Settings.get('sfxVol', 0.8);
+      currentSettings.difficulty = await Settings.get('difficulty', 'normal');
+      currentSettings.gameSpeed = await Settings.get('gameSpeed', 1);
+      
+      // Update UI elements if they exist (usually they do by now)
+      if(musicVolEl) musicVolEl.value = currentSettings.musicVol;
+      if(sfxVolEl) sfxVolEl.value = currentSettings.sfxVol;
+      if(difficultySelect) difficultySelect.value = currentSettings.difficulty;
+      if(gameSpeedSelect) gameSpeedSelect.value = currentSettings.gameSpeed;
+
+      this.scene.start('PreloadScene');
+    }
+  }
+
+  class PreloadScene extends Phaser.Scene {
+    constructor() { super('PreloadScene'); }
+    create() {
+      this.createTextures();
+      this.scene.start('MainMenuScene');
+    }
+    
+    createTextures() {
+      const g = this.make.graphics();
+      g.fillStyle(C_DIRT); g.fillRect(0, 0, 32, 32); g.generateTexture('dirt', 32, 32);
+      g.clear(); g.fillStyle(C_ROCK); g.fillRect(0, 0, 32, 32); g.fillStyle(0x555); g.fillRect(5,5,10,10); g.generateTexture('rock', 32, 32);
+      g.clear(); g.fillStyle(C_TUNNEL); g.fillRect(0, 0, 32, 32); g.generateTexture('tunnel', 32, 32);
+      g.clear(); g.fillStyle(0x388E3C); g.fillRect(0, 0, 32, 32); g.fillStyle(0x4CAF50); g.fillRect(0, 28, 32, 4); g.generateTexture('grass', 32, 32);
+      g.clear(); g.fillStyle(C_QUEEN); g.fillCircle(16, 16, 14); g.fillStyle(0xE1BEE7); g.fillCircle(16, 16, 8); g.generateTexture('queen', 32, 32);
+      g.clear(); g.fillStyle(C_WORKER); g.fillCircle(16, 16, 6); g.lineStyle(2, 0x000); g.beginPath(); g.moveTo(16,10); g.lineTo(16,4); g.stroke(); g.generateTexture('ant_worker', 32, 32);
+      g.clear(); g.fillStyle(C_SOLDIER); g.fillCircle(16, 16, 7); g.fillStyle(0x000); g.fillRect(14, 8, 4, 8); g.generateTexture('ant_soldier', 32, 32);
+      g.clear(); g.fillStyle(0xFFFFFF); g.fillCircle(16, 16, 6); g.fillStyle(0x2196F3); g.fillCircle(16,16,3); g.generateTexture('ant_nurse', 32, 32);
+      g.clear(); g.fillStyle(C_FOOD); g.fillCircle(16, 16, 6); g.generateTexture('food', 32, 32);
+      g.clear(); g.fillStyle(C_ENEMY_SPIDER); g.fillCircle(16, 16, 12); g.fillStyle(0x000); g.fillCircle(10, 10, 2); g.fillCircle(22, 10, 2); g.fillCircle(10, 22, 2); g.fillCircle(22, 22, 2); g.generateTexture('enemy_spider', 32, 32);
+      g.clear(); g.fillStyle(0x3E2723); g.fillRect(4, 10, 24, 12); g.generateTexture('enemy_beetle', 32, 32);
+    }
+  }
+
+  class MainMenuScene extends Phaser.Scene {
+    constructor() { super('MainMenuScene'); }
+    async create() {
+      mainMenuEl.classList.remove('hidden');
+      hudLayerEl.classList.add('hidden');
+      
+      // Explicitly bind events to ensure they work in module scope
+      document.getElementById('startBtnEl').onclick = async () => {
+        Sound.click();
+        mainMenuEl.classList.add('hidden');
+        trackStat('games_started', 1);
+        this.scene.start('GameScene');
+      };
+      
+      document.getElementById('optionsBtnEl').onclick = () => {
+        Sound.click();
+        mainMenuEl.classList.add('hidden');
+        optionsMenuEl.classList.remove('hidden');
+      };
+      
+      document.getElementById('helpBtnEl').onclick = () => {
+        Sound.click();
+        // Show tutorial overlay directly on top of menu
+        tutorialOverlayEl.hidden = false;
+        tutorialOverlayEl.style.zIndex = "100";
+      };
+
+      // Generate AI Tip (Feature)
+      try {
+        const tipEl = document.getElementById('aiTipEl');
+        tipEl.innerText = "Thinking...";
+        const tip = await generateText("Generate a very short, helpful strategy tip for an ant colony simulation game. Max 15 words.");
+        tipEl.innerText = "💡 " + tip;
+      } catch(e) {
+        console.error("AI Tip failed", e);
+      }
+    }
+  }
+
+  class GameScene extends Phaser.Scene {
+    constructor() { super('GameScene'); }
+    
+    create() {
+      window.gameScene = this; // Expose to window for UI
+      
+      this.food = 50;
+      this.ants = [];
+      this.enemies = this.physics.add.group();
+      this.rooms = [];
+      this.foodItems = this.physics.add.group();
+      this.selectedAnts = [];
+      this.timeSurvived = 0;
+      this.queenHp = 100;
+      this.digJobs = [];
+      this.currentTool = 'DIG';
+      this.buildCost = 20;
+      this.lastEventTime = 0;
+      
+      this.createMap();
+      
+      this.queen = this.physics.add.sprite(MAP_WIDTH/2 * TILE_SIZE, MAP_HEIGHT/2 * TILE_SIZE, 'queen');
+      this.queen.setDepth(5);
+      
+      this.carveRoom(MAP_WIDTH/2, MAP_HEIGHT/2, 5, 5);
+      
+      this.cameras.main.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE);
+      this.cameras.main.startFollow(this.queen);
+      
+      this.fogGraphics = this.add.graphics();
+      this.fogGraphics.setDepth(20);
+      
+      this.setupInput();
+      
+      this.time.addEvent({ delay: 1000, callback: this.gameTick, callbackScope: this, loop: true });
+      this.time.addEvent({ delay: 1000/60, callback: this.updateFog, callbackScope: this, loop: true });
+      
+      this.scene.launch('UIScene');
+      
+      for(let i=0; i<5; i++) this.spawnAnt('WORKER');
+      
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      // Generate initial event
+      this.triggerAIEvent("Colony founded. The Queen demands expansion.");
+    }
+    
+    createMap() {
+      this.map = [];
+      for (let y = 0; y < MAP_HEIGHT; y++) {
+        this.map[y] = [];
+        for (let x = 0; x < MAP_WIDTH; x++) {
+          let type = 0;
+          if (y < SURFACE_HEIGHT) type = 4;
+          else if (Math.random() < 0.05) type = 2;
+          this.map[y][x] = { type: type, room: null };
+        }
+      }
+      this.tileSprites = this.add.group();
+      this.renderFullMap();
+    }
+    
+    renderFullMap() {
+      this.tileSprites.clear(true, true);
+      for (let y = 0; y < MAP_HEIGHT; y++) {
+        for (let x = 0; x < MAP_WIDTH; x++) {
+          this.createTileSprite(x, y, this.map[y][x].type);
+        }
+      }
+    }
+    
+    createTileSprite(x, y, type) {
+      let key = 'dirt';
+      if (type === 1) key = 'tunnel';
+      if (type === 2) key = 'rock';
+      if (type === 3) key = 'tunnel';
+      if (type === 4) key = 'grass';
+      const s = this.add.sprite(x * TILE_SIZE + TILE_SIZE/2, y * TILE_SIZE + TILE_SIZE/2, key);
+      s.setDepth(0);
+      return s;
+    }
+    
+    carveRoom(cx, cy, w, h) {
+      for(let y=cy; y<cy+h; y++) {
+        for(let x=cx; x<cx+w; x++) {
+          if(y>=0 && y<MAP_HEIGHT && x>=0 && x<MAP_WIDTH) {
+            this.map[y][x].type = 1;
+            this.createTileSprite(x, y, 1);
+          }
+        }
+      }
+    }
+    
+    setupInput() {
+      this.selectionGraphics = this.add.graphics();
+      this.selectionGraphics.setDepth(30);
+      this.selectionGraphics.lineStyle(2, 0xffffff, 0.5);
+      
+      let isDragging = false;
+      let startX, startY;
+      
+      this.input.on('pointerdown', (p) => {
+        if (p.rightButtonDown()) return;
+        isDragging = true;
+        startX = p.worldX;
+        startY = p.worldY;
+        this.selectedAnts = [];
+        this.selectionGraphics.clear();
+      });
+      
+      this.input.on('pointermove', (p) => {
+        if (isDragging) {
+          this.selectionGraphics.clear();
+          this.selectionGraphics.strokeRect(startX, startY, p.worldX - startX, p.worldY - startY);
+        }
+      });
+      
+      this.input.on('pointerup', (p) => {
+        if (!isDragging) return;
+        isDragging = false;
+        const w = p.worldX - startX;
+        const h = p.worldY - startY;
+        const rect = new Phaser.Geom.Rectangle(startX, startY, w, h);
+        if(rect.width < 0) { rect.x += rect.width; rect.width *= -1; }
+        if(rect.height < 0) { rect.y += rect.height; rect.height *= -1; }
+        
+        if (rect.width > 5 && rect.height > 5) {
+          this.ants.forEach(ant => {
+            if (rect.contains(ant.x, ant.y)) this.selectedAnts.push(ant);
+          });
+          this.selectionGraphics.clear();
+        } else {
+          this.handleInteraction(p.worldX, p.worldY);
+        }
+      });
+    }
+    
+    async triggerAIEvent(forcedText = null) {
+      const logEl = document.getElementById('aiEventLogEl');
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      
+      let text = forcedText;
+      if(!text) {
+        try {
+          // AI Event Generation
+          text = await generateText("Describe a random event happening in an underground ant colony (good or bad), e.g., 'Flood!', 'New food source found.', 'Spider attack!'. Max 10 words.");
+        } catch(e) {
+          text = "Something rustles in the walls...";
+        }
+      }
+      
+      // Parse event for simple effects
+      entry.innerText = `Event: ${text}`;
+      logEl.prepend(entry);
+      if(logEl.children.length > 5) logEl.lastChild.remove();
+
+      // Simple game logic reaction to event text
+      const lower = text.toLowerCase();
+      if(lower.includes("spider") || lower.includes("attack")) {
+        this.spawnEnemyNearQueen();
+      } else if (lower.includes("flood") || lower.includes("rain")) {
+        this.food = Math.max(0, this.food - 10);
+        entry.style.color = "#ff5555";
+      } else if (lower.includes("food") || lower.includes("found")) {
+        this.food += 20;
+        entry.style.color = "#55ff55";
+      }
+    }
+
+    spawnEnemyNearQueen() {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 400;
+      const ex = this.queen.x + Math.cos(angle) * dist;
+      const ey = this.queen.y + Math.sin(angle) * dist;
+      const enemy = new Enemy(this, ex, ey, 'SPIDER');
+      this.enemies.add(enemy);
+    }
+
+    handleInteraction(x, y) {
+      const tx = Math.floor(x / TILE_SIZE);
+      const ty = Math.floor(y / TILE_SIZE);
+      
+      if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) return;
+      
+      if (this.currentTool === 'DIG') {
+        if (this.map[ty][tx].type === 0) {
+          this.map[ty][tx].type = 1;
+          this.createTileSprite(tx, ty, 1);
+          this.digJobs.push({x:tx, y:ty});
+        }
+      } else if (this.currentTool.startsWith('BUILD')) {
+        if (this.map[ty][tx].type === 1) {
+          if (this.food >= this.buildCost) {
+            this.food -= this.buildCost;
+            Sound.build();
+            let type = this.currentTool.split('_')[1];
+            this.rooms.push({x:tx, y:ty, type:type, level:1});
+            const text = this.add.text(x, y, type[0], {fontSize:'12px', color:'#fff'}).setOrigin(0.5);
+            text.setDepth(2);
+            trackStat('rooms_built', 1);
+          }
+        }
+      } else if (this.currentTool === 'MOVE') {
+        if (this.selectedAnts.length > 0) {
+          this.selectedAnts.forEach(ant => {
+            ant.state = 'MOVE';
+            ant.target = {x: x, y: y};
+          });
+        }
+      }
+    }
+    
+    gameTick() {
+      this.timeSurvived++;
+      
+      // AI Event Random Trigger
+      if (this.timeSurvived - this.lastEventTime > 30 && Math.random() < 0.05) {
+        this.triggerAIEvent();
+        this.lastEventTime = this.timeSurvived;
+      }
+
+      // Spawn Food
+      if (this.timeSurvived % 10 === 0) {
+        const fx = Phaser.Math.Between(1, MAP_WIDTH-2);
+        const fy = Phaser.Math.Between(1, SURFACE_HEIGHT-1);
+        const food = this.foodItems.create(fx * TILE_SIZE + 16, fy * TILE_SIZE + 16, 'food');
+        food.setDepth(5);
+      }
+      
+      // Spawn Enemies
+      let diffRate = currentSettings.difficulty === 'hard' ? 20 : 40;
+      if (this.timeSurvived > 20 && this.timeSurvived % diffRate === 0) {
+         const side = Math.floor(Math.random() * 4);
+         let ex, ey;
+         if (side === 0) { ex = Math.random() * MAP_WIDTH * TILE_SIZE; ey = 0; }
+         else if (side === 1) { ex = MAP_WIDTH * TILE_SIZE; ey = Math.random() * SURFACE_HEIGHT * TILE_SIZE; }
+         ex = Phaser.Math.Between(0, MAP_WIDTH) * TILE_SIZE;
+         ey = 0; 
+         const type = Math.random() < 0.7 ? 'SPIDER' : 'BEETLE';
+         const enemy = new Enemy(this, ex, ey, type);
+         this.enemies.add(enemy);
+      }
+    }
+    
+    updateFog() {
+      this.fogGraphics.clear();
+      this.fogGraphics.fillStyle(0x000000, 0.95);
+      this.fogGraphics.fillRect(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE);
+      this.fogGraphics.setBlendMode(Phaser.BlendModes.ERASE);
+      this.ants.forEach(ant => {
+        this.fogGraphics.fillCircle(ant.x, ant.y, ant.vision);
+      });
+      this.fogGraphics.fillCircle(this.queen.x, this.queen.y, 100);
+      this.fogGraphics.setBlendMode(Phaser.BlendModes.NORMAL);
+    }
+    
+    spawnAnt(type) {
+      const ant = new Ant(this, this.queen.x, this.queen.y, type);
+      this.ants.push(ant);
+      trackStat('ants_spawned', 1);
+    }
+    
+    digTile(tx, ty) {
+      const jobIdx = this.digJobs.findIndex(j => j.x === tx && j.y === ty);
+      if (jobIdx === -1) return false; 
+      this.digJobs.splice(jobIdx, 1);
+      this.map[ty][tx].type = 1;
+      this.createTileSprite(tx, ty, 1);
+      return true;
+    }
+    
+    getDigJob() {
+      return this.digJobs.length > 0 ? this.digJobs[0] : null;
+    }
+    
+    findNearestFood(x, y) {
+      let nearest = null;
+      let minDist = Infinity;
+      this.foodItems.getChildren().forEach(f => {
+        const d = Phaser.Math.Distance.Between(x, y, f.x, f.y);
+        if (d < minDist) { minDist = d; nearest = f; }
+      });
+      return nearest;
+    }
+    
+    removeFood(food) {
+      this.foodItems.remove(food, true, true);
+      trackStat('food_collected', 10);
+    }
+    
+    addFood(amount) {
+      this.food += amount;
+    }
+    
+    findNearestEnemy(x, y, range) {
+      let nearest = null;
+      let minDist = range;
+      this.enemies.getChildren().forEach(e => {
+        const d = Phaser.Math.Distance.Between(x, y, e.x, e.y);
+        if (d < minDist) { minDist = d; nearest = e; }
+      });
+      return nearest;
+    }
+    
+    damageQueen(amount) {
+      this.queenHp -= amount;
+      this.cameras.main.shake(200, 0.01);
+      if (this.queenHp <= 0) {
+        this.gameOver();
+      }
+    }
+
+    async gameOver() {
+      this.scene.stop('UIScene');
+      this.scene.start('MainMenuScene'); 
+      alert("Game Over! Your colony has fallen.");
+      await trackStat('time_survived', this.timeSurvived);
+    }
+    
+    setTool(tool) {
+      this.currentTool = tool;
+    }
+    
+    setRole(role) {
+      this.selectedAnts.forEach(ant => {
+        ant.setTexture(`ant_${role.toLowerCase()}`);
+        ant.type = role;
+        if(role === 'SOLDIER') ant.speed = 100;
+        else if(role === 'WORKER') ant.speed = 80;
+      });
+    }
+  }
+
+  class UIScene extends Phaser.Scene {
+    constructor() { super('UIScene'); }
+    create() {
+      hudLayerEl.classList.remove('hidden');
+      
+      // Options Listeners (ensure they save to KV)
+      musicVolEl.oninput = async (e) => {
+        currentSettings.musicVol = parseFloat(e.target.value);
+        await Settings.set('musicVol', currentSettings.musicVol);
+      };
+      sfxVolEl.oninput = async (e) => {
+        currentSettings.sfxVol = parseFloat(e.target.value);
+        await Settings.set('sfxVol', currentSettings.sfxVol);
+      };
+      gameSpeedSelect.onchange = async (e) => {
+        currentSettings.gameSpeed = parseFloat(e.target.value);
+        await Settings.set('gameSpeed', currentSettings.gameSpeed);
+      };
+      difficultySelect.onchange = async (e) => {
+        currentSettings.difficulty = e.target.value;
+        await Settings.set('difficulty', currentSettings.difficulty);
+      };
+
+      resumeBtnEl.onclick = () => {
+        this.scene.resume('GameScene');
+        pauseMenuEl.classList.add('hidden');
+      };
+      
+      quitBtnEl.onclick = () => {
+        this.scene.stop('GameScene');
+        this.scene.start('MainMenuScene');
+        pauseMenuEl.classList.add('hidden');
+      };
+      
+      closeOptionsBtnEl.onclick = () => {
+         optionsMenuEl.classList.add('hidden');
+         mainMenuEl.classList.remove('hidden');
+      };
+      
+      this.input.keyboard.on('keydown-ESC', () => {
+        const paused = this.scene.isPaused('GameScene');
+        if (paused) {
+          this.scene.resume('GameScene');
+          pauseMenuEl.classList.add('hidden');
+        } else {
+          this.scene.pause('GameScene');
+          pauseMenuEl.classList.remove('hidden');
+        }
+      });
+      
+      this.events.on('update', () => {
+        const game = this.scene.get('GameScene');
+        if (game && game.active) {
+           foodElEl.innerText = Math.floor(game.food);
+           antsElEl.innerText = game.ants.length;
+           capElEl.innerText = 10 + (game.rooms.length*5);
+           hpElEl.innerText = Math.ceil(game.queenHp);
+           let mins = Math.floor(game.timeSurvived / 60);
+           let secs = game.timeSurvived % 60;
+           timeElEl.innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+      });
+    }
+  }
+
+  // --- CONFIG ---
+  const config = {
+    type: Phaser.AUTO,
+    width: window.innerWidth,
+    height: window.innerHeight,
+    parent: 'game-container',
+    backgroundColor: '#000',
+    physics: {
+      default: 'arcade',
+      arcade: {
+        debug: false
+      }
+    },
+    scene: [BootScene, PreloadScene, MainMenuScene, GameScene, UIScene],
+    scale: {
+      mode: Phaser.Scale.RESIZE
+    }
+  };
+
+  const game = new Phaser.Game(config);
+
+</script>
+</body>
+</html>

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>generator-gen-1 — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="mainCtn"></div>
+
+<script>
+  // Global state for the current generator instance
+  let state = {
+    name: "",
+    stage: 1,
+    xp: 0,
+    traits: [],
+    plugins: [],
+    lineage: ["origin"],
+    skillTree: null,
+    skill: null,
+    finalRole: null
+  };
+
+  // Data Pools based on User Instruction
+  const DATA = {
+    skillTrees: ["World", "Character", "Systems"],
+    skills: {
+      "World": ["world_seed", "biome_generator", "lore_weaver", "quest_hooker"],
+      "Character": ["npc_builder", "personality_matrix", "dialogue_writer"],
+      "Systems": ["logic_router", "item_forge", "description_enhancer", "tone_shifter"]
+    },
+    mutations: [
+      "branch:world_specialist",
+      "branch:character_specialist",
+      "branch:systems_specialist",
+      "boost:hyper_focus",
+      "glitch:unstable_output"
+    ],
+    plugins: [
+      "plugin:text_tools",
+      "plugin:world_tools",
+      "plugin:character_tools",
+      "plugin:logic_tools"
+    ],
+    roles: [
+      "World Architect",
+      "Character Engine",
+      "Dialogue Brain",
+      "Quest Generator",
+      "Utility Toolkit",
+      "Meta-Generator"
+    ]
+  };
+
+  // Initialize with the root generator structure (System 3.0)
+  mainCtn.innerHTML = `
+    <div style="margin-bottom:20px;">
+      <h1 style="color:#00ff41; font-family:monospace; text-shadow:0 0 5px #00ff41; margin:0 0 10px 0;">Evolving Generator System 3.0</h1>
+      <button id="resetBtn" onclick="init()" style="font-family:monospace; background:#111; color:#00ff41; border:1px solid #00ff41; padding:5px 10px; cursor:pointer;">Initialize New System</button>
+    </div>
+    
+    <!-- Status Panel -->
+    <div id="statusPanel" class="panel">
+      <!-- Rendered by JS -->
+    </div>
+
+    <!-- Controls -->
+    <div id="controlsCtn" class="panel" style="display:flex; justify-content:center; gap:15px;">
+      <button id="evolveBtn" onclick="handleEvolve()" class="action-btn">EVOLVE</button>
+      <button id="mutateBtn" onclick="handleMutate()" class="action-btn">MUTATE</button>
+      <button id="outputBtn" onclick="handleOutput()" class="action-btn" style="border-color:#ff0055; color:#ff0055;">OUTPUT</button>
+    </div>
+
+    <!-- System Log -->
+    <div class="panel">
+      <div style="border-bottom:1px solid #333; padding-bottom:5px; margin-bottom:10px; color:#888;">SYSTEM LOG</div>
+      <div id="logContent" style="font-family:monospace; font-size:0.85em; color:#aaa; min-height:50px;"></div>
+    </div>
+
+    <!-- Final Output Area -->
+    <div id="finalOutputCtn" class="panel hidden" style="border-color:#ff0055; box-shadow: 0 0 15px rgba(255, 0, 85, 0.2);">
+      <h3 style="color:#ff0055; margin-top:0;">FINAL OUTPUT</h3>
+      <div id="finalOutputText" style="white-space:pre-wrap; line-height:1.5; color:#fff;"></div>
+      <button onclick="finalOutputCtn.hidden=true; resetBtn.hidden=false;" style="margin-top:10px; background:#ff0055; color:white; border:none; padding:5px; cursor:pointer; font-family:monospace;">Clear Output</button>
+    </div>
+  `;
+
+  async function init() {
+    // Reset State
+    state = {
+      name: "gen_" + Math.random().toString(36).substr(2, 5),
+      stage: 1,
+      xp: 0,
+      traits: ["none"],
+      plugins: ["none"],
+      lineage: ["origin"],
+      skillTree: null,
+      skill: null,
+      finalRole: null
+    };
+    
+    // UI Reset
+    finalOutputCtn.hidden = true;
+    logContent.innerHTML = '';
+    controlsCtn.hidden = false;
+    statusPanel.style.opacity = 1;
+    
+    renderStatus();
+    log("System initialized.");
+    log(`Generator [${state.name}] online. Stage: 1. Ready for evolution.`);
+  }
+
+  function renderStatus() {
+    statusPanel.innerHTML = `
+      <div class="stat-row"><span style="color:#888;">NAME:</span> <span style="color:#00ff41; font-weight:bold;">${state.name}</span></div>
+      <div class="stat-row"><span style="color:#888;">STAGE:</span> <span style="color:#00d9ff;">${state.stage}/5</span></div>
+      <div class="stat-row"><span style="color:#888;">XP:</span> <span style="color:#00d9ff;">${state.xp}</span></div>
+      <div class="stat-row"><span style="color:#888;">SKILL TREE:</span> <span>${state.skillTree || "---"}</span></div>
+      <div class="stat-row"><span style="color:#888;">CURRENT SKILL:</span> <span style="color:#e0e0e0;">${state.skill || "---"}</span></div>
+      <div class="stat-row"><span style="color:#888;">TRAITS:</span> <span style="font-size:0.9em; max-width:50%; text-align:right;">${state.traits.join(", ")}</span></div>
+      <div class="stat-row"><span style="color:#888;">PLUGINS:</span> <span style="font-size:0.9em; max-width:50%; text-align:right;">${state.plugins.join(", ")}</span></div>
+      <div class="stat-row" style="margin-top:10px; border-top:1px dashed #333; padding-top:5px;"><span style="color:#888;">LINEAGE:</span> <span style="font-family:monospace; font-size:0.8em;">${state.lineage.join(" > ")}</span></div>
+    `;
+  }
+
+  function log(msg) {
+    let entry = document.createElement('div');
+    entry.style.marginBottom = "4px";
+    entry.innerHTML = `> ${msg}`;
+    logContent.prepend(entry);
+  }
+
+  function pickRandom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  // ==========================
+  // ACTION: EVOLVE
+  // ==========================
+  async function handleEvolve() {
+    if (state.stage >= 5) {
+      log("MAX STAGE REACHED. Please generate Output.");
+      return;
+    }
+
+    evolveBtn.disabled = true;
+    evolveBtn.textContent = "EVOLVING...";
+
+    // Simulate calculation delay
+    await new Promise(r => setTimeout(r, 600));
+
+    // Logic: generator_evolve
+    let nextStage = state.stage + 1;
+    let xpGain = Math.floor(Math.random() * 16) + 5; // 5..20
+    
+    state.stage = nextStage;
+    state.xp += xpGain;
+    state.lineage.push(`stage${state.stage}`);
+
+    log(`<span style="color:#00d9ff;">${state.name} evolves to Stage ${state.stage}!</span> (XP +${xpGain})`);
+
+    // Logic: generator_skill_tree_select
+    let chosenTree = pickRandom(DATA.skillTrees);
+    state.skillTree = chosenTree;
+    
+    // Logic: generator_skill_tree_apply
+    let skillPool = DATA.skills[chosenTree];
+    let newSkill = pickRandom(skillPool);
+    state.skill = newSkill;
+    log(`Skill Tree Chosen: ${chosenTree}`);
+    log(`New Skill Learned: ${newSkill}`);
+
+    // Logic: generator_plugin_integration
+    let newPlugin = pickRandom(DATA.plugins);
+    if (state.plugins[0] === "none") state.plugins = [];
+    state.plugins.push(newPlugin);
+    log(`Plugin Installed: ${newPlugin}`);
+
+    renderStatus();
+    
+    evolveBtn.disabled = false;
+    evolveBtn.textContent = "EVOLVE";
+  }
+
+  // ==========================
+  // ACTION: MUTATE
+  // ==========================
+  async function handleMutate() {
+    mutateBtn.disabled = true;
+    mutateBtn.textContent = "MUTATING...";
+
+    await new Promise(r => setTimeout(r, 600));
+
+    // Logic: generator_mutate
+    let mutation = pickRandom(DATA.mutations);
+    
+    if (state.traits[0] === "none") state.traits = [];
+    state.traits.push(mutation);
+    
+    state.lineage.push(`mut_${mutation}`);
+
+    log(`<span style="color:#ff0055;">Mutation Occurred:</span> ${mutation}`);
+
+    // Mutation leads to skill selection again (per prompt: -> generator_skill_tree_select)
+    let chosenTree = pickRandom(DATA.skillTrees);
+    state.skillTree = chosenTree;
+    let skillPool = DATA.skills[chosenTree];
+    let newSkill = pickRandom(skillPool);
+    state.skill = newSkill;
+
+    log(`Post-mutation adaptation: Learned ${newSkill} from ${chosenTree} tree.`);
+
+    renderStatus();
+
+    mutateBtn.disabled = false;
+    mutateBtn.textContent = "MUTATE";
+  }
+
+  // ==========================
+  // ACTION: OUTPUT
+  // ==========================
+  async function handleOutput() {
+    outputBtn.disabled = true;
+    outputBtn.textContent = "GENERATING...";
+    
+    finalOutputCtn.hidden = true;
+    finalOutputText.innerHTML = '<span style="color:#00ff41;">Constructing final output...</span>';
+
+    // Determine Final Role
+    // Simple heuristic: pick a role from list, or match it to the last skill tree
+    let potentialRoles = [...DATA.roles];
+    if (state.skillTree === "World") potentialRoles.push("World Architect");
+    if (state.skillTree === "Character") potentialRoles.push("Character Engine");
+    if (state.skillTree === "Systems") potentialRoles.push("Utility Toolkit");
+    
+    state.finalRole = pickRandom(potentialRoles);
+    state.lineage.push(`final:${state.finalRole.replace(/\s/g, '_')}`);
+
+    // Construct prompt for generateText
+    let prompt = `
+    You are the "Evolving Generator System". 
+    The generator has reached a state of completion.
+    
+    GENERATOR STATS:
+    Name: ${state.name}
+    Final Role: ${state.finalRole}
+    Stage: ${state.stage}
+    XP: ${state.xp}
+    Traits: ${state.traits.join(", ")}
+    Plugins: ${state.plugins.join(", ")}
+    Active Skill: ${state.skill}
+    Lineage: ${state.lineage.join(" -> ")}
+    
+    TASK:
+    Write a "Final Output" result that this generator would produce based on its Final Role and Traits.
+    The result should be creative, detailed, and formatted nicely (using markdown-like bolding if helpful).
+    
+    If the Role is "World Architect", generate a cohesive world seed description.
+    If "Character Engine", generate a detailed character profile.
+    If "Dialogue Brain", write a short dialogue scene.
+    If "Quest Generator", write a quest hook.
+    If "Utility Toolkit", write a logic puzzle or formatted data structure.
+    
+    Reference the Traits and Plugins in the output text (e.g., "Influenced by the glitch:unstable_output trait...").
+    `;
+
+    try {
+      // Use AI to generate the rich content
+      let aiResult = await generateText(prompt);
+      
+      finalOutputText.innerHTML = aiResult;
+      finalOutputCtn.hidden = false;
+      controlsCtn.hidden = true; // Hide controls after final output
+      statusPanel.style.opacity = 0.5; // Dim status panel
+      
+      log(`SESSION COMPLETE. Final Role: ${state.finalRole}.`);
+
+    } catch (e) {
+      finalOutputText.innerHTML = `<span style="color:red">Error generating output: ${e.message}</span>`;
+      console.error(e);
+    }
+
+    outputBtn.disabled = false;
+    outputBtn.textContent = "OUTPUT";
+  }
+
+  // Initialize on load
+  init();
+
+</script>
+
+<style>
+  body { background-color: #050505; color: #e0e0e0; text-align:left; padding:20px; }
+  
+  .panel {
+    background: rgba(10, 10, 10, 0.9);
+    border: 1px solid #333;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.5);
+  }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-family: monospace;
+    font-size: 0.95rem;
+  }
+
+  .action-btn {
+    background: #111;
+    border: 1px solid #00ff41;
+    color: #00ff41;
+    padding: 10px 20px;
+    font-family: monospace;
+    font-weight: bold;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+    min-width: 120px;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    background: #00ff41;
+    color: #000;
+    box-shadow: 0 0 10px #00ff41;
+  }
+
+  .action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: #555;
+    color: #555;
+    background: #111;
+  }
+
+  #logContent div {
+    border-bottom: 1px solid #222;
+    padding-bottom: 2px;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: #000; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #555; }
+</style>
+</body>
+</html>

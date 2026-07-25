@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>beyond-the-bobber---ai-json-validator-02 — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<h1>Beyond the Bobber - AI JSON Validator</h1>
+<div
+  id="loadingSchemas"
+  style="
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  "
+>
+  <p>Loading schemas and preparing validator...</p>
+</div>
+<div id="mainContent" hidden>
+  <div
+    id="tabBar"
+    style="
+      display: flex;
+      gap: 5px;
+      margin-bottom: 15px;
+      padding: 10px;
+      background: #f0f0f0;
+      border-radius: 8px 8px 0 0;
+    "
+  ></div>
+  <div id="tabContent"></div>
+</div>
+
+<!-- Modal for schema editing -->
+<div id="schemaModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+  <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 8px; width: 80%; max-width: 800px; max-height: 80vh; overflow-y: auto;">
+    <h3>Edit Schema</h3>
+    <textarea id="schemaEditor" style="width: 100%; height: 400px; font-family: 'Courier New', monospace; font-size: 14px; margin: 10px 0;"></textarea>
+    <div>
+      <button onclick="saveSchemaEdit()">Save Schema</button>
+      <button onclick="closeSchemaModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  #tabBar button {
+    padding: 10px 20px;
+    border: none;
+    background: #e9ecef;
+    cursor: pointer;
+    border-radius: 6px 6px 0 0;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  #tabBar button:hover {
+    background: #dee2e6;
+  }
+  #tabBar button.active {
+    background: #fff;
+    border-bottom: 3px solid #4dabf7;
+    color: #1971c2;
+  }
+  .tabContent {
+    display: none;
+    padding: 20px;
+    border: 1px solid #dee2e6;
+    border-top: none;
+    background: #fff;
+    border-radius: 0 0 8px 8px;
+  }
+  .tabContent.active {
+    display: block;
+  }
+  textarea {
+    width: 100%;
+    height: 300px;
+    font-family: "Courier New", monospace;
+    font-size: 14px;
+    padding: 12px;
+    box-sizing: border-box;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    margin: 15px 0;
+    background: #f8f9fa;
+  }
+  button {
+    padding: 8px 16px;
+    margin: 5px 5px 5px 0;
+    background: #4dabf7;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+  button:hover {
+    background: #339af0;
+  }
+  .validationResult,
+  .aiExplanation {
+    margin-top: 15px;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+  }
+  .validationResult.success {
+    background-color: #d3f9d8;
+    border-color: #8ce99a;
+    color: #2b8a3e;
+  }
+  .validationResult.error {
+    background-color: #ffe3e3;
+    border-color: #ffa8a8;
+    color: #c92a2a;
+  }
+  .aiExplanation {
+    background-color: #e7f5ff;
+    border-color: #74c0fc;
+    color: #1864ab;
+  }
+  .loadingIndicator {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(77, 171, 247, 0.3);
+    border-radius: 50%;
+    border-top-color: #4dabf7;
+    animation: spin 1s ease-in-out infinite;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .settingsPanel {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  .settingsPanel label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+  }
+  .settingsPanel input, .settingsPanel select {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+  }
+  .buttonGroup {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 10px;
+  }
+</style>
+
+<script type="module">
+  import Ajv from 'https://esm.sh/ajv@8.12.0';
+  
+  // Tab configuration
+  const tabsData = [
+    {
+      name: "Tools",
+      schemaUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/schemas/tools.schema.json",
+      dataUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/data/tools.json",
+      id: "tools",
+    },
+    {
+      name: "Tools Recipes",
+      schemaUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/schemas/tools_recipes.schema.json",
+      dataUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/data/tools_recipes.json",
+      id: "toolsRecipes",
+    },
+    {
+      name: "Raw Fish",
+      schemaUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/schemas/raw_fish.schema.json",
+      dataUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/data/raw_fish.json",
+      id: "rawFish",
+    },
+    {
+      name: "Cooked Fish",
+      schemaUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/schemas/cooked_fish.schema.json",
+      dataUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/data/cooked_fish.json",
+      id: "cookedFish",
+    },
+    {
+      name: "Dishes",
+      schemaUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/schemas/dishes.schema.json",
+      dataUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/data/dishes.json",
+      id: "dishes",
+    },
+    {
+      name: "Rarity",
+      schemaUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/schemas/rarity.schema.json",
+      dataUrl:
+        "https://mosberg.github.io/src/beyond_the_bobber/data/rarity.json",
+      id: "rarity",
+    },
+    {
+      name: "Settings",
+      id: "settings",
+    },
+  ];
+
+  let validatorsByUrl = {};
+  let schemasByUrl = {};
+  let activeTabId = tabsData[0].id;
+  let ajvInstance;
+  let currentEditSchemaUrl = null; // Track which schema is being edited
+  let aiSettings = {
+    temperature: 0.7,
+    maxTokens: 1000,
+    model: "gpt-3.5-turbo"
+  };
+
+  // Load schema from URL
+  async function loadSchema(url) {
+    let response = await root.superFetch(url);
+    return response.json();
+  }
+
+  // Initialize the validator
+  async function initializeValidator() {
+    ajvInstance = new Ajv({ allErrors: true, strict: false });
+
+    // Load all schemas
+    for (let tab of tabsData) {
+      if (!tab.schemaUrl) continue; // Skip settings tab
+      let schema = await loadSchema(tab.schemaUrl);
+      schemasByUrl[tab.schemaUrl] = schema;
+      ajvInstance.addSchema(schema, tab.schemaUrl);
+    }
+
+    // Create validators
+    for (let tab of tabsData) {
+      if (!tab.schemaUrl) continue; // Skip settings tab
+      validatorsByUrl[tab.schemaUrl] = ajvInstance.compile(schemasByUrl[tab.schemaUrl]);
+    }
+
+    // Load saved settings
+    loadSettings();
+
+    // Create UI
+    loadingSchemas.hidden = true;
+    mainContent.hidden = false;
+    createTabs();
+  }
+
+  // Create tab interface
+  function createTabs() {
+    // Create tab buttons
+    for (let tab of tabsData) {
+      let btn = document.createElement("button");
+      btn.textContent = tab.name;
+      btn.id = tab.id + "TabBtn";
+      btn.onclick = () => switchTab(tab.id);
+      if (tab.id === activeTabId) {
+        btn.classList.add("active");
+      }
+      tabBar.appendChild(btn);
+    }
+
+    // Create tab content
+    for (let tab of tabsData) {
+      let div = document.createElement("div");
+      div.id = tab.id + "Tab";
+      div.className = "tabContent";
+      if (tab.id === activeTabId) {
+        div.classList.add("active");
+      }
+
+      if (tab.id === "settings") {
+        // Settings tab content
+        div.innerHTML = `
+          <h2>Validator Settings</h2>
+          <div class="settingsPanel">
+            <h3>AI Configuration</h3>
+            <label for="modelSelect">AI Model</label>
+            <select id="modelSelect">
+              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+              <option value="gpt-4">GPT-4</option>
+            </select>
+            
+            <label for="temperatureSlider">Temperature: <span id="tempValue">0.7</span></label>
+            <input type="range" id="temperatureSlider" min="0" max="1" step="0.1" value="0.7">
+            
+            <label for="maxTokensInput">Max Tokens</label>
+            <input type="number" id="maxTokensInput" min="100" max="4000" value="1000">
+            
+            <button onclick="saveSettings()">Save Settings</button>
+          </div>
+          
+          <div class="settingsPanel">
+            <h3>Data Management</h3>
+            <button onclick="exportAllData()">Export All Data</button>
+            <button onclick="document.getElementById('importDataInput').click()">Import Data</button>
+            <input type="file" id="importDataInput" accept=".json" style="display: none;" onchange="importData(event)">
+          </div>
+        `;
+      } else {
+        // Regular tab content
+        div.innerHTML = `
+          <h2>${tab.name} Schema</h2>
+          <div class="buttonGroup">
+            <button onclick="loadData('${tab.id}')">Load Data</button>
+            <button onclick="validateTab('${tab.id}')">Validate JSON</button>
+            <button onclick="explainWithAI('${tab.id}')">Explain with AI</button>
+            <button onclick="generateJson('${tab.id}')">Generate JSON</button>
+            <button onclick="openSchemaEdit('${tab.schemaUrl}')">Edit Schema</button>
+            <button onclick="saveLocalData('${tab.id}')">Save Data</button>
+            <button onclick="loadLocalData('${tab.id}')">Load Saved Data</button>
+            <button onclick="exportData('${tab.id}')">Export Data</button>
+            <button onclick="document.getElementById('${tab.id}ImportInput').click()">Import Data</button>
+            <input type="file" id="${tab.id}ImportInput" accept=".json" style="display: none;" onchange="importTabData(event, '${tab.id}')">
+          </div>
+          <div>
+            <textarea id="${tab.id}Json" placeholder="Load JSON data or paste your own..."></textarea>
+          </div>
+          <div id="${tab.id}ValidationResult" class="validationResult" style="display: none;"></div>
+          <div id="${tab.id}AiExplanation" class="aiExplanation" style="display: none;"></div>
+        `;
+      }
+      tabContent.appendChild(div);
+    }
+    
+    // Initialize temperature slider
+    temperatureSlider.addEventListener("input", function() {
+      tempValue.textContent = this.value;
+    });
+  }
+
+  // Switch active tab
+  function switchTab(tabId) {
+    document.querySelectorAll(".tabContent").forEach((div) => {
+      div.classList.remove("active");
+    });
+    document.querySelectorAll("#tabBar button").forEach((btn) => {
+      btn.classList.remove("active");
+    });
+    document.getElementById(tabId + "Tab").classList.add("active");
+    document.getElementById(tabId + "TabBtn").classList.add("active");
+    activeTabId = tabId;
+  }
+
+  // Load JSON data for tab
+  async function loadData(tabId) {
+    let tab = tabsData.find((t) => t.id === tabId);
+    let textarea = document.getElementById(tabId + "Json");
+
+    // Show loading indicator
+    textarea.value = "Loading data...";
+
+    try {
+      let response = await root.superFetch(tab.dataUrl);
+      let data = await response.json();
+      textarea.value = JSON.stringify(data, null, 2);
+    } catch (error) {
+      textarea.value = "Error loading data: " + error.message;
+    }
+  }
+
+  // Validate JSON against schema
+  function validateTab(tabId) {
+    let tab = tabsData.find((t) => t.id === tabId);
+    let textarea = document.getElementById(tabId + "Json");
+    let resultDiv = document.getElementById(tabId + "ValidationResult");
+
+    try {
+      let data = JSON.parse(textarea.value);
+      let validate = validatorsByUrl[tab.schemaUrl];
+      let valid = validate(data);
+
+      if (valid) {
+        resultDiv.className = "validationResult success";
+        resultDiv.textContent =
+          "✓ Valid JSON! The data conforms to the schema.";
+      } else {
+        resultDiv.className = "validationResult error";
+        resultDiv.textContent =
+          "✗ Validation errors:\n" + ajvInstance.errorsText(validate.errors);
+      }
+    } catch (e) {
+      resultDiv.className = "validationResult error";
+      resultDiv.textContent = "✗ Invalid JSON: " + e.message;
+    }
+    resultDiv.style.display = "block";
+  }
+
+  // Generate AI explanation
+  async function explainWithAI(tabId) {
+    let tab = tabsData.find((t) => t.id === tabId);
+    let textarea = document.getElementById(tabId + "Json");
+    let explanationDiv = document.getElementById(tabId + "AiExplanation");
+
+    // Show loading indicator
+    explanationDiv.innerHTML = `<span class="loadingIndicator"></span>Generating explanation...`;
+    explanationDiv.style.display = "block";
+
+    try {
+      let schema = schemasByUrl[tab.schemaUrl];
+      let json = textarea.value;
+
+      let prompt = `Analyze the following JSON structure according to the provided JSON Schema for the Minecraft mod "Beyond the Bobber". Explain:
+1. The purpose and structure of this data
+2. How it fits into the fishing mechanics of the mod
+3. Key properties and their significance
+4. Any relationships to other schema types
+
+Schema: ${JSON.stringify(schema, null, 2)}
+
+JSON Data: ${json}`;
+
+      let explanation = await root.generateText({
+        instruction: prompt,
+        temperature: aiSettings.temperature,
+        maxTokens: aiSettings.maxTokens,
+        model: aiSettings.model
+      });
+      explanationDiv.innerHTML = explanation;
+    } catch (error) {
+      explanationDiv.innerHTML =
+        "Error generating explanation: " + error.message;
+    }
+  }
+
+  // Generate JSON data based on schema
+  async function generateJson(tabId) {
+    let tab = tabsData.find((t) => t.id === tabId);
+    let textarea = document.getElementById(tabId + "Json");
+    let resultDiv = document.getElementById(tabId + "ValidationResult");
+
+    // Show loading indicator
+    textarea.value = "Generating data...";
+    resultDiv.style.display = "none";
+
+    try {
+      let schema = schemasByUrl[tab.schemaUrl];
+      
+      let prompt = `Generate a complete and valid JSON example based on this schema for the Minecraft mod "Beyond the Bobber". 
+Ensure the generated data:
+1. Strictly follows the schema structure
+2. Includes realistic examples that would fit in a fishing game
+3. Has proper data types and formats
+4. Includes multiple examples if the schema expects an array
+
+Schema: ${JSON.stringify(schema, null, 2)}`;
+
+      let generatedJson = await root.generateText({
+        instruction: prompt,
+        temperature: aiSettings.temperature,
+        maxTokens: aiSettings.maxTokens,
+        model: aiSettings.model
+      });
+      
+      // Try to parse and reformat the generated JSON
+      try {
+        let parsed = JSON.parse(generatedJson);
+        textarea.value = JSON.stringify(parsed, null, 2);
+      } catch (e) {
+        textarea.value = generatedJson;
+      }
+    } catch (error) {
+      textarea.value = "Error generating data: " + error.message;
+    }
+  }
+
+  // Open schema editor modal
+  function openSchemaEdit(schemaUrl) {
+    currentEditSchemaUrl = schemaUrl;
+    schemaEditor.value = JSON.stringify(schemasByUrl[schemaUrl], null, 2);
+    schemaModal.style.display = "block";
+  }
+
+  // Close schema editor modal
+  function closeSchemaModal() {
+    schemaModal.style.display = "none";
+    currentEditSchemaUrl = null;
+  }
+
+  // Save edited schema
+  function saveSchemaEdit() {
+    try {
+      let newSchema = JSON.parse(schemaEditor.value);
+      schemasByUrl[currentEditSchemaUrl] = newSchema;
+      
+      // Re-add schema to Ajv and recompile validator
+      ajvInstance.removeSchema(currentEditSchemaUrl);
+      ajvInstance.addSchema(newSchema, currentEditSchemaUrl);
+      validatorsByUrl[currentEditSchemaUrl] = ajvInstance.compile(newSchema);
+      
+      closeSchemaModal();
+      
+      // Show success message
+      let tabId = tabsData.find(t => t.schemaUrl === currentEditSchemaUrl).id;
+      let resultDiv = document.getElementById(tabId + "ValidationResult");
+      resultDiv.className = "validationResult success";
+      resultDiv.textContent = "✓ Schema updated successfully!";
+      resultDiv.style.display = "block";
+    } catch (e) {
+      alert("Invalid JSON in schema: " + e.message);
+    }
+  }
+
+  // Save current data to localStorage
+  function saveLocalData(tabId) {
+    let textarea = document.getElementById(tabId + "Json");
+    localStorage.setItem(`btb_${tabId}_data`, textarea.value);
+    
+    // Show success message
+    let resultDiv = document.getElementById(tabId + "ValidationResult");
+    resultDiv.className = "validationResult success";
+    resultDiv.textContent = "✓ Data saved locally!";
+    resultDiv.style.display = "block";
+  }
+
+  // Load saved data from localStorage
+  function loadLocalData(tabId) {
+    let savedData = localStorage.getItem(`btb_${tabId}_data`);
+    let textarea = document.getElementById(tabId + "Json");
+    
+    if (savedData) {
+      textarea.value = savedData;
+      
+      // Show success message
+      let resultDiv = document.getElementById(tabId + "ValidationResult");
+      resultDiv.className = "validationResult success";
+      resultDiv.textContent = "✓ Saved data loaded!";
+      resultDiv.style.display = "block";
+    } else {
+      // Show error message
+      let resultDiv = document.getElementById(tabId + "ValidationResult");
+      resultDiv.className = "validationResult error";
+      resultDiv.textContent = "✗ No saved data found!";
+      resultDiv.style.display = "block";
+    }
+  }
+
+  // Export current data as file
+  function exportData(tabId) {
+    let tab = tabsData.find((t) => t.id === tabId);
+    let textarea = document.getElementById(tabId + "Json");
+    let dataStr = textarea.value;
+    
+    let dataUri = "data:application/json;charset=utf-8,"+ encodeURIComponent(dataStr);
+    
+    let exportFileDefaultName = `${tab.id.toLowerCase().replace(/\s+/g, '_')}_data.json`;
+    
+    let linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  }
+
+  // Import data from file
+  function importTabData(event, tabId) {
+    let file = event.target.files[0];
+    if (!file) return;
+    
+    let reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        let content = e.target.result;
+        document.getElementById(tabId + "Json").value = content;
+        
+        // Show success message
+        let resultDiv = document.getElementById(tabId + "ValidationResult");
+        resultDiv.className = "validationResult success";
+        resultDiv.textContent = "✓ Data imported successfully!";
+        resultDiv.style.display = "block";
+      } catch (error) {
+        // Show error message
+        let resultDiv = document.getElementById(tabId + "ValidationResult");
+        resultDiv.className = "validationResult error";
+        resultDiv.textContent = "✗ Error importing data: " + error.message;
+        resultDiv.style.display = "block";
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // Save settings
+  function saveSettings() {
+    aiSettings.model = modelSelect.value;
+    aiSettings.temperature = parseFloat(temperatureSlider.value);
+    aiSettings.maxTokens = parseInt(maxTokensInput.value);
+    
+    localStorage.setItem("btb_aiSettings", JSON.stringify(aiSettings));
+    
+    // Show success message in settings tab
+    let resultDiv = document.createElement("div");
+    resultDiv.className = "validationResult success";
+    resultDiv.textContent = "✓ Settings saved successfully!";
+    resultDiv.style.display = "block";
+    settingsTab.appendChild(resultDiv);
+    
+    // Remove message after 3 seconds
+    setTimeout(() => {
+      resultDiv.remove();
+    }, 3000);
+  }
+
+  // Load settings
+  function loadSettings() {
+    let saved = localStorage.getItem("btb_aiSettings");
+    if (saved) {
+      aiSettings = JSON.parse(saved);
+      
+      // Update UI elements
+      modelSelect.value = aiSettings.model;
+      temperatureSlider.value = aiSettings.temperature;
+      tempValue.textContent = aiSettings.temperature;
+      maxTokensInput.value = aiSettings.maxTokens;
+    }
+  }
+
+  // Export all data
+  function exportAllData() {
+    let allData = {};
+    
+    for (let tab of tabsData) {
+      if (tab.id === "settings") continue;
+      
+      let savedData = localStorage.getItem(`btb_${tab.id}_data`);
+      if (savedData) {
+        try {
+          allData[tab.id] = JSON.parse(savedData);
+        } catch (e) {
+          console.error(`Error parsing saved data for ${tab.id}:`, e);
+        }
+      }
+    }
+    
+    let dataStr = JSON.stringify(allData, null, 2);
+    let dataUri = "data:application/json;charset=utf-8,"+ encodeURIComponent(dataStr);
+    
+    let exportFileDefaultName = "beyond_the_bobber_all_data.json";
+    
+    let linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  }
+
+  // Import data
+  function importData(event) {
+    let file = event.target.files[0];
+    if (!file) return;
+    
+    let reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        let content = e.target.result;
+        let data = JSON.parse(content);
+        
+        // Import all data
+        for (let tabId in data) {
+          localStorage.setItem(`btb_${tabId}_data`, JSON.stringify(data[tabId]));
+        }
+        
+        // Show success message
+        let resultDiv = document.createElement("div");
+        resultDiv.className = "validationResult success";
+        resultDiv.textContent = "✓ All data imported successfully!";
+        resultDiv.style.display = "block";
+        settingsTab.appendChild(resultDiv);
+        
+        // Remove message after 3 seconds
+        setTimeout(() => {
+          resultDiv.remove();
+        }, 3000);
+      } catch (error) {
+        // Show error message
+        let resultDiv = document.createElement("div");
+        resultDiv.className = "validationResult error";
+        resultDiv.textContent = "✗ Error importing data: " + error.message;
+        resultDiv.style.display = "block";
+        settingsTab.appendChild(resultDiv);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // Export functions to global scope for inline event handlers
+  window.loadData = loadData;
+  window.validateTab = validateTab;
+  window.explainWithAI = explainWithAI;
+  window.switchTab = switchTab;
+  window.generateJson = generateJson;
+  window.openSchemaEdit = openSchemaEdit;
+  window.closeSchemaModal = closeSchemaModal;
+  window.saveSchemaEdit = saveSchemaEdit;
+  window.saveLocalData = saveLocalData;
+  window.loadLocalData = loadLocalData;
+  window.exportData = exportData;
+  window.importTabData = importTabData;
+  window.saveSettings = saveSettings;
+  window.loadSettings = loadSettings;
+  window.exportAllData = exportAllData;
+  window.importData = importData;
+
+  // Initialize when page loads
+  initializeValidator();
+</script>
+</body>
+</html>

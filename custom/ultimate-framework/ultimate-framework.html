@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ultimate-framework — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+[output(settings)]
+
+settings
+  text
+    safetyReminder =
+    timeoutMs = 60000
+    maxRetries = 3
+    endButtons = continue,copy,improve,enchant,regenerate,translate,summarize,count,export,edit,clear,rewrite
+  image
+    resolution = 768x768
+    guidanceScale = 7
+    variations = 1
+  gallery
+    enabled = true
+    sort = top
+    contentFilter = g
+  ui
+    theme = auto
+    layout = tabs
+    maxWidth = 1100px
+    showTips = true
+    persistHistory = true
+    persistConfig = true
+  chat
+    persona = Assistant
+    keep = 8
+    compactAtRatio = 0.9
+
+<script>
+// ─────────────────────────────────────────────────────────────────────
+//  FRAMEWORK STUDIO — built entirely from modular panels.
+//  Each panel is registered via FW.panel(id, label, renderFn).
+//  The Generator Studio panel emits copy-paste code to make new generators.
+// ─────────────────────────────────────────────────────────────────────
+(function(){
+  function initStudio(){
+    var FW = window.__fw;
+    if(!FW){ var n=0; var iv=setInterval(function(){ n++; if(window.__fw){clearInterval(iv);initStudio();}else if(n>200){clearInterval(iv);console.error("FW not initialized after 10s");} },50); return; }
+    FW = window.__fw;
+
+    // ── shared CSS (appended once) ──
+    if(!document.getElementById("__fwStudioCss")){
+      var s=document.createElement("style"); s.id="__fwStudioCss";
+      s.textContent = `
+        body{ text-align:left; }
+        .__fwStudio{ max-width:1100px; margin:0 auto; padding:0.5rem; }
+        .__fw-tabs{ display:flex; flex-wrap:wrap; gap:0.25rem; border-bottom:2px solid var(--box-color,#ddd); margin-bottom:0.75rem; }
+        .__fw-tab{ padding:0.4rem 0.8rem; cursor:pointer; border:2px solid transparent; border-bottom:none; border-radius:6px 6px 0 0; background:transparent; font-size:0.95rem; }
+        .__fw-tab.active{ background:var(--box-color,#eee); border-color:var(--border-color,#ccc); font-weight:bold; }
+        .__fw-panel{ }
+        .__fw-field{ margin-bottom:0.6rem; }
+        .__fw-field label{ display:block; font-size:0.85rem; font-weight:bold; margin-bottom:0.2rem; opacity:0.85; }
+        .__fw-field input, .__fw-field textarea, .__fw-field select{ width:100%; box-sizing:border-box; padding:0.4rem; font-size:0.9rem; border:1px solid var(--border-color,#ccc); border-radius:4px; background:var(--input-color,#fff); color:var(--text-color,#000); }
+        .__fw-field textarea{ min-height:80px; resize:vertical; font-family:inherit; }
+        .__fw-btn{ padding:0.5rem 1rem; border:none; border-radius:6px; cursor:pointer; font-size:0.95rem; background:#4a9eff; color:#fff; }
+        .__fw-btn:hover{ filter:brightness(1.1); }
+        .__fw-btn:disabled{ opacity:0.5; cursor:default; }
+        .__fw-btn.secondary{ background:#666; }
+        .__fw-btn.danger{ background:#c44; }
+        .__fw-row{ display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; }
+        .__fw-output{ margin-top:0.5rem; padding:0.6rem; border:1px solid var(--border-color,#ccc); border-radius:6px; min-height:60px; background:var(--box-color,#f9f9f9); white-space:pre-wrap; word-wrap:break-word; }
+        .__fw-img-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:0.5rem; margin-top:0.5rem; }
+        .__fw-img-grid img{ width:100%; border-radius:6px; }
+        .__fw-tip{ font-size:0.8rem; opacity:0.6; margin-top:0.2rem; }
+        @keyframes rotate{ to{ transform:rotate(360deg); } }
+        .__fw-code{ font-family:monospace; font-size:0.8rem; white-space:pre; background:#1e1e2e; color:#cdd6f4; padding:0.8rem; border-radius:6px; overflow:auto; max-height:500px; }
+        .__fw-badge{ display:inline-block; padding:0.1rem 0.5rem; border-radius:10px; font-size:0.75rem; background:#4a9eff; color:#fff; }
+        .__fw-style-chip{ display:inline-block; padding:0.2rem 0.5rem; margin:0.15rem; border-radius:6px; font-size:0.8rem; cursor:pointer; border:1px solid #ccc; }
+        .__fw-style-chip:hover{ background:#eef; }
+      `;
+      document.head.appendChild(s);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: Text-to-Text
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("text","📝 Text-to-Text", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `
+        <div class="__fw-field"><label>Instruction</label><textarea id="__pT2tInstr" placeholder="Write a short story about a robot learning to paint..."></textarea></div>
+        <div class="__fw-row">
+          <div class="__fw-field" style="flex:1;"><label>Start With</label><input type="text" id="__pT2tSw" placeholder="Once upon a time,"></div>
+          <div class="__fw-field" style="flex:1;"><label>Stop Sequences (comma-sep)</label><input type="text" id="__pT2tStop"></div>
+        </div>
+        <div class="__fw-row">
+          <div class="__fw-field" style="flex:1;"><label>Safety Reminder</label><input type="text" id="__pT2tSafety" placeholder="(optional)"></div>
+          <div class="__fw-field"><label>Timeout (ms)</label><input type="number" id="__pT2tTimeout" value="60000"></div>
+        </div>
+        <div class="__fw-row">
+          <button class="__fw-btn" id="__pT2tRun">✨ Generate Text</button>
+          <button class="__fw-btn secondary" id="__pT2tStream">📺 Stream (innerHTML)</button>
+          <button class="__fw-btn danger" id="__pT2tStop">⏹ Stop</button>
+        </div>
+        <div class="__fw-output" id="__pT2tOut">Output appears here.</div>
+        <div id="__pT2tEndbtns"></div>
+        <div class="__fw-tip"><code>FW.text()</code> supports retry, timeout, safety, vision (array), streaming. After generating, use the action buttons. 🎭 Rewrite uses the unified style registry (t2t packs).</div>
+      `;
+      var job=null;
+      ct.querySelector("#__pT2tRun").onclick = async function(){
+        var out=ct.querySelector("#__pT2tOut"), btn=this;
+        var loading=FW.ui.loading(out,"generating text..."); btn.disabled=true;
+        try{
+          var stop=(ct.querySelector("#__pT2tStop").value||"").trim();
+          var r=await FW.text({
+            instruction: ct.querySelector("#__pT2tInstr").value,
+            startWith: ct.querySelector("#__pT2tSw").value,
+            stopSequences: stop?stop.split(",").map(function(s){return s.trim();}):[],
+            safetyReminder: ct.querySelector("#__pT2tSafety").value,
+            timeoutMs: Number(ct.querySelector("#__pT2tTimeout").value),
+            onChunk: function(d){ out.textContent=d.fullTextSoFar; }
+          });
+          loading.delete(); out.textContent=r.text; FW.setLastText(r.text);
+          FW.history.push({kind:"text",text:r.text,at:Date.now()});
+          renderEndBtns();
+        }catch(e){ loading.delete(); out.textContent="Error: "+e.message; }
+        btn.disabled=false;
+      };
+      ct.querySelector("#__pT2tStream").onclick = function(){
+        var out=ct.querySelector("#__pT2tOut"); out.innerHTML="";
+        var stop=(ct.querySelector("#__pT2tStop").value||"").trim();
+        var p=FW.textStream({ instruction:ct.querySelector("#__pT2tInstr").value, startWith:ct.querySelector("#__pT2tSw").value, stopSequences:stop?stop.split(",").map(function(s){return s.trim();}):[] });
+        job=p;
+        p.then&&p.then(function(){ FW.setLastText(out.textContent); FW.history.push({kind:"stream",text:out.textContent,at:Date.now()}); renderEndBtns(); });
+        out.innerHTML=p;
+      };
+      ct.querySelector("#__pT2tStop").onclick = function(){ if(job){try{job.stop();}catch(e){}} FW.cancelAll(); };
+
+      function renderEndBtns(){
+        var container=ct.querySelector("#__pT2tEndbtns"); container.innerHTML="";
+        var out=ct.querySelector("#__pT2tOut");
+        var wrap=async function(fn,label){ var l=FW.ui.loading(out,(label||"working")+"..."); try{await fn();}catch(e){out.textContent="Error: "+e.message;}finally{l.delete();renderEndBtns();} };
+        FW.endButtons(container, {
+          continue: function(){ wrap(async function(){ var r=await FW.continue({onChunk:function(d){out.textContent=d.fullTextSoFar;}}); out.textContent=r.text; },"continuing"); },
+          copy: function(){ FW.copy(FW.getLastText()); },
+          improve: function(){ wrap(async function(){ var r=await FW.improve({onChunk:function(d){out.textContent=d.fullTextSoFar;}}); out.textContent=r.text; },"improving"); },
+          enchant: async function(){ var p=await FW.enchantModal(); if(!p)return; wrap(async function(){ var r=await FW.enchant({preset:p.id,onChunk:function(d){out.textContent=d.fullTextSoFar;}}); out.textContent=r.text; },"enchanting"); },
+          regenerate: function(){ wrap(async function(){ var r=await FW.regenerate({onChunk:function(d){out.textContent=d.fullTextSoFar;}}); out.textContent=r.text; },"regenerating"); },
+          translate: async function(){ var lang=await FW.promptModal("Translate to language",FW.config.ui.defaultTranslateLang,"e.g. Spanish"); if(!lang)return; wrap(async function(){ var r=await FW.translate({lang:lang,onChunk:function(d){out.textContent=d.fullTextSoFar;}}); out.textContent=r.text; },"translating"); },
+          summarize: function(){ wrap(async function(){ var r=await FW.summarize({onChunk:function(d){out.textContent=d.fullTextSoFar;}}); out.textContent=r.text; },"summarizing"); },
+          count: function(){ var c=FW.wordCount(); out.textContent=FW.getLastText()+"\\n\\n── Word Count ──\\nwords: "+c.words+"  chars: "+c.chars+"  sentences: "+c.sentences+"  paragraphs: "+c.paragraphs+"  ~read: "+c.readMins+"min"; },
+          export: function(){ FW.exportFile(); },
+          edit: function(){ out.contentEditable="true"; out.focus(); out.style.outline="2px dashed #4a9eff"; out.onblur=function(){ out.contentEditable="false"; out.style.outline=""; FW.setLastText(out.textContent); FW.ui.toast("✏️ Saved"); }; },
+          clear: function(){ out.textContent="Output appears here."; FW.setLastText(""); container.innerHTML=""; },
+          rewrite: async function(){
+            var pick=await FW.stylePicker("t2t"); if(!pick)return;
+            wrap(async function(){ var r=await FW.rewrite({text:FW.getLastText(),style:pick.name,onChunk:function(d){out.textContent=d.fullTextSoFar;}}); out.textContent=r.text; },"rewriting");
+          },
+        });
+      }
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: Text-to-Image
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("image","🎨 Text-to-Image", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `
+        <div class="__fw-field"><label>Prompt</label><textarea id="__pImgPrompt" placeholder="a majestic dragon perched on a mountain peak at sunset, cinematic, highly detailed"></textarea></div>
+        <div class="__fw-field"><label>Negative Prompt</label><input type="text" id="__pImgNeg" placeholder="blur, low quality, deformed"></div>
+        <div class="__fw-row">
+          <div class="__fw-field"><label>Resolution</label><select id="__pImgRes"><option>512x512</option><option>512x768</option><option>768x512</option><option selected>768x768</option></select></div>
+          <div class="__fw-field"><label>Seed</label><input type="number" id="__pImgSeed" value="-1"></div>
+          <div class="__fw-field"><label>Guidance</label><input type="number" id="__pImgGuid" value="7" step="0.5"></div>
+          <div class="__fw-field"><label>Variations</label><input type="number" id="__pImgVar" value="1" min="1" max="6"></div>
+        </div>
+        <div class="__fw-row">
+          <label><input type="checkbox" id="__pImgRmBg"> Remove Background</label>
+          <label><input type="checkbox" id="__pImgHideGal"> Hide Gallery Buttons</label>
+          <label><input type="checkbox" id="__pImgStyleApply"> Apply t2i Style</label>
+        </div>
+        <div class="__fw-field" id="__pImgStyleRow" style="display:none;"><label>Image Style</label><select id="__pImgStyleSel"></select></div>
+        <div class="__fw-row">
+          <button class="__fw-btn" id="__pImgRun">🎨 Generate Image</button>
+          <button class="__fw-btn secondary" id="__pImgTile">🖼️ Tile (iframe)</button>
+          <button class="__fw-btn danger" id="__pImgStop">⏹ Stop All</button>
+        </div>
+        <div class="__fw-img-grid" id="__pImgOut"></div>
+        <div id="__pImgEndbtns"></div>
+        <div class="__fw-tip"><code>FW.image()</code> returns \\{dataUrl, canvas, inputs, checkNsfw(), upload()\\}. Variations produce multiple results. Apply a t2i style from the registry.</div>
+      `;
+      // populate t2i style dropdown
+      var styleSel=ct.querySelector("#__pImgStyleSel");
+      FW.styles.list("t2i").forEach(function(s){ var o=document.createElement("option"); o.value=s.name; o.textContent=(s.label||s.name); styleSel.appendChild(o); });
+      ct.querySelector("#__pImgStyleApply").onchange = function(){ ct.querySelector("#__pImgStyleRow").style.display = this.checked?"block":"none"; };
+      ct.querySelector("#__pImgRun").onclick = async function(){
+        var grid=ct.querySelector("#__pImgOut"), btn=this;
+        var loading=FW.ui.loading(grid,"generating image..."); btn.disabled=true;
+        try{
+          var opts={
+            prompt: ct.querySelector("#__pImgPrompt").value,
+            negativePrompt: ct.querySelector("#__pImgNeg").value,
+            resolution: ct.querySelector("#__pImgRes").value,
+            seed: Number(ct.querySelector("#__pImgSeed").value),
+            guidanceScale: Number(ct.querySelector("#__pImgGuid").value),
+            variations: Number(ct.querySelector("#__pImgVar").value),
+            removeBackground: ct.querySelector("#__pImgRmBg").checked,
+            hideGalleryButtons: ct.querySelector("#__pImgHideGal").checked,
+          };
+          if(ct.querySelector("#__pImgStyleApply").checked && styleSel.value){
+            var applied=FW.styles.apply(styleSel.value, opts.prompt, opts.negativePrompt);
+            opts.prompt=applied.prompt; opts.negativePrompt=applied.negative;
+          }
+          var r=await FW.image(opts);
+          loading.delete(); grid.innerHTML="";
+          var arr=Array.isArray(r)?r:[r];
+          arr.forEach(function(img){ var el=document.createElement("img"); el.src=img.dataUrl; grid.appendChild(el); });
+          renderImgEndBtns(r);
+        }catch(e){ loading.delete(); grid.textContent="Error: "+e.message; }
+        btn.disabled=false;
+      };
+      ct.querySelector("#__pImgTile").onclick = function(){
+        var grid=ct.querySelector("#__pImgOut");
+        grid.innerHTML=FW.imageTile({ prompt:ct.querySelector("#__pImgPrompt").value, negativePrompt:ct.querySelector("#__pImgNeg").value, resolution:ct.querySelector("#__pImgRes").value });
+      };
+      ct.querySelector("#__pImgStop").onclick = function(){ FW.cancelAll(); };
+      function renderImgEndBtns(r){
+        var container=ct.querySelector("#__pImgEndbtns"); container.innerHTML="";
+        if(!r)return; var arr=Array.isArray(r)?r:[r];
+        var row=document.createElement("div"); row.className="__fw-endbtns"; row.style.cssText="display:flex;gap:0.3rem;flex-wrap:wrap;margin-top:0.4rem;";
+        function btn(label,fn,bg){ var b=document.createElement("button"); b.className="__fw-btn secondary"; b.textContent=label; b.style.cssText="padding:0.3rem 0.6rem;font-size:0.82rem;background:"+(bg||"#666")+";"; b.onclick=fn; return b; }
+        row.appendChild(btn("📋 Copy URL", async function(){ try{await navigator.clipboard.writeText(arr[0].dataUrl); FW.ui.toast("📋 copied");}catch(e){FW.ui.toast("copy failed");} }));
+        row.appendChild(btn("💾 Save", async function(){ FW.ui.toast("uploading..."); try{var url=await arr[0].upload(); FW.ui.toast("💾 "+url);}catch(e){FW.ui.toast("upload failed: "+e.message);} }));
+        row.appendChild(btn("🔞 NSFW Check", async function(){ try{var r=await arr[0].checkNsfw(); FW.ui.toast("NSFW: "+String(r.nsfw)+" tags: "+(r.tags||[]).join(","));}catch(e){FW.ui.toast("check failed");} }));
+        row.appendChild(btn("🔄 Variations", async function(){ var l=FW.ui.loading(ct.querySelector("#__pImgOut"),"generating variations..."); try{var v=await FW.image(Object.assign({},FW.state.lastImagePrompt,{seed:-1,variations:3})); l.delete(); var g=ct.querySelector("#__pImgOut"); g.innerHTML=""; var a=Array.isArray(v)?v:[v]; a.forEach(function(img){var el=document.createElement("img");el.src=img.dataUrl;g.appendChild(el);}); renderImgEndBtns(v);}catch(e){l.delete();FW.ui.toast("Error: "+e.message);} }));
+        row.appendChild(btn("🪄 Style", async function(){ var pick=await FW.stylePicker("t2i"); if(!pick)return; var l=FW.ui.loading(ct.querySelector("#__pImgOut"),"applying "+pick.name+"..."); try{var applied=FW.styles.apply(pick.name, FW.state.lastImagePrompt.prompt, FW.state.lastImagePrompt.negativePrompt); var v=await FW.image(Object.assign({},applied,{resolution:FW.state.lastImagePrompt.resolution,guidanceScale:FW.state.lastImagePrompt.guidanceScale})); l.delete(); var g=ct.querySelector("#__pImgOut"); g.innerHTML=""; var el=document.createElement("img"); el.src=v.dataUrl; g.appendChild(el); renderImgEndBtns(v);}catch(e){l.delete();FW.ui.toast("Error: "+e.message);} }));
+        container.appendChild(row);
+      }
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: Chat
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("chat","💬 Chat Engine", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `
+        <div class="__fw-field"><label>Persona</label><input type="text" id="__pChatPersona" value="Assistant"></div>
+        <div class="__fw-row">
+          <div class="__fw-field" style="flex:1;"><label>Message</label><input type="text" id="__pChatInput" placeholder="Say something..."></div>
+          <button class="__fw-btn" id="__pChatSend">Send</button>
+          <button class="__fw-btn secondary" id="__pChatClear">Clear</button>
+        </div>
+        <div class="__fw-output" id="__pChatOut" style="min-height:200px;max-height:400px;overflow:auto;"></div>
+        <div class="__fw-tip">Prefix-cache-friendly append-only transcript with background summarization at compactAtRatio of context budget.</div>
+      `;
+      var out=ct.querySelector("#__pChatOut");
+      function append(role,text){ out.innerHTML+="<b>"+role+":</b> "+text.replace(/</g,"&lt;")+"<br><br>"; out.scrollTop=out.scrollHeight; }
+      ct.querySelector("#__pChatSend").onclick = async function(){
+        var inp=ct.querySelector("#__pChatInput"); var msg=inp.value.trim(); if(!msg)return; inp.value=""; append("You",msg);
+        var persona=ct.querySelector("#__pChatPersona").value||"Assistant"; this.disabled=true;
+        try{ await FW.chat.send(msg,{persona:persona,onChunk:function(d){ var stripped=d.fullTextSoFar.replace(/^\S+?:/,"").trim(); out.innerHTML=out.innerHTML.replace(new RegExp("<b>"+persona+":</b>.*$","s"),""); append(persona,stripped); }}); }
+        catch(e){ append("Error",e.message); }
+        this.disabled=false;
+      };
+      ct.querySelector("#__pChatInput").addEventListener("keydown", function(e){ if(e.key==="Enter") ct.querySelector("#__pChatSend").click(); });
+      ct.querySelector("#__pChatClear").onclick = function(){ FW.chat.clear(); out.innerHTML=""; };
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: Vision
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("vision","👁️ Vision", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `
+        <div class="__fw-field"><label>Image URL</label><input type="text" id="__pVisUrl" placeholder="https://...  or pick a file below"></div>
+        <div class="__fw-field"><label>Or upload file</label><input type="file" id="__pVisFile" accept="image/png,image/jpeg,image/webp"></div>
+        <div class="__fw-field"><label>Question</label><input type="text" id="__pVisQ" value="Describe this image in detail."></div>
+        <button class="__fw-btn" id="__pVisRun">👁️ Analyze</button>
+        <div class="__fw-output" id="__pVisOut">Result appears here.</div>
+        <div class="__fw-tip"><code>FW.vision()</code> — array instruction with image Blob (~570 tokens).</div>
+      `;
+      ct.querySelector("#__pVisRun").onclick = async function(){
+        var out=ct.querySelector("#__pVisOut"); var l=FW.ui.loading(out,"analyzing image..."); this.disabled=true;
+        try{ var url=ct.querySelector("#__pVisUrl").value.trim(); var file=ct.querySelector("#__pVisFile").files[0]; var img=file||url; if(!img){l.delete();out.textContent="Provide a URL or file.";return;} var r=await FW.vision(img, ct.querySelector("#__pVisQ").value); l.delete(); out.textContent=r.text; }
+        catch(e){ l.delete(); out.textContent="Error: "+e.message; }
+        this.disabled=false;
+      };
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: Pipeline (Image→Image)
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("pipeline","🔄 Image→Image", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `
+        <div class="__fw-field"><label>Source Image URL</label><input type="text" id="__pPipeUrl" placeholder="https://..."></div>
+        <div class="__fw-field"><label>Instruction (optional)</label><input type="text" id="__pPipeInstr" placeholder="Describe as a vivid t2i prompt for a variation"></div>
+        <button class="__fw-btn" id="__pPipeRun">🔄 Run Pipeline</button>
+        <div class="__fw-output" id="__pPipeDesc" style="min-height:60px;">Description appears here.</div>
+        <div class="__fw-img-grid" id="__pPipeImg"></div>
+        <div class="__fw-tip">Vision→Text→Image: <code>FW.imageToImage()</code>.</div>
+      `;
+      ct.querySelector("#__pPipeRun").onclick = async function(){
+        var desc=ct.querySelector("#__pPipeDesc"), img=ct.querySelector("#__pPipeImg"); var l=FW.ui.loading(desc,"running pipeline..."); img.innerHTML="";
+        try{ var url=ct.querySelector("#__pPipeUrl").value.trim(); if(!url){l.delete();desc.textContent="Provide a URL.";return;} var r=await FW.imageToImage(url, ct.querySelector("#__pPipeInstr").value); l.delete(); desc.textContent=r.description.text; var el=document.createElement("img"); el.src=r.image.dataUrl; img.appendChild(el); }
+        catch(e){ l.delete(); desc.textContent="Error: "+e.message; }
+      };
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: Gallery
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("gallery","🖼️ Gallery", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `
+        <div class="__fw-row">
+          <div class="__fw-field"><label>Sort</label><select id="__pGalSort"><option>top</option><option>recent</option><option>trending</option></select></div>
+          <div class="__fw-field"><label>Content Filter</label><select id="__pGalFilter"><option>g</option><option>pg13</option></select></div>
+          <div class="__fw-field"><label>Time Range</label><select id="__pGalTime"><option>1-day</option><option>3-day</option><option>1-week</option><option>1-month</option><option>1-year</option><option selected>all-time</option></select></div>
+        </div>
+        <button class="__fw-btn" id="__pGalLoad">🖼️ Load Gallery</button>
+        <div id="__pGalOut" style="margin-top:0.5rem;"></div>
+        <div class="__fw-tip">Public per-generator gallery via <code>FW.gallery()</code>.</div>
+      `;
+      ct.querySelector("#__pGalLoad").onclick = function(){
+        ct.querySelector("#__pGalOut").innerHTML = FW.gallery({ sort:ct.querySelector("#__pGalSort").value, contentFilter:ct.querySelector("#__pGalFilter").value, timeRange:ct.querySelector("#__pGalTime").value });
+      };
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: Styles (unified registry browser)
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("styles","🎭 Styles", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `
+        <div class="__fw-row">
+          <div class="__fw-field"><label>Type Filter</label><select id="__pStType"><option value="">All</option><option value="t2t">Text (rewrite)</option><option value="t2i">Image (art)</option></select></div>
+          <div class="__fw-field" style="flex:1;"><label>Search</label><input type="text" id="__pStSearch" placeholder="filter by name/label/tag..."></div>
+        </div>
+        <div id="__pStPacks" style="margin:0.5rem 0; font-size:0.8rem; opacity:0.7;"></div>
+        <div id="__pStList"></div>
+        <div class="__fw-field" style="margin-top:0.6rem;"><label>Quick Apply (prompt/negative preview)</label>
+          <div class="__fw-field"><label>Prompt</label><textarea id="__pStPrompt" placeholder="a cute fox"></textarea></div>
+          <div class="__fw-field"><label>Negative</label><input type="text" id="__pStNeg" placeholder="blur"></div>
+          <button class="__fw-btn" id="__pStApply">Apply Selected Style</button>
+          <div class="__fw-output" id="__pStResult">Resulting prompt/negative appears here.</div>
+        </div>
+        <div class="__fw-tip">Unified style registry — both text-rewrite and image-art packs. <code>FW.styles.list(type)</code>, <code>FW.styles.apply(name, desc, neg)</code>, <code>FW.rewrite(text, styleName)</code>.</div>
+      `;
+      var typeSel=ct.querySelector("#__pStType"), searchEl=ct.querySelector("#__pStSearch"), listEl=ct.querySelector("#__pStList"), packsEl=ct.querySelector("#__pStPacks");
+      var selected=null;
+      function renderPacks(){
+        packsEl.textContent = "Packs: "+FW.styles.packs().map(function(n){ var p=FW.styles.packInfo(n); return n+" ("+p.type+", "+(FW.styles.listByPack(n).length)+" styles)"; }).join("  ·  ");
+      }
+      function renderList(){
+        var t=typeSel.value, q=searchEl.value;
+        var items=FW.styles.list(t).filter(function(s){ if(!q) return true; return (s.name+" "+s.label).toLowerCase().indexOf(q.toLowerCase())!==-1; });
+        listEl.innerHTML="";
+        if(!items.length){ listEl.innerHTML="<div style='opacity:0.6;padding:0.5rem;'>No styles found.</div>"; return; }
+        var grouped={}; items.forEach(function(s){ (grouped[s.pack]=grouped[s.pack]||[]).push(s); });
+        Object.keys(grouped).forEach(function(pname){
+          var h=document.createElement("div"); h.style.cssText="font-weight:bold;font-size:0.85rem;margin:0.4rem 0 0.2rem;"; h.textContent=pname+" · "+grouped[pname].length; listEl.appendChild(h);
+          var grid=document.createElement("div"); grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:0.3rem;";
+          grouped[pname].forEach(function(s){
+            var chip=document.createElement("div"); chip.className="__fw-style-chip"; chip.textContent=(s.label||s.name)+" "; chip.style.background = s.type==="t2t" ? "#e8f5e9" : "#e3f2fd"; chip.style.borderColor = s.type==="t2t"?"#7b5":"#4a9eff";
+            chip.title=s.name+" ("+s.type+")";
+            chip.onclick=function(){ selected=s.name; listEl.querySelectorAll(".__fw-style-chip").forEach(function(c){c.style.outline="";}); chip.style.outline="2px solid #333"; };
+            grid.appendChild(chip);
+          });
+          listEl.appendChild(grid);
+        });
+      }
+      typeSel.onchange=function(){ renderList(); }; searchEl.oninput=function(){ renderList(); };
+      ct.querySelector("#__pStApply").onclick = function(){
+        if(!selected){ FW.ui.toast("Pick a style first"); return; }
+        var applied=FW.styles.apply(selected, ct.querySelector("#__pStPrompt").value, ct.querySelector("#__pStNeg").value);
+        ct.querySelector("#__pStResult").textContent = "Type: "+applied.type+"  Pack: "+applied.pack+"\\n\\nPrompt: "+applied.prompt+"\\n\\nNegative: "+applied.negative+(applied.startWith?("\\n\\nStartWith: "+applied.startWith):"");
+      };
+      renderPacks(); renderList();
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: Share
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("share","🔗 Share", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `
+        <div class="__fw-field"><label>Data (JSON or text)</label><textarea id="__pShData" placeholder="any data to share"></textarea></div>
+        <button class="__fw-btn" id="__pShCreate">🔗 Create Share Link</button>
+        <div class="__fw-output" id="__pShOut">Share link appears here.</div>
+        <button class="__fw-btn secondary" id="__pShLoad" style="margin-top:0.5rem;">📥 Load from URL Hash</button>
+        <div class="__fw-output" id="__pShLoaded" style="margin-top:0.5rem;">Loaded data appears here.</div>
+        <div class="__fw-tip">gzip + upload via <code>FW.shareLink()</code> / <code>FW.loadShareLink()</code>.</div>
+      `;
+      ct.querySelector("#__pShCreate").onclick = async function(){
+        var out=ct.querySelector("#__pShOut"); var l=FW.ui.loading(out,"creating link...");
+        try{ var raw=ct.querySelector("#__pShData").value; var data=raw.trim().startsWith("{")?JSON.parse(raw):{text:raw}; var url=await FW.shareLink(data); l.delete(); out.innerHTML='<input value="'+url+'" style="width:100%;font-size:80%;" readonly><br><a href="'+url+'" target="_blank">open ↗</a>'; }
+        catch(e){ l.delete(); out.textContent="Error: "+e.message; }
+      };
+      ct.querySelector("#__pShLoad").onclick = async function(){
+        var out=ct.querySelector("#__pShLoaded");
+        try{ var data=await FW.loadShareLink(); out.textContent=data?JSON.stringify(data,null,2):"No share link in URL hash."; }
+        catch(e){ out.textContent="Error: "+e.message; }
+      };
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: History
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("history","🕰️ History", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `
+        <div class="__fw-row" style="justify-content:space-between;">
+          <b>Output History</b>
+          <div>
+            <button class="__fw-btn secondary" id="__pHistRefresh" style="padding:0.3rem 0.6rem;font-size:0.82rem;">🔄 Refresh</button>
+            <button class="__fw-btn danger" id="__pHistClear" style="padding:0.3rem 0.6rem;font-size:0.82rem;">🗑️ Clear</button>
+          </div>
+        </div>
+        <div class="__fw-output" id="__pHistOut" style="min-height:200px;max-height:60vh;overflow:auto;">History appears here.</div>
+      `;
+      function render(){
+        var out=ct.querySelector("#__pHistOut"); var items=FW.history.list();
+        if(!items.length){ out.textContent="No history yet."; return; }
+        out.innerHTML=""; items.slice().reverse().forEach(function(item,i){
+          var realIdx=items.length-1-i;
+          var div=document.createElement("div"); div.style.cssText="padding:0.5rem;border:1px solid var(--border-color,#ccc);border-radius:6px;margin-bottom:0.4rem;cursor:pointer;";
+          var preview=(item.text||"").slice(0,160).replace(/</g,"&lt;"); var time=new Date(item.at).toLocaleTimeString();
+          div.innerHTML='<div style="display:flex;justify-content:space-between;font-size:0.8rem;opacity:0.7;margin-bottom:0.2rem;"><span>#'+realIdx+' · '+(item.kind||"?")+'</span><span>'+time+'</span></div><div>'+preview+'...</div>';
+          div.onclick=function(){ FW.setLastText(item.text); FW.ui.toast("Restored #"+realIdx); };
+          out.appendChild(div);
+        });
+      }
+      ct.querySelector("#__pHistRefresh").onclick=render; ct.querySelector("#__pHistClear").onclick=function(){ FW.history.clear(); render(); FW.ui.toast("History cleared"); };
+      render();
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: Settings
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("settings","⚙️ Settings", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `
+        <h3 style="margin:0.2rem 0 0.6rem;">⚙️ Settings</h3>
+        <div class="__fw-field"><label>Default End Buttons (comma-separated)</label><input type="text" id="__pSetEndBtns"></div>
+        <div class="__fw-field"><label>Continue Prompt</label><textarea id="__pSetCont"></textarea></div>
+        <div class="__fw-field"><label>Improve Prompt</label><textarea id="__pSetImp"></textarea></div>
+        <div class="__fw-row">
+          <div class="__fw-field" style="flex:1;"><label>Continue Separator</label><input type="text" id="__pSetSep"></div>
+          <div class="__fw-field" style="flex:1;"><label>Default Enchant Preset</label><select id="__pSetPreset"></select></div>
+          <div class="__fw-field" style="flex:1;"><label>Default Translate Language</label><input type="text" id="__pSetLang"></div>
+        </div>
+        <div class="__fw-row">
+          <div class="__fw-field" style="flex:1;"><label>Timeout (ms)</label><input type="number" id="__pSetTimeout"></div>
+          <div class="__fw-field" style="flex:1;"><label>Max Retries</label><input type="number" id="__pSetRetries"></div>
+          <div class="__fw-field" style="flex:1;"><label>Retry Delay (ms)</label><input type="number" id="__pSetDelay"></div>
+        </div>
+        <div class="__fw-row">
+          <div class="__fw-field" style="flex:1;"><label>Image Resolution</label><select id="__pSetImgRes"><option>512x512</option><option>512x768</option><option>768x512</option><option>768x768</option></select></div>
+          <div class="__fw-field" style="flex:1;"><label>Image Guidance</label><input type="number" id="__pSetImgGuid" step="0.5"></div>
+          <div class="__fw-field" style="flex:1;"><label>Image Variations</label><input type="number" id="__pSetImgVar" min="1" max="6"></div>
+        </div>
+        <div class="__fw-row">
+          <div class="__fw-field" style="flex:1;"><label>Chat Persona</label><input type="text" id="__pSetPersona"></div>
+          <div class="__fw-field" style="flex:1;"><label>Chat Keep</label><input type="number" id="__pSetKeep"></div>
+          <div class="__fw-field" style="flex:1;"><label>Compact Ratio</label><input type="number" id="__pSetRatio" step="0.05"></div>
+        </div>
+        <div class="__fw-row">
+          <label><input type="checkbox" id="__pSetEndBtnsShow"> Show End Buttons</label>
+          <label><input type="checkbox" id="__pSetHist"> Persist History</label>
+          <label><input type="checkbox" id="__pSetCfg"> Persist Config</label>
+        </div>
+        <div class="__fw-row" style="margin-top:0.6rem;">
+          <button class="__fw-btn" id="__pSetSave">💾 Save</button>
+          <button class="__fw-btn secondary" id="__pSetExport">📋 Export</button>
+          <button class="__fw-btn secondary" id="__pSetImport">📥 Import</button>
+          <button class="__fw-btn danger" id="__pSetReset">↺ Reset</button>
+        </div>
+        <div class="__fw-output" id="__pSetStatus" style="margin-top:0.5rem;min-height:40px;">Load settings into the form, tweak, and Save. Changes apply immediately.</div>
+      `;
+      var presetSel=ct.querySelector("#__pSetPreset");
+      FW.presets.list.forEach(function(p){ var o=document.createElement("option"); o.value=p.id; o.textContent=p.label; presetSel.appendChild(o); });
+      function load(){ var c=FW.config;
+        ct.querySelector("#__pSetEndBtns").value=c.text.endButtons;
+        ct.querySelector("#__pSetCont").value=c.text.continuePrompt;
+        ct.querySelector("#__pSetImp").value=c.text.improvePrompt;
+        ct.querySelector("#__pSetSep").value=c.text.continueSeparator;
+        presetSel.value=c.text.enchantPreset;
+        ct.querySelector("#__pSetLang").value=c.ui.defaultTranslateLang;
+        ct.querySelector("#__pSetTimeout").value=c.text.timeoutMs;
+        ct.querySelector("#__pSetRetries").value=c.text.maxRetries;
+        ct.querySelector("#__pSetDelay").value=c.text.retryDelayMs;
+        ct.querySelector("#__pSetImgRes").value=c.image.resolution;
+        ct.querySelector("#__pSetImgGuid").value=c.image.guidanceScale;
+        ct.querySelector("#__pSetImgVar").value=c.image.variations;
+        ct.querySelector("#__pSetPersona").value=c.chat.persona;
+        ct.querySelector("#__pSetKeep").value=c.chat.keep;
+        ct.querySelector("#__pSetRatio").value=c.chat.compactAtRatio;
+        ct.querySelector("#__pSetEndBtnsShow").checked=c.ui.showEndButtons;
+        ct.querySelector("#__pSetHist").checked=c.ui.persistHistory;
+        ct.querySelector("#__pSetCfg").checked=c.ui.persistConfig;
+      }
+      function save(){ var set=FW.settings.set.bind(FW.settings);
+        set("text.endButtons", ct.querySelector("#__pSetEndBtns").value);
+        set("text.continuePrompt", ct.querySelector("#__pSetCont").value);
+        set("text.improvePrompt", ct.querySelector("#__pSetImp").value);
+        set("text.continueSeparator", ct.querySelector("#__pSetSep").value);
+        set("text.enchantPreset", presetSel.value);
+        set("ui.defaultTranslateLang", ct.querySelector("#__pSetLang").value);
+        set("text.timeoutMs", Number(ct.querySelector("#__pSetTimeout").value));
+        set("text.maxRetries", Number(ct.querySelector("#__pSetRetries").value));
+        set("text.retryDelayMs", Number(ct.querySelector("#__pSetDelay").value));
+        set("image.resolution", ct.querySelector("#__pSetImgRes").value);
+        set("image.guidanceScale", Number(ct.querySelector("#__pSetImgGuid").value));
+        set("image.variations", Number(ct.querySelector("#__pSetImgVar").value));
+        set("chat.persona", ct.querySelector("#__pSetPersona").value);
+        set("chat.keep", Number(ct.querySelector("#__pSetKeep").value));
+        set("chat.compactAtRatio", Number(ct.querySelector("#__pSetRatio").value));
+        set("ui.showEndButtons", ct.querySelector("#__pSetEndBtnsShow").checked);
+        set("ui.persistHistory", ct.querySelector("#__pSetHist").checked);
+        set("ui.persistConfig", ct.querySelector("#__pSetCfg").checked);
+        FW.settings.persist();
+        ct.querySelector("#__pSetStatus").textContent="Saved at "+new Date().toLocaleTimeString()+".";
+        FW.ui.toast("⚙️ Settings saved");
+      }
+      ct.querySelector("#__pSetSave").onclick=save;
+      ct.querySelector("#__pSetExport").onclick=function(){ ct.querySelector("#__pSetStatus").innerHTML='<textarea style="width:100%;min-height:120px;font-size:0.8rem;" readonly>'+FW.settings.export().replace(/</g,"&lt;")+'</textarea>'; };
+      ct.querySelector("#__pSetImport").onclick=function(){ var s=prompt("Paste config JSON:"); if(!s)return; try{FW.settings.import(s); load(); FW.ui.toast("📥 imported");}catch(e){FW.ui.toast("import failed: "+e.message);} };
+      ct.querySelector("#__pSetReset").onclick=function(){ FW.settings.reset(); load(); FW.ui.toast("↺ reset"); };
+      load();
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: Stats
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("stats","📊 Stats", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `<button class="__fw-btn" id="__pStatsRefresh">🔄 Refresh</button><div class="__fw-output" id="__pStatsOut">Stats appear here.</div>`;
+      ct.querySelector("#__pStatsRefresh").onclick=function(){ ct.querySelector("#__pStatsOut").textContent=JSON.stringify(FW.stats(),null,2); };
+      ct.querySelector("#__pStatsRefresh").click();
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  PANEL: Generator Studio (code generator)
+    // ════════════════════════════════════════════════════════════════════
+    FW.panel("studio","🧪 Generator Studio", function(ct, ctx){
+      var FW=ctx.FW;
+      ct.innerHTML = `
+        <p style="opacity:0.8;font-size:0.9rem;">Configure your new generator below, then copy the generated <code>main.pjs</code> and <code>index.html</code> into a new perchance generator. The framework core (this generator's main.pjs) is the shared, upgradeable engine.</p>
+        <div class="__fw-row">
+          <div class="__fw-field" style="flex:1;"><label>Generator Title</label><input type="text" id="__pGTitle" value="My Cool Generator"></div>
+          <div class="__fw-field" style="flex:1;"><label>Subtitle</label><input type="text" id="__pGSub" value="Built with the Ultimate Framework"></div>
+          <div class="__fw-field"><label>Layout</label><select id="__pGLayout"><option value="tabs">tabs</option><option value="accordion">accordion</option><option value="single">single</option></select></div>
+        </div>
+        <div class="__fw-field"><label>Panels (tick the ones to include)</label>
+          <div id="__pGPanels" style="display:flex;flex-wrap:wrap;gap:0.5rem;"></div>
+        </div>
+        <div class="__fw-field"><label>Style packs to register (besides built-in)</label>
+          <div id="__pGStylePacks" style="font-size:0.85rem;"></div>
+          <input type="text" id="__pGNewPackName" placeholder="import name, e.g. t2i-styles-mosberg-nsfw" style="margin-top:0.3rem;">
+          <select id="__pGNewPackType"><option value="t2i">t2i</option><option value="t2t">t2t</option></select>
+          <button class="__fw-btn secondary" id="__pGAddPack" style="margin-left:0.3rem;">➕ Add pack</button>
+        </div>
+        <div class="__fw-field"><label>Extra style pack <code>import:</code> names (comma-separated, auto-added to main.pjs)</label><input type="text" id="__pGStyleImports" placeholder="t2i-styles-mosberg-nsfw, t2t-styles-moss-nsfw"></div>
+        <div class="__fw-row">
+          <button class="__fw-btn" id="__pGGen">⚡ Generate Code</button>
+          <button class="__fw-btn secondary" id="__pGCopyPjs">📋 Copy main.pjs</button>
+          <button class="__fw-btn secondary" id="__pGCopyHtml">📋 Copy index.html</button>
+        </div>
+        <div class="__fw-field" style="margin-top:0.6rem;"><label>Generated main.pjs</label><div class="__fw-code" id="__pGCodePjs"></div></div>
+        <div class="__fw-field" style="margin-top:0.6rem;"><label>Generated index.html</label><div class="__fw-code" id="__pGCodeHtml"></div></div>
+      `;
+      var panelIds=["text","image","chat","vision","pipeline","gallery","styles","share","history","settings","stats"];
+      var defaultOn={text:true,image:true,chat:false,vision:false,pipeline:false,gallery:true,styles:true,share:false,history:true,settings:true,stats:false};
+      var selectedPanels=Object.assign({},defaultOn);
+      var packsEl=ct.querySelector("#__pGPanels");
+      panelIds.forEach(function(id){ var lbl={text:"📝 Text",image:"🎨 Image",chat:"💬 Chat",vision:"👁️ Vision",pipeline:"🔄 Pipeline",gallery:"🖼️ Gallery",styles:"🎭 Styles",share:"🔗 Share",history:"🕰️ History",settings:"⚙️ Settings",stats:"📊 Stats"}[id];
+        var lbl2=document.createElement("label"); lbl2.style.cssText="display:flex;align-items:center;gap:0.2rem;";
+        var cb=document.createElement("input"); cb.type="checkbox"; cb.checked=selectedPanels[id]; cb.dataset.id=id;
+        cb.onchange=function(){ selectedPanels[id]=cb.checked; };
+        lbl2.appendChild(cb); lbl2.appendChild(document.createTextNode(lbl)); packsEl.appendChild(lbl2);
+      });
+      var extraPacks=[];
+      var packsListEl=ct.querySelector("#__pGStylePacks");
+      function renderPacks(){ packsListEl.innerHTML=extraPacks.length?extraPacks.map(function(p,i){ return p.name+" ("+p.type+") <span data-i='"+i+"' style='color:red;cursor:pointer;'>✕</span>"; }).join("<br>"):"(none added — built-in t2i-styles + t2t-styles are always registered)"; }
+      renderPacks();
+      packsListEl.addEventListener("click", function(e){ if(e.target.dataset.i!==undefined){ extraPacks.splice(Number(e.target.dataset.i),1); renderPacks(); } });
+      ct.querySelector("#__pGAddPack").onclick=function(){ var name=ct.querySelector("#__pGNewPackName").value.trim(); if(!name)return; extraPacks.push({name:name,type:ct.querySelector("#__pGNewPackType").value}); renderPacks(); };
+      function generatePjs(){
+        var title=ct.querySelector("#__pGTitle").value;
+        var subtitle=ct.querySelector("#__pGSub").value;
+        var styleImports=ct.querySelector("#__pGStyleImports").value.split(",").map(function(s){return s.trim();}).filter(Boolean);
+        var importLines = [
+          "generateText = {import:ai-text-plugin}",
+          "generateImage = {import:text-to-image-plugin}",
+          "uploadPlugin = {import:upload-plugin}",
+          "commentsPlugin = {import:comments-plugin}",
+          "fullscreenButton = {import:fullscreen-button-plugin}",
+          "selectLeaf = {import:select-leaf-plugin}",
+          "t2iStyles = {import:t2i-styles}",
+          "t2iStylesNSFW = {import:t2i-styles-mosberg-nsfw}",
+          "t2tStyles = {import:t2t-styles}",
+        ];
+        styleImports.forEach(function(n){ importLines.push(n.replace(/[^a-zA-Z0-9_-]/g,"")+" = {import:"+n+"}"); });
+        var packRegistrations = extraPacks.map(function(p){ var varName=p.name.replace(/[^a-zA-Z0-9_]/g,""); return '  FW.styles.register("'+p.name+'", "'+p.type+'", '+varName+', {label:"'+p.name+'"});'; }).join("\n");
+        var lines = [];
+        lines.push("// "+title);
+        lines.push("// Generated by the Ultimate Framework Studio (v"+String(FW.version).replace(/"/g,"")+")");
+        lines.push("");
+        lines.push(importLines.join("\n"));
+        lines.push("");
+        lines.push("// Boot the shared framework core from the Studio generator's main.pjs.");
+        lines.push("// (Copy that core into THIS generator's main.pjs.)");
+        lines.push("");
+        lines.push('output(settings) =>');
+        lines.push('  if(!window.__fw) initFramework(settings);');
+        lines.push('  return "";');
+        lines.push("");
+        lines.push("// Register extra style packs");
+        lines.push("registerPacks() =>");
+        lines.push(packRegistrations || "  // (none)");
+        lines.push("");
+        lines.push("$meta");
+        lines.push("  title = "+title);
+        lines.push("  description = "+subtitle);
+        return lines.join("\n");
+      }
+      function generateHtml(){
+        var title=ct.querySelector("#__pGTitle").value;
+        var subtitle=ct.querySelector("#__pGSub").value;
+        var layout=ct.querySelector("#__pGLayout").value;
+        var activePanels=panelIds.filter(function(id){ return selectedPanels[id]; });
+        var Q = String.fromCharCode(34);
+        var lines = [];
+        lines.push("[output(settings)]");
+        lines.push("");
+        lines.push("settings");
+        lines.push("  ui");
+        lines.push("    layout = "+layout);
+        lines.push("");
+        lines.push('<div class='+Q+'__fwStudio'+Q+' id='+Q+'__genRoot'+Q+'></div>');
+        lines.push("");
+        lines.push("<script>");
+        lines.push("(function(){");
+        lines.push("  function init(){");
+        lines.push("    var FW=window.__fw; if(!FW){var n=0;var iv=setInterval(function(){n++;if(window.__fw){clearInterval(iv);init();}},50);return;}");
+        lines.push("    FW=window.__fw;");
+        lines.push("    if(typeof registerPacks=="+Q+"function"+Q+") registerPacks();");
+        lines.push("    FW.generator({");
+        lines.push("      title: "+JSON.stringify(title)+",");
+        lines.push("      subtitle: "+JSON.stringify(subtitle)+",");
+        lines.push("      layout: "+JSON.stringify(layout)+",");
+        lines.push("      panels: "+JSON.stringify(activePanels)+",");
+        lines.push("    }).mount("+Q+"#__genRoot"+Q+");");
+        lines.push("  }");
+        lines.push("  init();");
+        lines.push("})();");
+        lines.push("</scr"+"ipt>");
+        return lines.join("\n");
+      }
+      ct.querySelector("#__pGGen").onclick=function(){
+        ct.querySelector("#__pGCodePjs").textContent=generatePjs();
+        ct.querySelector("#__pGCodeHtml").textContent=generateHtml();
+      };
+      ct.querySelector("#__pGCopyPjs").onclick=function(){ navigator.clipboard.writeText(ct.querySelector("#__pGCodePjs").textContent).then(function(){FW.ui.toast("📋 main.pjs copied");},function(){FW.ui.toast("copy failed");}); };
+      ct.querySelector("#__pGCopyHtml").onclick=function(){ navigator.clipboard.writeText(ct.querySelector("#__pGCodeHtml").textContent).then(function(){FW.ui.toast("📋 index.html copied");},function(){FW.ui.toast("copy failed");}); };
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  MOUNT
+    // ════════════════════════════════════════════════════════════════════
+    var root = document.createElement("div"); root.className="__fwStudio";
+    var header = document.createElement("div");
+    header.innerHTML = '<h2 style="text-align:center;">⚡ Ultimate Framework <span class="__fw-badge">v' + String(FW.version).replace(/\"/g,"") + '</span></h2><p style="text-align:center;opacity:0.7;font-size:0.85rem;">Unified Text-to-Text + Text-to-Image modular system — shared styles, plugins, and generators.</p>';
+    root.appendChild(header);
+    var panelsRoot = document.createElement("div"); panelsRoot.className="__fw-panels-root";
+    root.appendChild(panelsRoot);
+    document.body.appendChild(root);
+    FW.renderPanels(panelsRoot, FW.config.ui.layout || "tabs", ["text","image","chat","vision","pipeline","gallery","styles","share","history","settings","stats","studio"]);
+
+    // footer
+    var foot = document.createElement("div");
+    foot.style.cssText="text-align:center;margin-top:2rem;opacity:0.7;font-size:0.8rem;";
+    foot.innerHTML='<p>⚡ <b>Ultimate Framework</b> v' + String(FW.version).replace(/\"/g,"") + ' — unified t2t + t2i modular system with a pluggable style registry, panel system, and generator factory.</p><p>[commentsPlugin()]</p>';
+    document.body.appendChild(foot);
+  }
+  initStudio();
+})();
+</script>
+
+</body>
+</html>

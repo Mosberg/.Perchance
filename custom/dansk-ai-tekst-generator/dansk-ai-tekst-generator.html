@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>dansk-ai-tekst-generator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<h1 style="margin-top:10px;">🤖 Dansk AI Tekst Generator</h1>
+<p style="max-width:600px; margin:0 auto 20px;">
+  Indtast en prompt nedenfor, og AI'en vil svare på <strong>dansk</strong>.
+</p>
+
+<div style="max-width:760px; margin:0 auto; text-align:left;">
+
+  <!-- Prompt -->
+  <label style="font-weight:bold;">Prompt:</label>
+  <textarea id="promptInput" rows="4"
+    style="width:100%; margin-top:4px; padding:8px; border:1px solid #aaa; border-radius:4px; font-family:inherit;">
+Skriv en kort, hyggelig beskrivelse af en dansk sommeraften ved havet.
+  </textarea>
+
+  <!-- Tonevalg -->
+  <div style="margin-top:12px;">
+    <label style="font-weight:bold;">Tone:</label>
+    <select id="toneSelect" style="padding:6px; border-radius:4px; margin-left:6px;">
+      <option value="neutral">Neutral</option>
+      <option value="hyggelig">Hyggelig</option>
+      <option value="kreativ">Kreativ</option>
+      <option value="formel">Formel</option>
+    </select>
+  </div>
+
+  <!-- Status -->
+  <div id="statusEl" style="margin-top:10px; font-style:italic; color:#555;">Status: Idle</div>
+
+  <!-- Knapper -->
+  <div style="margin-top:14px;">
+    <button id="generateBtn" onclick="startGeneration()" style="padding:8px 16px; cursor:pointer;">Generér</button>
+    <button id="continueBtn" hidden onclick="safeContinue()" style="padding:8px 16px; cursor:pointer; margin-left:8px;">Fortsæt</button>
+    <button id="stopBtn" hidden onclick="safeStop()" style="padding:8px 16px; cursor:pointer; margin-left:8px;">Stop</button>
+  </div>
+
+  <!-- Output -->
+  <div id="outputEl"
+    style="white-space:pre-wrap; margin-top:20px; padding:16px; border:1px solid #ccc; border-radius:6px; min-height:140px; background:#fafafa; font-size:1.05em; line-height:1.5;">
+  </div>
+
+</div>
+
+<script>
+  let currentGen = null;
+  let lastFullOutput = "";
+  let state = "idle"; // idle → optimizing → generating → done
+
+  function setState(newState) {
+    state = newState;
+    statusEl.textContent = "Status: " + newState;
+
+    // Adaptive knapper
+    if (state === "idle") {
+      generateBtn.disabled = false;
+      continueBtn.hidden = true;
+      stopBtn.hidden = true;
+    }
+
+    if (state === "optimizing") {
+      generateBtn.disabled = true;
+      continueBtn.hidden = true;
+      stopBtn.hidden = false;
+      stopBtn.disabled = false;
+    }
+
+    if (state === "generating") {
+      generateBtn.disabled = true;
+      continueBtn.hidden = false;
+      continueBtn.disabled = false;
+      stopBtn.hidden = false;
+      stopBtn.disabled = false;
+    }
+
+    if (state === "done") {
+      generateBtn.disabled = false;
+      continueBtn.hidden = false;
+      continueBtn.disabled = false;
+      stopBtn.hidden = true;
+    }
+  }
+
+  function appendChunk(text) {
+    const el = outputEl;
+    const span = document.createElement("span");
+    span.textContent = text;
+    span.style.opacity = 0;
+    span.style.transition = "opacity 0.25s ease";
+    el.appendChild(span);
+    requestAnimationFrame(() => span.style.opacity = 1);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function safeStop() {
+    if (currentGen && typeof currentGen.stop === "function") {
+      currentGen.stop();
+    }
+  }
+
+  function safeContinue() {
+    if (!lastFullOutput) return;
+    continueGeneration();
+  }
+
+  async function optimizePrompt(rawPrompt) {
+    setState("optimizing");
+
+    let optGen = generateText({
+      instruction:
+        "Forbedr følgende prompt, så den bliver klarere, mere detaljeret og mere effektiv. " +
+        "Skriv kun den forbedrede prompt på dansk.\n\nPrompt:\n" + rawPrompt,
+      onChunk: () => {}
+    });
+
+    try {
+      const result = await optGen;
+      return result.text;
+    } catch {
+      return rawPrompt;
+    }
+  }
+
+  async function startGeneration() {
+    currentGen = null;
+    lastFullOutput = "";
+    outputEl.textContent = "";
+
+    const rawPrompt = promptInput.value.trim() || "Sig hej på dansk.";
+    const tone = toneSelect.value;
+
+    const toneInstruction = {
+      neutral: "Svar i en neutral, naturlig og flydende dansk tone.",
+      hyggelig: "Svar i en varm, hyggelig og afslappet dansk tone.",
+      kreativ: "Svar i en kreativ, billedrig og legende dansk tone.",
+      formel: "Svar i en formel, præcis og professionel dansk tone."
+    }[tone];
+
+    const systemPrompt =
+      "Du er en hjælpsom assistent, der altid skriver flydende, naturligt og grammatisk korrekt dansk. " +
+      "Svar udelukkende på dansk. " +
+      toneInstruction;
+
+    // 1) OPTIMER PROMPT
+    const optimizedPrompt = await optimizePrompt(rawPrompt);
+
+    // 2) GENERÉR SVAR
+    setState("generating");
+
+    currentGen = generateText({
+      instruction: `${systemPrompt}\n\nBrugerens optimerede prompt:\n${optimizedPrompt}`,
+      onChunk: (data) => appendChunk(data.textChunk)
+    });
+
+    try {
+      const final = await currentGen;
+      lastFullOutput = final.text;
+      setState("done");
+    } catch {
+      appendChunk("\n\n[Fejl under generering]");
+      setState("idle");
+    }
+  }
+
+  async function continueGeneration() {
+    setState("generating");
+
+    outputEl.textContent += "\n\n--- Fortsættelse ---\n\n";
+
+    currentGen = generateText({
+      instruction:
+        "Fortsæt teksten nedenfor i samme stil, tone og kontekst. Skriv udelukkende på dansk.\n\n" +
+        lastFullOutput,
+      onChunk: (data) => appendChunk(data.textChunk)
+    });
+
+    try {
+      const final = await currentGen;
+      lastFullOutput += "\n" + final.text;
+      setState("done");
+    } catch {
+      appendChunk("\n\n[Fejl under fortsættelse]");
+      setState("idle");
+    }
+  }
+
+  setState("idle");
+</script>
+</body>
+</html>

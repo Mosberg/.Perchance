@@ -1,0 +1,1436 @@
+// A Notebook Plugin v2 for Perchance
+// Suggested import:
+//   notebookV2 = {import:a-notebook-plugin-v2}
+// Suggested usage in HTML panel:
+//   [notebookV2.mount()]
+
+$output = [createNotebookApiV2()]
+
+createNotebookApiV2() =>
+  if(!window.__aNotebookPluginV2) {
+    window.__aNotebookPluginV2 = (function () {
+      "use strict";
+
+      var DEFAULTS = {
+        storageKey: typeof kvStorageKey !== "undefined" ? kvStorageKey + "_v2" : "acg_notebook_pages_v2_plus",
+        storageDriver: "auto", // auto | localStorage | kv
+        enableProfile: true,
+        profileStorageKey: "__a_notebook_plugin_shared_profile_v1",
+        title: "Notebook",
+        defaultPageTitle: "Ideas",
+        emptyPageTitle: "Untitled",
+        newPageTemplate: "",
+        exportFileName: "notebook-v2.json",
+        mountButton: true,
+        buttonLabel: "Notebook v2",
+        buttonPosition: "bottom-right",
+        maxPages: 1000,
+        autosave: true,
+        autosaveDelay: 500,
+        maxTitleLength: 140,
+        maxTagLength: 40,
+        maxTagsPerPage: 20,
+        allowImportReplace: true,
+        importMergeStrategy: "replace", // replace | prepend | append
+        openOnInit: false,
+        closeOnEsc: true,
+        backdropClose: true,
+        keyboardShortcuts: true,
+        showStatusBar: true,
+        showArchived: false,
+        defaultSort: "updated_desc", // updated_desc | updated_asc | created_desc | created_asc | title_asc | title_desc
+        zIndexButton: 9998,
+        zIndexModal: 9999,
+        labels: {
+          close: "close",
+          profileTitle: "profile",
+          username: "username",
+          password: "password",
+          saveProfile: "save profile",
+          clearProfile: "clear profile",
+          addPage: "add page",
+          duplicate: "duplicate",
+          archive: "archive",
+          restore: "restore",
+          pin: "pin",
+          unpin: "unpin",
+          export: "export",
+          import: "import",
+          save: "save",
+          resetFilters: "reset filters",
+          open: "open",
+          rename: "rename",
+          delete: "delete",
+          searchPlaceholder: "Search title/content/tags",
+          tagsPlaceholder: "tags, comma, separated",
+          newPagePlaceholder: "New page title",
+          emptyList: "No pages match your filters.",
+          listTitle: "Pages",
+          editorTitle: "Editor",
+          statusReady: "Ready"
+        },
+        theme: {
+          backdrop: "rgba(0,0,0,0.62)",
+          panelBg: "#101826",
+          surface: "#172338",
+          surfaceAlt: "#132032",
+          border: "#2c4364",
+          text: "#f1f6ff",
+          muted: "#9bb0cc",
+          accent: "#2f6db2",
+          ok: "#2a9d67",
+          warn: "#b9862f",
+          danger: "#b84252",
+          tagBg: "#24405f"
+        }
+      };
+
+      var state = {
+        initialized: false,
+        mounted: false,
+        pages: [],
+        activeId: null,
+        options: null,
+        els: {},
+        autosaveTimer: null,
+        styleCacheKey: "",
+        styleCacheValue: "",
+        instanceId: "nb2_" + Math.random().toString(36).slice(2, 10),
+        profile: {
+          username: "",
+          password: "",
+          updated: 0
+        },
+        view: {
+          query: "",
+          tag: "",
+          sort: "updated_desc",
+          showArchived: false
+        },
+        listeners: {}
+      };
+
+      function deepMerge(base, extra) {
+        var out = {};
+        var key;
+        for (key in base) {
+          if (Object.prototype.hasOwnProperty.call(base, key)) out[key] = base[key];
+        }
+        for (key in (extra || {})) {
+          if (!Object.prototype.hasOwnProperty.call(extra, key)) continue;
+          var baseVal = out[key];
+          var extraVal = extra[key];
+          if (isPlainObject(baseVal) && isPlainObject(extraVal)) out[key] = deepMerge(baseVal, extraVal);
+          else out[key] = extraVal;
+        }
+        return out;
+      }
+
+      function isPlainObject(value) {
+        return !!value && typeof value === "object" && !Array.isArray(value);
+      }
+
+      function clone(obj) {
+        return JSON.parse(JSON.stringify(obj));
+      }
+
+      function genId() {
+        return "p_" + Math.random().toString(36).slice(2, 12);
+      }
+
+      function now() {
+        return Date.now();
+      }
+
+      function escapeHtml(value) {
+        return String(value == null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function sanitizeTitle(value) {
+        var text = String(value == null ? "" : value).trim();
+        if (text.length > state.options.maxTitleLength) text = text.slice(0, state.options.maxTitleLength);
+        return text || state.options.emptyPageTitle;
+      }
+
+      function sanitizeTags(input) {
+        var raw = Array.isArray(input) ? input.join(",") : String(input == null ? "" : input);
+        var parts = raw.split(",");
+        var out = [];
+        var seen = {};
+        for (var i = 0; i < parts.length; i++) {
+          var p = parts[i].trim();
+          if (!p) continue;
+          if (p.length > state.options.maxTagLength) p = p.slice(0, state.options.maxTagLength);
+          var key = p.toLowerCase();
+          if (seen[key]) continue;
+          seen[key] = true;
+          out.push(p);
+          if (out.length >= state.options.maxTagsPerPage) break;
+        }
+        return out;
+      }
+
+      function createPage(seed) {
+        var t = now();
+        var s = seed || {};
+        return {
+          id: s.id || genId(),
+          title: sanitizeTitle(s.title || state.options.defaultPageTitle),
+          content: String(s.content == null ? state.options.newPageTemplate : s.content),
+          tags: sanitizeTags(s.tags || []),
+          color: String(s.color || ""),
+          pinned: !!s.pinned,
+          archived: !!s.archived,
+          created: Number(s.created) || t,
+          modified: Number(s.modified) || Number(s.created) || t
+        };
+      }
+
+      function normalizePage(raw) {
+        return createPage(raw || {});
+      }
+
+      function getStorageApi() {
+        var key = state.options.storageKey;
+        return {
+          read: function () {
+            try {
+              if ((state.options.storageDriver === "auto" || state.options.storageDriver === "kv") && typeof kv !== "undefined" && kv && typeof kv.get === "function") {
+                return kv.get(key);
+              }
+              if (state.options.storageDriver === "localStorage" || state.options.storageDriver === "auto") {
+                return localStorage.getItem(key);
+              }
+              return null;
+            } catch (err) {
+              return null;
+            }
+          },
+          write: function (value) {
+            try {
+              if ((state.options.storageDriver === "auto" || state.options.storageDriver === "kv") && typeof kv !== "undefined" && kv && typeof kv.set === "function") {
+                kv.set(key, value);
+                return true;
+              }
+              if (state.options.storageDriver === "localStorage" || state.options.storageDriver === "auto") {
+                localStorage.setItem(key, value);
+                return true;
+              }
+              return false;
+            } catch (err) {
+              console.error("Notebook v2 save failed", err);
+              return false;
+            }
+          },
+          clear: function () {
+            try {
+              if (typeof localStorage !== "undefined") localStorage.removeItem(key);
+            } catch (err) {}
+            return true;
+          }
+        };
+      }
+
+      function getProfileStorageApi() {
+        var key = state.options.profileStorageKey;
+        return {
+          read: function() {
+            try {
+              return localStorage.getItem(key);
+            } catch (err) {
+              return null;
+            }
+          },
+          write: function(value) {
+            try {
+              localStorage.setItem(key, value);
+              return true;
+            } catch (err) {
+              return false;
+            }
+          },
+          clear: function() {
+            try {
+              localStorage.removeItem(key);
+              return true;
+            } catch (err) {
+              return false;
+            }
+          }
+        };
+      }
+
+      function loadProfile() {
+        if (!state.options.enableProfile) return;
+        var storage = getProfileStorageApi();
+        var raw = storage.read();
+        if (!raw) return;
+        try {
+          var parsed = JSON.parse(raw);
+          state.profile.username = String(parsed && parsed.username || "");
+          state.profile.password = String(parsed && parsed.password || "");
+          state.profile.updated = Number(parsed && parsed.updated) || 0;
+        } catch (err) {
+          state.profile.username = "";
+          state.profile.password = "";
+          state.profile.updated = 0;
+        }
+      }
+
+      function renderProfileInputs() {
+        if (!state.options.enableProfile) return;
+        if (!state.els.profileUsernameInput || !state.els.profilePasswordInput) return;
+        state.els.profileUsernameInput.value = state.profile.username || "";
+        state.els.profilePasswordInput.value = state.profile.password || "";
+      }
+
+      function saveProfile(username, password) {
+        if (!state.options.enableProfile) return false;
+        state.profile.username = String(username == null ? state.profile.username : username).trim();
+        state.profile.password = String(password == null ? state.profile.password : password);
+        state.profile.updated = now();
+        var storage = getProfileStorageApi();
+        var ok = storage.write(JSON.stringify(state.profile));
+        if (ok) {
+          renderProfileInputs();
+          setStatus("Profile saved", "ok");
+          emit("profile:save", clone(state.profile));
+        }
+        return ok;
+      }
+
+      function clearProfile() {
+        if (!state.options.enableProfile) return false;
+        state.profile.username = "";
+        state.profile.password = "";
+        state.profile.updated = now();
+        getProfileStorageApi().clear();
+        renderProfileInputs();
+        setStatus("Profile cleared", "warn");
+        emit("profile:clear", {});
+        return true;
+      }
+
+      function emit(eventName, payload) {
+        var arr = state.listeners[eventName] || [];
+        for (var i = 0; i < arr.length; i++) {
+          try {
+            arr[i](payload);
+          } catch (err) {
+            console.error("Notebook v2 listener error", err);
+          }
+        }
+      }
+
+      function on(eventName, handler) {
+        if (!state.listeners[eventName]) state.listeners[eventName] = [];
+        state.listeners[eventName].push(handler);
+        return api;
+      }
+
+      function off(eventName, handler) {
+        var arr = state.listeners[eventName] || [];
+        state.listeners[eventName] = arr.filter(function (fn) {
+          return fn !== handler;
+        });
+        return api;
+      }
+
+      function setStatus(text, tone) {
+        if (!state.options.showStatusBar || !state.els.status) return;
+        state.els.status.textContent = text || state.options.labels.statusReady;
+        state.els.status.setAttribute("data-tone", tone || "info");
+      }
+
+      function savePages() {
+        var storage = getStorageApi();
+        var payload = {
+          version: 2,
+          exportedAt: now(),
+          pages: state.pages
+        };
+        var ok = storage.write(JSON.stringify(payload));
+        if (ok) emit("save", { pages: clone(state.pages) });
+        return ok;
+      }
+
+      function loadPages() {
+        var storage = getStorageApi();
+        var raw = storage.read();
+        var arr = null;
+        if (!raw) {
+          arr = [createPage({ title: state.options.defaultPageTitle })];
+          return arr;
+        }
+        try {
+          var parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) arr = parsed;
+          else if (parsed && Array.isArray(parsed.pages)) arr = parsed.pages;
+          else arr = [];
+        } catch (err) {
+          arr = [];
+        }
+        if (!arr.length) arr = [createPage({ title: state.options.defaultPageTitle })];
+        return arr.map(normalizePage);
+      }
+
+      function getPageById(id) {
+        for (var i = 0; i < state.pages.length; i++) {
+          if (state.pages[i].id === id) return state.pages[i];
+        }
+        return null;
+      }
+
+      function ensureActivePage() {
+        var active = getPageById(state.activeId);
+        if (active) return active;
+        if (!state.pages.length) {
+          var first = createPage({ title: state.options.defaultPageTitle });
+          state.pages.push(first);
+          state.activeId = first.id;
+          return first;
+        }
+        state.activeId = state.pages[0].id;
+        return state.pages[0];
+      }
+
+      function touchPage(page) {
+        page.modified = now();
+      }
+
+      function scheduleAutosave() {
+        if (!state.options.autosave) return;
+        clearTimeout(state.autosaveTimer);
+        state.autosaveTimer = setTimeout(function () {
+          persistEditor(true);
+        }, state.options.autosaveDelay);
+      }
+
+      function persistEditor(silent) {
+        var page = getPageById(state.activeId);
+        if (!page || !state.els.pageTitleInput || !state.els.pageTextarea || !state.els.tagsInput || !state.els.colorInput) return false;
+        page.title = sanitizeTitle(state.els.pageTitleInput.value || page.title);
+        page.content = String(state.els.pageTextarea.value || "");
+        page.tags = sanitizeTags(state.els.tagsInput.value || "");
+        page.color = String(state.els.colorInput.value || "").trim();
+        touchPage(page);
+        savePages();
+        renderList();
+        if (!silent) setStatus("Saved", "ok");
+        emit("page:update", clone(page));
+        return true;
+      }
+
+      function addPage(title, seed) {
+        if (state.pages.length >= state.options.maxPages) {
+          setStatus("Max pages reached", "warn");
+          return null;
+        }
+        var page = createPage(seed || {});
+        page.title = sanitizeTitle(title || page.title || state.options.emptyPageTitle);
+        state.pages.unshift(page);
+        state.activeId = page.id;
+        savePages();
+        renderList();
+        renderEditor(page);
+        setStatus("Page added", "ok");
+        emit("page:add", clone(page));
+        return clone(page);
+      }
+
+      function removePage(id) {
+        var page = getPageById(id);
+        if (!page) return false;
+        var ok = confirm("Delete \"" + page.title + "\"?");
+        if (!ok) return false;
+
+        state.pages = state.pages.filter(function (item) {
+          return item.id !== id;
+        });
+        ensureActivePage();
+        savePages();
+        renderList();
+        renderEditor(getPageById(state.activeId));
+        setStatus("Page deleted", "warn");
+        emit("page:remove", clone(page));
+        return true;
+      }
+
+      function renamePage(id, nextTitle) {
+        var page = getPageById(id);
+        if (!page) return false;
+        var title = nextTitle;
+        if (typeof title !== "string") title = prompt("New title", page.title);
+        if (title == null) return false;
+        page.title = sanitizeTitle(title);
+        touchPage(page);
+        savePages();
+        renderList();
+        if (id === state.activeId && state.els.pageTitleInput) state.els.pageTitleInput.value = page.title;
+        setStatus("Page renamed", "ok");
+        emit("page:update", clone(page));
+        return true;
+      }
+
+      function duplicatePage(id) {
+        var page = getPageById(id || state.activeId);
+        if (!page) return null;
+        return addPage(page.title + " copy", {
+          content: page.content,
+          tags: page.tags,
+          color: page.color,
+          pinned: page.pinned,
+          archived: false
+        });
+      }
+
+      function setArchived(id, nextValue) {
+        var page = getPageById(id);
+        if (!page) return false;
+        page.archived = !!nextValue;
+        touchPage(page);
+        savePages();
+        renderList();
+        if (state.activeId === id) renderEditor(page);
+        setStatus(page.archived ? "Page archived" : "Page restored", "info");
+        emit("page:update", clone(page));
+        return true;
+      }
+
+      function setPinned(id, nextValue) {
+        var page = getPageById(id);
+        if (!page) return false;
+        page.pinned = !!nextValue;
+        touchPage(page);
+        savePages();
+        renderList();
+        setStatus(page.pinned ? "Page pinned" : "Page unpinned", "info");
+        emit("page:update", clone(page));
+        return true;
+      }
+
+      function setTags(id, tagsInput) {
+        var page = getPageById(id);
+        if (!page) return false;
+        page.tags = sanitizeTags(tagsInput || []);
+        touchPage(page);
+        savePages();
+        renderList();
+        if (state.activeId === id && state.els.tagsInput) state.els.tagsInput.value = page.tags.join(", ");
+        emit("page:update", clone(page));
+        return true;
+      }
+
+      function addTag(id, tag) {
+        var page = getPageById(id);
+        if (!page) return false;
+        var tags = page.tags.slice();
+        tags.push(tag);
+        return setTags(id, tags);
+      }
+
+      function removeTag(id, tag) {
+        var page = getPageById(id);
+        if (!page) return false;
+        var low = String(tag || "").toLowerCase();
+        var tags = page.tags.filter(function (t) {
+          return String(t).toLowerCase() !== low;
+        });
+        return setTags(id, tags);
+      }
+
+      function setColor(id, color) {
+        var page = getPageById(id);
+        if (!page) return false;
+        page.color = String(color == null ? "" : color).trim();
+        touchPage(page);
+        savePages();
+        renderList();
+        if (state.activeId === id && state.els.colorInput) state.els.colorInput.value = page.color;
+        emit("page:update", clone(page));
+        return true;
+      }
+
+      function setActive(id) {
+        var page = getPageById(id);
+        if (!page) return false;
+        state.activeId = id;
+        renderList();
+        renderEditor(page);
+        emit("page:active", clone(page));
+        return true;
+      }
+
+      function matchesQuery(page, query) {
+        if (!query) return true;
+        var q = query.toLowerCase();
+        var hay = [page.title, page.content, (page.tags || []).join(" ")].join(" ").toLowerCase();
+        return hay.indexOf(q) !== -1;
+      }
+
+      function matchesTag(page, tag) {
+        if (!tag) return true;
+        var low = tag.toLowerCase();
+        for (var i = 0; i < page.tags.length; i++) {
+          if (String(page.tags[i]).toLowerCase() === low) return true;
+        }
+        return false;
+      }
+
+      function comparePages(a, b, sortMode) {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        if (sortMode === "updated_asc") return a.modified - b.modified;
+        if (sortMode === "created_desc") return b.created - a.created;
+        if (sortMode === "created_asc") return a.created - b.created;
+        if (sortMode === "title_asc") return a.title.localeCompare(b.title);
+        if (sortMode === "title_desc") return b.title.localeCompare(a.title);
+        return b.modified - a.modified;
+      }
+
+      function getVisiblePages() {
+        var query = state.view.query;
+        var tag = state.view.tag;
+        var showArchived = !!state.view.showArchived;
+        var sortMode = state.view.sort || state.options.defaultSort;
+
+        var filtered = state.pages.filter(function (p) {
+          if (!showArchived && p.archived) return false;
+          if (!matchesQuery(p, query)) return false;
+          if (!matchesTag(p, tag)) return false;
+          return true;
+        });
+        filtered.sort(function (a, b) {
+          return comparePages(a, b, sortMode);
+        });
+        return filtered;
+      }
+
+      function listAllTags() {
+        var map = {};
+        for (var i = 0; i < state.pages.length; i++) {
+          var tags = state.pages[i].tags || [];
+          for (var j = 0; j < tags.length; j++) {
+            map[String(tags[j])] = true;
+          }
+        }
+        var out = Object.keys(map);
+        out.sort();
+        return out;
+      }
+
+      function renderTagFilter() {
+        if (!state.els.tagFilter) return;
+        var tags = listAllTags();
+        var html = ['<option value="">all tags</option>'];
+        for (var i = 0; i < tags.length; i++) {
+          var t = tags[i];
+          var selected = state.view.tag === t ? ' selected="selected"' : "";
+          html.push('<option value="' + escapeHtml(t) + '"' + selected + '>' + escapeHtml(t) + '</option>');
+        }
+        state.els.tagFilter.innerHTML = html.join("\n");
+      }
+
+      function renderList() {
+        if (!state.els.pagesList) return;
+        var pages = getVisiblePages();
+        renderTagFilter();
+
+        if (!pages.length) {
+          state.els.pagesList.innerHTML = '<div class="nb2__empty">' + escapeHtml(state.options.labels.emptyList) + '</div>';
+          return;
+        }
+
+        var html = [];
+        for (var i = 0; i < pages.length; i++) {
+          var page = pages[i];
+          var active = page.id === state.activeId;
+          var stamp = new Date(page.modified || page.created).toLocaleString();
+          var tags = (page.tags || []).map(function (tag) {
+            return '<span class="nb2__tag">' + escapeHtml(tag) + '</span>';
+          }).join(" ");
+          var pinLabel = page.pinned ? state.options.labels.unpin : state.options.labels.pin;
+          var arcLabel = page.archived ? state.options.labels.restore : state.options.labels.archive;
+          var colorSwatch = page.color ? '<span class="nb2__swatch" style="background:' + escapeHtml(page.color) + ';"></span>' : '';
+
+          html.push(
+            '<article class="nb2__page-card' + (active ? ' is-active' : '') + '">' +
+              '<div class="nb2__meta">' +
+                '<div class="nb2__title-row">' + colorSwatch + '<strong class="nb2__title">' + escapeHtml(page.title) + '</strong>' + (page.pinned ? '<span class="nb2__pill">pinned</span>' : '') + (page.archived ? '<span class="nb2__pill nb2__pill--muted">archived</span>' : '') + '</div>' +
+                '<div class="nb2__date">' + escapeHtml(stamp) + '</div>' +
+                '<div class="nb2__tags">' + tags + '</div>' +
+              '</div>' +
+              '<div class="nb2__actions">' +
+                '<button type="button" class="nb2__action" data-action="open" data-id="' + escapeHtml(page.id) + '">' + escapeHtml(state.options.labels.open) + '</button>' +
+                '<button type="button" class="nb2__action" data-action="rename" data-id="' + escapeHtml(page.id) + '">' + escapeHtml(state.options.labels.rename) + '</button>' +
+                '<button type="button" class="nb2__action" data-action="duplicate" data-id="' + escapeHtml(page.id) + '">' + escapeHtml(state.options.labels.duplicate) + '</button>' +
+                '<button type="button" class="nb2__action" data-action="pin" data-id="' + escapeHtml(page.id) + '">' + escapeHtml(pinLabel) + '</button>' +
+                '<button type="button" class="nb2__action" data-action="archive" data-id="' + escapeHtml(page.id) + '">' + escapeHtml(arcLabel) + '</button>' +
+                '<button type="button" class="nb2__action nb2__action--danger" data-action="delete" data-id="' + escapeHtml(page.id) + '">' + escapeHtml(state.options.labels.delete) + '</button>' +
+              '</div>' +
+            '</article>'
+          );
+        }
+
+        state.els.pagesList.innerHTML = html.join("\n");
+      }
+
+      function renderEditor(page) {
+        if (!state.els.editor || !page) return;
+
+        var html = [
+          '<section class="nb2__editor-head">',
+          '  <div class="nb2__editor-title">' + escapeHtml(state.options.labels.editorTitle) + '</div>',
+          '  <div class="nb2__editor-actions">',
+          '    <button type="button" class="nb2__btn" data-nb2-save>' + escapeHtml(state.options.labels.save) + '</button>',
+          '  </div>',
+          '</section>',
+          '<label class="nb2__field">',
+          '  <span class="nb2__field-label">Title</span>',
+          '  <input type="text" class="nb2__input" data-nb2-title value="' + escapeHtml(page.title) + '" maxlength="' + state.options.maxTitleLength + '"/>',
+          '</label>',
+          '<div class="nb2__editor-grid">',
+          '  <label class="nb2__field">',
+          '    <span class="nb2__field-label">Tags</span>',
+          '    <input type="text" class="nb2__input" data-nb2-tags value="' + escapeHtml((page.tags || []).join(", ")) + '" placeholder="' + escapeHtml(state.options.labels.tagsPlaceholder) + '"/>',
+          '  </label>',
+          '  <label class="nb2__field">',
+          '    <span class="nb2__field-label">Color</span>',
+          '    <input type="text" class="nb2__input" data-nb2-color value="' + escapeHtml(page.color || "") + '" placeholder="#hex or css color"/>',
+          '  </label>',
+          '</div>',
+          '<label class="nb2__field">',
+          '  <span class="nb2__field-label">Content</span>',
+          '  <textarea class="nb2__textarea" data-nb2-content>' + escapeHtml(page.content || "") + '</textarea>',
+          '</label>'
+        ];
+
+        state.els.editor.innerHTML = html.join("\n");
+        state.els.pageTitleInput = state.els.editor.querySelector("[data-nb2-title]");
+        state.els.tagsInput = state.els.editor.querySelector("[data-nb2-tags]");
+        state.els.colorInput = state.els.editor.querySelector("[data-nb2-color]");
+        state.els.pageTextarea = state.els.editor.querySelector("[data-nb2-content]");
+        state.els.saveBtn = state.els.editor.querySelector("[data-nb2-save]");
+
+        state.els.saveBtn.addEventListener("click", function () {
+          persistEditor(false);
+        });
+        state.els.pageTitleInput.addEventListener("input", scheduleAutosave);
+        state.els.tagsInput.addEventListener("input", scheduleAutosave);
+        state.els.colorInput.addEventListener("input", scheduleAutosave);
+        state.els.pageTextarea.addEventListener("input", scheduleAutosave);
+      }
+
+      function getButtonPositionCss(position) {
+        var map = {
+          "bottom-right": "bottom:1rem;right:1rem;",
+          "bottom-left": "bottom:1rem;left:1rem;",
+          "top-right": "top:1rem;right:1rem;",
+          "top-left": "top:1rem;left:1rem;"
+        };
+        return map[position] || map["bottom-right"];
+      }
+
+      function buildStyles() {
+        var t = state.options.theme;
+        var cacheKey = JSON.stringify({
+          theme: t,
+          pos: state.options.buttonPosition,
+          zBtn: state.options.zIndexButton,
+          zModal: state.options.zIndexModal
+        });
+
+        if (state.styleCacheKey === cacheKey && state.styleCacheValue) {
+          return state.styleCacheValue;
+        }
+
+        var styles = [
+          ".nb2__root, .nb2__root * { box-sizing: border-box; }",
+          ".nb2__root {",
+          "  --nb2-backdrop: " + t.backdrop + ";",
+          "  --nb2-panel: " + t.panelBg + ";",
+          "  --nb2-surface: " + t.surface + ";",
+          "  --nb2-surface-alt: " + t.surfaceAlt + ";",
+          "  --nb2-border: " + t.border + ";",
+          "  --nb2-text: " + t.text + ";",
+          "  --nb2-muted: " + t.muted + ";",
+          "  --nb2-accent: " + t.accent + ";",
+          "  --nb2-ok: " + t.ok + ";",
+          "  --nb2-warn: " + t.warn + ";",
+          "  --nb2-danger: " + t.danger + ";",
+          "  --nb2-tag-bg: " + t.tagBg + ";",
+          "  color: var(--nb2-text);",
+          "  font-family: 'Avenir Next', 'Trebuchet MS', 'Segoe UI', sans-serif;",
+          "}",
+          ".nb2__launcher { position: fixed; " + getButtonPositionCss(state.options.buttonPosition) + " z-index:" + state.options.zIndexButton + "; }",
+          ".nb2__btn, .nb2__action { border:1px solid var(--nb2-border); background:linear-gradient(135deg, var(--nb2-accent), #1f4f86); color:var(--nb2-text); border-radius:10px; padding:0.45rem 0.72rem; cursor:pointer; font-weight:600; letter-spacing:0.01em; }",
+          ".nb2__btn:hover, .nb2__action:hover { transform: translateY(-1px); filter: brightness(1.05); }",
+          ".nb2__action--danger { background: var(--nb2-danger); }",
+          ".nb2__backdrop { display:none; position:fixed; inset:0; z-index:" + state.options.zIndexModal + "; background:var(--nb2-backdrop); align-items:center; justify-content:center; padding:1rem; }",
+          ".nb2__dialog { width:min(980px,100%); max-height:94vh; overflow:auto; border:1px solid var(--nb2-border); background:linear-gradient(165deg, #0f1a2b 0%, var(--nb2-panel) 60%); border-radius:16px; padding:1rem; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }",
+          ".nb2__header { display:flex; gap:0.5rem; justify-content:space-between; align-items:center; }",
+          ".nb2__grid { display:grid; grid-template-columns: 1.05fr 1fr; gap:0.8rem; margin-top:0.8rem; }",
+          ".nb2__left, .nb2__right { border:1px solid var(--nb2-border); background:linear-gradient(180deg, var(--nb2-surface-alt), #0f1c30); border-radius:12px; padding:0.65rem; }",
+          ".nb2__profile { border:1px solid var(--nb2-border); border-radius:10px; padding:0.6rem; background:rgba(36,64,95,0.35); margin-bottom:0.6rem; }",
+          ".nb2__profile-title { margin:0 0 0.45rem 0; color:var(--nb2-muted); font-size:0.84rem; text-transform:uppercase; letter-spacing:0.08em; }",
+          ".nb2__profile-row { display:grid; grid-template-columns:1fr 1fr auto auto; gap:0.4rem; }",
+          ".nb2__toolbar { display:grid; grid-template-columns: 1fr auto auto auto; gap:0.4rem; margin-bottom:0.5rem; }",
+          ".nb2__toolbar-2 { display:grid; grid-template-columns: 1fr 180px 180px auto; gap:0.4rem; margin-bottom:0.55rem; }",
+          ".nb2__input, .nb2__select, .nb2__textarea { width:100%; border:1px solid var(--nb2-border); background:rgba(23,35,56,0.9); color:var(--nb2-text); border-radius:9px; padding:0.5rem; }",
+          ".nb2__textarea { min-height:40vh; resize:vertical; }",
+          ".nb2__field { display:block; margin-bottom:0.5rem; }",
+          ".nb2__field-label { display:block; color:var(--nb2-muted); font-size:0.83rem; margin-bottom:0.25rem; }",
+          ".nb2__editor-grid { display:grid; grid-template-columns: 1fr 220px; gap:0.5rem; }",
+          ".nb2__pages { display:flex; flex-direction:column; gap:0.5rem; }",
+          ".nb2__page-card { border:1px solid var(--nb2-border); background:linear-gradient(180deg, var(--nb2-surface), #142238); border-radius:12px; padding:0.58rem; display:flex; gap:0.6rem; justify-content:space-between; align-items:flex-start; }",
+          ".nb2__page-card.is-active { outline:2px solid rgba(47,109,178,0.65); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06); }",
+          ".nb2__meta { flex:1; min-width:0; }",
+          ".nb2__title-row { display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap; }",
+          ".nb2__title { overflow-wrap:anywhere; }",
+          ".nb2__date { font-size:0.8rem; color:var(--nb2-muted); margin-top:0.2rem; }",
+          ".nb2__tags { margin-top:0.3rem; display:flex; gap:0.25rem; flex-wrap:wrap; }",
+          ".nb2__tag { background:var(--nb2-tag-bg); border:1px solid var(--nb2-border); border-radius:999px; padding:0.08rem 0.45rem; font-size:0.78rem; }",
+          ".nb2__pill { border:1px solid var(--nb2-border); border-radius:999px; padding:0.06rem 0.4rem; font-size:0.72rem; }",
+          ".nb2__pill--muted { color:var(--nb2-muted); }",
+          ".nb2__swatch { width:11px; height:11px; border-radius:999px; border:1px solid var(--nb2-border); display:inline-block; }",
+          ".nb2__actions { display:flex; gap:0.3rem; flex-wrap:wrap; justify-content:flex-end; }",
+          ".nb2__status { margin-top:0.5rem; border-radius:8px; border:1px solid var(--nb2-border); background:var(--nb2-surface); padding:0.45rem 0.6rem; color:var(--nb2-muted); }",
+          ".nb2__status[data-tone='ok'] { color:var(--nb2-ok); }",
+          ".nb2__status[data-tone='warn'] { color:var(--nb2-warn); }",
+          ".nb2__status[data-tone='danger'] { color:var(--nb2-danger); }",
+          ".nb2__empty { border:1px dashed var(--nb2-border); border-radius:8px; padding:0.8rem; color:var(--nb2-muted); }",
+          ".nb2__section-title { margin:0 0 0.5rem 0; font-size:0.95rem; color:var(--nb2-muted); }",
+          ".nb2__editor-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:0.4rem; }",
+          "@media (max-width: 780px) { .nb2__grid { grid-template-columns: 1fr; } .nb2__toolbar { grid-template-columns: 1fr 1fr; } .nb2__toolbar-2 { grid-template-columns: 1fr 1fr; } .nb2__editor-grid { grid-template-columns: 1fr; } .nb2__profile-row { grid-template-columns:1fr 1fr; } }"
+        ].join("\n");
+
+        state.styleCacheKey = cacheKey;
+        state.styleCacheValue = styles;
+        return styles;
+      }
+
+      function buildSortOptions() {
+        var current = state.view.sort;
+        var opts = [
+          ["updated_desc", "updated desc"],
+          ["updated_asc", "updated asc"],
+          ["created_desc", "created desc"],
+          ["created_asc", "created asc"],
+          ["title_asc", "title asc"],
+          ["title_desc", "title desc"]
+        ];
+        return opts.map(function (pair) {
+          var selected = current === pair[0] ? ' selected="selected"' : "";
+          return '<option value="' + pair[0] + '"' + selected + '>' + pair[1] + '</option>';
+        }).join("\n");
+      }
+
+      function buildMarkup() {
+        var labels = state.options.labels;
+        var launcher = "";
+        var profileBlock = "";
+        if (state.options.mountButton) {
+          launcher = [
+            '<div class="nb2__launcher">',
+            '  <button type="button" class="nb2__btn" data-nb2-open>' + escapeHtml(state.options.buttonLabel) + '</button>',
+            '</div>'
+          ].join("\n");
+        }
+
+        if (state.options.enableProfile) {
+          profileBlock = [
+            '<section class="nb2__profile">',
+            '  <h4 class="nb2__profile-title">' + escapeHtml(labels.profileTitle) + '</h4>',
+            '  <div class="nb2__profile-row">',
+            '    <input class="nb2__input" type="text" data-nb2-profile-username placeholder="' + escapeHtml(labels.username) + '"/>',
+            '    <input class="nb2__input" type="password" data-nb2-profile-password placeholder="' + escapeHtml(labels.password) + '"/>',
+            '    <button type="button" class="nb2__btn" data-nb2-profile-save>' + escapeHtml(labels.saveProfile) + '</button>',
+            '    <button type="button" class="nb2__btn" data-nb2-profile-clear>' + escapeHtml(labels.clearProfile) + '</button>',
+            '  </div>',
+            '</section>'
+          ].join("\n");
+        }
+
+        return [
+          '<div class="nb2__root" data-nb2-instance="' + escapeHtml(state.instanceId) + '">',
+          launcher,
+          '  <div class="nb2__backdrop" data-nb2-backdrop>',
+          '    <div class="nb2__dialog" role="dialog" aria-modal="true" aria-label="' + escapeHtml(state.options.title) + '">',
+          '      <header class="nb2__header">',
+          '        <h2>' + escapeHtml(state.options.title) + '</h2>',
+          '        <button type="button" class="nb2__btn" data-nb2-close>' + escapeHtml(labels.close) + '</button>',
+          '      </header>',
+          '      <div class="nb2__grid">',
+          '        <section class="nb2__left">',
+          profileBlock,
+          '          <h3 class="nb2__section-title">' + escapeHtml(labels.listTitle) + '</h3>',
+          '          <div class="nb2__toolbar">',
+          '            <input class="nb2__input" type="text" data-nb2-new-title placeholder="' + escapeHtml(labels.newPagePlaceholder) + '"/>',
+          '            <button type="button" class="nb2__btn" data-nb2-add>' + escapeHtml(labels.addPage) + '</button>',
+          '            <button type="button" class="nb2__btn" data-nb2-export>' + escapeHtml(labels.export) + '</button>',
+          '            <button type="button" class="nb2__btn" data-nb2-import>' + escapeHtml(labels.import) + '</button>',
+          '          </div>',
+          '          <div class="nb2__toolbar-2">',
+          '            <input class="nb2__input" type="text" data-nb2-search placeholder="' + escapeHtml(labels.searchPlaceholder) + '"/>',
+          '            <select class="nb2__select" data-nb2-tag-filter></select>',
+          '            <select class="nb2__select" data-nb2-sort>' + buildSortOptions() + '</select>',
+          '            <button type="button" class="nb2__btn" data-nb2-reset-filters>' + escapeHtml(labels.resetFilters) + '</button>',
+          '          </div>',
+          '          <label class="nb2__field"><input type="checkbox" data-nb2-show-archived ' + (state.view.showArchived ? 'checked="checked"' : '') + '/> show archived</label>',
+          '          <div class="nb2__pages" data-nb2-pages></div>',
+          '        </section>',
+          '        <section class="nb2__right">',
+          '          <div data-nb2-editor></div>',
+          '        </section>',
+          '      </div>',
+          state.options.showStatusBar ? '      <div class="nb2__status" data-nb2-status>' + escapeHtml(labels.statusReady) + '</div>' : '',
+          '    </div>',
+          '  </div>',
+          '</div>'
+        ].join("\n");
+      }
+
+      function openModal() {
+        ensureMounted();
+        state.els.backdrop.style.display = "flex";
+        renderProfileInputs();
+        renderList();
+        renderEditor(ensureActivePage());
+        setStatus("Opened", "info");
+        emit("open", { activeId: state.activeId });
+      }
+
+      function closeModal() {
+        if (!state.els.backdrop) return;
+        state.els.backdrop.style.display = "none";
+        setStatus("Closed", "info");
+        emit("close", { activeId: state.activeId });
+      }
+
+      function toggleModal() {
+        if (!state.els.backdrop || state.els.backdrop.style.display !== "flex") openModal();
+        else closeModal();
+      }
+
+      function applyFilters(nextFilters) {
+        nextFilters = nextFilters || {};
+        if (typeof nextFilters.query === "string") state.view.query = nextFilters.query;
+        if (typeof nextFilters.tag === "string") state.view.tag = nextFilters.tag;
+        if (typeof nextFilters.sort === "string") state.view.sort = nextFilters.sort;
+        if (typeof nextFilters.showArchived === "boolean") state.view.showArchived = nextFilters.showArchived;
+        renderList();
+        emit("filter", clone(state.view));
+        return clone(state.view);
+      }
+
+      function resetFilters() {
+        state.view.query = "";
+        state.view.tag = "";
+        state.view.sort = state.options.defaultSort;
+        state.view.showArchived = !!state.options.showArchived;
+
+        if (state.els.searchInput) state.els.searchInput.value = "";
+        if (state.els.sortSelect) state.els.sortSelect.value = state.view.sort;
+        if (state.els.showArchivedInput) state.els.showArchivedInput.checked = !!state.view.showArchived;
+
+        renderList();
+        setStatus("Filters reset", "info");
+        return clone(state.view);
+      }
+
+      function search(query) {
+        state.view.query = String(query == null ? "" : query);
+        if (state.els.searchInput) state.els.searchInput.value = state.view.query;
+        renderList();
+        return getVisiblePages().map(clone);
+      }
+
+      function sort(sortMode) {
+        state.view.sort = String(sortMode || state.options.defaultSort);
+        if (state.els.sortSelect) state.els.sortSelect.value = state.view.sort;
+        renderList();
+        return getVisiblePages().map(clone);
+      }
+
+      function filterByTag(tag) {
+        state.view.tag = String(tag == null ? "" : tag);
+        renderList();
+        return getVisiblePages().map(clone);
+      }
+
+      function updatePage(id, updates) {
+        var page = getPageById(id);
+        if (!page) return false;
+        updates = updates || {};
+        if (Object.prototype.hasOwnProperty.call(updates, "title")) page.title = sanitizeTitle(updates.title);
+        if (Object.prototype.hasOwnProperty.call(updates, "content")) page.content = String(updates.content == null ? "" : updates.content);
+        if (Object.prototype.hasOwnProperty.call(updates, "tags")) page.tags = sanitizeTags(updates.tags || []);
+        if (Object.prototype.hasOwnProperty.call(updates, "color")) page.color = String(updates.color == null ? "" : updates.color).trim();
+        if (Object.prototype.hasOwnProperty.call(updates, "pinned")) page.pinned = !!updates.pinned;
+        if (Object.prototype.hasOwnProperty.call(updates, "archived")) page.archived = !!updates.archived;
+        touchPage(page);
+        savePages();
+        renderList();
+        if (state.activeId === id) renderEditor(page);
+        emit("page:update", clone(page));
+        return true;
+      }
+
+      function appendContent(id, text) {
+        var page = getPageById(id);
+        if (!page) return false;
+        page.content += String(text == null ? "" : text);
+        touchPage(page);
+        savePages();
+        if (state.activeId === id) renderEditor(page);
+        renderList();
+        return true;
+      }
+
+      function prependContent(id, text) {
+        var page = getPageById(id);
+        if (!page) return false;
+        page.content = String(text == null ? "" : text) + page.content;
+        touchPage(page);
+        savePages();
+        if (state.activeId === id) renderEditor(page);
+        renderList();
+        return true;
+      }
+
+      function setContent(id, text) {
+        return updatePage(id, { content: String(text == null ? "" : text) });
+      }
+
+      function listPages(filters) {
+        if (filters) {
+          var snapshot = clone(state.view);
+          applyFilters(filters);
+          var result = getVisiblePages().map(clone);
+          state.view = snapshot;
+          renderList();
+          return result;
+        }
+        return state.pages.map(clone);
+      }
+
+      function getPage(id) {
+        var page = getPageById(id || state.activeId);
+        return page ? clone(page) : null;
+      }
+
+      function getActivePage() {
+        return getPage(state.activeId);
+      }
+
+      function exportPages(mode) {
+        var payload = {
+          version: 2,
+          exportedAt: now(),
+          pages: state.pages
+        };
+        var json = JSON.stringify(payload, null, 2);
+
+        if (mode === "string") return json;
+
+        var blob = new Blob([json], { type: "application/json" });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.href = url;
+        link.download = state.options.exportFileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () {
+          URL.revokeObjectURL(url);
+        }, 1000);
+        setStatus("Exported", "ok");
+        emit("export", { count: state.pages.length });
+        return json;
+      }
+
+      function parseIncomingPages(input) {
+        var data = input;
+        if (typeof input === "string") {
+          data = JSON.parse(input);
+        }
+        if (Array.isArray(data)) return data.map(normalizePage);
+        if (data && Array.isArray(data.pages)) return data.pages.map(normalizePage);
+        return [];
+      }
+
+      function mergeIncomingPages(incoming, strategy) {
+        strategy = strategy || state.options.importMergeStrategy;
+        if (strategy === "replace") {
+          state.pages = incoming;
+          return;
+        }
+
+        var existing = state.pages.slice();
+        var ids = {};
+        for (var i = 0; i < existing.length; i++) ids[existing[i].id] = true;
+        for (var j = 0; j < incoming.length; j++) {
+          if (ids[incoming[j].id]) incoming[j].id = genId();
+        }
+
+        if (strategy === "append") state.pages = existing.concat(incoming);
+        else state.pages = incoming.concat(existing);
+      }
+
+      function importPages(input, options) {
+        options = options || {};
+
+        if (typeof input === "undefined") {
+          var fileInput = document.createElement("input");
+          fileInput.type = "file";
+          fileInput.accept = "application/json";
+          fileInput.addEventListener("change", function (event) {
+            var file = event.target.files && event.target.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function () {
+              try {
+                importPages(String(reader.result || ""), options);
+              } catch (err) {
+                setStatus("Import failed", "danger");
+              }
+            };
+            reader.readAsText(file);
+          });
+          fileInput.click();
+          return [];
+        }
+
+        var incoming = parseIncomingPages(input);
+        if (!incoming.length) {
+          setStatus("Import contained no pages", "warn");
+          return [];
+        }
+
+        if (!state.options.allowImportReplace && (!options.mergeStrategy || options.mergeStrategy === "replace")) {
+          options.mergeStrategy = "prepend";
+        }
+
+        mergeIncomingPages(incoming, options.mergeStrategy || state.options.importMergeStrategy);
+        if (state.pages.length > state.options.maxPages) state.pages = state.pages.slice(0, state.options.maxPages);
+        ensureActivePage();
+        savePages();
+        renderList();
+        renderEditor(getPageById(state.activeId));
+        setStatus("Imported " + incoming.length + " pages", "ok");
+        emit("import", { count: incoming.length });
+        return incoming.map(clone);
+      }
+
+      function clearStorage() {
+        var storage = getStorageApi();
+        storage.clear();
+        state.pages = [createPage({ title: state.options.defaultPageTitle })];
+        state.activeId = state.pages[0].id;
+        savePages();
+        renderList();
+        renderEditor(getPageById(state.activeId));
+        setStatus("Storage cleared", "warn");
+        return true;
+      }
+
+      function destroy() {
+        clearTimeout(state.autosaveTimer);
+        if (state.els.root && state.els.root.parentNode) state.els.root.parentNode.removeChild(state.els.root);
+        if (state.els.styleEl && state.els.styleEl.parentNode) state.els.styleEl.parentNode.removeChild(state.els.styleEl);
+        state.els = {};
+        state.mounted = false;
+        emit("destroy", {});
+        return true;
+      }
+
+      function handlePageAction(action, id) {
+        if (action === "open") setActive(id);
+        if (action === "rename") renamePage(id);
+        if (action === "delete") removePage(id);
+        if (action === "duplicate") duplicatePage(id);
+        if (action === "pin") {
+          var p = getPageById(id);
+          if (p) setPinned(id, !p.pinned);
+        }
+        if (action === "archive") {
+          var q = getPageById(id);
+          if (q) setArchived(id, !q.archived);
+        }
+      }
+
+      function bindEvents(root) {
+        state.els.root = root;
+        state.els.backdrop = root.querySelector("[data-nb2-backdrop]");
+        state.els.openBtn = root.querySelector("[data-nb2-open]");
+        state.els.closeBtn = root.querySelector("[data-nb2-close]");
+        state.els.newTitleInput = root.querySelector("[data-nb2-new-title]");
+        state.els.addBtn = root.querySelector("[data-nb2-add]");
+        state.els.exportBtn = root.querySelector("[data-nb2-export]");
+        state.els.importBtn = root.querySelector("[data-nb2-import]");
+        state.els.searchInput = root.querySelector("[data-nb2-search]");
+        state.els.tagFilter = root.querySelector("[data-nb2-tag-filter]");
+        state.els.sortSelect = root.querySelector("[data-nb2-sort]");
+        state.els.resetFiltersBtn = root.querySelector("[data-nb2-reset-filters]");
+        state.els.showArchivedInput = root.querySelector("[data-nb2-show-archived]");
+        state.els.pagesList = root.querySelector("[data-nb2-pages]");
+        state.els.editor = root.querySelector("[data-nb2-editor]");
+        state.els.status = root.querySelector("[data-nb2-status]");
+        state.els.profileUsernameInput = root.querySelector("[data-nb2-profile-username]");
+        state.els.profilePasswordInput = root.querySelector("[data-nb2-profile-password]");
+        state.els.profileSaveBtn = root.querySelector("[data-nb2-profile-save]");
+        state.els.profileClearBtn = root.querySelector("[data-nb2-profile-clear]");
+
+        if (state.options.enableProfile) {
+          renderProfileInputs();
+          if (state.els.profileSaveBtn) {
+            state.els.profileSaveBtn.addEventListener("click", function() {
+              saveProfile(state.els.profileUsernameInput.value, state.els.profilePasswordInput.value);
+            });
+          }
+          if (state.els.profileClearBtn) {
+            state.els.profileClearBtn.addEventListener("click", function() {
+              clearProfile();
+            });
+          }
+        }
+
+        if (state.els.openBtn) state.els.openBtn.addEventListener("click", openModal);
+        state.els.closeBtn.addEventListener("click", closeModal);
+
+        if (state.options.backdropClose) {
+          state.els.backdrop.addEventListener("click", function (event) {
+            if (event.target === state.els.backdrop) closeModal();
+          });
+        }
+
+        state.els.addBtn.addEventListener("click", function () {
+          var title = state.els.newTitleInput.value;
+          addPage(title || state.options.emptyPageTitle);
+          state.els.newTitleInput.value = "";
+        });
+
+        state.els.exportBtn.addEventListener("click", function () {
+          exportPages();
+        });
+        state.els.importBtn.addEventListener("click", function () {
+          importPages();
+        });
+
+        state.els.searchInput.addEventListener("input", function () {
+          state.view.query = state.els.searchInput.value;
+          renderList();
+        });
+
+        state.els.tagFilter.addEventListener("change", function () {
+          state.view.tag = state.els.tagFilter.value;
+          renderList();
+        });
+
+        state.els.sortSelect.addEventListener("change", function () {
+          state.view.sort = state.els.sortSelect.value;
+          renderList();
+        });
+
+        state.els.resetFiltersBtn.addEventListener("click", function () {
+          resetFilters();
+        });
+
+        state.els.showArchivedInput.addEventListener("change", function () {
+          state.view.showArchived = !!state.els.showArchivedInput.checked;
+          renderList();
+        });
+
+        state.els.pagesList.addEventListener("click", function (event) {
+          var btn = event.target.closest("button[data-action]");
+          if (!btn) return;
+          var action = btn.getAttribute("data-action");
+          var id = btn.getAttribute("data-id");
+          handlePageAction(action, id);
+        });
+
+        if (state.options.keyboardShortcuts) {
+          document.addEventListener("keydown", function (event) {
+            if (state.els.backdrop.style.display !== "flex") return;
+
+            var key = String(event.key || "").toLowerCase();
+            var cmd = !!event.metaKey || !!event.ctrlKey;
+            var shift = !!event.shiftKey;
+
+            if (state.options.closeOnEsc && key === "escape") {
+              closeModal();
+              return;
+            }
+
+            if (cmd && key === "s") {
+              event.preventDefault();
+              persistEditor(false);
+              return;
+            }
+
+            if (cmd && key === "n") {
+              event.preventDefault();
+              addPage(state.options.defaultPageTitle);
+              return;
+            }
+
+            if (cmd && key === "f") {
+              event.preventDefault();
+              state.els.searchInput.focus();
+              return;
+            }
+
+            if (cmd && shift && key === "p") {
+              event.preventDefault();
+              var active = getPageById(state.activeId);
+              if (active) setPinned(active.id, !active.pinned);
+              return;
+            }
+          });
+        }
+      }
+
+      function ensureMounted(target) {
+        if (state.mounted) return state.els.root;
+
+        var mountTarget = null;
+        if (typeof target === "string") mountTarget = document.querySelector(target);
+        else if (target && target.nodeType === 1) mountTarget = target;
+        if (!mountTarget) mountTarget = document.body;
+
+        var styleEl = document.createElement("style");
+        styleEl.textContent = buildStyles();
+        document.head.appendChild(styleEl);
+        state.els.styleEl = styleEl;
+
+        var host = document.createElement("div");
+        host.innerHTML = buildMarkup();
+        var root = host.firstElementChild;
+        mountTarget.appendChild(root);
+
+        bindEvents(root);
+        state.mounted = true;
+
+        renderList();
+        renderEditor(ensureActivePage());
+        setStatus(state.options.labels.statusReady, "info");
+        return root;
+      }
+
+      function init(options) {
+        if (state.initialized) return api;
+        state.options = deepMerge(DEFAULTS, options || {});
+        loadProfile();
+        state.view.sort = state.options.defaultSort;
+        state.view.showArchived = !!state.options.showArchived;
+        state.pages = loadPages();
+        state.activeId = state.pages.length ? state.pages[0].id : null;
+        ensureActivePage();
+        state.initialized = true;
+        if (state.options.openOnInit) {
+          ensureMounted();
+          openModal();
+        }
+        emit("init", { options: clone(state.options) });
+        return api;
+      }
+
+      function mount(target, options) {
+        if (!state.initialized) init(options || {});
+        else if (options && Object.keys(options).length) state.options = deepMerge(state.options, options);
+        ensureMounted(target);
+        return "";
+      }
+
+      function config(nextOptions) {
+        state.options = deepMerge(state.options || DEFAULTS, nextOptions || {});
+        if (state.mounted && state.els.styleEl) {
+          state.els.styleEl.textContent = buildStyles();
+          renderList();
+          renderEditor(getPageById(state.activeId));
+        }
+        return api;
+      }
+
+      function reset(options) {
+        var opts = options || {};
+        state.pages = [createPage({ title: state.options.defaultPageTitle })];
+        state.activeId = state.pages[0].id;
+        if (opts.clearStorage) getStorageApi().clear();
+        savePages();
+        renderList();
+        renderEditor(getPageById(state.activeId));
+        setStatus("Notebook reset", "warn");
+        return true;
+      }
+
+      function getState() {
+        return {
+          initialized: state.initialized,
+          mounted: state.mounted,
+          activeId: state.activeId,
+          view: clone(state.view),
+          options: clone(state.options),
+          totalPages: state.pages.length,
+          visiblePages: getVisiblePages().length
+        };
+      }
+
+      var api = {
+        init: init,
+        mount: mount,
+        open: openModal,
+        close: closeModal,
+        toggle: toggleModal,
+        destroy: destroy,
+        reset: reset,
+        save: function () { return persistEditor(false); },
+        add: addPage,
+        remove: removePage,
+        rename: renamePage,
+        duplicate: duplicatePage,
+        archive: function (id) { return setArchived(id, true); },
+        restore: function (id) { return setArchived(id, false); },
+        pin: function (id) { return setPinned(id, true); },
+        unpin: function (id) { return setPinned(id, false); },
+        setTags: setTags,
+        addTag: addTag,
+        removeTag: removeTag,
+        setColor: setColor,
+        setContent: setContent,
+        appendContent: appendContent,
+        prependContent: prependContent,
+        update: updatePage,
+        getPage: getPage,
+        getActivePage: getActivePage,
+        listPages: listPages,
+        setActive: setActive,
+        search: search,
+        filter: applyFilters,
+        filterByTag: filterByTag,
+        sort: sort,
+        resetFilters: resetFilters,
+        exportPages: exportPages,
+        importPages: importPages,
+        clearStorage: clearStorage,
+        getProfile: function() { return clone(state.profile); },
+        setProfile: function(profile) {
+          profile = profile || {};
+          return saveProfile(profile.username, profile.password);
+        },
+        clearProfile: clearProfile,
+        getState: getState,
+        config: config,
+        on: on,
+        off: off
+      };
+
+      return api.init();
+    })();
+  }
+
+  return window.__aNotebookPluginV2;

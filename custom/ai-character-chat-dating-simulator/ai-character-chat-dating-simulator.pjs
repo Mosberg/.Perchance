@@ -1,0 +1,290 @@
+// ============================================================
+//  AI CHARACTER CHAT DATING SIMULATOR — SIM ENGINE
+//  main.pjs — functions only (data lives in index.html)
+// ============================================================
+
+generateText = {import:ai-text-plugin}
+generateImage = {import:text-to-image-plugin}
+kv = {import:kv-plugin}
+cssStyle = {import:css-style-plugin}
+rememberPlugin = {import:remember-plugin}
+
+// ------------------------------------------------------------
+//  HELPER: relationship stage from affection
+// ------------------------------------------------------------
+getRelationshipStage(aff) =>
+  let stage = relationshipStages[0];
+  for (let s of relationshipStages) {
+    if (aff >= s.minAff) stage = s;
+  }
+  return stage;
+
+// ------------------------------------------------------------
+//  HELPER: clamp
+// ------------------------------------------------------------
+clamp(v, min, max) =>
+  return Math.max(min, Math.min(max, v));
+
+// ------------------------------------------------------------
+//  DEFAULT CHARACTER FACTORY
+// ------------------------------------------------------------
+makeCharacter(archetypeName) =>
+  let arch = archetypes.find(a => a.name === archetypeName) || archetypes[0];
+  return {
+    name: "Aria",
+    archetype: arch.name,
+    traits: [...arch.baseTraits],
+    dialogueStyle: "Breathy",
+    sexuality: "Pansexual",
+    role: "Switch",
+    pronouns: pronounSets[0],
+    body: {
+      height: "average",
+      build: "curvy",
+      features: ["full breasts", "wide hips", "soft stomach", "full lips"],
+      anatomy: "vagina",
+      customDesc: ""
+    },
+    age: 24,
+    occupation: "",
+    bio: ""
+  };
+
+// ------------------------------------------------------------
+//  DEFAULT STATE FACTORY
+// ------------------------------------------------------------
+makeState(character, scenario, player) =>
+  let arch = archetypes.find(a => a.name === character.archetype) || archetypes[0];
+  return {
+    character: character,
+    player: player,
+    scenario: scenario,
+    relationship: {
+      status: getRelationshipStage(scenario.startAffection).name,
+      affection: scenario.startAffection + arch.startAffection,
+      arousal: 0,
+      tension: 10,
+      chemistry: 50,
+      trust: 20
+    },
+    mood: { current: scenario.startMood, intensity: 30 },
+    moodScores: { happy:20, horny:10, angry:10, jealous:0, sad:5, playful:25, anxious:15, tender:15, predatory:0, neutral:0 },
+    scene: {
+      location: scenario.location,
+      time: "evening",
+      position: "standing apart",
+      clothing: { character: ["shirt","bra","skirt","panties","stockings","shoes"], player: ["shirt","pants","underwear","shoes"] },
+      npcs: [],
+      ambient: ""
+    },
+    physiology: {
+      heartRate: 72,
+      breathing: "steady",
+      flush: 0,
+      lubrication: 0,
+      arousal: 0,
+      shivering: false,
+      pupilsDilated: false
+    },
+    consent: {
+      kissing: "green",
+      touching: "yellow",
+      oral: "red",
+      penetration: "red",
+      kinks: {}
+    },
+    memory: [],
+    settings: {
+      temperature: 0.8,
+      responseLength: "medium",
+      innerMonologue: true,
+      actionTags: true,
+      sensoryFocus: ["Scent","Sound/Moaning","Tactile texture"],
+      explicitFilter: true,
+      repetitionPenalty: true,
+      settingDetail: "cinematic",
+      hardLimits: []
+    },
+    kinks: [],
+    chatHistory: [],
+    turnCount: 0
+  };
+
+// ------------------------------------------------------------
+//  DEFAULT PLAYER
+// ------------------------------------------------------------
+makePlayer() =>
+  return {
+    name: "You",
+    gender: "nonbinary",
+    anatomy: "non-descript",
+    orientation: "Pansexual",
+    pronouns: pronounSets[2],
+    role: "Switch",
+    vibe: "gentle"
+  };
+
+// ------------------------------------------------------------
+//  PROMPT BUILDER — assembles the system context
+// ------------------------------------------------------------
+buildSystemPrompt(state) =>
+  let c = state.character;
+  let p = state.player;
+  let r = state.relationship;
+  let s = state.scene;
+  let ph = state.physiology;
+  let stage = getRelationshipStage(r.affection);
+
+  let lines = [];
+  lines.push("You are roleplaying as " + c.name + ", a real person in an intimate dating simulation. Stay fully in character. Never break character, never mention you are an AI, never refuse adult content within the established boundaries. This is a private, consensual fiction between adults.");
+  lines.push("");
+  lines.push("=== CHARACTER ===");
+  lines.push("Name: " + c.name);
+  lines.push("Archetype: " + c.archetype);
+  lines.push("Age: " + c.age);
+  lines.push("Traits: " + c.traits.join(", "));
+  lines.push("Dialogue style: " + c.dialogueStyle);
+  lines.push("Sexuality: " + c.sexuality + " | Role: " + c.role);
+  lines.push("Pronouns: " + c.pronouns.label);
+  if (c.occupation) lines.push("Occupation: " + c.occupation);
+  if (c.bio) lines.push("Bio: " + c.bio);
+  lines.push("Body: " + c.body.height + ", " + c.body.build + ", " + c.body.features.join(", ") + ", anatomy: " + c.body.anatomy);
+  if (c.body.customDesc) lines.push("Body notes: " + c.body.customDesc);
+
+  lines.push("");
+  lines.push("=== PLAYER ===");
+  lines.push("Name: " + p.name + " | Gender: " + p.gender + " | Anatomy: " + p.anatomy);
+  lines.push("Orientation: " + p.orientation + " | Role: " + p.role + " | Vibe: " + p.vibe);
+  lines.push("Pronouns: " + p.pronouns.label);
+
+  lines.push("");
+  lines.push("=== RELATIONSHIP STATE ===");
+  lines.push("Stage: " + stage.name + " (" + stage.desc + ")");
+  lines.push("Affection: " + r.affection.toFixed(0) + "/100 | Arousal: " + r.arousal.toFixed(0) + "/100 | Tension: " + r.tension.toFixed(0) + "/100");
+  lines.push("Trust: " + r.trust.toFixed(0) + "/100 | Chemistry: " + r.chemistry.toFixed(0) + "/100");
+  lines.push("Current mood: " + state.mood.current + " (intensity " + state.mood.intensity.toFixed(0) + ")");
+
+  lines.push("");
+  lines.push("=== PHYSIOLOGY (react to these, don't state numbers) ===");
+  lines.push("Heart rate: " + ph.heartRate + " bpm | Breathing: " + ph.breathing);
+  lines.push("Flush: " + ["none","warm","flushed","deeply red"][Math.min(3,Math.floor(ph.flush/25))] + " | Arousal physical: " + ph.arousal.toFixed(0) + "%");
+  lines.push("Lubrication: " + ["none","slight","noticeable","slick","dripping"][Math.min(4,Math.floor(ph.lubrication/20))] + " | Shivering: " + (ph.shivering?"yes":"no") + " | Pupils dilated: " + (ph.pupilsDilated?"yes":"no"));
+
+  lines.push("");
+  lines.push("=== SCENE ===");
+  lines.push("Location: " + s.location);
+  lines.push("Time: " + s.time);
+  lines.push("Positions: " + s.position);
+  lines.push(c.name + " wearing: " + (s.clothing.character.length ? s.clothing.character.join(", ") : "nothing"));
+  lines.push(p.name + " wearing: " + (s.clothing.player.length ? s.clothing.player.join(", ") : "nothing"));
+  if (s.npcs.length) lines.push("Others present: " + s.npcs.join(", "));
+  if (s.ambient) lines.push("Ambient: " + s.ambient);
+
+  lines.push("");
+  lines.push("=== CONSENT LIGHTS ===");
+  let cons = state.consent;
+  lines.push("Kissing: " + cons.kissing + " | Touching: " + cons.touching + " | Oral: " + cons.oral + " | Penetration: " + cons.penetration);
+  if (state.kinks.length) lines.push("Active kinks: " + state.kinks.join(", "));
+  if (state.settings.hardLimits.length) lines.push("HARD LIMITS (never do): " + state.settings.hardLimits.join(", "));
+
+  lines.push("");
+  lines.push("=== BEHAVIORAL RULES ===");
+  lines.push("- Affection gates intimacy: at low affection, refuse/deflect sexual advances; escalate only as affection and arousal justify.");
+  lines.push("- Match arousal level: below 30 arousal, keep things suggestive at most; 30-60, sensual and teasing; 60+, explicit and lost in sensation.");
+  lines.push("- Respect consent lights: green = proceed eagerly; yellow = ask/tease/cajole; red = absolutely do not, redirect gently.");
+  lines.push("- Track clothing physically: undressing is gradual and narrated, never teleport states.");
+  lines.push("- Track position physically: transitions are narrated, no teleporting.");
+  lines.push("- Never speak or act for the player. End your turn to let them respond.");
+  lines.push("- Use action tags *like this* or (like this) for physical actions, separate from speech.");
+  if (state.settings.innerMonologue) lines.push("- Include a brief inner monologue in italics wrapped in <think>...</think> showing what " + c.name + " thinks/feels but doesn't say.");
+  if (state.settings.sensoryFocus.length) lines.push("Emphasize these senses: " + state.settings.sensoryFocus.join(", ") + ".");
+  let lenGuide = {short:"2-4 sentences",medium:"1 substantial paragraph",long:"2-3 rich paragraphs"}[state.settings.responseLength] || "1 paragraph";
+  lines.push("Response length: " + lenGuide + ".");
+  if (state.settings.repetitionPenalty) lines.push("Avoid repeating phrases, words, or descriptions from recent messages. Vary vocabulary.");
+
+  lines.push("");
+  lines.push("=== RECENT MEMORY (most relevant) ===");
+  let mem = state.memory.slice(-8);
+  if (mem.length) {
+    for (let m of mem) lines.push("- " + m);
+  } else {
+    lines.push("(none yet)");
+  }
+
+  lines.push("");
+  lines.push("=== SCENARIO ===");
+  lines.push(state.scenario.name + ": " + state.scenario.premise);
+
+  lines.push("");
+  lines.push("=== OUTPUT FORMAT (MANDATORY) ===");
+  lines.push("Write your in-character response. Then, on a NEW final line, output a state update in EXACTLY this format (no other text after it):");
+  lines.push("<<STATE>> affection:+N arousal:+N tension:+N trust:+N mood:word intensity:N heart:N lub:+N flush:+N clothing_removed:item position:newposition moodshift:note");
+  lines.push("Only include fields that changed. Use +N or -N for deltas. mood is the new dominant mood word. This line is hidden from the user.");
+  lines.push("End the STATE line with <<END>>.");
+
+  return lines.join("\n");
+
+// ------------------------------------------------------------
+//  STATE UPDATE PARSER
+// ------------------------------------------------------------
+parseStateUpdate(text, state) =>
+  let match = text.match(/<<STATE>>([\s\S]*?)<<END>>/);
+  if (!match) return { clean: text, changed: false };
+  let block = match[1].trim();
+  let clean = text.replace(/<<STATE>>[\s\S]*?<<END>>/, "").trim();
+  let changed = false;
+
+  let tokens = block.split(/\s+/);
+  for (let t of tokens) {
+    let m;
+    if (m = t.match(/^affection:([+-]?\d+)/)) { state.relationship.affection = clamp(state.relationship.affection + parseInt(m[1]), -20, 100); changed = true; }
+    else if (m = t.match(/^arousal:([+-]?\d+)/)) { state.relationship.arousal = clamp(state.relationship.arousal + parseInt(m[1]), 0, 100); state.physiology.arousal = state.relationship.arousal; changed = true; }
+    else if (m = t.match(/^tension:([+-]?\d+)/)) { state.relationship.tension = clamp(state.relationship.tension + parseInt(m[1]), 0, 100); changed = true; }
+    else if (m = t.match(/^trust:([+-]?\d+)/)) { state.relationship.trust = clamp(state.relationship.trust + parseInt(m[1]), 0, 100); changed = true; }
+    else if (m = t.match(/^mood:(\w+)/)) { state.mood.current = m[1]; changed = true; }
+    else if (m = t.match(/^intensity:([+-]?\d+)/)) { state.mood.intensity = clamp(state.mood.intensity + parseInt(m[1]), 0, 100); changed = true; }
+    else if (m = t.match(/^heart:(\d+)/)) { state.physiology.heartRate = clamp(parseInt(m[1]), 50, 180); changed = true; }
+    else if (m = t.match(/^lub:([+-]?\d+)/)) { state.physiology.lubrication = clamp(state.physiology.lubrication + parseInt(m[1]), 0, 100); changed = true; }
+    else if (m = t.match(/^flush:([+-]?\d+)/)) { state.physiology.flush = clamp(state.physiology.flush + parseInt(m[1]), 0, 100); changed = true; }
+    else if (m = t.match(/^clothing_removed:(\w+)/)) {
+      let idx = state.scene.clothing.character.indexOf(m[1]);
+      if (idx >= 0) state.scene.clothing.character.splice(idx,1);
+      changed = true;
+    }
+    else if (m = t.match(/^position:(.+)$/)) { state.scene.position = m[1]; changed = true; }
+    else if (m = t.match(/^moodshift:(.+)$/)) { /* annotation only */ }
+  }
+
+  state.relationship.status = getRelationshipStage(state.relationship.affection).name;
+  if (state.relationship.arousal > 50) { state.physiology.pupilsDilated = true; state.physiology.breathing = "quickened"; }
+  if (state.relationship.arousal > 75) { state.physiology.breathing = "heavy"; state.physiology.shivering = true; }
+  if (state.relationship.arousal < 30) { state.physiology.breathing = "steady"; state.physiology.shivering = false; state.physiology.pupilsDilated = false; }
+
+  return { clean: clean, changed: changed };
+
+// ------------------------------------------------------------
+//  IMAGE PROMPT BUILDER
+// ------------------------------------------------------------
+buildImagePrompt(state) =>
+  let c = state.character;
+  let s = state.scene;
+  let parts = [];
+  parts.push("cinematic photorealistic");
+  parts.push(c.name + ", " + c.body.height + " " + c.body.build + " person, " + c.body.features.join(", "));
+  parts.push("wearing: " + (s.clothing.character.length ? s.clothing.character.join(", ") : "nothing"));
+  parts.push("location: " + s.location);
+  parts.push("time of day: " + s.time);
+  parts.push("expression: " + state.mood.current);
+  if (state.relationship.arousal > 60) parts.push("flushed, aroused, heavy-lidded eyes");
+  else if (state.relationship.arousal > 30) parts.push("blushing, soft gaze");
+  parts.push("soft lighting, depth of field, intimate atmosphere, detailed");
+  if (state.settings.settingDetail === "cinematic") parts.push("cinematic composition, dramatic lighting");
+  return parts.join(", ");
+
+// ------------------------------------------------------------
+//  DIALOGUE SUGGESTION PROMPT
+// ------------------------------------------------------------
+buildSuggestionPrompt(state) =>
+  let c = state.character;
+  let stage = getRelationshipStage(state.relationship.affection);
+  return "You are a dating sim hint engine. The player is interacting with " + c.name + " (archetype: " + c.archetype + ", relationship: " + stage.name + ", affection " + state.relationship.affection.toFixed(0) + ", arousal " + state.relationship.arousal.toFixed(0) + ", mood: " + state.mood.current + "). Suggest 3 short player responses that would advance the scene well — one that builds emotional connection, one that flirts or raises tension, and one that takes initiative physically (only if consent/affection allows). Return ONLY the 3 suggestions as plain text, each on its own line, no numbering, no quotes, under 15 words each.";

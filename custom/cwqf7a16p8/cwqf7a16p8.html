@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>cwqf7a16p8 — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- 
+  The AI HentaiHub - Single File Implementation
+  
+  Architecture:
+    1. Layout: CSS Grid/Flexbox with a fixed Sidebar and scrollable Main area.
+    2. State: Centralized 'appState' object managed via reactive-style render functions.
+    3. Storage: Hybrid 'root.kv' (primary for persistence) + localStorage (fallback).
+    4. Plugins: root.generateText, root.generateImage, root.uploadPlugin, root.kv.
+    5. Styling: Dark, neon-accented (Pink/Purple), responsive, using CSS variables.
+-->
+
+<style>
+  :root {
+    --bg-dark: #0f0f13;
+    --bg-panel: #1a1a20;
+    --bg-input: #25252f;
+    --primary: #ff2a6d; /* Neon Pink */
+    --primary-hover: #ff4785;
+    --secondary: #05d9e8; /* Cyan */
+    --text-main: #e0e0e0;
+    --text-dim: #a0a0a0;
+    --border: #333340;
+    --danger: #ff4757;
+    --radius: 8px;
+    --font-main: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; outline: none; }
+  body { margin: 0; padding: 0; background: var(--bg-dark); color: var(--text-main); font-family: var(--font-main); overflow: hidden; height: 100vh; display: flex; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg-dark); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+  /* Layout */
+  .sidebar { width: 320px; background: var(--bg-panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+
+  /* Sidebar Components */
+  .brand { padding: 20px; font-size: 1.2rem; font-weight: bold; color: var(--primary); text-align: center; border-bottom: 1px solid var(--border); letter-spacing: 1px; }
+  .brand span { color: var(--secondary); }
+  
+  .tabs { display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .tab-btn { flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; transition: 0.2s; white-space: nowrap; }
+  .tab-btn:hover { background: var(--bg-input); color: var(--text-main); }
+  .tab-btn.active { background: var(--bg-input); color: var(--primary); border-bottom: 2px solid var(--primary); font-weight: bold; }
+
+  .panel-content { padding: 15px; flex: 1; overflow-y: auto; display: none; flex-direction: column; gap: 15px; }
+  .panel-content.active { display: flex; }
+
+  /* Inputs & Controls */
+  textarea, input, select { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 10px; border-radius: var(--radius); width: 100%; font-family: inherit; resize: vertical; }
+  textarea:focus, input:focus, select:focus { border-color: var(--primary); }
+  
+  .row { display: flex; gap: 10px; align-items: center; }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+
+  button { cursor: pointer; border: none; border-radius: var(--radius); padding: 8px 16px; font-weight: 600; transition: 0.2s; background: var(--bg-input); color: var(--text-main); }
+  button:hover { background: var(--border); }
+  button:active { transform: translateY(1px); }
+  button.primary { background: var(--primary); color: #fff; }
+  button.primary:hover { background: var(--primary-hover); }
+  button.danger { background: var(--danger); color: white; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Tag System */
+  .tag-cloud { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { font-size: 0.75rem; padding: 4px 8px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; user-select: none; }
+  .chip:hover { border-color: var(--primary); color: var(--primary); }
+  .chip.selected { background: var(--primary); color: white; border-color: var(--primary); }
+
+  /* Main Controls */
+  .header { padding: 15px 20px; background: var(--bg-panel); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { margin: 0; font-size: 1.2rem; }
+  
+  .control-bar { padding: 15px 20px; background: var(--bg-dark); border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+  .slider-group { display: flex; flex-direction: column; gap: 5px; }
+  .slider-header { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-dim); }
+  
+  /* Gallery */
+  .gallery-toolbar { padding: 10px 20px; background: var(--bg-panel); border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .gallery-container { flex: 1; overflow-y: auto; padding: 20px; background: #000; }
+  .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+  .gallery-card { background: var(--bg-panel); border-radius: var(--radius); overflow: hidden; position: relative; aspect-ratio: 1; cursor: pointer; border: 1px solid transparent; transition: 0.2s; }
+  .gallery-card:hover { border-color: var(--primary); transform: scale(1.02); z-index: 1; box-shadow: 0 0 15px rgba(255, 42, 109, 0.3); }
+  .gallery-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 10px; background: linear-gradient(transparent, rgba(0,0,0,0.9)); font-size: 0.75rem; opacity: 0; transition: 0.2s; display: flex; justify-content: space-between; }
+  .gallery-card:hover .card-overlay { opacity: 1; }
+  .card-checkbox { position: absolute; top: 5px; left: 5px; z-index: 2; width: 16px; height: 16px; display: none; }
+  .gallery-card.bulk-active .card-checkbox { display: block; }
+
+  /* Modals */
+  dialog { background: var(--bg-panel); color: var(--text-main); border: 1px solid var(--border); border-radius: var(--radius); padding: 0; max-width: 90vw; width: 800px; max-height: 90vh; }
+  dialog::backdrop { background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); }
+  .modal-header { padding: 15px; background: var(--bg-input); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+  .modal-body { padding: 20px; display: flex; gap: 20px; max-height: 70vh; overflow-y: auto; }
+  .modal-img-container { flex: 1; background: #000; display: flex; align-items: center; justify-content: center; border-radius: var(--radius); min-height: 300px; }
+  .modal-img-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .modal-details { width: 300px; display: flex; flex-direction: column; gap: 15px; }
+  
+  .status-pill { padding: 4px 10px; background: var(--bg-input); border-radius: 20px; font-size: 0.8rem; border: 1px solid var(--border); }
+  
+  /* Utility */
+  .hidden { display: none !important; }
+  .spin { animation: spin 1s linear infinite; display: inline-block; }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+  
+  /* Mobile */
+  @media (max-width: 768px) {
+    body { flex-direction: column; overflow: auto; height: auto; }
+    .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    .control-bar { grid-template-columns: 1fr; }
+    .modal-body { flex-direction: column; }
+    .modal-details { width: 100%; }
+  }
+</style>
+
+<div class="sidebar">
+  <div class="brand">THE AI <span>HENTAIHUB</span></div>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="ui.switchTab('builder')">Prompt</button>
+    <button class="tab-btn" onclick="ui.switchTab('scratchpad')">Notes</button>
+    <button class="tab-btn" onclick="ui.switchTab('tags')">Tags</button>
+    <button class="tab-btn" onclick="ui.switchTab('history')">History</button>
+    <button class="tab-btn" onclick="ui.switchTab('settings')">Settings</button>
+  </div>
+
+  <!-- Tab: Builder -->
+  <div id="tab-builder" class="panel-content active">
+    <div class="col">
+      <h3>AI Prompt Engineer</h3>
+      <textarea id="helperInput" rows="4" placeholder="Describe your fantasy scene..."></textarea>
+      <div class="row">
+        <button class="primary" style="flex:1" onclick="app.generatePrompt('generate')">Generate</button>
+        <button style="flex:1" onclick="app.generatePrompt('random')">Random</button>
+        <button style="flex:1" onclick="app.generatePrompt('enhance')">Enhance</button>
+      </div>
+      <div class="row">
+        <button onclick="app.copyToClipboard('helperInput')">Copy</button>
+        <button onclick="app.injectToMain()">Inject</button>
+        <button onclick="app.saveToScratchpad()">Save Note</button>
+      </div>
+      
+      <div class="section-divider"></div>
+      
+      <h3>Weighting</h3>
+      <div class="row">
+        <button onclick="app.addWeight(0.5)">0.5x</button>
+        <button onclick="app.addWeight(0.8)">0.8x</button>
+        <button onclick="app.addWeight(1.2)">1.2x</button>
+        <button onclick="app.addWeight(1.5)">1.5x</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Scratchpad -->
+  <div id="tab-scratchpad" class="panel-content">
+    <div class="col">
+      <div class="row" style="justify-content:space-between">
+        <h3>Scratchpad</h3>
+        <div class="row">
+          <button onclick="app.newNotePage()">+</button>
+          <button onclick="app.delNotePage()">-</button>
+        </div>
+      </div>
+      <div id="notePages" class="row"></div>
+      <textarea id="scratchpadInput" style="flex:1" placeholder="Save your prompt ideas here..."></textarea>
+      <button class="primary" onclick="app.loadNoteToMain()">Load to Main</button>
+    </div>
+  </div>
+
+  <!-- Tab: Tags -->
+  <div id="tab-tags" class="panel-content">
+    <h3>Tag Library</h3>
+    <select id="tagCategorySelect" onchange="app.renderTagCategory()">
+      <option value="style">Art Style</option>
+      <option value="category">Category</option>
+      <option value="character">Character</option>
+      <option value="action">Action</option>
+      <option value="setting">Setting</option>
+      <option value="camera">Camera</option>
+      <option value="lighting">Lighting</option>
+      <option value="quality">Quality</option>
+    </select>
+    <div id="tagCloud" class="tag-cloud" style="max-height: 400px; overflow-y: auto; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius);"></div>
+    <button class="primary" onclick="app.appendTags()">Add to Positive</button>
+    <button onclick="app.appendTags(true)">Add to Negative</button>
+  </div>
+
+  <!-- Tab: History -->
+  <div id="tab-history" class="panel-content">
+    <div class="row" style="justify-content: space-between;">
+      <h3>Prompt History</h3>
+      <button class="danger" onclick="app.clearHistory()">Clear</button>
+    </div>
+    <div id="historyList" class="col" style="gap: 5px;"></div>
+  </div>
+
+  <!-- Tab: Settings -->
+  <div id="tab-settings" class="panel-content">
+    <h3>Account & Data</h3>
+    <div class="col">
+      <label>Username (Namespace)</label>
+      <div class="row">
+        <input id="usernameInput" placeholder="Enter username...">
+        <button onclick="app.loginUser()">Login/Save</button>
+      </div>
+    </div>
+    <hr style="width:100%; border:0; border-top:1px solid var(--border)">
+    <div class="col">
+      <button onclick="app.exportData()">Export All Data (JSON)</button>
+      <label class="row" style="cursor:pointer">
+        Import JSON
+        <input type="file" hidden onchange="app.importData(this)" accept=".json">
+      </label>
+      <button class="danger" onclick="app.clearAllData()">Factory Reset</button>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <header class="header">
+    <div class="row">
+      <h1>Studio</h1>
+      <span id="userDisplay" class="status-pill">Guest</span>
+    </div>
+    <div class="row">
+      <button onclick="app.toggleBulkMode()" id="bulkModeBtn">☑ Bulk Select</button>
+    </div>
+  </header>
+
+  <section class="control-bar">
+    <div class="col" style="gap: 10px;">
+      <div class="row" style="justify-content: space-between;">
+        <label>Positive Prompt</label>
+        <button style="font-size: 0.7rem; padding: 2px 5px;" onclick="app.loadFromHistoryToMain()">History</button>
+      </div>
+      <textarea id="mainPrompt" rows="3" placeholder="Main prompt details..."></textarea>
+      
+      <label>Negative Prompt</label>
+      <textarea id="negPrompt" rows="2" placeholder="Blurry, bad anatomy, low quality..."></textarea>
+    </div>
+
+    <div class="col">
+      <div class="slider-group">
+        <div class="slider-header"><span>Batch Size</span><span id="batchValEl">1</span></div>
+        <input type="range" id="batchInput" min="1" max="12" value="1" oninput="batchValEl.innerText=this.value">
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span>Guidance (CFG)</span><span id="cfgValEl">7.0</span></div>
+        <input type="range" id="cfgInput" min="1" max="20" step="0.5" value="7.0" oninput="cfgValEl.innerText=this.value">
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span>Steps</span><span id="stepsValEl">30</span></div>
+        <input type="range" id="stepsInput" min="10" max="150" value="30" oninput="stepsValEl.innerText=this.value">
+      </div>
+      <div class="row" style="margin-top: auto;">
+        <input type="number" id="seedInputEl" placeholder="Seed (-1)" style="width: 80px" value="-1">
+        <button onclick="seedInputEl.value = Math.floor(Math.random()*999999)">🎲</button>
+        <select id="ratioSelect">
+          <option value="768x768">1:1 Square</option>
+          <option value="512x768">2:3 Portrait</option>
+          <option value="768x512">3:2 Landscape</option>
+          <option value="512x512">Small Square</option>
+        </select>
+      </div>
+      <button id="generateBtn" class="primary" style="height: 50px; font-size: 1.1rem;" onclick="app.generateImages()">⚡ GENERATE</button>
+    </div>
+  </section>
+
+  <section class="gallery-toolbar">
+    <input id="searchInput" placeholder="Search prompts..." style="width: 200px;" oninput="app.renderGallery()">
+    <select id="filterFolder" onchange="app.renderGallery()">
+      <option value="all">All Images</option>
+      <option value="favorites">❤ Favorites</option>
+    </select>
+    <select id="sortGallery" onchange="app.renderGallery()">
+      <option value="newest">Newest</option>
+      <option value="oldest">Oldest</option>
+    </select>
+    <div style="flex:1"></div>
+    <button id="bulkActionBtn" class="danger hidden" onclick="app.bulkDelete()">Delete Selected</button>
+  </section>
+
+  <div class="gallery-container">
+    <div id="galleryGrid" class="gallery-grid"></div>
+  </div>
+</div>
+
+<!-- Modal -->
+<dialog id="imageModal">
+  <div class="modal-header">
+    <h3>Image Details</h3>
+    <button onclick="imageModal.close()">✕</button>
+  </div>
+  <div class="modal-body">
+    <div class="modal-img-container">
+      <img id="modalImg" src="" alt="Preview">
+    </div>
+    <div class="modal-details">
+      <label>Prompt</label>
+      <textarea id="modalPrompt" rows="4" readonly></textarea>
+      
+      <label>Parameters</label>
+      <div id="modalParams" class="status-pill" style="text-align: left;"></div>
+
+      <div class="row">
+        <input id="modalFolderInput" placeholder="Folder Name" style="flex:1">
+        <button onclick="app.setFolder()">Set Folder</button>
+      </div>
+
+      <div class="row" style="margin-top:auto">
+        <button class="primary" onclick="app.downloadImage()">Download</button>
+        <button onclick="app.toggleFavorite()">❤ Favorite</button>
+      </div>
+      <div class="row">
+        <button onclick="app.useAsNegative()">Use as Neg</button>
+        <button class="primary" onclick="app.regenerateFromModal()">Variation</button>
+      </div>
+      <button class="danger" onclick="app.deleteImage()">Delete Image</button>
+    </div>
+  </div>
+</dialog>
+
+<script type="module">
+  // --- DATA & CONFIG ---
+  const TAGS = {
+    style: ["Anime", "Manga", "Cel Shaded", "Hyper Realistic", "Oil Painting", "Watercolor", "Cyberpunk", "Glow", "Neon", "Sketch", "Lineart", "Digital Art", "3D Render", "Uncensored", "Hentai", "Doujinshi", "Pixel Art"],
+    category: ["Solo", "Gangbang", "Bondage", "Tentacle", "Futanari", "Yuri", "Yaoi", "Furry", "Monster", "Giantess", "Muscle", "Pregnant", "Lactation", "Ahegao", "Gokkun", "Nakadashi", "Public", "Exhibitionism", "Mind Break", "Corruption"],
+    character: ["Catgirl", "Bunny Girl", "Schoolgirl", "Maid", "Nun", "Nurse", "Office Lady", "Knight", "Elf", "Demon", "Angel", "Goddess", "Android", "Cyborg", "Vampire", "Werewolf", "Fox Girl", "Dragon Girl", "Slime Girl", "Ghost"],
+    action: ["Blowjob", "Paizuri", "Handjob", "Fingering", "Cunnilingus", "Anal", "Sex", "Missionary", "Doggystyle", "Cowgirl", "Reverse Cowgirl", "Standing", "Against Wall", "Orgy", "Kissing", "Embracing", "Spanking", "Choking", "Pissing", "Creampie"],
+    setting: ["Bedroom", "Classroom", "Bathroom", "Onsen", "Beach", "Forest", "Dungeon", "Space Station", "Cyberpunk Alley", "Church", "Temple", "Gym", "Pool", "Rooftop", "Alley", "Love Hotel", "Laboratory", "Throne Room"],
+    camera: ["Portrait", "Full Body", "Close Up", "Extreme Close Up", "Wide Shot", "Low Angle", "High Angle", "POV", "Over Shoulder", "Dutch Angle"],
+    lighting: ["Cinematic Lighting", "Volumetric Lighting", "Soft Light", "Hard Light", "Rim Light", "Neon Light", "Candlelight", "Moonlight", "Sunlight", "Studio Lighting"],
+    quality: ["Masterpiece", "Best Quality", "Ultra High Res", "8k", "4k", "HDR", "Detailed", "Intricate", "Sharp Focus", "Absurdres"]
+  };
+
+  const TEMPLATES = {
+    random: "[character] [action] in [setting], [style], [lighting], [quality], detailed eyes, explicit",
+    portrait: "Portrait of [character], [style], [lighting], [quality], detailed face, bokeh",
+    scene: "A scene of [character] [action] in [setting], [category], [style], [quality], cinematic composition"
+  };
+
+  // --- STATE MANAGEMENT ---
+  const appState = {
+    user: 'guest',
+    gallery: [],
+    history: [],
+    notes: { 0: "" },
+    currentNoteId: 0,
+    selectedTags: new Set(),
+    bulkMode: false,
+    bulkSelected: new Set(),
+    currentModalImgId: null
+  };
+
+  // --- CORE APP LOGIC ---
+  const app = {
+    async init() {
+      await this.loadStorage();
+      ui.init();
+      this.renderGallery();
+      this.renderHistory();
+      this.renderNotes();
+      this.renderTagCategory();
+    },
+
+    // --- STORAGE (KV + LOCAL) ---
+    async loadStorage() {
+      // Local User
+      if(localStorage.hentaiUser) appState.user = localStorage.hentaiUser;
+      ui.updateUserDisplay();
+
+      // Load from KV if available
+      try {
+        if(root && root.kv) {
+          const savedGallery = await root.kv.hentaiHub_gallery.get(appState.user);
+          if(savedGallery) appState.gallery = savedGallery;
+          
+          const savedNotes = await root.kv.hentaiHub_notes.get(appState.user);
+          if(savedNotes) appState.notes = savedNotes;
+
+          const savedHistory = await root.kv.hentaiHub_history.get(appState.user);
+          if(savedHistory) appState.history = savedHistory;
+        }
+      } catch(e) { console.log("KV init error", e); }
+
+      // Fallback to LocalStorage
+      if(appState.gallery.length === 0 && localStorage.hentaiGallery) {
+        appState.gallery = JSON.parse(localStorage.hentaiGallery);
+      }
+    },
+
+    async saveStorage() {
+      // Save to KV
+      if(root && root.kv) {
+        try {
+          await root.kv.hentaiHub_gallery.set(appState.user, appState.gallery);
+          await root.kv.hentaiHub_notes.set(appState.user, appState.notes);
+          await root.kv.hentaiHub_history.set(appState.user, appState.history);
+        } catch(e) { console.error("KV Save Error", e); }
+      }
+      // Save to Local
+      localStorage.hentaiGallery = JSON.stringify(appState.gallery);
+      localStorage.hentaiNotes = JSON.stringify(appState.notes);
+      localStorage.hentaiHistory = JSON.stringify(appState.history);
+    },
+
+    // --- PROMPT SYSTEM ---
+    async generatePrompt(mode) {
+      const input = helperInput.value.trim();
+      let instruction = "";
+      const tags = Object.values(TAGS).flat().join(", ");
+
+      if(mode === 'generate') instruction = `Generate a detailed explicit NSFW prompt for AI image generation based on this concept: "${input}". Use keywords from: ${tags}.`;
+      if(mode === 'random') instruction = `Create a completely random, explicit, high-quality hentai prompt using this format: [character] [action] in [setting], [style], [quality]. Use keywords from: ${tags}.`;
+      if(mode === 'enhance') instruction = `Enhance this explicit NSFW prompt to be more detailed and visually striking: "${input}". Add artistic styles and lighting details.`;
+
+      helperInput.value = "Generating...";
+      helperInput.disabled = true;
+
+      try {
+        let result = "";
+        if(root && root.generateText) {
+          result = await root.generateText({ instruction });
+        } else {
+          result = "Plugin not available. Using mock generation. " + input + ", detailed, masterpiece, best quality.";
+        }
+        helperInput.value = result;
+        this.addToHistory(result);
+      } catch(e) {
+        helperInput.value = "Error generating prompt.";
+      }
+      
+      helperInput.disabled = false;
+    },
+
+    addWeight(weight) {
+      const start = helperInput.selectionStart;
+      const end = helperInput.selectionEnd;
+      const text = helperInput.value;
+      if(start === end) return;
+      const selection = text.substring(start, end);
+      helperInput.value = text.substring(0, start) + `(${selection}:${weight})` + text.substring(end);
+    },
+
+    injectToMain() {
+      mainPrompt.value = helperInput.value;
+    },
+
+    copyToClipboard(id) {
+      navigator.clipboard.writeText(document.getElementById(id).value);
+    },
+
+    addToHistory(text) {
+      if(!text) return;
+      appState.history.unshift(text);
+      if(appState.history.length > 50) appState.history.pop();
+      this.renderHistory();
+      this.saveStorage();
+    },
+
+    // --- IMAGE GENERATION ---
+    async generateImages() {
+      const prompt = mainPrompt.value.trim();
+      if(!prompt) return alert("Please enter a prompt.");
+
+      const negative = negPrompt.value.trim();
+      const count = parseInt(batchInput.value);
+      const seed = parseInt(seedInput.value);
+      const steps = parseInt(stepsInput.value);
+      const guidance = parseFloat(cfgInput.value);
+      const resolution = ratioSelect.value;
+
+      generateBtn.innerHTML = '<span class="spin">⚙</span> Generating...';
+      generateBtn.disabled = true;
+
+      const promises = [];
+      for(let i=0; i<count; i++) {
+        const currentSeed = seed === -1 ? Math.floor(Math.random() * 999999999) : seed + i;
+        
+        // Construct full prompt string for the generator
+        const fullPrompt = `${prompt} | ${negative} | steps:${steps} scale:${guidance} seed:${currentSeed} res:${resolution}`;
+
+        promises.push(this.createImageObject(prompt, negative, currentSeed, steps, guidance, resolution, fullPrompt));
+      }
+
+      const results = await Promise.all(promises);
+      appState.gallery.unshift(...results);
+      this.renderGallery();
+      this.saveStorage();
+
+      generateBtn.innerHTML = '⚡ GENERATE';
+      generateBtn.disabled = false;
+    },
+
+    async createImageObject(prompt, negative, seed, steps, guidance, resolution, fullPromptString) {
+      let url = "";
+      try {
+        if(root && root.generateImage) {
+          // Generate image. Note: Perchance generateImage takes prompt, options.
+          // We pass the resolution option.
+          url = await root.generateImage(prompt, { resolution: resolution }); 
+          // Note: We rely on the generator handling style/steps internally or via prompt text
+          // as standard SD APIs vary. Here we embed params in text for debugging/record, 
+          // but generateImage usually just takes a text description.
+        } else {
+          // Fallback placeholder
+          url = `https://placehold.co/${resolution.replace('x','/')}?text=Seed+${seed}`;
+        }
+      } catch(e) {
+        url = `https://placehold.co/${resolution.replace('x','/')}?text=Error`;
+      }
+
+      return {
+        id: Date.now() + Math.random().toString(36).substr(2, 9),
+        url: url,
+        prompt: prompt,
+        negative: negative,
+        seed: seed,
+        steps: steps,
+        guidance: guidance,
+        resolution: resolution,
+        timestamp: Date.now(),
+        favorite: false,
+        folder: "default"
+      };
+    },
+
+    // --- GALLERY MANAGEMENT ---
+    renderGallery() {
+      const grid = galleryGrid;
+      const search = searchInput.value.toLowerCase();
+      const filter = filterFolder.value;
+      const sort = sortGallery.value;
+
+      let items = appState.gallery.filter(img => {
+        const matchesSearch = img.prompt.toLowerCase().includes(search) || img.id.includes(search);
+        const matchesFilter = filter === 'all' ? true : (filter === 'favorites' ? img.favorite : true);
+        return matchesSearch && matchesFilter;
+      });
+
+      if(sort === 'newest') items.sort((a,b) => b.timestamp - a.timestamp);
+      if(sort === 'oldest') items.sort((a,b) => a.timestamp - b.timestamp);
+
+      grid.innerHTML = '';
+      
+      items.forEach(img => {
+        const card = document.createElement('div');
+        card.className = `gallery-card ${appState.bulkMode ? 'bulk-active' : ''}`;
+        if(appState.bulkSelected.has(img.id)) card.style.borderColor = 'var(--primary)';
+
+        card.innerHTML = `
+          <input type="checkbox" class="card-checkbox" ${appState.bulkSelected.has(img.id)?'checked':''} onclick="event.stopPropagation(); app.toggleBulkSelect('${img.id}')">
+          <img src="${img.url}" loading="lazy">
+          <div class="card-overlay">
+            <span>${new Date(img.timestamp).toLocaleTimeString()}</span>
+            <span>${img.favorite ? '❤' : ''}</span>
+          </div>
+        `;
+        
+        card.onclick = (e) => {
+          if(appState.bulkMode) {
+            this.toggleBulkSelect(img.id);
+          } else {
+            this.openModal(img.id);
+          }
+        };
+        grid.appendChild(card);
+      });
+    },
+
+    // --- MODAL ACTIONS ---
+    openModal(id) {
+      const img = appState.gallery.find(i => i.id === id);
+      if(!img) return;
+      appState.currentModalImgId = id;
+      
+      modalImg.src = img.url;
+      modalPrompt.value = img.prompt;
+      modalParams.innerText = `Seed: ${img.seed} | Steps: ${img.steps} | CFG: ${img.guidance} | Res: ${img.resolution}`;
+      modalFolderInput.value = img.folder || 'default';
+      imageModal.showModal();
+    },
+
+    async regenerateFromModal() {
+      const img = appState.gallery.find(i => i.id === appState.currentModalImgId);
+      if(!img) return;
+      
+      // Load params to main
+      mainPrompt.value = img.prompt;
+      negPrompt.value = img.negative;
+      seedInput.value = img.seed;
+      stepsInput.value = img.steps;
+      cfgInput.value = img.guidance;
+      ratioSelect.value = img.resolution;
+      
+      imageModal.close();
+      this.generateImages();
+    },
+
+    toggleFavorite() {
+      const img = appState.gallery.find(i => i.id === appState.currentModalImgId);
+      if(img) {
+        img.favorite = !img.favorite;
+        this.renderGallery();
+        this.saveStorage();
+      }
+    },
+
+    async deleteImage() {
+      if(!confirm("Delete this image?")) return;
+      appState.gallery = appState.gallery.filter(i => i.id !== appState.currentModalImgId);
+      this.renderGallery();
+      this.saveStorage();
+      imageModal.close();
+    },
+
+    downloadImage() {
+      const img = appState.gallery.find(i => i.id === appState.currentModalImgId);
+      if(img) {
+        const a = document.createElement('a');
+        a.href = img.url;
+        a.download = `hentaihub-${img.id}.png`;
+        a.click();
+      }
+    },
+
+    useAsNegative() {
+      const img = appState.gallery.find(i => i.id === appState.currentModalImgId);
+      if(img) {
+        negPrompt.value = img.prompt;
+        alert("Loaded prompt to Negative box.");
+      }
+    },
+
+    setFolder() {
+      const img = appState.gallery.find(i => i.id === appState.currentModalImgId);
+      const folderName = modalFolderInput.value.trim();
+      if(img && folderName) {
+        img.folder = folderName;
+        this.saveStorage();
+        alert("Moved to folder: " + folderName);
+      }
+    },
+
+    // --- BULK ACTIONS ---
+    toggleBulkMode() {
+      appState.bulkMode = !appState.bulkMode;
+      appState.bulkSelected.clear();
+      bulkModeBtn.style.background = appState.bulkMode ? 'var(--primary)' : '';
+      bulkModeBtn.style.color = appState.bulkMode ? 'white' : '';
+      bulkActionBtn.classList.toggle('hidden', !appState.bulkMode);
+      this.renderGallery();
+    },
+
+    toggleBulkSelect(id) {
+      if(appState.bulkSelected.has(id)) appState.bulkSelected.delete(id);
+      else appState.bulkSelected.add(id);
+      this.renderGallery();
+    },
+
+    bulkDelete() {
+      if(!confirm(`Delete ${appState.bulkSelected.size} images?`)) return;
+      appState.gallery = appState.gallery.filter(i => !appState.bulkSelected.has(i.id));
+      appState.bulkSelected.clear();
+      this.saveStorage();
+      this.renderGallery();
+    },
+
+    // --- SCRATCHPAD ---
+    renderNotes() {
+      notePages.innerHTML = '';
+      Object.keys(appState.notes).forEach(id => {
+        const btn = document.createElement('button');
+        btn.innerText = parseInt(id) + 1;
+        btn.style.background = appState.currentNoteId == id ? 'var(--primary)' : '';
+        btn.onclick = () => {
+          appState.notes[appState.currentNoteId] = scratchpadInput.value; // Save current
+          appState.currentNoteId = id;
+          scratchpadInput.value = appState.notes[id] || "";
+          this.renderNotes();
+        };
+        notePages.appendChild(btn);
+      });
+      scratchpadInput.value = appState.notes[appState.currentNoteId] || "";
+    },
+
+    newNotePage() {
+      const newId = Date.now().toString();
+      appState.notes[appState.currentNoteId] = scratchpadInput.value; // Save current
+      appState.notes[newId] = "";
+      appState.currentNoteId = newId;
+      this.renderNotes();
+    },
+
+    delNotePage() {
+      if(Object.keys(appState.notes).length <= 1) return;
+      delete appState.notes[appState.currentNoteId];
+      appState.currentNoteId = Object.keys(appState.notes)[0];
+      this.renderNotes();
+      this.saveStorage();
+    },
+
+    saveToScratchpad() {
+      appState.notes[appState.currentNoteId] += (appState.notes[appState.currentNoteId] ? "\n" : "") + helperInput.value;
+      this.renderNotes();
+      this.saveStorage();
+    },
+
+    loadNoteToMain() {
+      mainPrompt.value = scratchpadInput.value;
+    },
+
+    // --- TAGS ---
+    renderTagCategory() {
+      const cat = tagCategorySelect.value;
+      const list = TAGS[cat] || [];
+      const cloud = tagCloud;
+      cloud.innerHTML = '';
+      list.forEach(tag => {
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.innerText = tag;
+        chip.onclick = () => {
+          if(appState.selectedTags.has(tag)) {
+            appState.selectedTags.delete(tag);
+            chip.classList.remove('selected');
+          } else {
+            appState.selectedTags.add(tag);
+            chip.classList.add('selected');
+          }
+        };
+        cloud.appendChild(chip);
+      });
+    },
+
+    appendTags(toNegative = false) {
+      const tags = Array.from(appState.selectedTags).join(", ");
+      if(!tags) return;
+      if(toNegative) negPrompt.value += (negPrompt.value ? ", " : "") + tags;
+      else mainPrompt.value += (mainPrompt.value ? ", " : "") + tags;
+      appState.selectedTags.clear();
+      this.renderTagCategory();
+    },
+
+    // --- UTILS ---
+    renderHistory() {
+      historyList.innerHTML = '';
+      appState.history.forEach(text => {
+        const item = document.createElement('div');
+        item.className = 'status-pill';
+        item.style.textAlign = 'left';
+        item.style.cursor = 'pointer';
+        item.style.whiteSpace = 'nowrap';
+        item.style.overflow = 'hidden';
+        item.style.textOverflow = 'ellipsis';
+        item.innerText = text;
+        item.title = text;
+        item.onclick = () => {
+          helperInput.value = text;
+          ui.switchTab('builder');
+        };
+        historyList.appendChild(item);
+      });
+    },
+
+    clearHistory() {
+      if(confirm("Clear history?")) {
+        appState.history = [];
+        this.renderHistory();
+        this.saveStorage();
+      }
+    },
+
+    async loginUser() {
+      const name = usernameInput.value.trim();
+      if(!name) return;
+      appState.user = name;
+      localStorage.hentaiUser = name;
+      ui.updateUserDisplay();
+      await this.loadStorage(); // Reload data for new user
+      this.renderGallery();
+      alert("Logged in as: " + name);
+    },
+
+    exportData() {
+      const data = {
+        user: appState.user,
+        gallery: appState.gallery,
+        notes: appState.notes,
+        history: appState.history,
+        date: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `hentaihub_backup_${appState.user}.json`;
+      a.click();
+    },
+
+    importData(input) {
+      const file = input.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if(data.gallery) appState.gallery = data.gallery;
+          if(data.notes) appState.notes = data.notes;
+          if(data.history) appState.history = data.history;
+          this.renderGallery();
+          this.renderNotes();
+          this.renderHistory();
+          this.saveStorage();
+          alert("Import successful!");
+        } catch(err) {
+          alert("Invalid JSON file.");
+        }
+      };
+      reader.readAsText(file);
+    },
+    
+    clearAllData() {
+      if(confirm("This will wipe ALL data. Are you sure?")) {
+        localStorage.clear();
+        location.reload();
+      }
+    }
+  };
+
+  // --- UI HELPERS ---
+  const ui = {
+    init() {
+      // Auto-save note on type
+      scratchpadInput.addEventListener('input', () => {
+        appState.notes[appState.currentNoteId] = scratchpadInput.value;
+        app.saveStorage();
+      });
+    },
+    
+    switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
+      
+      // Find button by onclick attribute is messy, just find by index or add IDs.
+      // Simplification: Re-query based on mapping or event target.
+      // Let's rely on DOM order for simplicity in this single file or specific IDs.
+      // Updated to use IDs logic:
+      
+      // Reset all
+      const buttons = document.querySelectorAll('.tab-btn');
+      const panels = document.querySelectorAll('.panel-content');
+      
+      buttons.forEach(b => b.classList.remove('active'));
+      panels.forEach(p => p.classList.remove('active'));
+      
+      // Set Active
+      const targetBtn = Array.from(buttons).find(b => b.textContent.toLowerCase().includes(tabName === 'builder' ? 'prompt' : tabName));
+      if(targetBtn) targetBtn.classList.add('active');
+      
+      const targetPanel = document.getElementById('tab-' + tabName);
+      if(targetPanel) targetPanel.classList.add('active');
+    },
+    
+    updateUserDisplay() {
+      userDisplay.innerText = appState.user;
+      usernameInput.value = appState.user;
+    }
+  };
+
+  // Start
+  window.app = app; // Expose for onclick handlers
+  window.ui = ui;
+  app.init();
+
+</script>
+</body>
+</html>

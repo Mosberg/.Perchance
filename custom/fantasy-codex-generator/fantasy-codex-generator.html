@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>fantasy-codex-generator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="codexAppCtn" style="font-family:system-ui, sans-serif; max-width:900px; margin:2rem auto; text-align:left;">
+  <h1 style="margin-bottom:.25rem; color:#2c3e50;">Fantasy Codex Generator</h1>
+  <p style="color:#666; margin-top:0; font-size:.9rem;">Production-ready modular plugin scaffold. Extend via <code>registry</code> and <code>generators</code>.</p>
+
+  <div style="display:flex; gap:.5rem; margin:1.25rem 0; flex-wrap:wrap;">
+    <button id="charTabBtn" class="tabBtn" onclick="switchTab('character')" style="padding:.5rem 1rem; cursor:pointer;">Character</button>
+    <button id="locTabBtn" class="tabBtn" onclick="switchTab('location')" style="padding:.5rem 1rem; cursor:pointer;">Location</button>
+    <button id="artTabBtn" class="tabBtn" onclick="switchTab('artifact')" style="padding:.5rem 1rem; cursor:pointer;">Artifact</button>
+    <button id="bulkTabBtn" class="tabBtn" onclick="switchTab('bulk')" style="padding:.5rem 1rem; cursor:pointer;">Bulk Gen</button>
+  </div>
+
+  <div id="workspaceCtn" style="border:1px solid #ddd; border-radius:8px; padding:1.5rem; background:#fafafa;">
+    <div id="controlsCtn" style="display:flex; gap:.5rem; flex-wrap:wrap;">
+      <button id="generateBtn" onclick="generateCurrent()" style="padding:.6rem 1.2rem; cursor:pointer;">Generate</button>
+      <button id="saveBtn" onclick="saveCurrent()" style="padding:.6rem 1.2rem; cursor:pointer;" hidden>Save to Codex</button>
+      <button id="clearBtn" onclick="clearOutput()" style="padding:.6rem 1.2rem; cursor:pointer;">Clear</button>
+    </div>
+
+    <div id="outputCtn" style="margin-top:1rem; padding:1rem; background:white; border:1px solid #eee; border-radius:6px; min-height:120px; white-space:pre-wrap; line-height:1.5; font-size:1rem;"></div>
+
+    <div id="bulkCtn" hidden style="margin-top:1rem;">
+      <label>Quantity: <input id="bulkInput" type="number" value="5" min="1" max="50" style="width:60px; padding:.3rem;"></label>
+      <div id="bulkOutputCtn" style="margin-top:.5rem; white-space:pre-wrap; line-height:1.6; font-size:.95rem;"></div>
+    </div>
+  </div>
+
+  <details style="margin-top:1.5rem;">
+    <summary style="cursor:pointer; font-weight:bold; color:#2c3e50;">View List Registry (JSON)</summary>
+    <pre id="registryDisplayEl" style="background:#1e1e1e; color:#d4d4d4; padding:1rem; border-radius:6px; overflow-x:auto; font-size:.85rem; margin-top:.5rem;"></pre>
+  </details>
+
+  <div id="savedCtn" style="margin-top:2rem;">
+    <h3 style="border-bottom:2px solid #eee; padding-bottom:.3rem; color:#2c3e50;">Saved Codex Entries</h3>
+    <div id="savedListCtn" style="display:flex; flex-direction:column; gap:.5rem; margin-top:.75rem;"></div>
+  </div>
+</div>
+
+<style>
+  #codexAppCtn .tabBtn.active { background:#2c3e50; color:white; border-color:#2c3e50; }
+  #savedListCtn .entry { background:#f8f9fa; padding:.75rem; border-radius:6px; border-left:4px solid #2c3e50; }
+  #savedListCtn .entry small { color:#888; display:block; margin-top:.25rem; font-size:.8rem; }
+  #bulkOutputCtn .bulkItem + .bulkItem { margin-top:.75rem; border-top:1px dashed #ddd; padding-top:.75rem; }
+</style>
+
+<script type="module">
+  let registry = {
+    archetype: ["Warrior","Mage","Rogue","Druid","Paladin","Warlock","Bard"],
+    origin: ["the Ashen Wastes","the Sapphire Depths","a fallen sky-citadel","the Hollow Woods","the Sunken Kingdoms","the Ember Steppe"],
+    drive: ["seeking vengeance","hunting a lost relic","protecting a secret heir","curing a curse","mapping the Unknown","redeeming a blood-oath"],
+    nemesis: ["a void-touched tyrant","an ancient machine-cult","a dragons' syndicate","the Mirror Folk","a forgotten god","the Hungering Rot"],
+    terrain: ["crystalline caverns","shifting salt-flats","bio-luminescent marshlands","floating archipelagos","petrified forests","glass deserts"],
+    atmosphere: ["haunted by whale-song","bathed in eternal twilight","ruled by quantum superstition","overgrown with singing moss","frozen in a paused explosion","connected by fungal neural nets"],
+    inhabitants: ["nomadic starglass smiths","symbiotic spore-knights","reformed demons in court dress","echoes of unborn timelines","sentient mathematical equations","gentle kaiju gardeners"],
+    objective: ["seal a rupture in reality","deliver a ghost-bound message","sabotage an aerial dreadnought","negotiate with the Deep Ones","ignite the Beacon Chain","charm the World-Engine"],
+    itemType: ["Ornate","Cracked","Living","Runed","Cursed","Blessed"],
+    itemBase: ["Compass","Mask","Grimoire","Chalice","Dagger","Lantern"],
+    itemPower: ["whispers secrets of gravity","stores memories as light","breathes when danger is near","opens any door once","drinks the blood of liars","grants one hour of borrowed time"]
+  };
+
+  let engine = {
+    pick: (list) => list[Math.floor(Math.random() * list.length)],
+    resolve: (template) => template.replace(/\[(\w+)\]/g, (_, key) => {
+      let list = registry[key];
+      return list ? engine.pick(list) : `[${key}?]`;
+    })
+  };
+
+  let generators = {
+    character: () => engine.resolve("A [archetype] from [origin], currently [drive]. Nemesis: [nemesis]."),
+    location: () => engine.resolve("[terrain] [atmosphere]. Inhabited by [inhabitants]. Rumored goal: [objective]."),
+    artifact: () => engine.resolve("The [itemType] [itemBase] that [itemPower]. Origin: [origin]."),
+    bulk: (n) => Array.from({length: n}, (_, i) => `${i+1}. ${generators.character()}`).join("\n\n")
+  };
+
+  let tabs = {
+    character: { btn: charTabBtn, gen: generators.character, showSave: true },
+    location:  { btn: locTabBtn,  gen: generators.location,  showSave: true },
+    artifact:  { btn: artTabBtn,  gen: generators.artifact,  showSave: true },
+    bulk:      { btn: bulkTabBtn, gen: () => generators.bulk(parseInt(bulkInput.value) || 5), showSave: false, isBulk: true }
+  };
+
+  let kvRoot = (typeof root !== 'undefined' && root.kv) ? root.kv : (typeof kv !== 'undefined' ? kv : null);
+  let codexStore = kvRoot ? kvRoot.codex : {
+    _mem: {},
+    async get(k){ return this._mem[k]; },
+    async set(k,v){ this._mem[k] = v; }
+  };
+
+  let currentTab = "character";
+  let lastOutput = "";
+
+  window.switchTab = (name) => {
+    currentTab = name;
+    Object.values(tabs).forEach(t => t.btn.classList.remove("active"));
+    tabs[name].btn.classList.add("active");
+    saveBtn.hidden = !tabs[name].showSave;
+    bulkCtn.hidden = !tabs[name].isBulk;
+    outputCtn.textContent = "";
+    bulkOutputCtn.innerHTML = "";
+    lastOutput = "";
+  };
+
+  window.generateCurrent = () => {
+    let result = tabs[currentTab].gen();
+    lastOutput = result;
+    if(tabs[currentTab].isBulk) {
+      bulkOutputCtn.innerHTML = result.split("\n\n").map((line) => `<div class="bulkItem">${line}</div>`).join("");
+    } else {
+      outputCtn.textContent = result;
+    }
+  };
+
+  window.saveCurrent = async () => {
+    if(!lastOutput) return;
+    let entry = { type: currentTab, text: lastOutput, time: Date.now() };
+    let saves = await codexStore.get("entries") || [];
+    saves.unshift(entry);
+    await codexStore.set("entries", saves.slice(0, 50));
+    renderSaved();
+  };
+
+  window.clearOutput = () => {
+    outputCtn.textContent = "";
+    bulkOutputCtn.innerHTML = "";
+    lastOutput = "";
+  };
+
+  async function renderSaved() {
+    let saves = await codexStore.get("entries") || [];
+    savedListCtn.innerHTML = saves.slice(0, 20).map(s => `
+      <div class="entry">
+        <strong style="text-transform:capitalize;">${s.type}</strong>
+        <div>${s.text.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>
+        <small>${new Date(s.time).toLocaleString()}</small>
+      </div>
+    `).join("");
+  }
+
+  switchTab("character");
+  registryDisplayEl.textContent = JSON.stringify(registry, null, 2);
+  renderSaved();
+</script>
+</body>
+</html>

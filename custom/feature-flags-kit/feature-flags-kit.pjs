@@ -1,0 +1,192 @@
+ensureFeatureFlagsStore() =>
+  if(!window.__featureFlagsKitV1) {
+    window.__featureFlagsKitV1 = {};
+  }
+  return window.__featureFlagsKitV1;
+
+normalizeScope(scope) =>
+  const raw = scope === undefined || scope === null ? "default" : String(scope).trim();
+  return raw === "" ? "default" : raw;
+
+normalizeFlag(flagName) =>
+  if(flagName === undefined || flagName === null) return "";
+  return String(flagName).trim();
+
+storageKey(scope, flagName) =>
+  const scopeName = normalizeScope(scope);
+  const name = normalizeFlag(flagName);
+  return `ffk.v1::${scopeName}::${name}`;
+
+ensureScope(scope) =>
+  const scopeName = normalizeScope(scope);
+  const store = ensureFeatureFlagsStore();
+  if(!store[scopeName]) {
+    store[scopeName] = {};
+  }
+  return store[scopeName];
+
+set(scope, flagName, value, mode) =>
+  const name = normalizeFlag(flagName);
+  if(name === "") return "";
+
+  const scopeData = ensureScope(scope);
+  scopeData[name] = value;
+
+  if(mode === "persist") {
+    try {
+      localStorage.setItem(storageKey(scope, name), JSON.stringify(value));
+    } catch(error) {
+      console.warn("feature-flags-kit: localStorage write failed", error);
+    }
+  }
+
+  return value;
+
+get(scope, flagName, fallback, mode) =>
+  const name = normalizeFlag(flagName);
+  if(name === "") return fallback === undefined ? false : fallback;
+
+  const scopeData = ensureScope(scope);
+  if(scopeData.hasOwnProperty(name)) {
+    return scopeData[name];
+  }
+
+  if(mode === "persist") {
+    try {
+      const raw = localStorage.getItem(storageKey(scope, name));
+      if(raw !== null) {
+        const parsed = JSON.parse(raw);
+        scopeData[name] = parsed;
+        return parsed;
+      }
+    } catch(error) {
+      console.warn("feature-flags-kit: localStorage read failed", error);
+    }
+  }
+
+  return fallback === undefined ? false : fallback;
+
+enable(scope, flagName, mode) =>
+  return set(scope, flagName, true, mode);
+
+disable(scope, flagName, mode) =>
+  return set(scope, flagName, false, mode);
+
+toggle(scope, flagName, mode) =>
+  const current = Boolean(get(scope, flagName, false, mode));
+  const nextValue = !current;
+  set(scope, flagName, nextValue, mode);
+  return nextValue;
+
+isEnabled(scope, flagName, mode) =>
+  return Boolean(get(scope, flagName, false, mode));
+
+gate(scope, flagName, enabledValue, disabledValue, mode) =>
+  return isEnabled(scope, flagName, mode) ? enabledValue : disabledValue;
+
+remove(scope, flagName, mode) =>
+  const name = normalizeFlag(flagName);
+  if(name === "") return false;
+
+  const scopeData = ensureScope(scope);
+  const hadValue = scopeData.hasOwnProperty(name);
+  if(hadValue) {
+    delete scopeData[name];
+  }
+
+  if(mode === "persist") {
+    try {
+      localStorage.removeItem(storageKey(scope, name));
+    } catch(error) {
+      console.warn("feature-flags-kit: localStorage remove failed", error);
+    }
+  }
+
+  return hadValue;
+
+list(scope, separator) =>
+  const sep = separator === undefined ? "," : String(separator);
+  return Object.keys(ensureScope(scope)).join(sep);
+
+activeList(scope, separator) =>
+  const sep = separator === undefined ? "," : String(separator);
+  const scopeData = ensureScope(scope);
+  return Object.keys(scopeData).filter(keyName => Boolean(scopeData[keyName])).join(sep);
+
+exportJson(scope) =>
+  return JSON.stringify(ensureScope(scope));
+
+importJson(scope, jsonText, mode, replaceMode) =>
+  let parsed;
+
+  try {
+    parsed = JSON.parse(String(jsonText || "{}"));
+  } catch(error) {
+    return "error: invalid json";
+  }
+
+  if(!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return "error: expected object json";
+  }
+
+  if(replaceMode === "replace") {
+    const store = ensureFeatureFlagsStore();
+    store[normalizeScope(scope)] = {};
+  }
+
+  for(const keyName of Object.keys(parsed)) {
+    set(scope, keyName, parsed[keyName], mode);
+  }
+
+  return exportJson(scope);
+
+applyPreset(scope, presetName, mode) =>
+  const preset = String(presetName || "").toLowerCase();
+
+  if(preset === "dev" || preset === "development") {
+    set(scope, "debug", true, mode);
+    set(scope, "beta", true, mode);
+    set(scope, "trace", true, mode);
+  } else if(preset === "prod" || preset === "production") {
+    set(scope, "debug", false, mode);
+    set(scope, "beta", false, mode);
+    set(scope, "trace", false, mode);
+  } else if(preset === "safe") {
+    set(scope, "experimental", false, mode);
+    set(scope, "unsafeActions", false, mode);
+    set(scope, "beta", false, mode);
+  } else {
+    return "error: unknown preset";
+  }
+
+  return exportJson(scope);
+
+clear(scope, mode) =>
+  const scopeName = normalizeScope(scope);
+  const store = ensureFeatureFlagsStore();
+  const previous = JSON.stringify(store[scopeName] || {});
+
+  if(mode === "persist") {
+    try {
+      const prefix = `ffk.v1::${scopeName}::`;
+      const toRemove = [];
+      for(let i = 0; i < localStorage.length; i += 1) {
+        const thisKey = localStorage.key(i);
+        if(thisKey && thisKey.startsWith(prefix)) {
+          toRemove.push(thisKey);
+        }
+      }
+      for(let i = 0; i < toRemove.length; i += 1) {
+        localStorage.removeItem(toRemove[i]);
+      }
+    } catch(error) {
+      console.warn("feature-flags-kit: localStorage clear failed", error);
+    }
+  }
+
+  store[scopeName] = {};
+  return previous;
+
+$meta
+  title = Feature Flags Kit
+  description = Scope-aware feature toggle system for large generators with optional persistence and presets.

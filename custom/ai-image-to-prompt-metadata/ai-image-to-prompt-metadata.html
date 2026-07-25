@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-image-to-prompt-metadata — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+  AI Image to Prompt/Description/Metadata Generator
+  ------------------------------------------------
+  Enhanced version with:
+  - Multiple output modes (SD, Midjourney, Natural Lang, Metadata, Story, Character, Comprehensive)
+  - Tab-based results interface (Prompt, Description, Metadata, Analysis)
+  - Expanded settings (Style Bias, Tag Density, Detail Level)
+  - EXIF Extraction (via CDN library)
+  - History management with drawer
+  - Light/Dark theme toggle
+  - Color palette extraction and visualization
+  - Tag generation with density control
+-->
+<div id="appCtn" class="app-ctn">
+  <!-- Header -->
+  <header class="header">
+    <h1>🖼️ AI Image → Text Generator</h1>
+    <div class="header-controls">
+      <button id="themeToggleBtn" class="icon-btn" title="Toggle Theme">🌙</button>
+      <button id="historyToggleBtn" class="icon-btn" title="View History">📂 History</button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <main class="main-grid">
+    
+    <!-- Left Column: Input & Settings -->
+    <section class="col-input">
+      
+      <!-- Upload Section -->
+      <div class="card">
+        <h2>1. Image Input</h2>
+        <div id="dropZone" class="drop-zone">
+          <input type="file" id="fileInput" accept="image/*" hidden>
+          <div id="uploadPlaceholder">
+            <span class="icon">📁</span>
+            <p>Drag & drop image here<br>or click to browse</p>
+            <small>Supports JPG, PNG, WEBP</small>
+          </div>
+          <img id="previewImg" class="preview-img hidden" alt="Preview">
+          <button id="clearImgBtn" class="clear-btn hidden" title="Remove Image">×</button>
+        </div>
+        
+        <!-- Image Info / EXIF -->
+        <div id="imageInfoCtn" class="image-info hidden">
+          <div class="info-row"><span>Type:</span> <span id="imgTypeEl">-</span></div>
+          <div class="info-row"><span>Size:</span> <span id="imgSizeEl">-</span></div>
+          <div class="info-row"><span>Dimensions:</span> <span id="imgDimEl">-</span></div>
+        </div>
+        
+        <div id="exifPanel" class="exif-panel hidden">
+          <h3>📷 EXIF Data</h3>
+          <div id="exifGrid" class="exif-grid"></div>
+        </div>
+      </div>
+
+      <!-- Settings Section -->
+      <div class="card">
+        <h2>2. Settings</h2>
+        
+        <div class="control-group">
+          <label>Output Focus</label>
+          <select id="outputTypeSelect">
+            <option value="comprehensive">Comprehensive (All)</option>
+            <option value="prompt">Stable Diffusion Prompt</option>
+            <option value="midjourney">Midjourney Prompt</option>
+            <option value="description">Natural Description</option>
+            <option value="metadata">Technical Metadata</option>
+            <option value="story">Creative Story / Lore</option>
+            <option value="character">RPG Character Sheet</option>
+          </select>
+        </div>
+
+        <div class="grid-2-col">
+          <div class="control-group">
+            <label>Detail Level</label>
+            <select id="detailLevelSelect">
+              <option value="simple">Simple</option>
+              <option value="detailed" selected>Detailed</option>
+              <option value="ultra">Ultra-Detailed</option>
+            </select>
+          </div>
+          
+          <div class="control-group">
+            <label>Style Bias</label>
+            <select id="styleBiasSelect">
+              <option value="auto">Auto-Detect</option>
+              <option value="photorealistic">Photorealistic</option>
+              <option value="cinematic">Cinematic</option>
+              <option value="anime">Anime / Manga</option>
+              <option value="digital_art">Digital Art</option>
+              <option value="3d_render">3D Render</option>
+              <option value="painting">Traditional Painting</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid-2-col">
+          <div class="control-group">
+            <label>Tag Density</label>
+            <select id="tagDensitySelect">
+              <option value="minimal">Minimal</option>
+              <option value="normal" selected>Normal</option>
+              <option value="heavy">Heavy</option>
+            </select>
+          </div>
+          
+          <div class="control-group">
+            <label>Include In Output</label>
+            <div class="checkbox-group">
+              <label><input type="checkbox" id="incNegative" checked> Negative</label>
+              <label><input type="checkbox" id="incColor" checked> Colors</label>
+            </div>
+          </div>
+        </div>
+        
+        <div class="checkbox-group full-width">
+          <label><input type="checkbox" id="incCamera" checked> Camera Analysis</label>
+          <label><input type="checkbox" id="incMeta" checked> EXIF Data Integration</label>
+        </div>
+
+        <button id="generateBtn" class="btn-primary">✨ Analyze & Generate</button>
+        <div id="loadingBar" class="loading-bar hidden">
+          <div class="spinner"></div> <span id="loadingText">Analyzing Image...</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Output -->
+    <section class="col-output">
+      <div class="card output-card">
+        <div id="placeholderMsg" class="placeholder-msg">
+          <h3>Ready to Analyze</h3>
+          <p>Upload an image and click Generate to extract prompts, descriptions, and metadata.</p>
+        </div>
+
+        <!-- Results Area (Hidden initially) -->
+        <div id="resultsAreaCtn" class="results-area hidden">
+          
+          <!-- Tab Navigation -->
+          <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('promptTab')">🎨 Prompt</button>
+            <button class="tab-btn" onclick="switchTab('descTab')">📝 Description</button>
+            <button class="tab-btn" onclick="switchTab('metaTab')">🏷️ Metadata & Tags</button>
+            <button class="tab-btn" onclick="switchTab('extraTab')">🧠 Analysis</button>
+          </div>
+
+          <!-- Tab Content: Prompt -->
+          <div id="promptTab" class="tab-content active">
+            <div class="block-header">
+              <h3>Generated Prompt</h3>
+              <div class="btn-group">
+                <button class="btn-small" onclick="copyToClipboard(promptOutputEl)">Copy</button>
+                <button class="btn-small" onclick="downloadText(promptOutputEl, 'prompt.txt')">Save</button>
+              </div>
+            </div>
+            <div id="promptOutputEl" class="text-output"></div>
+          </div>
+
+          <!-- Tab Content: Description -->
+          <div id="descTab" class="tab-content hidden">
+            <div class="block-header">
+              <h3>Description</h3>
+              <button class="btn-small" onclick="copyToClipboard(descOutputEl)">Copy</button>
+            </div>
+            <div id="descOutputEl" class="text-output"></div>
+          </div>
+
+          <!-- Tab Content: Metadata -->
+          <div id="metaTab" class="tab-content hidden">
+            <div class="block-header">
+              <h3>Metadata & Tags</h3>
+              <button class="btn-small" onclick="copyToClipboard(tagsOutputEl)">Copy Tags</button>
+            </div>
+            
+            <!-- Negative Prompt -->
+            <div id="negativePromptSection" class="meta-section hidden">
+              <h4>🚫 Negative Prompt</h4>
+              <div id="negativeOutputEl" class="text-output small"></div>
+            </div>
+
+            <!-- Tags -->
+            <div class="meta-section">
+              <h4>Keywords & Tags</h4>
+              <div id="tagsOutputEl" class="tags-container"></div>
+            </div>
+
+            <!-- Color Palette -->
+            <div id="colorPaletteSection" class="meta-section hidden">
+              <h4>🎨 Dominant Colors</h4>
+              <div id="colorPaletteEl" class="color-bar"></div>
+            </div>
+          </div>
+
+          <!-- Tab Content: Extra Analysis -->
+          <div id="extraTab" class="tab-content hidden">
+            <div class="block-header">
+              <h3>Deep Analysis</h3>
+              <button class="btn-small" onclick="copyToClipboard(analysisOutputEl)">Copy</button>
+            </div>
+            <div id="analysisOutputEl" class="text-output"></div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- History Drawer -->
+  <aside id="historyDrawer" class="drawer hidden">
+    <div class="drawer-header">
+      <h2>History</h2>
+      <button id="closeHistoryBtn" class="icon-btn">×</button>
+    </div>
+    <div id="historyList" class="history-list">
+      <!-- History items injected here -->
+    </div>
+    <button id="clearHistoryBtn" class="btn-small danger">Clear History</button>
+  </aside>
+
+</div>
+
+<!-- Toast Notification -->
+<div id="toastEl" class="toast hidden">Message</div>
+
+<!-- EXIF Library -->
+<script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+
+<script type="module">
+  // Access globals via root in module
+  const generateText = root.generateText;
+  const uploadPlugin = root.uploadPlugin;
+  const kv = root.kv;
+
+  // State
+  let currentFile = null;
+  let currentImageUrl = "";
+  let isGenerating = false;
+  let imageHistory = [];
+
+  // --- Initialization ---
+  async function init() {
+    // Load History
+    try {
+      imageHistory = await kv.imageGenHistory.get('items') || [];
+    } catch(e) { console.log("KV storage not available"); }
+    renderHistory();
+    
+    // Set up Drag & Drop
+    setupDragDrop();
+    
+    // Event Listeners
+    clearImgBtn.onclick = clearImage;
+    fileInput.onchange = (e) => handleFile(e.target.files[0]);
+    generateBtn.onclick = runGeneration;
+    
+    // UI Toggles
+    themeToggleBtn.onclick = toggleTheme;
+    historyToggleBtn.onclick = () => historyDrawer.classList.remove('hidden');
+    closeHistoryBtn.onclick = () => historyDrawer.classList.add('hidden');
+    clearHistoryBtn.onclick = async () => {
+      if(confirm("Clear all history?")) {
+        imageHistory = [];
+        await kv.imageGenHistory.delete("items");
+        renderHistory();
+      }
+    };
+
+    // Load remembered theme
+    if(localStorage.theme === 'light') {
+      document.body.classList.add('light-mode');
+      themeToggleBtn.textContent = '☀️';
+    }
+  }
+
+  // --- Image Handling ---
+  function setupDragDrop() {
+    dropZone.onclick = () => fileInput.click();
+    
+    dropZone.ondragover = (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    };
+    
+    dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
+    
+    dropZone.ondrop = (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    };
+  }
+
+  function handleFile(file) {
+    if(!file || !file.type.startsWith('image/')) {
+      showToast("Please upload a valid image file.");
+      return;
+    }
+    
+    currentFile = file;
+    
+    // Show Preview
+    let reader = new FileReader();
+    reader.onload = (e) => {
+      previewImg.src = e.target.result;
+      previewImg.classList.remove('hidden');
+      uploadPlaceholder.classList.add('hidden');
+      clearImgBtn.classList.remove('hidden');
+      
+      // Basic Info
+      imgTypeEl.textContent = file.type;
+      imgSizeEl.textContent = (file.size / 1024).toFixed(1) + " KB";
+      imageInfoCtn.classList.remove('hidden');
+      
+      // Get Dimensions
+      let img = new Image();
+      img.onload = () => {
+        imgDimEl.textContent = `${img.width} x ${img.height} px`;
+      };
+      img.src = e.target.result;
+      
+      extractExif(file);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearImage() {
+    currentFile = null;
+    currentImageUrl = "";
+    fileInput.value = "";
+    previewImg.src = "";
+    previewImg.classList.add('hidden');
+    uploadPlaceholder.classList.remove('hidden');
+    clearImgBtn.classList.add('hidden');
+    imageInfoCtn.classList.add('hidden');
+    exifPanel.classList.add('hidden');
+    exifGrid.innerHTML = "";
+    resultsAreaCtn.classList.add('hidden');
+    placeholderMsg.classList.remove('hidden');
+  }
+
+  function extractExif(file) {
+    exifPanel.classList.remove('hidden');
+    exifGrid.innerHTML = '<div class="spinner small"></div>';
+    
+    setTimeout(() => {
+      EXIF.getData(file, function() {
+        exifGrid.innerHTML = "";
+        let allTags = EXIF.getAllTags(this);
+        let tagsToShow = ['Make', 'Model', 'DateTime', 'ExposureTime', 'FNumber', 'ISOSpeedRatings', 'FocalLength', 'LensModel'];
+        let hasData = false;
+
+        tagsToShow.forEach(tag => {
+          if(allTags[tag]) {
+            hasData = true;
+            let row = document.createElement('div');
+            row.className = 'exif-item';
+            let val = allTags[tag];
+            
+            if(tag === 'ExposureTime') val = val >= 1 ? val : `1/${Math.round(1/val)}`;
+            if(tag === 'FNumber') val = `f/${val}`;
+            if(tag === 'FocalLength') val = `${val}mm`;
+            
+            row.innerHTML = `<span>${tag}:</span> <b>${val}</b>`;
+            exifGrid.appendChild(row);
+          }
+        });
+
+        if(!hasData) exifGrid.innerHTML = "<i>No EXIF data found.</i>";
+      });
+    }, 100);
+  }
+
+  // --- AI Generation ---
+  async function runGeneration() {
+    if(!currentFile) { showToast("Please upload an image first."); return; }
+    if(isGenerating) return;
+
+    isGenerating = true;
+    generateBtn.disabled = true;
+    loadingBar.classList.remove('hidden');
+    placeholderMsg.classList.add('hidden');
+    resultsAreaCtn.classList.add('hidden');
+
+    try {
+      // 1. Upload Image
+      loadingText.textContent = "⏳ Uploading and Analyzing...";
+      let uploadData = await uploadPlugin(currentFile, {expires: Date.now() + 1000 * 60 * 60});
+      if(uploadData.error) throw new Error(uploadData.error);
+      currentImageUrl = uploadData.url;
+
+      // 2. Prepare Settings
+      let settings = {
+        type: outputTypeSelect.value,
+        detail: detailLevelSelect.value,
+        styleBias: styleBiasSelect.value,
+        tagDensity: tagDensitySelect.value,
+        includeNegative: incNegative.checked,
+        includeColor: incColor.checked,
+        includeCamera: incCamera.checked,
+        includeMeta: incMeta.checked
+      };
+
+      // 3. Construct AI Prompt
+      loadingText.textContent = "🧠 Generating Content...";
+      
+      let systemPrompt = `You are an expert AI Image Analyzer and Prompt Engineer. Analyze the image at the provided URL and generate text content based on the user's configuration.`;
+      
+      let userPrompt = `
+        Image URL: ${currentImageUrl}
+        
+        Configuration:
+        - Output Focus: ${settings.type}
+        - Detail Level: ${settings.detail}
+        - Style Bias: ${settings.styleBias}
+        - Tag Density: ${settings.tagDensity}
+        - Include Negative Prompt: ${settings.includeNegative}
+        - Include Color Palette: ${settings.includeColor}
+        - Include Camera/Composition Analysis: ${settings.includeCamera}
+
+        TASK:
+        Provide a detailed analysis and output based on the selected Output Focus.
+        If 'Comprehensive' is selected, provide all sections.
+        
+        REQUIRED JSON FORMAT OUTPUT (Strictly valid JSON only, no markdown):
+        {
+          "prompt": "The main high-quality prompt for Stable Diffusion/Midjourney.",
+          "negative_prompt": "Negative prompt elements (blur, distortion, bad anatomy).",
+          "description": "A natural language description of the image (2-4 sentences).",
+          "tags": ["tag1", "tag2", "tag3"],
+          "colors": ["#HEX1", "#HEX2", "#HEX3"],
+          "analysis": {
+            "camera": "Camera angle, lighting type, lens details.",
+            "composition": "Rule of thirds, symmetry, leading lines, etc.",
+            "subjects": ["List of detected subjects"],
+            "mood": "Emotional tone of the image."
+          }
+        }
+        
+        If the output type is 'character', include fields like 'name', 'age', 'personality', 'stats'.
+        If 'story', provide a short narrative snippet.
+      `;
+
+      // 4. Call AI
+      let responseText = await generateText({
+        instruction: systemPrompt,
+        prompt: userPrompt
+      });
+
+      // 5. Parse Response
+      let jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      let data = {};
+      
+      if(jsonMatch) {
+        try {
+          data = JSON.parse(jsonMatch[0]);
+        } catch(e) {
+          console.error("JSON Parse Error", e);
+          data = { 
+            prompt: responseText, 
+            description: "Parsing failed, raw response returned.", 
+            tags: [], 
+            colors: [], 
+            analysis: {} 
+          };
+        }
+      } else {
+        data.prompt = responseText;
+      }
+
+      // 6. Render Results
+      renderResults(data, settings);
+      await addToHistory(currentImageUrl, data);
+
+    } catch(err) {
+      console.error(err);
+      showToast("Error: " + err.message);
+    } finally {
+      isGenerating = false;
+      generateBtn.disabled = false;
+      loadingBar.classList.add('hidden');
+    }
+  }
+
+  // --- Rendering ---
+  function renderResults(data, settings) {
+    resultsAreaCtn.classList.remove('hidden');
+    
+    // Prompt
+    promptOutputEl.textContent = data.prompt || "No prompt generated.";
+    
+    // Description
+    descOutputEl.textContent = data.description || "No description available.";
+    
+    // Negative
+    if(data.negative_prompt) {
+      negativeOutputEl.textContent = data.negative_prompt;
+      negativePromptSection.classList.remove('hidden');
+    } else {
+      negativePromptSection.classList.add('hidden');
+    }
+
+    // Tags
+    tagsOutputEl.innerHTML = "";
+    if(data.tags && data.tags.length) {
+      data.tags.forEach(tag => {
+        let span = document.createElement('span');
+        span.className = 'tag-pill';
+        span.textContent = tag;
+        tagsOutputEl.appendChild(span);
+      });
+    } else {
+      tagsOutputEl.textContent = "No tags generated.";
+    }
+
+    // Colors
+    colorPaletteEl.innerHTML = "";
+    if(data.colors && data.colors.length) {
+      data.colors.forEach(c => {
+        let div = document.createElement('div');
+        div.style.backgroundColor = c;
+        div.style.flex = "1";
+        div.title = c;
+        colorPaletteEl.appendChild(div);
+      });
+      colorPaletteSection.classList.remove('hidden');
+    } else {
+      colorPaletteSection.classList.add('hidden');
+    }
+
+    // Analysis
+    let analysisText = "";
+    if(data.analysis) {
+      if(data.analysis.camera) analysisText += `**Camera & Lighting:**\n${data.analysis.camera}\n\n`;
+      if(data.analysis.composition) analysisText += `**Composition:**\n${data.analysis.composition}\n\n`;
+      if(data.analysis.subjects) analysisText += `**Subjects:**\n${data.analysis.subjects.join(", ")}\n\n`;
+      if(data.analysis.mood) analysisText += `**Mood:**\n${data.analysis.mood}`;
+    }
+    analysisOutputEl.innerHTML = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--accent);">$1</strong>').replace(/\n/g, '<br>');
+    
+    // Handle specific output types
+    if(settings.type === 'character' && data.character_sheet) {
+        promptOutputEl.textContent = JSON.stringify(data.character_sheet, null, 2);
+    } else if (settings.type === 'story' && data.story) {
+        descOutputEl.textContent = data.story;
+    }
+
+    // Switch to first tab
+    switchTab('promptTab');
+  }
+
+  // Tab Switching
+  window.switchTab = function(tabId) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById(tabId).classList.remove('hidden');
+    document.getElementById(tabId).classList.add('active');
+    
+    let btn = document.querySelector(`button[onclick="switchTab('${tabId}')"]`);
+    if(btn) btn.classList.add('active');
+  }
+
+  // --- History ---
+  async function addToHistory(url, data) {
+    let item = { url, prompt: data.prompt, time: Date.now() };
+    imageHistory.unshift(item);
+    if(imageHistory.length > 20) imageHistory.pop();
+    renderHistory();
+    try {
+      await kv.imageGenHistory.set('items', imageHistory);
+    } catch(e) {}
+  }
+
+  function renderHistory() {
+    historyList.innerHTML = "";
+    if(imageHistory.length === 0) {
+      historyList.innerHTML = "<p style='color:#888; padding:1rem;'>No history yet.</p>";
+      return;
+    }
+    
+    imageHistory.forEach(item => {
+      let div = document.createElement('div');
+      div.className = 'history-item';
+      div.innerHTML = `
+        <img src="${item.url}" class="history-thumb">
+        <div class="history-info">
+          <div class="history-time">${new Date(item.time).toLocaleString()}</div>
+          <div class="history-prompt">${item.prompt.substring(0, 60)}...</div>
+        </div>
+        <button class="btn-small" onclick="loadHistoryItem('${item.url}')">Load</button>
+      `;
+      historyList.appendChild(div);
+    });
+  }
+
+  window.loadHistoryItem = function(url) {
+    previewImg.src = url;
+    previewImg.classList.remove('hidden');
+    uploadPlaceholder.classList.add('hidden');
+    clearImgBtn.classList.remove('hidden');
+    showToast("History image loaded. Click Generate to re-analyze.");
+  };
+
+  // --- Utilities ---
+  function toggleTheme() {
+    document.body.classList.toggle('light-mode');
+    let isLight = document.body.classList.contains('light-mode');
+    localStorage.theme = isLight ? 'light' : 'dark';
+    themeToggleBtn.textContent = isLight ? '☀️' : '🌙';
+  }
+
+  window.copyToClipboard = function(el) {
+    let text = el.textContent || el.innerText;
+    navigator.clipboard.writeText(text).then(() => showToast("Copied!"));
+  };
+
+  window.downloadText = function(el, filename) {
+    let text = el.textContent || el.innerText;
+    let blob = new Blob([text], { type: "text/plain" });
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.remove('hidden');
+    setTimeout(() => toastEl.classList.add('hidden'), 3000);
+  }
+
+  // Run Init
+  init();
+</script>
+
+<!-- Global Styles -->
+<style>
+  :root {
+    --bg: #121212;
+    --card-bg: #1e1e1e;
+    --text: #e0e0e0;
+    --text-muted: #a0a0a0;
+    --accent: #007bff;
+    --accent-hover: #0056b3;
+    --border: #333;
+    --input-bg: #2a2a2a;
+    --success: #00b894;
+    --danger: #d63031;
+  }
+
+  body.light-mode {
+    --bg: #f5f6fa;
+    --card-bg: #ffffff;
+    --text: #2d3436;
+    --text-muted: #636e72;
+    --accent: #0984e3;
+    --accent-hover: #74b9ff;
+    --border: #dfe6e9;
+    --input-bg: #f1f2f6;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    margin: 0;
+    padding: 0;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  .app-ctn {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    height: 100vh;
+    box-sizing: border-box;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 { margin: 0; font-size: 1.5rem; }
+  .header-controls { display: flex; gap: 10px; }
+
+  /* Grid */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 20px;
+    flex: 1;
+    min-height: 0;
+  }
+  @media (max-width: 900px) {
+    .main-grid { grid-template-columns: 1fr; overflow-y: auto; }
+    .app-ctn { height: auto; }
+  }
+
+  /* Cards */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    overflow-y: auto;
+  }
+
+  .col-input { display: flex; flex-direction: column; gap: 20px; }
+
+  /* Upload Area */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 30px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: 0.2s;
+    position: relative;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--input-bg);
+  }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(0, 123, 255, 0.05); }
+  .preview-img { max-width: 100%; max-height: 250px; border-radius: 6px; object-fit: contain; }
+  .clear-btn {
+    position: absolute; top: 10px; right: 10px;
+    background: rgba(0,0,0,0.6); color: white; border: none;
+    border-radius: 50%; width: 24px; height: 24px; cursor: pointer;
+    font-weight: bold; display: flex; align-items: center; justify-content: center;
+  }
+
+  /* Image Info */
+  .image-info { background: var(--input-bg); padding: 10px; border-radius: 6px; font-size: 0.85em; display: flex; flex-direction: column; gap: 4px; }
+  .info-row { display: flex; justify-content: space-between; }
+  .info-row span:first-child { color: var(--text-muted); }
+
+  /* EXIF Panel */
+  .exif-panel { background: var(--input-bg); padding: 10px; border-radius: 6px; font-size: 0.9rem; }
+  .exif-panel h3 { margin: 0 0 10px 0; font-size: 0.95rem; color: var(--text-muted); }
+  .exif-grid { display: flex; flex-direction: column; gap: 5px; }
+  .exif-item { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 2px; font-size: 0.85em; }
+  .exif-item span { color: var(--text-muted); }
+
+  /* Controls */
+  .control-group { display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 0.9rem; font-weight: 600; color: var(--text-muted); }
+  select {
+    background: var(--input-bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px; border-radius: 4px; width: 100%;
+  }
+  .grid-2-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .checkbox-group { display: flex; flex-wrap: wrap; gap: 10px; }
+  .checkbox-group.full-width { flex-direction: column; }
+  .checkbox-group label { font-weight: normal; display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 0.85em; color: var(--text); }
+
+  /* Buttons */
+  .btn-primary, .btn-small, .icon-btn {
+    cursor: pointer; border: none; border-radius: 6px; font-weight: 600; transition: 0.2s;
+  }
+  .btn-primary {
+    background: var(--accent); color: white; padding: 12px; font-size: 1rem; margin-top: auto;
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+  
+  .btn-small { padding: 4px 8px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); font-size: 12px; }
+  .btn-small:hover { background: var(--border); }
+  .btn-small.danger { color: var(--danger); border-color: var(--danger); }
+
+  .icon-btn { background: none; font-size: 1.2rem; padding: 5px; color: var(--text); }
+  .icon-btn:hover { background: var(--input-bg); border-radius: 4px; }
+  
+  .btn-group { display: flex; gap: 5px; }
+
+  /* Output Area */
+  .output-card { height: 100%; position: relative; }
+  .placeholder-msg {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    color: var(--text-muted); text-align: center; width: 80%;
+  }
+  .placeholder-msg h3 { margin: 0 0 10px 0; color: var(--text); }
+  .placeholder-msg p { margin: 0; }
+
+  /* Results Area & Tabs */
+  .results-area { display: flex; flex-direction: column; height: 100%; }
+  
+  .tab-nav {
+    display: flex; gap: 5px; border-bottom: 1px solid var(--border);
+    padding-bottom: 5px; overflow-x: auto; flex-shrink: 0;
+  }
+  .tab-btn {
+    padding: 8px 16px; background: none; border: none; color: var(--text-muted);
+    cursor: pointer; border-bottom: 2px solid transparent; font-weight: bold;
+    white-space: nowrap; font-size: 0.9em; border-radius: 4px 4px 0 0;
+  }
+  .tab-btn:hover { color: var(--text); background: var(--input-bg); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-content {
+    display: none; flex: 1; overflow-y: auto; padding-top: 15px;
+  }
+  .tab-content.active { display: flex; flex-direction: column; }
+
+  .block-header { display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center; flex-shrink: 0; }
+  .block-header h3 { margin: 0; font-size: 1rem; color: var(--accent); }
+  .text-output {
+    white-space: pre-wrap; font-family: monospace; font-size: 0.9rem; line-height: 1.6;
+    color: var(--text); background: var(--input-bg); padding: 15px; border-radius: 8px;
+    border: 1px solid var(--border); min-height: 100px; overflow-y: auto;
+  }
+  .text-output.small { font-size: 0.85em; color: var(--text-muted); }
+
+  /* Meta Sections */
+  .meta-section { margin-bottom: 15px; }
+  .meta-section h4 { margin: 0 0 8px 0; font-size: 0.9em; color: var(--text-muted); }
+
+  /* Tags & Colors */
+  .tags-container { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag-pill {
+    background: var(--border); padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;
+    color: var(--text);
+  }
+
+  .color-bar {
+    display: flex; gap: 5px; height: 30px; border-radius: 4px; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .color-bar > div { min-width: 20px; transition: flex 0.2s; }
+  .color-bar > div:hover { flex: 2; }
+
+  /* Loading */
+  .loading-bar {
+    display: flex; align-items: center; gap: 10px; justify-content: center;
+    color: var(--accent); font-weight: 600; padding: 10px; background: var(--input-bg);
+    border-radius: 6px; margin-top: auto;
+  }
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid var(--accent);
+    border-top-color: transparent; border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  .spinner.small { width: 12px; height: 12px; border-width: 1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* History Drawer */
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 300px;
+    background: var(--card-bg); border-left: 1px solid var(--border);
+    padding: 20px; z-index: 100; transform: translateX(0);
+    transition: transform 0.3s; display: flex; flex-direction: column; gap: 10px;
+    box-shadow: -5px 0 15px rgba(0,0,0,0.3);
+  }
+  .drawer.hidden { transform: translateX(100%); }
+  .drawer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .history-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .history-item {
+    display: flex; gap: 10px; background: var(--input-bg); padding: 8px;
+    border-radius: 6px; align-items: center;
+  }
+  .history-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
+  .history-info { flex: 1; overflow: hidden; }
+  .history-time { font-size: 0.7rem; color: var(--text-muted); }
+  .history-prompt { font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 10px 20px;
+    border-radius: 20px; font-weight: 600; z-index: 200;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+</style>
+</body>
+</html>

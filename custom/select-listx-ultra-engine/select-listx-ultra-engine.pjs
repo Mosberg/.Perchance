@@ -1,0 +1,266 @@
+{js:
+// ============================================================================
+// SELECT-LISTX ULTRA ENGINE
+// Massive expansion pack with weights, filters, transforms, hooks, caching,
+// seeded RNG, debug tracing, strict mode, cycle detection, and more.
+// ============================================================================
+
+// ------------------------------------------------------------
+// GLOBAL SETTINGS (optional)
+// ------------------------------------------------------------
+const ListXConfig = {
+  debug: false,
+  strict: false,
+  maxDepth: 20000,
+  detectCycles: true,
+  seed: null,
+  freeze: false,
+  frozenValue: null,
+  fallback: "(no listx found)",
+  allowEmptyArrays: false,
+  shuffleArrays: false,
+  dedupe: false,
+  tryUntilValid: false,
+  maxAttempts: 50,
+  transform: null,
+  preFilter: null,
+  postFilter: null,
+  keyBias: null,       // e.g. { "rare": 0.1, "common": 5 }
+  priorityKeys: [],    // keys to try first
+  cache: new Map(),
+};
+
+// ------------------------------------------------------------
+// SEEDED RNG (optional)
+// ------------------------------------------------------------
+function seededRandom() {
+  if (ListXConfig.seed === null) return Math.random();
+  const x = Math.sin(ListXConfig.seed++) * 10000;
+  return x - Math.floor(x);
+}
+
+// ------------------------------------------------------------
+// RANDOM PICK
+// ------------------------------------------------------------
+function pick(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  const idx = Math.floor(seededRandom() * arr.length);
+  return arr[idx];
+}
+
+// ------------------------------------------------------------
+// WEIGHTED PICK
+// ------------------------------------------------------------
+function weightedPick(obj) {
+  const entries = Object.entries(obj);
+  let total = 0;
+
+  for (const [key, val] of entries) {
+    const w = val.weight || val.w || 1;
+    total += w;
+  }
+
+  let r = seededRandom() * total;
+
+  for (const [key, val] of entries) {
+    const w = val.weight || val.w || 1;
+    if ((r -= w) <= 0) return val.value ?? val;
+  }
+
+  return entries[entries.length - 1][1];
+}
+
+// ------------------------------------------------------------
+// CYCLE DETECTION
+// ------------------------------------------------------------
+function cycleGuard(stack, node) {
+  if (!ListXConfig.detectCycles) return false;
+  if (stack.has(node)) return true;
+  stack.add(node);
+  return false;
+}
+
+// ------------------------------------------------------------
+// CORE SELECTOR
+// ------------------------------------------------------------
+function selectLeaf(listx, depth = 0, stack = new Set()) {
+  if (ListXConfig.freeze && ListXConfig.frozenValue !== null)
+    return ListXConfig.frozenValue;
+
+  if (depth > ListXConfig.maxDepth)
+    return "(max depth reached)";
+
+  if (cycleGuard(stack, listx))
+    return "(cycle detected)";
+
+  // Primitive
+  if (["string", "number", "boolean"].includes(typeof listx))
+    return listx;
+
+  // Nullish
+  if (!listx)
+    return ListXConfig.fallback;
+
+  // Array
+  if (Array.isArray(listx)) {
+    if (!ListXConfig.allowEmptyArrays && listx.length === 0)
+      return ListXConfig.fallback;
+
+    let arr = [...listx];
+
+    if (ListXConfig.shuffleArrays)
+      arr.sort(() => seededRandom() - 0.5);
+
+    if (ListXConfig.preFilter)
+      arr = arr.filter(ListXConfig.preFilter);
+
+    const chosen = pick(arr);
+    return selectLeaf(chosen, depth + 1, stack);
+  }
+
+  // Weighted object
+  if (listx && listx.weightMap)
+    return selectLeaf(weightedPick(listx.weightMap), depth + 1, stack);
+
+  // Object with value/text/label/name
+  if (listx.value || listx.text || listx.label || listx.name)
+    return listx.value || listx.text || listx.label || listx.name;
+
+  // Object with selectOne
+  if (typeof listx.selectOne === "function")
+    return selectLeaf(listx.selectOne(), depth + 1, stack);
+
+  // Generic object
+  const keys = Object.keys(listx);
+  if (keys.length === 0)
+    return ListXConfig.fallback;
+
+  // Priority keys first
+  for (const k of ListXConfig.priorityKeys) {
+    if (k in listx)
+      return selectLeaf(listx[k], depth + 1, stack);
+  }
+
+  // Key bias
+  if (ListXConfig.keyBias) {
+    const weighted = {};
+    for (const k of keys) {
+      weighted[k] = {
+        value: listx[k],
+        weight: ListXConfig.keyBias[k] || 1
+      };
+    }
+    return selectLeaf(weightedPick(weighted), depth + 1, stack);
+  }
+
+  // Default random key
+  const key = pick(keys);
+  return selectLeaf(listx[key], depth + 1, stack);
+}
+
+// ------------------------------------------------------------
+// GET ALL LEAVES
+// ------------------------------------------------------------
+function getAllLeaves(node) {
+  if (!node) return [];
+
+  if (["string", "number", "boolean"].includes(typeof node))
+    return [node];
+
+  if (Array.isArray(node))
+    return node.flatMap(getAllLeaves);
+
+  if (node.value || node.text || node.label || node.name)
+    return [node.value || node.text || node.label || node.name];
+
+  if (node.selectAll)
+    return getAllLeaves(node.selectAll);
+
+  return Object.values(node).flatMap(getAllLeaves);
+}
+
+// ------------------------------------------------------------
+// SELECT MANY
+// ------------------------------------------------------------
+function selectMany(list, ...a) {
+  let num = 1;
+
+  if (a.length === 1) {
+    if (Array.isArray(a[0]))
+      num = Number(pick(a[0]));
+    else
+      num = Number(a[0]);
+
+  } else if (a.length === 2) {
+    num = Number(a[0]) + Math.round(seededRandom() * (a[1] - a[0]));
+
+  } else if (a.length > 2) {
+    num = Number(pick(a));
+  }
+
+  if (isNaN(num) || num < 1) num = 1;
+
+  const arr = [];
+  const seen = new Set();
+
+  for (let i = 0; i < num; i++) {
+    let val = selectLeaf(list);
+
+    if (ListXConfig.dedupe) {
+      let attempts = 0;
+      while (seen.has(val) && attempts++ < 20)
+        val = selectLeaf(list);
+      seen.add(val);
+    }
+
+    if (ListXConfig.postFilter && !ListXConfig.postFilter(val)) {
+      if (ListXConfig.tryUntilValid) {
+        let attempts = 0;
+        while (!ListXConfig.postFilter(val) && attempts++ < ListXConfig.maxAttempts)
+          val = selectLeaf(list);
+      }
+    }
+
+    if (ListXConfig.transform)
+      val = ListXConfig.transform(val);
+
+    arr.push(val);
+  }
+
+  arr.toString = function () { return this.join(""); };
+  return arr;
+}
+
+// ------------------------------------------------------------
+// EXPORT 1: selectListX — select ONE leaf
+// ------------------------------------------------------------
+$output selectListX = (list) => {
+  if (!list) return "(no list given to selectListX plugin)";
+  const val = selectLeaf(list);
+  if (ListXConfig.freeze) ListXConfig.frozenValue = val;
+  return val;
+};
+
+// ------------------------------------------------------------
+// EXPORT 2: selectListsX — select MANY leaves
+// ------------------------------------------------------------
+$output selectListsX = (list, ...a) => {
+  if (!list) return "(no list given to selectListsX plugin)";
+  return selectMany(list, ...a);
+};
+
+// ------------------------------------------------------------
+// EXPORT 3: selectAllListsX — return ALL leaves
+// ------------------------------------------------------------
+$output selectAllListsX = (list) => {
+  if (!list) return "(no list given to selectAllListsX plugin)";
+  const leaves = getAllLeaves(list);
+
+  leaves.toString = function () {
+    if (this.length === 0) return "";
+    return this[Math.floor(seededRandom() * this.length)] + "";
+  };
+
+  return leaves;
+};
+}

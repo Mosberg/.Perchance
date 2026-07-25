@@ -1,0 +1,4030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>motor-simulator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a12; color: #e0e0e0; font-family: system-ui, sans-serif; overflow-x: hidden; user-select: none; -webkit-user-select: none; }
+  #app { display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 10px; gap: 8px; }
+  h1 { font-size: 16px; letter-spacing: 3px; color: #555; text-transform: uppercase; font-weight: 300; }
+
+  /* Motor selector */
+  #motorSelector { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+  .mbtn { padding: 5px 12px; border-radius: 5px; border: 1px solid #333; background: #111; color: #777; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; letter-spacing: 0.5px; }
+  .mbtn:hover { border-color: #555; color: #ccc; }
+  .mbtn.sel { background: #1a2a3e; color: #5a9fd4; border-color: #5a9fd4; box-shadow: 0 0 8px rgba(90,159,212,0.3); }
+
+  /* Main layout */
+  #main { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  #leftPanel { display: flex; flex-direction: column; gap: 8px; }
+
+  /* Motor cross-section */
+  #motorWrap { position: relative; }
+  #motorCanvas { display: block; border-radius: 8px; background: #0d0d18; }
+  #motorInfo { position: absolute; top: 8px; left: 12px; font-size: 11px; pointer-events: none; }
+  #motorInfo .mname { font-size: 15px; font-weight: 700; color: #5a9fd4; letter-spacing: 1px; }
+  #motorInfo .mdesc { font-size: 10px; color: #555; margin-top: 2px; }
+  #motorInfo .mstats { font-size: 10px; color: #777; margin-top: 4px; line-height: 1.5; }
+
+  /* Waveform scope */
+  #scopeWrap { position: relative; }
+  #scopeCanvas { display: block; border-radius: 8px; background: #080812; }
+  .panel-label { font-size: 10px; color: #555; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 2px; }
+
+  /* Right panel — gauges & controls */
+  #rightPanel { display: flex; flex-direction: column; gap: 8px; width: 240px; }
+  .gauge-row { display: flex; gap: 8px; }
+  .gauge-box { flex: 1; background: #0d0d18; border-radius: 6px; padding: 8px; border: 1px solid #1a1a2e; }
+  .gauge-label { font-size: 9px; color: #555; letter-spacing: 1px; text-transform: uppercase; }
+  .gauge-value { font-size: 22px; font-weight: 700; color: #5a9fd4; line-height: 1.2; }
+  .gauge-unit { font-size: 10px; color: #555; }
+
+  /* Slider control */
+  .control-group { background: #0d0d18; border-radius: 6px; padding: 10px; border: 1px solid #1a1a2e; }
+  .control-group label { font-size: 10px; color: #777; letter-spacing: 1px; text-transform: uppercase; display: block; margin-bottom: 6px; }
+  input[type=range] { width: 100%; accent-color: #5a9fd4; cursor: pointer; }
+  .slider-row { display: flex; justify-content: space-between; font-size: 10px; color: #666; margin-top: 3px; }
+
+  /* Load control */
+  #loadSlider { margin-top: 4px; }
+
+  /* Status bars */
+  .stat-bar { margin-top: 6px; }
+  .stat-header { display: flex; justify-content: space-between; font-size: 9px; color: #666; letter-spacing: 1px; }
+  .stat-track { height: 6px; background: #1a1a2e; border-radius: 3px; overflow: hidden; margin-top: 2px; }
+  .stat-fill { height: 100%; border-radius: 3px; transition: width 0.1s linear; }
+  #tempFill { background: linear-gradient(90deg, #5a9fd4, #ffd700, #ff4444); }
+  #effFill { background: linear-gradient(90deg, #ff4444, #ffd700, #4ecca3); }
+  #curFill { background: linear-gradient(90deg, #4ecca3, #ffd700, #ff4444); }
+
+  /* Start/stop */
+  #powerBtn { width: 100%; padding: 10px; border-radius: 6px; border: 2px solid #333; background: #1a1a2e; color: #888; font-size: 12px; font-weight: 700; cursor: pointer; letter-spacing: 2px; transition: all 0.2s; }
+  #powerBtn.on { background: #4ecca3; color: #000; border-color: #4ecca3; box-shadow: 0 0 16px rgba(78,204,163,0.4); }
+  #powerBtn:hover { border-color: #5a9fd4; }
+
+  .hint { font-size: 9px; color: #444; text-align: center; max-width: 700px; line-height: 1.5; margin-top: 4px; }
+
+  @media (max-width: 900px) {
+    #rightPanel { width: 100%; max-width: 360px; }
+    #motorCanvas { width: 100%; height: auto; }
+  }
+
+  #fpsCounter { position: fixed; top: 6px; right: 8px; font-size: 11px; font-weight: 700; color: #555; font-family: monospace; pointer-events: none; z-index: 999; background: rgba(10,10,18,0.7); padding: 2px 8px; border-radius: 4px; }
+  .cust-row { display: flex; align-items: center; gap: 6px; font-size: 9px; color: #777; margin-top: 4px; }
+  .cust-row span:first-child { width: 80px; flex-shrink: 0; }
+  .cust-row input[type=range] { flex: 1; accent-color: #5a9fd4; cursor: pointer; }
+  .cust-row span:last-child { width: 36px; text-align: right; color: #5a9fd4; font-weight: 600; flex-shrink: 0; }
+
+  #partInfoEl { display: flex; flex-direction: column; gap: 2px; padding: 6px 12px; background: rgba(255,215,0,0.06); border: 1px solid rgba(255,215,0,0.25); border-radius: 6px; margin-top: 4px; width: 400px; max-width: 100%; }
+  #partInfoEl .part-info-name { font-size: 13px; font-weight: 700; color: #ffd700; letter-spacing: 0.5px; }
+  #partInfoEl .part-info-desc { font-size: 10px; color: #998; line-height: 1.4; }
+  #partsBox { width: 100%; max-width: 820px; margin-top: 6px; }
+  .parts-label { font-size: 10px; color: #555; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; text-align: center; }
+  #partsList { display: flex; gap: 6px; overflow-x: auto; padding: 8px; background: #0d0d18; border-radius: 8px; border: 1px solid #1a1a2e; scroll-behavior: smooth; }
+  #partsList::-webkit-scrollbar { height: 5px; }
+  #partsList::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+  .part-card { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 6px; border: 1px solid #222; background: #111122; cursor: pointer; transition: all 0.15s; min-width: 72px; }
+  .part-card:hover { border-color: #5a9fd4; background: #1a2a3e; transform: translateY(-2px); }
+  .part-card.active { border-color: #ffd700; background: rgba(255,215,0,0.1); box-shadow: 0 0 10px rgba(255,215,0,0.25); }
+  .part-icon { font-size: 22px; }
+  .part-name { font-size: 8px; color: #888; text-align: center; line-height: 1.2; letter-spacing: 0.3px; }
+  .part-card.active .part-name { color: #ffd700; }
+</style>
+
+<div id="app">
+  <div id="fpsCounter">— FPS</div>
+  <h1>Electric Motor Simulator</h1>
+  <div id="motorSelector"></div>
+
+  <div id="main">
+    <div id="leftPanel">
+      <div id="motorWrap">
+        <canvas id="motorCanvas" width="400" height="400"></canvas>
+        <div id="motorInfo">
+          <div class="mname">—</div>
+          <div class="mdesc">—</div>
+          <div class="mstats">—</div>
+        </div>
+      </div>
+      <div>
+        <div class="panel-label">Back-EMF & Current Waveform</div>
+        <canvas id="scopeCanvas" width="400" height="120"></canvas>
+      </div>
+    </div>
+
+    <div id="rightPanel">
+      <div class="gauge-row">
+        <div class="gauge-box">
+          <div class="gauge-label">RPM</div>
+          <div class="gauge-value" id="rpmVal">0</div>
+        </div>
+        <div class="gauge-box">
+          <div class="gauge-label">Torque</div>
+          <div class="gauge-value" id="torqueVal">0</div>
+          <div class="gauge-unit">mN·m</div>
+        </div>
+      </div>
+      <div class="gauge-row">
+        <div class="gauge-box">
+          <div class="gauge-label">Current</div>
+          <div class="gauge-value" id="currentVal">0</div>
+          <div class="gauge-unit">A</div>
+        </div>
+        <div class="gauge-box">
+          <div class="gauge-label">Back-EMF</div>
+          <div class="gauge-value" id="emfVal">0</div>
+          <div class="gauge-unit">V</div>
+        </div>
+      </div>
+      <div class="gauge-row">
+        <div class="gauge-box">
+          <div class="gauge-label">Power In</div>
+          <div class="gauge-value" id="powerVal">0</div>
+          <div class="gauge-unit">W</div>
+        </div>
+        <div class="gauge-box">
+          <div class="gauge-label">Efficiency</div>
+          <div class="gauge-value" id="effVal">—</div>
+          <div class="gauge-unit">%</div>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Supply Voltage</label>
+        <input type="range" id="voltSlider" min="-100" max="100" value="20">
+        <div class="slider-row"><span>−V</span><span id="voltLabel">— V</span><span id="voltMax">— V</span></div>
+        <div class="slider-row" id="voltRatedRow" style="font-size:9px;color:#555;margin-top:1px;"><span></span><span id="voltRated">—</span><span></span></div>
+      </div>
+
+      <div class="control-group">
+        <label>Load Torque</label>
+        <input type="range" id="loadSlider" min="0" max="100" value="10">
+        <div class="slider-row"><span>No load</span><span id="loadLabel">—</span><span>Full load</span></div>
+      </div>
+
+      <div class="control-group">
+        <div class="stat-bar">
+          <div class="stat-header"><span>TEMPERATURE</span><span id="tempVal">20°C</span></div>
+          <div class="stat-track"><div id="tempFill" class="stat-fill" style="width:16%"></div></div>
+        </div>
+        <div class="stat-bar">
+          <div class="stat-header"><span>CURRENT DRAW</span><span id="curPct">0%</span></div>
+          <div class="stat-track"><div id="curFill" class="stat-fill" style="width:0%"></div></div>
+        </div>
+        <div class="stat-bar">
+          <div class="stat-header"><span>EFFICIENCY</span><span id="effPct">—%</span></div>
+          <div class="stat-track"><div id="effFill" class="stat-fill" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <button id="powerBtn" onclick="togglePower()">POWER ON</button>
+      <label style="display:flex;align-items:center;gap:8px;width:100%;padding:6px;border-radius:6px;border:1px solid #333;background:#1a1a2e;color:#666;font-size:10px;font-weight:600;cursor:pointer;letter-spacing:1px;margin-top:4px;"><input type="checkbox" id="endCapCheck" onclick="toggleEndCap()" style="cursor:pointer;">🔩 PLASTIC END CAP</label>
+      <button id="slowMoBtn" onclick="toggleSlowMo()" style="width:100%;padding:6px;border-radius:6px;border:1px solid #333;background:#1a1a2e;color:#666;font-size:10px;font-weight:600;cursor:pointer;letter-spacing:1px;margin-top:4px;">🐌 SLOW-MO: OFF</button>
+      <div id="voltRatingCtn" class="control-group" style="padding:8px;">
+        <label>Rated Voltage</label>
+        <select id="voltRatingSelect" onchange="applyVoltageRating(this.value)" style="width:100%;padding:4px;border-radius:4px;border:1px solid #333;background:#111;color:#5a9fd4;font-size:11px;font-weight:600;cursor:pointer;"></select>
+      </div>
+      <div id="slotsCtn" class="control-group" style="padding:8px;" hidden>
+        <label>Rotor Slots</label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input type="range" id="slotsSlider" min="2" max="24" step="2" value="12" oninput="applySlots(this.value)" style="flex:1;cursor:pointer;">
+          <span id="slotsVal" style="min-width:24px;text-align:right;font-size:11px;font-weight:600;color:#5a9fd4;">12</span>
+        </div>
+      </div>
+      <div id="freqCtn" class="control-group" style="padding:8px;" hidden>
+        <label>AC Frequency</label>
+        <select id="freqSelect" onchange="applyFreq(this.value)" style="width:100%;padding:4px;border-radius:4px;border:1px solid #333;background:#111;color:#5a9fd4;font-size:11px;font-weight:600;cursor:pointer;">
+          <option value="50">50 Hz (Europe/Asia)</option>
+          <option value="60" selected>60 Hz (Americas)</option>
+          <option value="100">100 Hz</option>
+          <option value="200">200 Hz</option>
+          <option value="300">300 Hz</option>
+          <option value="400">400 Hz (Aerospace)</option>
+        </select>
+      </div>
+      <div id="failModeCtn" class="control-group" style="padding:8px;">
+        <label>Failure Mode</label>
+        <select id="failModeSelect" onchange="applyFailMode(this.value)" style="width:100%;padding:4px;border-radius:4px;border:1px solid #333;background:#111;color:#5a9fd4;font-size:11px;font-weight:600;cursor:pointer;">
+          <option value="auto">Auto (Random)</option>
+          <option value="thermal">Thermal — Overheat & Burn</option>
+          <option value="overspeed">Overspeed — Rotor Tears Apart</option>
+          <option value="brush">Brush Failure — Commutator Destruction</option>
+          <option value="short">Short Circuit — Windings Melt</option>
+          <option value="bearing">Bearing Seizure — Grind to Death</option>
+          <option value="overvolt">Overvolt — Catastrophic Arcing</option>
+          <option value="centrifugal">Centrifugal — Rotor Explodes Outward</option>
+          <option value="flood">Flood — Short & Steam</option>
+          <option value="phase">Phase Loss — Sputtering Imbalance</option>
+          <option value="magnet">Magnet Demag — Field Collapse</option>
+          <option value="wire">Wire Snap — Terminal Arcing</option>
+          <option value="ringoffire">Ring of Fire — Commutator Shorts Out</option>
+        </select>
+      </div>
+      <div id="qualityCtn" class="control-group" style="padding:8px;">
+        <label>Graphics Quality</label>
+        <div style="display:flex;gap:4px;">
+          <div class="qbtn" data-q="high" onclick="setQuality('high')" style="flex:1;padding:4px;border-radius:4px;border:1px solid #333;background:#111;color:#777;font-size:10px;font-weight:600;cursor:pointer;text-align:center;">HIGH</div>
+          <div class="qbtn" data-q="medium" onclick="setQuality('medium')" style="flex:1;padding:4px;border-radius:4px;border:1px solid #333;background:#111;color:#777;font-size:10px;font-weight:600;cursor:pointer;text-align:center;">MED</div>
+          <div class="qbtn sel" data-q="low" onclick="setQuality('low')" style="flex:1;padding:4px;border-radius:4px;border:1px solid #5a9fd4;background:#1a2a3e;color:#5a9fd4;font-size:10px;font-weight:600;cursor:pointer;text-align:center;">LOW</div>
+        </div>
+      </div>
+      <div id="customCtn" class="control-group" style="padding:8px;display:none;">
+        <label>⚙ Custom Motor Parameters</label>
+        <div class="cust-row" style="flex-direction:column;align-items:stretch;gap:2px;"><span style="width:auto;">Motor Type</span><select id="custMotorType" onchange="applyCustomParam('motorType', this.value)" style="width:100%;padding:3px;border-radius:4px;border:1px solid #333;background:#111;color:#5a9fd4;font-size:10px;font-weight:600;cursor:pointer;">
+          <option value="brushed">Brushed DC (PM)</option>
+          <option value="seriesdc">Series DC</option>
+          <option value="shunt">Shunt DC</option>
+          <option value="universal">Universal (AC/DC)</option>
+          <option value="repulsion">Repulsion</option>
+          <option value="induction">Induction</option>
+          <option value="synchronous">Synchronous</option>
+          <option value="pmsm">PMSM</option>
+          <option value="bldc">BLDC</option>
+          <option value="syncrel">Sync Reluctance</option>
+        </select></div>
+        <div class="cust-row" id="custBrushesRow"><span>Brushes</span><label style="flex:1;display:flex;align-items:center;gap:4px;font-size:9px;color:#777;cursor:pointer;"><input type="checkbox" id="custBrushes" checked onchange="applyCustomParam('brushes', this.checked)" style="cursor:pointer;"> <span id="custBrushesVal">ON</span></label></div>
+        <div class="cust-row" id="custBrushDropRow"><span>Brush Drop (V)</span><input type="range" id="custBrushDrop" min="0" max="4" step="0.1" value="1.6" oninput="applyCustomParam('brushDrop', this.value)"><span id="custBrushDropVal">1.6</span></div>
+        <div class="cust-row"><span>Poles</span><input type="range" id="custPoles" min="2" max="12" step="2" value="2" oninput="applyCustomParam('poles', this.value)"><span id="custPolesVal">2</span></div>
+        <div class="cust-row" id="custSlotsRow"><span>Slots</span><input type="range" id="custSlots" min="2" max="24" step="2" value="12" oninput="applyCustomParam('slots', this.value)"><span id="custSlotsVal">12</span></div>
+        <div class="cust-row"><span>Kv (RPM/V)</span><input type="range" id="custKv" min="50" max="3000" step="10" value="600" oninput="applyCustomParam('kv', this.value)"><span id="custKvVal">600</span></div>
+        <div class="cust-row"><span>Resistance (Ω)</span><input type="range" id="custR" min="0.1" max="10" step="0.1" value="1.0" oninput="applyCustomParam('resistance', this.value)"><span id="custRVal">1.0</span></div>
+        <div class="cust-row"><span>Max Voltage (V)</span><input type="range" id="custV" min="3" max="240" step="1" value="36" oninput="applyCustomParam('maxVoltage', this.value)"><span id="custVVal">36</span></div>
+        <div class="cust-row"><span>Max Current (A)</span><input type="range" id="custI" min="2" max="50" step="1" value="12" oninput="applyCustomParam('maxCurrent', this.value)"><span id="custIVal">12</span></div>
+        <div class="cust-row"><span>Inertia (µ)</span><input type="range" id="custInertia" min="1" max="100" step="1" value="8" oninput="applyCustomParam('inertia', this.value)"><span id="custInertiaVal">8</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="partInfoEl" hidden>
+    <span class="part-info-name"></span>
+    <span class="part-info-desc"></span>
+  </div>
+  <div id="partsBox">
+    <div class="parts-label">🔧 Motor Parts Catalog — click a part on the motor or below</div>
+    <div id="partsList"></div>
+  </div>
+
+  <div class="hint">Select motor type · Adjust voltage and load · Too much voltage or load will overheat and BURN OUT the motor — watch for smoke, commutator ring of fire, and arcing brushes · Use REPAIR to reset · Click any motor part to inspect it</div>
+</div>
+
+<script type="module">
+// ═══════════════════════════════════════════════════════════════════════
+// MOTOR CONFIG
+// ═══════════════════════════════════════════════════════════════════════
+const motorKeys = ['brushed','induction','synchronous','pmsm','bldc','seriesdc','shunt','universal','repulsion','syncrel','custom'];
+let cfg = {};
+let currentMotor = 'brushed';
+let slotOverride = null; // when set, overrides cfg.slots for brushed rotors
+
+let customParams = {
+  name: 'Custom Motor',
+  motorType: 'brushed',
+  brushes: true,
+  poles: 2,
+  kv: 600,
+  resistance: 1.0,
+  inductance: 0.002,
+  maxVoltage: 36,
+  maxCurrent: 12,
+  torqueConst: 0.05,
+  inertia: 0.000008,
+  friction: 0.000004,
+  slots: 12,
+  brushDrop: 1.6,
+  burnTemp: 100,
+  smokeTemp: 70,
+  fanCooling: 0.004,
+  sliderMaxVoltage: 180,
+  desc: 'Fully configurable — change motor type, poles, brushes & more',
+};
+
+const BRUSHED_TYPES = ['brushed','seriesdc','shunt','universal','repulsion'];
+function isBrushedType(t) { return BRUSHED_TYPES.includes(t); }
+function fieldForType(t) {
+  if (t === 'seriesdc' || t === 'universal') return 'series';
+  if (t === 'shunt') return 'shunt';
+  if (t === 'repulsion') return 'repulsion';
+  return 'pm';
+}
+
+function loadMotor(key) {
+  const isCustom = key === 'custom';
+  const m = isCustom ? customParams : root.motors[key];
+  const motorType = isCustom ? (customParams.motorType || 'brushed') : key;
+  const isBT = isBrushedType(motorType);
+  const field = isCustom ? fieldForType(motorType) : (m.field || 'pm');
+  const phases = isBT ? 1 : 3;
+  cfg = {
+    key: motorType,
+    isCustom,
+    brushedType: isBT,
+    field,
+    name: isCustom ? customParams.name : m.name,
+    poles: m.poles, phases,
+    isAC: phases === 3 || motorType === 'universal' || motorType === 'repulsion',
+    kv: m.kv, resistance: m.resistance, inductance: m.inductance,
+    maxVoltage: m.maxVoltage, maxCurrent: m.maxCurrent,
+    torqueConst: m.torqueConst, inertia: m.inertia, friction: m.friction,
+    desc: isCustom ? customParams.desc : m.desc,
+    slots: m.slots || 0, brushDrop: m.brushDrop || 0,
+    brushes: isCustom ? customParams.brushes : true,
+    burnTemp: m.burnTemp || 150, smokeTemp: m.smokeTemp || 90,
+    sliderMaxVoltage: m.sliderMaxVoltage || Math.round(m.maxVoltage * 5),
+    fanCooling: m.fanCooling || 0.0008,
+    ke: 1 / (m.kv * (2 * Math.PI / 60)),
+    failModes: isCustom
+      ? ((root.motors[motorType] && root.motors[motorType].failModes || 'thermal,short,overvolt').split(',').map(s => s.trim()))
+      : (m.failModes || 'thermal,short,overvolt').split(',').map(s => s.trim()),
+  };
+  // Store base values at the original rated voltage for voltage rating scaling
+  if (isBT) {
+    cfg.baseVoltage = m.maxVoltage;
+    cfg.baseResistance = m.resistance;
+    cfg.baseInductance = m.inductance;
+    cfg.baseMaxCurrent = m.maxCurrent;
+    cfg.baseKv = m.kv;
+    cfg.baseBurnTemp = m.burnTemp || 110;
+    cfg.baseSmokeTemp = m.smokeTemp || 75;
+    cfg.baseTorqueConst = m.torqueConst;
+    cfg.baseKe = 1 / (m.kv * (2 * Math.PI / 60));
+    cfg.voltageRatings = (m.voltageRatings || '12,24,48,120,240').split(',').map(s => parseFloat(s.trim()));
+  }
+  currentMotor = key;
+  // Apply slot override for brushed rotors (non-custom uses the main slider)
+  if (cfg.brushedType && !isCustom && slotOverride != null) {
+    cfg.slots = slotOverride;
+  }
+  // Slot count affects speed: fewer slots = faster (lower back-EMF), more = slower.
+  // Applied to brushed-type rotors only. Factor is capped to a sane range.
+  if (cfg.brushedType && cfg.slots) {
+    const slotFactor = Math.max(0.5, Math.min(2, cfg.slots / 12)); // 6 slots→0.5 (2x speed), 24→2 (0.5x)
+    cfg._slotFactor = slotFactor;
+    cfg.ke = (cfg.baseKe || cfg.ke) * slotFactor;
+    cfg.kv = (cfg.baseKv || cfg.kv) / slotFactor;
+    cfg.torqueConst = (cfg.baseTorqueConst || cfg.torqueConst) * slotFactor;
+  }
+  const vs = document.getElementById('voltSlider');
+  // Default to ~40% of rated voltage for a safe start
+  vs.value = Math.round(cfg.maxVoltage / cfg.sliderMaxVoltage * 100 * 0.4);
+  updateEndCapBtnVisibility();
+  updateVoltRatingUI();
+  updateFreqUI();
+  updateCustomPanelVisibility();
+  updateSlotsUI();
+}
+loadMotor('brushed');
+
+// ═══════════════════════════════════════════════════════════════════════
+// SIMULATION STATE
+// ═══════════════════════════════════════════════════════════════════════
+let state = {
+  powered: false,
+  angle: 0,          // rotor mechanical angle (rad)
+  omega: 0,          // angular velocity (rad/s)
+  voltage: 0,        // applied voltage (V)
+  sliderVoltage: 0,  // slider voltage (before AC modulation)
+  simTime: 0,        // simulation time accumulator (for AC waveform)
+  current: 0,        // motor current (A)
+  emf: 0,            // back-EMF (V)
+  torque: 0,         // output torque (N·m)
+  loadTorque: 0,     // external load (N·m)
+  temp: 20,          // temperature (°C)
+  powerIn: 0,
+  powerOut: 0,
+  efficiency: 0,
+  // 3-phase state for AC motors
+  phaseCurrents: [0, 0, 0],
+  phaseVoltages: [0, 0, 0],
+  phaseEMF: [0, 0, 0],
+  // Commutation for brushed
+  commutatorSegment: 0,
+  sparkIntensity: 0,
+  sparks: [],
+  // Brushed current ripple
+  ripplePhase: 0,
+  // Burnout & damage
+  burnedOut: false,
+  exploded: false,
+  fullyDestroyed: false,
+  wreckTime: 0,
+  burnDamage: 0,
+  failing: false,
+  smoke: [],
+  fire: [],
+  arcs: [],
+  shrapnel: [],
+  ringFire: 0,
+  // End cap
+  endCap: false,
+  capFire: 0,   // plastic end cap combustion 0-1
+  // Slow-mo
+  timeScale: 1,
+  // AC line frequency (Hz) — used by all AC motors
+  lineFreq: 60,
+  // Failure staging
+  failStage: 0,
+  failMode: 'auto',
+  // Waveform history for scope
+  scopeData: [],
+  scopeData2: [],
+  // Graphics quality
+  quality: 'low',
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHYSICS
+// ═══════════════════════════════════════════════════════════════════════
+function physicsStep(dt) {
+  const h = dt;
+  state.simTime += h;
+  if (!state.powered) {
+    // Coast down or burned out
+    state.wreckTime = 0;
+    state._wreckThreshold = 0;
+    state.torque = 0;
+    state.current = 0;
+    state.emf = 0;
+    state.powerIn = 0;
+    state.powerOut = 0;
+    state.efficiency = 0;
+    state.sparkIntensity = 0;
+    state.ringFire *= 0.9;
+    // Powered off → stop failing (motor can recover if not yet burned out)
+    if (state.failing && !state.burnedOut) {
+      state.failing = false;
+      state.failStage = 0;
+      cfg._failFriction = 0;
+      cfg._failRate = 0;
+    }
+    // Still cool down — fan-assisted when spinning; plastic cap traps heat
+    const endCapCool = (state.endCap && cfg.brushedType) ? -(state.temp - 20) * 0.008 : 0;
+    const cooling = (state.temp - 20) * 0.03 + Math.abs(state.omega) * cfg.fanCooling + endCapCool;
+    state.temp += (0 - cooling) * h;
+    state.temp = Math.max(20, state.temp);
+    // Continue smoke/fire when burned
+    if (state.temp > cfg.smokeTemp) {
+      const smokeRate = (state.temp - cfg.smokeTemp) / (cfg.burnTemp - cfg.smokeTemp);
+      if (Math.random() < smokeRate * h * 12) emitSmoke(smokeRate);
+    }
+    if (state.burnedOut && state.temp > 60 && Math.random() < h * 8) emitFire();
+    // Smoldering wreckage — dark acrid smoke continues for a while after burnout
+    if (state.burnedOut && state.temp > 50 && Math.random() < h * 6) {
+      state.smoke.push({
+        x: MCX + (Math.random() - 0.5) * 60, y: MCY + (Math.random() - 0.5) * 50,
+        vx: (Math.random() - 0.5) * 12, vy: -10 - Math.random() * 20,
+        life: 2 + Math.random() * 2, maxLife: 4, size: 8 + Math.random() * 12,
+        growth: 10 + Math.random() * 15, dark: 0.08 + Math.random() * 0.1,
+      });
+    }
+    // Gradual recovery when unpowered — burn damage heals slowly (not if already burned out)
+    if (!state.burnedOut && state.burnDamage > 0) {
+      state.burnDamage = Math.max(0, state.burnDamage - h * 0.02);
+    }
+    // Plastic cap fire dies down when unpowered
+    if (state.capFire > 0) {
+      state.capFire = Math.max(0, state.capFire - h * 0.08);
+      if (state.capFire > 0.1 && Math.random() < h * state.capFire * 12) emitCapFire();
+    }
+    for (let i = 0; i < 3; i++) { state.phaseCurrents[i] = 0; state.phaseVoltages[i] = 0; state.phaseEMF[i] = 0; }
+  } else {
+    // Sync voltage from slider
+    state.voltage = state.sliderVoltage;
+    // Universal and repulsion motors run on AC natively
+    if ((cfg.key === 'universal' || cfg.key === 'repulsion') && !state.burnedOut) {
+      state.voltage = state.sliderVoltage * Math.sin(2 * Math.PI * state.lineFreq * state.simTime);
+    }
+    // Clear failing state immediately when voltage is reduced well below rated
+    if (state.failing && !state.burnedOut && Math.abs(state.sliderVoltage) < cfg.maxVoltage * 0.5) {
+      state.failing = false;
+      state.failStage = 0;
+      cfg._failFriction = 0;
+      cfg._failRate = 0;
+    }
+    const rpm = state.omega * 60 / (2 * Math.PI);
+    const elecFreq = rpm * cfg.poles / 120; // Hz
+
+    // Brushes removed on a commutator motor — open circuit, no current, no torque
+    if (cfg.brushedType && !cfg.brushes && !state.burnedOut) {
+      state.current = 0;
+      state.emf = cfg.ke * state.omega;
+      state.torque = 0;
+      state.sparkIntensity = 0;
+      state.ripplePhase = state.angle * (cfg.slots || 12);
+    } else {
+    switch (cfg.key) {
+      case 'brushed': stepBrushed(h, rpm); break;
+      case 'induction': stepInduction(h, rpm, state.lineFreq); break;
+      case 'synchronous': stepSynchronous(h, rpm, state.lineFreq); break;
+      case 'pmsm': stepPMSM(h, rpm, elecFreq); break;
+      case 'bldc': stepBLDC(h, rpm, elecFreq); break;
+      case 'seriesdc': stepSeriesDC(h, rpm); break;
+      case 'shunt': stepShunt(h, rpm); break;
+      case 'universal': stepSeriesDC(h, rpm); break;
+      case 'repulsion': stepRepulsion(h, rpm); break;
+      case 'syncrel': stepSyncRel(h, rpm, state.lineFreq); break;
+    }
+    }
+
+    // Temperature — copper loss + iron loss + brush friction + overspeed heating
+    const copperLoss = state.current * state.current * cfg.resistance;
+    const brushLoss = state.current * cfg.brushDrop;
+    // Iron losses (eddy current + hysteresis) scale with speed² — physical property, not winding-dependent
+    const rpmAbs = Math.abs(state.omega) * 60 / (2 * Math.PI);
+    const ratedRPM = cfg.maxVoltage * cfg.kv;
+    const speedRatio = ratedRPM > 0 ? rpmAbs / ratedRPM : 0;
+    const baseR = cfg.baseResistance || cfg.resistance;
+    const ironLoss = baseR * speedRatio * speedRatio * 5;
+    // Brush friction losses at high speed
+    const brushFricLoss = rpmAbs * 0.0003 * (1 + speedRatio);
+    // Overspeed mechanical stress — rotor flying apart
+    const overspeedLoss = speedRatio > 2 ? baseR * (speedRatio - 2) * (speedRatio - 2) * 20 : 0;
+    const heatInput = (copperLoss + brushLoss + ironLoss + brushFricLoss + overspeedLoss) * 0.08;
+    const endCapCool = (state.endCap && cfg.brushedType) ? -(state.temp - 20) * 0.008 : 0;
+    const cooling = (state.temp - 20) * 0.03 + Math.abs(state.omega) * cfg.fanCooling + endCapCool;
+    state.temp += (heatInput - cooling) * h;
+    state.temp = Math.max(20, state.temp);
+
+    // ── Plastic end cap combustion ──
+    if (state.endCap && cfg.brushedType) {
+      const capIgniteTemp = cfg.smokeTemp + 30; // plastic ignites above smoke temp
+      if (state.temp > capIgniteTemp) {
+        state.capFire += (state.temp - capIgniteTemp) / 200 * h;
+      } else if (state.capFire > 0) {
+        state.capFire = Math.max(0, state.capFire - h * 0.05);
+      }
+      state.capFire = Math.min(1, state.capFire);
+      // Emit cap-surface fire + dark toxic smoke
+      if (state.capFire > 0.15 && Math.random() < h * state.capFire * 30) emitCapFire();
+      if (state.capFire > 0.1 && Math.random() < h * state.capFire * 15) {
+        state.smoke.push({
+          x: MCX + (Math.random() - 0.5) * 140, y: MCY + (Math.random() - 0.5) * 120,
+          vx: (Math.random() - 0.5) * 15, vy: -15 - Math.random() * 30,
+          life: 2 + Math.random() * 3, maxLife: 5, size: 10 + Math.random() * 16,
+          growth: 12 + Math.random() * 18, dark: 0.04 + Math.random() * 0.06,
+        });
+      }
+    }
+
+    // ── Failure triggers — depend on selected failure mode ──
+    const fm = state.failMode === 'auto' ? cfg.failModes[Math.floor(Math.random()*cfg.failModes.length)] : state.failMode;
+    if (!state.failing && !state.burnedOut && Math.abs(state.sliderVoltage) > cfg.maxVoltage * 0.5) {
+      if (!state._resolvedFailMode) state._resolvedFailMode = fm;
+      const rfm = state._resolvedFailMode;
+      if (rfm === 'thermal' && state.temp > cfg.burnTemp) {
+        state.burnDamage += (state.temp - cfg.burnTemp) / 30 * h * 2;
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'overspeed' && speedRatio > 2.5) {
+        state.burnDamage += (speedRatio - 2.5) * h * 3;
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'brush' && (state.sparkIntensity > 0.2 || state.voltage > cfg.maxVoltage * 1.5)) {
+        state.burnDamage += h * (0.05 + state.sparkIntensity * 0.3);
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'short' && state.current > cfg.maxCurrent * 0.8) {
+        state.burnDamage += h * 0.1 * (state.current / cfg.maxCurrent);
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'bearing' && rpmAbs > ratedRPM * 0.5) {
+        state.burnDamage += h * 0.04 * (rpmAbs / (ratedRPM * 0.5));
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'overvolt' && state.voltage > cfg.maxVoltage * 1.2) {
+        state.burnDamage += h * 0.15 * (state.voltage / cfg.maxVoltage);
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'centrifugal' && speedRatio > 1.5) {
+        state.burnDamage += h * 0.08 * speedRatio * speedRatio;
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'flood') {
+        state.burnDamage += h * 0.03;
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'phase' && cfg.phases === 3 && state.voltage > cfg.maxVoltage * 0.8) {
+        state.burnDamage += h * 0.06;
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'phase' && cfg.phases !== 3) {
+        // Treat as thermal for non-3-phase motors
+        if (state.temp > cfg.burnTemp) { state.burnDamage += h * 0.1; if (state.burnDamage >= 0.7) state.failing = true; }
+      } else if (rfm === 'magnet' && (cfg.key === 'brushed' || cfg.key === 'pmsm' || cfg.key === 'bldc') && state.temp > 80) {
+        state.burnDamage += h * 0.05 * (1 + (state.temp - 80) / 50);
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'magnet' && state.temp > cfg.burnTemp) {
+        state.burnDamage += h * 0.08;
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'wire' && state.current > cfg.maxCurrent * 0.5) {
+        state.burnDamage += h * 0.04 * (state.current / cfg.maxCurrent);
+        if (state.burnDamage >= 0.7) state.failing = true;
+      } else if (rfm === 'ringoffire') {
+        // Ring of fire — commutator arcs all around, shorting the rotor.
+        // Only meaningful on brushed-type motors; falls back to thermal otherwise.
+        if (cfg.brushedType) {
+          const trig = state.sparkIntensity > 0.25 || Math.abs(state.voltage) > cfg.maxVoltage * 1.2
+            || (Math.abs(state.omega) * 60 / (2 * Math.PI)) > cfg.maxVoltage * cfg.kv * 0.8;
+          if (trig) {
+            state.burnDamage += h * 0.08 * (1 + state.sparkIntensity);
+            if (state.burnDamage >= 0.7) state.failing = true;
+          }
+        } else if (state.temp > cfg.burnTemp) {
+          state.burnDamage += h * 0.1;
+          if (state.burnDamage >= 0.7) state.failing = true;
+        }
+      }
+    }
+
+    // Gradual failure phase — mode-specific destruction
+    if (state.failing && !state.burnedOut) {
+      if (Math.abs(state.sliderVoltage) < cfg.maxVoltage * 0.5) {
+        state.failing = false;
+        state.failStage = 0;
+        cfg._failFriction = 0;
+        cfg._failRate = 0;
+        state.ringFire *= 0.92;
+        state.burnDamage = Math.max(0, state.burnDamage - h * 0.05);
+      } else {
+        if (!cfg._failRate) cfg._failRate = 0.02 + Math.random() * 0.3;
+        state.burnDamage += h * cfg._failRate;
+        const rfm = state._resolvedFailMode || 'thermal';
+
+        const newStage = state.burnDamage < 0.78 ? 0 : state.burnDamage < 0.86 ? 1 : state.burnDamage < 0.93 ? 2 : 3;
+        if (newStage !== state.failStage) {
+          state.failStage = newStage;
+          if (newStage > 0) audio.playPop(audio.ctx.currentTime, 0.04 + newStage * 0.02);
+        }
+        const stage = state.failStage;
+        const prog = (state.burnDamage - 0.7) / 0.3; // 0-1 through failing phase
+
+        if (rfm === 'thermal') {
+          // Overheating — smoke, fire, melting windings
+          state.current *= 0.3 + Math.random() * 0.4;
+          state.torque *= 0.3 + Math.random() * 0.3;
+          if (Math.random() < h * (15 + prog * 25)) emitSmoke(Math.min(1, state.burnDamage));
+          if (Math.random() < h * (10 + prog * 30)) emitFire();
+          if (Math.random() < h * (10 + prog * 20)) emitArcs(0.3 + Math.random() * 0.4 + prog * 0.3);
+          if (Math.random() < h * (8 + prog * 20)) emitSparks(0.3 + Math.random() * 0.3 + prog * 0.3);
+          state.ringFire = Math.min(1, state.ringFire + h * (1 + prog * 3));
+        } else if (rfm === 'overspeed') {
+          // Rotor tearing apart — violent shaking, pieces flying
+          state.torque *= 0.2 + Math.random() * 0.6;
+          cfg._failFriction = (cfg._failFriction || 0) + h * 0.0001 * (1 + prog * 3);
+          if (Math.random() < h * (15 + prog * 40)) emitSparks(0.4 + Math.random() * 0.5);
+          if (Math.random() < h * (10 + prog * 25)) emitSmoke(0.5 + prog * 0.5);
+          if (Math.random() < h * (5 + prog * 20)) emitFire();
+          if (Math.random() < h * (8 + prog * 15)) emitArcs(0.3 + Math.random() * 0.4);
+          state.ringFire = Math.min(0.8, state.ringFire + h * (0.5 + prog));
+        } else if (rfm === 'brush') {
+          // Commutator destruction — intense arcing, brush fragments flying
+          state.current *= (Math.random() < 0.3 ? 3 : 0.2);
+          state.torque *= 0.2 + Math.random() * 0.3;
+          if (Math.random() < h * (25 + prog * 40)) emitSparks(0.5 + Math.random() * 0.5);
+          if (Math.random() < h * (20 + prog * 35)) emitArcs(0.6 + Math.random() * 0.4);
+          if (Math.random() < h * (12 + prog * 20)) emitSmoke(0.5 + prog * 0.5);
+          if (Math.random() < h * (5 + prog * 15)) emitFire();
+          state.ringFire = Math.min(1, state.ringFire + h * (1.5 + prog * 3));
+          // Glowing brush/commutator fragments thrown far
+          if (Math.random() < h * (5 + prog * 15)) emitDebris();
+        } else if (rfm === 'short') {
+          // Windings melting — current spikes, smoke, no sparks
+          if (Math.random() < 0.3) state.current *= 3;
+          else state.current *= 0.3;
+          state.torque *= 0.1 + Math.random() * 0.2;
+          if (Math.random() < h * (20 + prog * 30)) emitSmoke(0.6 + prog * 0.4);
+          if (Math.random() < h * (10 + prog * 25)) emitFire();
+          if (Math.random() < h * (8 + prog * 15)) emitArcs(0.4 + Math.random() * 0.4);
+          if (Math.random() < h * (5 + prog * 15)) emitSparks(0.3 + Math.random() * 0.3);
+          state.ringFire = Math.min(0.7, state.ringFire + h * (1 + prog * 2));
+        } else if (rfm === 'bearing') {
+          // Bearing seizure — grinding, friction ramps, slow death
+          cfg._failFriction = (cfg._failFriction || 0) + h * 0.0002 * (1 + prog * 4);
+          state.current *= 0.3 + Math.random() * 0.4;
+          state.torque *= 0.1 + Math.random() * 0.2;
+          if (Math.random() < h * (20 + prog * 35)) emitSparks(0.3 + Math.random() * 0.4);
+          if (Math.random() < h * (15 + prog * 20)) emitSmoke(0.4 + prog * 0.4);
+          if (Math.random() < h * (8 + prog * 15)) emitArcs(0.3 + Math.random() * 0.3);
+          if (Math.random() < h * (3 + prog * 12)) emitFire();
+          state.ringFire = Math.min(0.6, state.ringFire + h * (0.5 + prog));
+        } else if (rfm === 'overvolt') {
+          // Catastrophic arcing — blinding, violent, spectacular
+          state.current *= (Math.random() < 0.4 ? 4 : 0.1);
+          state.torque *= 0.1 + Math.random() * 0.3;
+          if (Math.random() < h * (35 + prog * 50)) emitSparks(0.6 + Math.random() * 0.4);
+          if (Math.random() < h * (30 + prog * 45)) emitArcs(0.7 + Math.random() * 0.3);
+          if (Math.random() < h * (20 + prog * 35)) emitFire();
+          if (Math.random() < h * (15 + prog * 25)) emitSmoke(0.5 + prog * 0.5);
+          state.ringFire = Math.min(1, state.ringFire + h * (2 + prog * 4));
+          if (Math.random() < h * (3 + prog * 12)) emitDebris();
+        } else if (rfm === 'centrifugal') {
+          // Rotor expands and explodes outward — violent vibration, pieces flung radially
+          state.torque *= 0.3 + Math.random() * 0.7;
+          state.omega *= 1 + h * 0.5 * prog; // accelerates as it comes apart
+          cfg._failFriction = (cfg._failFriction || 0) + h * 0.00005;
+          if (Math.random() < h * (20 + prog * 50)) emitSparks(0.5 + Math.random() * 0.5);
+          if (Math.random() < h * (10 + prog * 30)) emitDebris();
+          if (Math.random() < h * (5 + prog * 20)) emitArcs(0.4 + Math.random() * 0.4);
+          if (Math.random() < h * (5 + prog * 15)) emitSmoke(0.4 + prog * 0.4);
+          state.ringFire = Math.min(0.5, state.ringFire + h * prog);
+        } else if (rfm === 'flood') {
+          // Water ingress — steaming, sputtering, slow short
+          state.current *= (Math.random() < 0.4 ? 0.1 : 0.5 + Math.random() * 0.3);
+          state.torque *= 0.2 + Math.random() * 0.3;
+          // Lots of steam (light smoke)
+          if (Math.random() < h * (25 + prog * 35)) {
+            state.smoke.push({
+              x: MCX + (Math.random() - 0.5) * 60, y: MCY + (Math.random() - 0.5) * 50,
+              vx: (Math.random() - 0.5) * 15, vy: -25 - Math.random() * 30,
+              life: 1.5 + Math.random() * 2, maxLife: 3.5, size: 10 + Math.random() * 15,
+              growth: 20 + Math.random() * 20, dark: 0.7 + Math.random() * 0.2,
+            });
+          }
+          if (Math.random() < h * (8 + prog * 20)) emitArcs(0.3 + Math.random() * 0.3);
+          if (Math.random() < h * (5 + prog * 15)) emitSparks(0.2 + Math.random() * 0.3);
+          if (Math.random() < h * (3 + prog * 10)) emitFire();
+          state.ringFire = Math.min(0.3, state.ringFire + h * prog);
+        } else if (rfm === 'phase') {
+          // Phase loss — imbalanced, shuddering, one phase dead
+          if (cfg.phases === 3) {
+            const deadPhase = Math.floor(state.burnDamage * 3) % 3;
+            state.phaseCurrents[deadPhase] *= 0.1;
+            state.phaseCurrents[(deadPhase+1)%3] *= 1.5 + Math.random();
+            state.phaseCurrents[(deadPhase+2)%3] *= 1.5 + Math.random();
+          }
+          state.torque *= 0.3 + Math.random() * 0.4;
+          state.omega += (Math.random() - 0.5) * 5 * prog; // shuddering
+          if (Math.random() < h * (10 + prog * 25)) emitSparks(0.3 + Math.random() * 0.3);
+          if (Math.random() < h * (8 + prog * 15)) emitSmoke(0.4 + prog * 0.4);
+          if (Math.random() < h * (5 + prog * 15)) emitArcs(0.3 + Math.random() * 0.3);
+          if (Math.random() < h * (3 + prog * 8)) emitFire();
+          state.ringFire = Math.min(0.4, state.ringFire + h * prog);
+        } else if (rfm === 'magnet') {
+          // Magnet demagnetization — field weakens, torque drops, erratic
+          const fieldLoss = 1 - prog * 0.8;
+          state.torque *= fieldLoss * (0.3 + Math.random() * 0.4);
+          state.current *= 1 + prog * 2; // less back-EMF = more current
+          if (Math.random() < h * (8 + prog * 20)) emitSmoke(0.3 + prog * 0.4);
+          if (Math.random() < h * (5 + prog * 15)) emitSparks(0.2 + Math.random() * 0.3);
+          if (Math.random() < h * (3 + prog * 10)) emitArcs(0.2 + Math.random() * 0.3);
+          if (Math.random() < h * (2 + prog * 8)) emitFire();
+          state.ringFire = Math.min(0.3, state.ringFire + h * prog);
+        } else if (rfm === 'wire') {
+          // Wire snap — terminal arcing, intermittent connection
+          const connected = Math.random() < (0.5 - prog * 0.4);
+          if (!connected) { state.current *= 0.05; state.torque *= 0.05; }
+          else { state.current *= 1.5 + Math.random(); state.torque *= 0.5 + Math.random() * 0.5; }
+          if (Math.random() < h * (20 + prog * 40)) emitArcs(0.5 + Math.random() * 0.5);
+          if (Math.random() < h * (15 + prog * 30)) emitSparks(0.4 + Math.random() * 0.4);
+          if (Math.random() < h * (5 + prog * 15)) emitSmoke(0.3 + prog * 0.4);
+          if (Math.random() < h * (3 + prog * 10)) emitFire();
+          state.ringFire = Math.min(0.5, state.ringFire + h * (0.5 + prog));
+        } else if (rfm === 'ringoffire') {
+          // Ring of fire — commutator arcs around the ENTIRE ring, shorting
+          // out power to the rotor. Current surges through the arc ring instead
+          // of the windings, so torque collapses; comm bars glow white-hot and
+          // get flung off the spinning rotor.
+          if (cfg.brushedType) {
+            // The arc ring shorts the armature — huge current, near-zero torque
+            const shorted = Math.random() < (0.6 + prog * 0.3);
+            if (shorted) {
+              state.current *= 1.5 + Math.random() * 2; // dead-short surge
+              state.torque *= 0.02 + Math.random() * 0.08;
+            } else {
+              state.current *= 0.1 + Math.random() * 0.2; // brief open
+              state.torque *= 0.05 + Math.random() * 0.1;
+            }
+            state.sparkIntensity = Math.max(state.sparkIntensity, 0.6 + prog * 0.4);
+            // Ring of fire climbs to maximum and locks there
+            state.ringFire = Math.min(1, state.ringFire + h * (3 + prog * 5));
+            // Continuous arcing all around the commutator
+            if (Math.random() < h * (40 + prog * 60)) emitArcs(0.8 + Math.random() * 0.2);
+            if (Math.random() < h * (35 + prog * 50)) emitSparks(0.7 + Math.random() * 0.3);
+            // White-hot comm bars flung outward as the ring self-destructs
+            if (Math.random() < h * (8 + prog * 30)) emitDebris();
+            // Heat, smoke and flame from the shorted commutator
+            if (Math.random() < h * (15 + prog * 25)) emitSmoke(0.5 + prog * 0.5);
+            if (Math.random() < h * (10 + prog * 20)) emitFire();
+            // Violent vibration as the shorted rotor fights itself
+            state.omega += (Math.random() - 0.5) * 8 * prog;
+          } else {
+            // Non-brushed motor: treat as thermal runaway
+            state.current *= 0.3 + Math.random() * 0.4;
+            state.torque *= 0.1 + Math.random() * 0.2;
+            if (Math.random() < h * (15 + prog * 25)) emitSmoke(0.5 + prog * 0.5);
+            if (Math.random() < h * (10 + prog * 20)) emitFire();
+            if (Math.random() < h * (8 + prog * 15)) emitArcs(0.4 + Math.random() * 0.4);
+            if (Math.random() < h * (5 + prog * 15)) emitSparks(0.3 + Math.random() * 0.3);
+            state.ringFire = Math.min(0.4, state.ringFire + h * prog);
+          }
+        }
+
+        if (state.burnDamage >= 1) {
+          state.burnDamage = 1;
+          state.burnedOut = true;
+          state.failing = false;
+          state.powered = false;
+          state.torque = 0;
+          cfg._failFriction = 0;
+          explode();
+          audio.playExplosion();
+        }
+      }
+    }
+
+    // Burn damage heals
+    if (!state.burnedOut && state.burnDamage > 0 && state.voltage < cfg.maxVoltage * 0.5) {
+      state.burnDamage = Math.max(0, state.burnDamage - h * 0.05);
+    }
+
+    // Smoke emission — heavier when overvolted
+    if (state.temp > cfg.smokeTemp) {
+      const smokeRate = (state.temp - cfg.smokeTemp) / (cfg.burnTemp - cfg.smokeTemp);
+      const overVolt = state.voltage > cfg.maxVoltage ? state.voltage / cfg.maxVoltage : 1;
+      if (Math.random() < smokeRate * h * 8 * overVolt) emitSmoke(smokeRate);
+    }
+
+    // Fire emission when burning or extremely hot
+    if (state.temp > cfg.burnTemp * 1.1) {
+      const fireRate = state.temp > cfg.burnTemp * 1.5 ? 30 : 15;
+      if (Math.random() < h * fireRate) emitFire();
+    }
+
+    // Continuous arcing when severely overvolted or at high speed
+    if (cfg.brushedType && !state.burnedOut) {
+      const sr = Math.abs(state.omega) * 60 / (2 * Math.PI) / Math.max(1, cfg.maxVoltage * cfg.kv);
+      const arcIntensity = Math.min(1, Math.max(
+        Math.abs(state.voltage) > cfg.maxVoltage * 2 ? Math.abs(state.voltage) / (cfg.maxVoltage * 4) : 0,
+        sr > 1 ? (sr - 1) * 0.4 : 0
+      ));
+      if (arcIntensity > 0.1) {
+        if (Math.random() < h * (15 + arcIntensity * 25)) emitArcs(arcIntensity);
+        if (Math.random() < h * (12 + arcIntensity * 20)) emitSparks(arcIntensity * 0.8);
+      }
+    }
+
+    // Power and efficiency
+    state.powerIn = state.voltage * state.current;
+    state.powerOut = state.torque * state.omega;
+    state.efficiency = state.powerIn > 0.5 ? Math.min(100, (state.powerOut / state.powerIn) * 100) : 0;
+  }
+
+  // Mechanical dynamics
+  const failFric = (state.failing && !state.burnedOut) ? (cfg._failFriction || 0) : 0;
+  const loadT = (state.powered && !state.burnedOut) ? state.loadTorque : 0;
+  // Load torque must always oppose rotation; a fixed-sign load would drive the
+  // motor backward at 0V (a small reverse perturbation gets amplified until
+  // back-EMF braking balances the mis-signed load → motor "runs" at 0V).
+  const loadTorqueApplied = loadT * Math.tanh(state.omega / 0.5);
+  // Magnetic cogging torque for PM motors (brushed, pmsm, bldc) — causes jerky coasting and oscillation at rest
+  // Uses base motor params: cogging is a physical property of the magnet/stator geometry, not the winding
+  // Evaluated at midpoint angle for numerical stability; scaled by speed since inertia filters high-freq cogging
+  let coggingTorque = 0;
+  const hasPM = (cfg.key === 'brushed' || cfg.key === 'pmsm' || cfg.key === 'bldc');
+  if (hasPM && !state.burnedOut) {
+    const refKe = cfg.baseKe || cfg.ke;
+    const refImax = cfg.baseMaxCurrent || cfg.maxCurrent;
+    if (cfg.key === 'brushed') {
+      // Slot-count-driven cogging: fewer slots = fewer, much stronger jerks
+      // (each slot is bigger → larger reluctance variation); more slots = many
+      // small jerks that average out to smooth rotation. Cogging also persists
+      // to higher RPM with fewer slots (less filtering by the sparse geometry).
+      const slots = cfg.slots || 12;
+      const nCog = slots;
+      const cogMult = Math.max(0.3, Math.min(3.5, 12 / slots)); // 6 slots→2x, 24→0.5x
+      const cogAmp = refKe * refImax * 0.03 * cogMult;
+      const midAngle = state.angle + state.omega * h * 0.5;
+      const cogSpeedFactor = Math.exp(-Math.abs(state.omega) * slots / 300); // fewer slots persists longer
+      coggingTorque = -cogAmp * Math.sin(nCog * midAngle) * cogSpeedFactor;
+    } else {
+      const nCog = cfg.poles * 3;
+      const cogAmp = refKe * refImax * 0.02;
+      const midAngle = state.angle + state.omega * h * 0.5;
+      const cogSpeedFactor = Math.exp(-Math.abs(state.omega) / 25);
+      coggingTorque = -cogAmp * Math.sin(nCog * midAngle) * cogSpeedFactor;
+    }
+  }
+  // Coulomb friction (dry friction) — damps cogging oscillation to rest; uses base params (physical property)
+  const refKe = cfg.baseKe || cfg.ke;
+  const refImax = cfg.baseMaxCurrent || cfg.maxCurrent;
+  const coulombFric = refKe * refImax * 0.01;
+  const fricTorque = state.omega * (cfg.friction + failFric) + coulombFric * Math.tanh(state.omega / 0.5);
+  const netTorque = state.torque + coggingTorque - loadTorqueApplied - fricTorque;
+  state.omega += (netTorque / cfg.inertia) * h;
+  // Gradual coast-down after total destruction — exponential decay (~1.5s time constant)
+  if (state.fullyDestroyed) state.omega *= Math.exp(-h / 1.5);
+  const isACmode = cfg.key === 'universal' || cfg.key === 'repulsion';
+  if (cfg.brushedType && state.powered && state.voltage > 0 && state.omega < 0 && !isACmode) state.omega = 0;
+  state.angle += state.omega * h;
+  state.angle = state.angle % (Math.PI * 2);
+
+  // Update scope data
+  let scopeVal;
+  if (cfg.phases === 3) scopeVal = state.phaseCurrents[0];
+  else if (cfg.brushedType && state.powered) scopeVal = state.current * (1 + 0.08 * Math.sin(state.ripplePhase));
+  else scopeVal = state.current;
+  state.scopeData.push(scopeVal);
+  state.scopeData2.push(cfg.phases === 3 ? state.phaseEMF[0] : state.emf);
+  if (state.scopeData.length > 200) { state.scopeData.shift(); state.scopeData2.shift(); }
+}
+
+// ── Brushed DC (PMDC) ──
+function stepBrushed(h, rpm) {
+  const segments = cfg.slots || 12;
+  const segAngle = (2 * Math.PI) / segments;
+  const ke = cfg.ke;
+
+  // Burnout effects: insulation degrades → partial short → resistance drops → current spikes → then opens
+  let burnR, burnTorqueFactor;
+  if (state.burnedOut) {
+    // Burned out but powered at high voltage — dead short through carbonized windings
+    // Motor spins erratically with massive current, fire, and sparks, then physically breaks apart
+    if (Math.abs(state.voltage) > cfg.maxVoltage * 2 && !state.fullyDestroyed) {
+      // Track how long the wreck has been powered at high voltage
+      state.wreckTime = (state.wreckTime || 0) + h;
+      if (!state._wreckThreshold) state._wreckThreshold = 8 + Math.random() * 6;
+      // Random fluttering resistance — motor spins unpredictably
+      burnR = 0.1 + Math.random() * 0.5;
+      burnTorqueFactor = (0.2 + Math.random() * 0.5) * (Math.random() < 0.2 ? 0 : 1);
+      // Escalating fire and sparks as it tears itself apart
+      const wreckProgress = Math.min(1, state.wreckTime / state._wreckThreshold);
+      if (Math.random() < h * (20 + wreckProgress * 40)) emitSparks(0.4 + Math.random() * 0.6);
+      if (Math.random() < h * (15 + wreckProgress * 35)) emitFire();
+      if (Math.random() < h * (10 + wreckProgress * 25)) emitArcs(0.5 + Math.random() * 0.5);
+      if (Math.random() < h * (15 + wreckProgress * 30)) emitSmoke(1);
+      state.ringFire = Math.min(1, state.ringFire + h * 2);
+      // After enough punishment, motor physically breaks apart
+      if (state.wreckTime > state._wreckThreshold) {
+        state.powered = false;
+        state.torque = 0;
+        explode();
+        audio.playExplosion();
+      }
+    } else {
+      burnR = 1000;
+      burnTorqueFactor = 0;
+    }
+  } else if (state.burnDamage < 0.4) {
+    burnR = 1 + state.burnDamage * 1.5; // slight increase from insulation degradation
+    burnTorqueFactor = 1 - state.burnDamage * 0.5;
+  } else {
+    // Partial short: resistance drops dramatically, current spikes
+    burnR = 1 + 0.6 - (state.burnDamage - 0.4) * 3; // drops from 1.6 to 0.4
+    burnR = Math.max(0.2, burnR);
+    burnTorqueFactor = 1 - state.burnDamage * 0.5;
+  }
+
+  // Failing state: intermittent shorts cause erratic current and intense sparking
+  let failSparkBoost = 0;
+  if (state.failing) {
+    // Random intermittent short circuits — current fluctuates wildly
+    if (Math.random() < 0.15) {
+      burnR *= 0.3; // brief short
+      failSparkBoost = 0.6;
+    } else if (Math.random() < 0.2) {
+      burnR *= 5; // brief open
+      failSparkBoost = 0.3;
+    }
+    failSparkBoost = Math.max(failSparkBoost, 0.2 + state.burnDamage * 0.4);
+  }
+
+  // Brush voltage drop (~0.8V per carbon brush, ~1.6V total)
+  const vArm = state.powered ? (state.voltage > 0 ? Math.max(0, state.voltage - cfg.brushDrop) : Math.min(0, state.voltage + cfg.brushDrop)) : 0;
+  const ratedOmega = cfg.maxVoltage * cfg.kv * (2 * Math.PI / 60);
+  const speedRatio = Math.abs(state.omega) / Math.max(1, ratedOmega);
+
+  // Back-EMF: E = ke * ω, with small ripple at commutation frequency
+  const rippleAmp = ke * Math.abs(state.omega) * 0.03;
+  state.emf = ke * state.omega + rippleAmp * Math.sin(state.angle * segments);
+
+  // Electrical dynamics: L·di/dt = V_arm - I·R - E  (semi-implicit for stability)
+  const R = cfg.resistance * burnR;
+  const alpha = h * R / cfg.inductance;
+  state.current = (state.current + h * (vArm - state.emf) / cfg.inductance) / (1 + alpha);
+  state.current = Math.max(-cfg.maxCurrent * 20, Math.min(cfg.maxCurrent * 20, state.current));
+
+  // Torque: T = ke · I  (SI: kt = ke), degraded by burn damage
+  state.torque = ke * state.current * burnTorqueFactor;
+
+  // Commutation detection — segment passing under brush
+  const newSegment = Math.floor(state.angle / segAngle);
+  if (newSegment !== state.commutatorSegment) {
+    const coilL = cfg.inductance / (segments / 2);
+    const commTime = segAngle / Math.max(0.1, Math.abs(state.omega));
+    const sparkV = coilL * state.current / Math.max(0.0001, commTime);
+    state.sparkIntensity = Math.min(1, sparkV / 25 + failSparkBoost + speedRatio * 0.3);
+    if (state.sparkIntensity > 0.04) {
+      emitSparks(state.sparkIntensity);
+      // Electrical arcs at brush-commutator interface
+      if (state.sparkIntensity > 0.15) emitArcs(state.sparkIntensity);
+    }
+    state.commutatorSegment = newSegment;
+  } else {
+    state.sparkIntensity *= 0.88;
+  }
+
+  // Ring of fire buildup when sparking intensely or overcurrent
+  const overCurrent = Math.abs(state.current) > cfg.maxCurrent ? (Math.abs(state.current) - cfg.maxCurrent) / cfg.maxCurrent : 0;
+  const av = Math.abs(state.voltage);
+  const overVolt = av > cfg.maxVoltage ? av / cfg.maxVoltage : 1;
+  // Arcing intensifies with speed — higher RPM = more violent commutation sparks
+  const speedArcFactor = Math.max(0, speedRatio - 0.5) * 0.8;
+  const ringTarget = Math.min(1, Math.max(state.sparkIntensity * 0.7, overCurrent * 0.8, (overVolt - 2) * 0.15, speedArcFactor));
+  state.ringFire += (ringTarget - state.ringFire) * 0.15;
+  if (state.ringFire > 0.05 && Math.random() < state.ringFire * 0.4) emitSparks(state.ringFire * 0.6);
+  // Continuous arcing from ring of fire
+  if (state.ringFire > 0.3 && Math.random() < state.ringFire * 0.2) emitArcs(state.ringFire * 0.5);
+  // Speed-induced arcing — gets worse as RPM climbs, escalating toward explosion
+  if (speedRatio > 0.8 && !state.burnedOut) {
+    const speedArcIntensity = Math.min(1, (speedRatio - 0.8) * 1.5);
+    if (Math.random() < h * (10 + speedArcIntensity * 30)) emitArcs(speedArcIntensity);
+    if (Math.random() < h * (8 + speedArcIntensity * 25)) emitSparks(speedArcIntensity * 0.8);
+    state.ringFire = Math.min(1, state.ringFire + h * speedArcIntensity * 0.5);
+  }
+
+  // Current ripple phase (at slot frequency)
+  state.ripplePhase = state.angle * segments;
+}
+
+// ── Induction (Asynchronous) ──
+function stepInduction(h, rpm, freq) {
+  // Synchronous speed
+  const nsync = (120 * freq / cfg.poles) * (2 * Math.PI / 60); // rad/s
+  const slip = (nsync - state.omega) / Math.max(0.1, nsync);
+
+  // 3-phase supply at line frequency
+  const Vpeak = state.voltage;
+  const wt = 2 * Math.PI * freq * state.simTime; // electrical angle from line freq
+  for (let i = 0; i < 3; i++) {
+    state.phaseVoltages[i] = Vpeak * Math.sin(wt + i * 2 * Math.PI / 3);
+  }
+
+  // Back-EMF proportional to slip frequency (induced rotor EMF)
+  const slipFreq = Math.abs(slip) * freq;
+  const rotorEMF = Vpeak * Math.abs(slip) * 0.8; // simplified
+  state.emf = rotorEMF;
+
+  // Current: depends on slip (high slip = high current)
+  const slipFactor = Math.abs(slip);
+  const baseCurrent = Vpeak / Math.max(0.5, cfg.resistance) * slipFactor;
+  state.current = Math.min(cfg.maxCurrent * 2, baseCurrent);
+
+  // Phase currents
+  const phaseImpedance = Math.sqrt(cfg.resistance * cfg.resistance + (2 * Math.PI * freq * cfg.inductance) * (2 * Math.PI * freq * cfg.inductance));
+  for (let i = 0; i < 3; i++) {
+    state.phaseCurrents[i] = state.phaseVoltages[i] / Math.max(1, phaseImpedance);
+    state.phaseEMF[i] = state.phaseVoltages[i] * 0.9;
+  }
+
+  // Torque (proportional to slip at low slip, decreases at high slip — torque-speed curve)
+  const breakdownSlip = 0.2;
+  let torqueFactor;
+  if (slipFactor < breakdownSlip) {
+    torqueFactor = slipFactor / breakdownSlip;
+  } else {
+    torqueFactor = breakdownSlip / slipFactor;
+  }
+  state.torque = cfg.torqueConst * state.current * torqueFactor * 5 * Math.sign(slip || 0.001);
+}
+
+// ── Synchronous ──
+function stepSynchronous(h, rpm, freq) {
+  const nsync = (120 * freq / cfg.poles) * (2 * Math.PI / 60);
+
+  // Supply at line frequency
+  const wt = 2 * Math.PI * freq * state.simTime;
+  const Vpeak = state.voltage;
+  for (let i = 0; i < 3; i++) {
+    state.phaseVoltages[i] = Vpeak * Math.sin(wt + i * 2 * Math.PI / 3);
+  }
+
+  // Back-EMF from field excitation
+  const ke = 1 / (cfg.kv * (2 * Math.PI / 60));
+  state.emf = ke * nsync; // EMF at sync speed
+
+  for (let i = 0; i < 3; i++) {
+    state.phaseEMF[i] = state.emf * Math.sin(wt + i * 2 * Math.PI / 3);
+    state.phaseCurrents[i] = (state.phaseVoltages[i] - state.phaseEMF[i]) / cfg.resistance;
+  }
+
+  state.current = Math.sqrt(state.phaseCurrents[0]**2 + state.phaseCurrents[1]**2 + state.phaseCurrents[2]**2) / Math.sqrt(2);
+  state.current = Math.min(cfg.maxCurrent * 1.5, state.current);
+
+  // Torque angle (power angle)
+  const torqueAngle = Math.PI / 4; // 45° = max torque
+  state.torque = cfg.torqueConst * state.current * Math.sin(torqueAngle) * 3;
+
+  // Force sync speed
+  state.omega += (nsync - state.omega) * 0.5;
+}
+
+// ── PMSM (sinusoidal commutation) ──
+function stepPMSM(h, rpm, freq) {
+  const wt = state.angle * cfg.poles / 2; // electrical angle
+  const Vpeak = state.voltage;
+
+  // Sinusoidal phase voltages
+  for (let i = 0; i < 3; i++) {
+    state.phaseVoltages[i] = Vpeak * Math.sin(wt + i * 2 * Math.PI / 3);
+  }
+
+  // Back-EMF (sinusoidal)
+  const ke = 1 / (cfg.kv * (2 * Math.PI / 60));
+  const emfPeak = ke * state.omega;
+  for (let i = 0; i < 3; i++) {
+    state.phaseEMF[i] = emfPeak * Math.sin(wt + i * 2 * Math.PI / 3);
+    state.phaseCurrents[i] = (state.phaseVoltages[i] - state.phaseEMF[i]) / cfg.resistance;
+  }
+
+  state.emf = emfPeak;
+  state.current = Math.sqrt(state.phaseCurrents[0]**2 + state.phaseCurrents[1]**2 + state.phaseCurrents[2]**2) / Math.sqrt(2) * 0.8;
+  state.current = Math.min(cfg.maxCurrent * 1.5, state.current);
+  state.torque = cfg.torqueConst * state.current * 2;
+}
+
+// ── BLDC (trapezoidal six-step commutation) ──
+function stepBLDC(h, rpm, freq) {
+  const wt = state.angle * cfg.poles / 2;
+  const Vpeak = state.voltage;
+
+  // Six-step commutation: each phase is +V, -V, or floating
+  const sector = Math.floor((wt % (2 * Math.PI)) / (Math.PI / 3)) % 6;
+  const states = [
+    [1, 0, -1], [1, -1, 0], [0, -1, 1],
+    [-1, 0, 1], [-1, 1, 0], [0, 1, -1],
+  ][sector];
+
+  for (let i = 0; i < 3; i++) {
+    state.phaseVoltages[i] = states[i] * Vpeak;
+  }
+
+  // Trapezoidal back-EMF
+  const ke = 1 / (cfg.kv * (2 * Math.PI / 60));
+  const emfPeak = ke * state.omega;
+  for (let i = 0; i < 3; i++) {
+    // Trapezoidal waveform
+    const phase = ((wt + i * 2 * Math.PI / 3) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+    let trap;
+    if (phase < Math.PI / 3) trap = phase / (Math.PI / 3);
+    else if (phase < 2 * Math.PI / 3) trap = 1;
+    else if (phase < Math.PI) trap = 1 - (phase - 2 * Math.PI / 3) / (Math.PI / 3);
+    else if (phase < 4 * Math.PI / 3) trap = -1 + (phase - Math.PI) / (Math.PI / 3) - 1;
+    else if (phase < 5 * Math.PI / 3) trap = -1;
+    else trap = -1 + (phase - 5 * Math.PI / 3) / (Math.PI / 3);
+    trap = Math.max(-1, Math.min(1, trap));
+    state.phaseEMF[i] = emfPeak * trap;
+    state.phaseCurrents[i] = (state.phaseVoltages[i] - state.phaseEMF[i]) / cfg.resistance;
+  }
+
+  state.emf = emfPeak;
+  state.current = Math.abs(state.phaseCurrents[0]) + Math.abs(state.phaseCurrents[1]) + Math.abs(state.phaseCurrents[2]);
+  state.current = state.current / 2;
+  state.current = Math.min(cfg.maxCurrent * 1.5, state.current);
+  state.torque = cfg.torqueConst * state.current * 2;
+}
+
+// ── Shared helpers for wound-field brushed motors ──
+function computeBurnEffects(h) {
+  let burnR, burnTorqueFactor;
+  if (state.burnedOut) {
+    if (Math.abs(state.voltage) > cfg.maxVoltage * 2 && !state.fullyDestroyed) {
+      state.wreckTime = (state.wreckTime || 0) + h;
+      if (!state._wreckThreshold) state._wreckThreshold = 8 + Math.random() * 6;
+      burnR = 0.1 + Math.random() * 0.5;
+      burnTorqueFactor = (0.2 + Math.random() * 0.5) * (Math.random() < 0.2 ? 0 : 1);
+      const wp = Math.min(1, state.wreckTime / state._wreckThreshold);
+      if (Math.random() < h * (20 + wp * 40)) emitSparks(0.4 + Math.random() * 0.6);
+      if (Math.random() < h * (15 + wp * 35)) emitFire();
+      if (Math.random() < h * (10 + wp * 25)) emitArcs(0.5 + Math.random() * 0.5);
+      if (Math.random() < h * (15 + wp * 30)) emitSmoke(1);
+      state.ringFire = Math.min(1, state.ringFire + h * 2);
+      if (state.wreckTime > state._wreckThreshold) {
+        state.powered = false; state.torque = 0; explode(); audio.playExplosion();
+      }
+    } else {
+      burnR = 1000; burnTorqueFactor = 0;
+    }
+  } else if (state.burnDamage < 0.4) {
+    burnR = 1 + state.burnDamage * 1.5;
+    burnTorqueFactor = 1 - state.burnDamage * 0.5;
+  } else {
+    burnR = Math.max(0.2, 1 + 0.6 - (state.burnDamage - 0.4) * 3);
+    burnTorqueFactor = 1 - state.burnDamage * 0.5;
+  }
+  let failSparkBoost = 0;
+  if (state.failing) {
+    if (Math.random() < 0.15) { burnR *= 0.3; failSparkBoost = 0.6; }
+    else if (Math.random() < 0.2) { burnR *= 5; failSparkBoost = 0.3; }
+    failSparkBoost = Math.max(failSparkBoost, 0.2 + state.burnDamage * 0.4);
+  }
+  return { burnR, burnTorqueFactor, failSparkBoost };
+}
+
+function brushedCommutation(h, failSparkBoost) {
+  const segments = cfg.slots || 12;
+  const segAngle = (2 * Math.PI) / segments;
+  const ratedOmega = (cfg.baseKv || cfg.kv) * (cfg.baseVoltage || cfg.maxVoltage) * (2 * Math.PI / 60);
+
+  const newSegment = Math.floor(state.angle / segAngle);
+  if (newSegment !== state.commutatorSegment) {
+    const coilL = cfg.inductance / (segments / 2);
+    const commTime = segAngle / Math.max(0.1, Math.abs(state.omega));
+    const sparkV = coilL * state.current / Math.max(0.0001, commTime);
+    const speedRatio = Math.abs(state.omega) / Math.max(1, ratedOmega);
+    state.sparkIntensity = Math.min(1, sparkV / 25 + failSparkBoost + speedRatio * 0.3);
+    if (state.sparkIntensity > 0.04) {
+      emitSparks(state.sparkIntensity);
+      if (state.sparkIntensity > 0.15) emitArcs(state.sparkIntensity);
+    }
+    state.commutatorSegment = newSegment;
+  } else {
+    state.sparkIntensity *= 0.88;
+  }
+
+  const overCurrent = Math.abs(state.current) > cfg.maxCurrent ? (Math.abs(state.current) - cfg.maxCurrent) / cfg.maxCurrent : 0;
+  const av = Math.abs(state.voltage);
+  const overVolt = av > cfg.maxVoltage ? av / cfg.maxVoltage : 1;
+  const speedRatio = Math.abs(state.omega) / Math.max(1, ratedOmega);
+  const speedArcFactor = Math.max(0, speedRatio - 0.5) * 0.8;
+  const ringTarget = Math.min(1, Math.max(state.sparkIntensity * 0.7, overCurrent * 0.8, (overVolt - 2) * 0.15, speedArcFactor));
+  state.ringFire += (ringTarget - state.ringFire) * 0.15;
+  if (state.ringFire > 0.05 && Math.random() < state.ringFire * 0.4) emitSparks(state.ringFire * 0.6);
+  if (state.ringFire > 0.3 && Math.random() < state.ringFire * 0.2) emitArcs(state.ringFire * 0.5);
+  if (speedRatio > 0.8 && !state.burnedOut) {
+    const sai = Math.min(1, (speedRatio - 0.8) * 1.5);
+    if (Math.random() < h * (10 + sai * 30)) emitArcs(sai);
+    if (Math.random() < h * (8 + sai * 25)) emitSparks(sai * 0.8);
+    state.ringFire = Math.min(1, state.ringFire + h * sai * 0.5);
+  }
+  state.ripplePhase = state.angle * segments;
+}
+
+// ── Series DC / Universal (series field: flux ∝ I, T ∝ I²) ──
+function stepSeriesDC(h, rpm) {
+  const { burnR, burnTorqueFactor, failSparkBoost } = computeBurnEffects(h);
+  const ks = cfg.torqueConst * 8;
+  const vArm = state.powered ? (state.voltage > 0 ? Math.max(0, state.voltage - cfg.brushDrop) : Math.min(0, state.voltage + cfg.brushDrop)) : 0;
+
+  // Series: E = ks·I·ω  →  V = I·(R + ks·ω) + L·dI/dt
+  const R = cfg.resistance * burnR;
+  const Reff = R + ks * state.omega;
+  const alpha = h * Reff / cfg.inductance;
+  state.current = (state.current + h * vArm / cfg.inductance) / (1 + alpha);
+  state.current = Math.max(-cfg.maxCurrent * 20, Math.min(cfg.maxCurrent * 20, state.current));
+
+  // Saturation
+  const Isat = cfg.maxCurrent * 1.2;
+  const satFactor = 1 / Math.sqrt(1 + (state.current / Isat) ** 2);
+  state.emf = ks * state.current * satFactor * state.omega;
+  state.torque = ks * state.current * state.current * satFactor * burnTorqueFactor;
+
+  brushedCommutation(h, failSparkBoost);
+}
+
+// ── Shunt DC (field in parallel: flux ≈ const, T ∝ I) ──
+function stepShunt(h, rpm) {
+  const { burnR, burnTorqueFactor, failSparkBoost } = computeBurnEffects(h);
+  const ke = cfg.ke;
+  const vArm = state.powered ? (state.voltage > 0 ? Math.max(0, state.voltage - cfg.brushDrop) : Math.min(0, state.voltage + cfg.brushDrop)) : 0;
+
+  state.emf = ke * state.omega;
+  const R = cfg.resistance * burnR;
+  const alpha = h * R / cfg.inductance;
+  state.current = (state.current + h * (vArm - state.emf) / cfg.inductance) / (1 + alpha);
+  state.current = Math.max(-cfg.maxCurrent * 20, Math.min(cfg.maxCurrent * 20, state.current));
+  state.torque = ke * state.current * burnTorqueFactor;
+
+  brushedCommutation(h, failSparkBoost);
+}
+
+// ── Repulsion (AC, transformer-coupled series motor with offset brushes) ──
+function stepRepulsion(h, rpm) {
+  const { burnR, burnTorqueFactor, failSparkBoost } = computeBurnEffects(h);
+  const brushAngle = Math.PI / 4;
+  const coupling = Math.sin(2 * brushAngle);
+  const kt = cfg.torqueConst * 6 * coupling;
+  const vArm = state.powered ? state.voltage : 0;
+
+  const R = cfg.resistance * burnR;
+  const vEff = vArm - (vArm > 0 ? cfg.brushDrop : vArm < 0 ? -cfg.brushDrop : 0);
+  const Reff = R + kt * state.omega;
+  const alpha = h * Reff / cfg.inductance;
+  state.current = (state.current + h * vEff / cfg.inductance) / (1 + alpha);
+  state.current = Math.max(-cfg.maxCurrent * 20, Math.min(cfg.maxCurrent * 20, state.current));
+
+  const Isat = cfg.maxCurrent * 1.2;
+  const satFactor = 1 / Math.sqrt(1 + (state.current / Isat) ** 2);
+  state.emf = kt * state.current * satFactor * state.omega;
+  state.torque = kt * state.current * state.current * satFactor * burnTorqueFactor;
+
+  brushedCommutation(h, failSparkBoost);
+}
+
+// ── Synchronous Reluctance (3-phase AC, salient rotor, reluctance torque) ──
+function stepSyncRel(h, rpm, freq) {
+  const nsync = (120 * freq / cfg.poles) * (2 * Math.PI / 60);
+  const wt = 2 * Math.PI * freq * state.simTime;
+  const Vpeak = state.voltage;
+
+  for (let i = 0; i < 3; i++) {
+    state.phaseVoltages[i] = Vpeak * Math.sin(wt + i * 2 * Math.PI / 3);
+  }
+
+  const ke = 1 / (cfg.kv * (2 * Math.PI / 60));
+  state.emf = ke * nsync;
+  for (let i = 0; i < 3; i++) {
+    state.phaseEMF[i] = state.emf * Math.sin(wt + i * 2 * Math.PI / 3);
+    state.phaseCurrents[i] = (state.phaseVoltages[i] - state.phaseEMF[i]) / cfg.resistance;
+  }
+
+  state.current = Math.sqrt(state.phaseCurrents[0]**2 + state.phaseCurrents[1]**2 + state.phaseCurrents[2]**2) / Math.sqrt(2);
+  state.current = Math.min(cfg.maxCurrent * 1.5, state.current);
+
+  // Reluctance torque: T ∝ sin(2δ), max at 45°
+  const loadAngle = Math.PI / 4;
+  state.torque = cfg.torqueConst * state.current * Math.sin(2 * loadAngle) * 3;
+
+  // Force sync speed
+  state.omega += (nsync - state.omega) * 0.5;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SPARKS (for brushed DC)
+// ═══════════════════════════════════════════════════════════════════════
+// Get all hole positions (4 arc holes + 4 circular gap holes)
+function getHolePositions() {
+  const pos = [];
+  const numArc = 4, holeR = 55, gapR = 38;
+  for (let i = 0; i < numArc; i++) {
+    const a = (i / numArc) * Math.PI * 2 + Math.PI / numArc;
+    pos.push({x: MCX + Math.cos(a) * holeR, y: MCY + Math.sin(a) * holeR, a});
+    const ga = a + Math.PI / numArc;
+    pos.push({x: MCX + Math.cos(ga) * gapR, y: MCY + Math.sin(ga) * gapR, a: ga});
+  }
+  return pos;
+}
+
+function emitSparks(intensity) {
+  const arcing = state.failing || state.sparkIntensity > 0.3;
+  const velBoost = arcing ? 1.8 : 1; // arcing throws sparks much harder
+  if (state.endCap && cfg.brushedType) {
+    const commR = 32;
+    const count = Math.floor(3 + intensity * 7);
+    // No holes — all sparks stay inside, visible through translucent cap
+    for (let i = 0; i < count; i++) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const sx = MCX + side * (commR + 2) + (Math.random() - 0.5) * 4;
+      const sy = MCY + (Math.random() - 0.5) * 10;
+      const baseAngle = side > 0 ? 0 : Math.PI;
+      const spread = (Math.random() - 0.5) * Math.PI * 0.7;
+      const a = baseAngle + spread;
+      const sp = (15 + Math.random() * 50 * intensity) * velBoost;
+      state.sparks.push({
+        x: sx, y: sy,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 10,
+        life: 0.04 + Math.random() * 0.08, maxLife: 0.12,
+        size: 0.6 + Math.random() * 1.2,
+        escapes: false,
+        arcing,
+      });
+    }
+    return;
+  }
+  for (const side of [-1, 1]) {
+    const sx = MCX + side * 30;
+    const sy = MCY;
+    const count = Math.floor(3 + intensity * 7);
+    for (let i = 0; i < count; i++) {
+      const baseAngle = side > 0 ? 0 : Math.PI;
+      const spread = (Math.random() - 0.5) * Math.PI * 0.9;
+      const a = baseAngle + spread;
+      const sp = (25 + Math.random() * 90 * intensity) * velBoost;
+      state.sparks.push({
+        x: sx + (Math.random() - 0.5) * 4,
+        y: sy + (Math.random() - 0.5) * 10,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 15,
+        life: 0.06 + Math.random() * 0.15,
+        maxLife: 0.21,
+        size: 0.8 + Math.random() * 2,
+        arcing,
+      });
+    }
+  }
+}
+
+function tickSparks(dt) {
+  const capR2 = 155 * 155;
+  for (let i = state.sparks.length - 1; i >= 0; i--) {
+    const s = state.sparks[i];
+    s.life -= dt;
+    if (s.life <= 0) { state.sparks.splice(i, 1); continue; }
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    s.vx *= 0.92; s.vy *= 0.92;
+    // Kill non-escaping sparks that fly outside the end cap radius
+    if (s.escapes !== true && state.endCap && cfg.brushedType) {
+      const dx = s.x - MCX, dy = s.y - MCY;
+      if (dx*dx + dy*dy > capR2) { state.sparks.splice(i, 1); continue; }
+    }
+  }
+}
+
+// ── Smoke particles ──
+function emitSmoke(intensity) {
+  let sources;
+  if (state.endCap && cfg.brushedType) {
+    // No holes — smoke escapes from shaft hole and cap rim edges
+    const rimA = Math.random() * Math.PI * 2;
+    const rimR = 155;
+    sources = [
+      {x: MCX, y: MCY}, // shaft hole
+      {x: MCX + Math.cos(rimA) * rimR, y: MCY + Math.sin(rimA) * rimR}, // cap rim
+    ];
+  } else {
+    // Smoke from rotor (radius ~85) — windings/commutator are what actually burn
+    sources = [
+      {x: MCX + (Math.random() - 0.5) * 60, y: MCY - 60},
+      {x: MCX + (Math.random() - 0.5) * 60, y: MCY + 60},
+      {x: MCX - 50, y: MCY + (Math.random() - 0.5) * 40},
+      {x: MCX + 50, y: MCY + (Math.random() - 0.5) * 40},
+    ];
+  }
+  const src = sources[Math.floor(Math.random() * sources.length)];
+  state.smoke.push({
+    x: src.x + (Math.random() - 0.5) * 20,
+    y: src.y + (Math.random() - 0.5) * 10,
+    vx: (Math.random() - 0.5) * 15,
+    vy: -20 - Math.random() * 30 * intensity,
+    life: 1.5 + Math.random() * 2,
+    maxLife: 3.5,
+    size: 8 + Math.random() * 16,
+    growth: 15 + Math.random() * 20,
+    dark: state.burnedOut ? 0.15 + Math.random() * 0.15 : 0.35 + Math.random() * 0.25,
+  });
+}
+
+function tickSmoke(dt) {
+  for (let i = state.smoke.length - 1; i >= 0; i--) {
+    const s = state.smoke[i];
+    s.life -= dt;
+    if (s.life <= 0) { state.smoke.splice(i, 1); continue; }
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    s.vx *= 0.98;
+    s.vy *= 0.99;
+    s.size += s.growth * dt;
+  }
+}
+
+// ── Fire particles ──
+function emitFire() {
+  let src;
+  if (state.endCap && cfg.brushedType) {
+    // No holes — fire originates inside at commutator, visible through translucent cap
+    src = {x: MCX + (Math.random() - 0.5) * 50, y: MCY + (Math.random() - 0.5) * 30, a: -Math.PI / 2};
+  } else {
+    src = {x: MCX + (Math.random() - 0.5) * 60, y: MCY + (Math.random() - 0.5) * 40, a: -Math.PI / 2};
+  }
+  // Emit a small cluster of flames per call for a denser, more realistic plume
+  const burst = 2 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < burst; i++) {
+    const jitter = i === 0 ? 0 : 1;
+    state.fire.push({
+      x: src.x + (Math.random() - 0.5) * 12 * jitter,
+      y: src.y + (Math.random() - 0.5) * 8 * jitter,
+      vx: Math.cos(src.a) * 20 + (Math.random() - 0.5) * 25,
+      vy: Math.sin(src.a) * 20 - 30 - Math.random() * 50,
+      life: 0.3 + Math.random() * 0.5,
+      maxLife: 0.8,
+      size: 4 + Math.random() * 10,
+      seed: Math.random(),
+    });
+  }
+}
+
+// ── Plastic end cap surface fire — flames crawl across the cap exterior ──
+function emitCapFire() {
+  const capR = 156; // approx cap radius
+  // Fire from random points on the cap surface (not through holes — on the plastic itself)
+  const a = Math.random() * Math.PI * 2;
+  const r = 20 + Math.random() * (capR - 25);
+  const x = MCX + Math.cos(a) * r;
+  const y = MCY + Math.sin(a) * r;
+  const outward = Math.atan2(y - MCY, x - MCX);
+  state.fire.push({
+    x: x, y: y,
+    vx: Math.cos(outward) * 15 + (Math.random() - 0.5) * 20,
+    vy: Math.sin(outward) * 10 - 25 - Math.random() * 40,
+    life: 0.4 + Math.random() * 0.6,
+    maxLife: 1.0,
+    size: 5 + Math.random() * 12,
+    capFire: true,
+  });
+  // Dripping molten plastic — small glowing blobs falling
+  if (Math.random() < 0.3) {
+    state.fire.push({
+      x: x, y: y,
+      vx: (Math.random() - 0.5) * 10,
+      vy: 20 + Math.random() * 30, // falls downward
+      life: 0.5 + Math.random() * 0.8,
+      maxLife: 1.3,
+      size: 2 + Math.random() * 4,
+      capFire: true,
+    });
+  }
+}
+
+function tickFire(dt) {
+  for (let i = state.fire.length - 1; i >= 0; i--) {
+    const f = state.fire[i];
+    f.life -= dt;
+    if (f.life <= 0) { state.fire.splice(i, 1); continue; }
+    f.x += f.vx * dt;
+    f.y += f.vy * dt;
+    f.vx *= 0.94;
+    f.vy *= 0.96;
+    f.size *= 0.97;
+  }
+}
+
+// ── Electrical arcs ──
+function emitArcs(intensity) {
+  if (state.endCap && cfg.brushedType) {
+    // Arcs stay at commutator area (covered by cap, glow visible through holes)
+    for (const side of [-1, 1]) {
+      const sx = MCX + side * 30;
+      const sy = MCY + (Math.random() - 0.5) * 12;
+      state.arcs.push({
+        x: sx, y: sy, side: side, intensity: intensity,
+        life: 0.04 + Math.random() * 0.06, maxLife: 0.1,
+        points: generateArcPath(sx, sy, intensity),
+      });
+    }
+    return;
+  }
+  for (const side of [-1, 1]) {
+    const sx = MCX + side * 30;
+    const sy = MCY + (Math.random() - 0.5) * 12;
+    state.arcs.push({
+      x: sx, y: sy,
+      side: side,
+      intensity: intensity,
+      life: 0.04 + Math.random() * 0.06,
+      maxLife: 0.1,
+      points: generateArcPath(sx, sy, intensity),
+    });
+  }
+}
+
+function generateArcPath(sx, sy, intensity) {
+  const pts = [{x: sx, y: sy}];
+  const endX = sx + (Math.random() - 0.5) * 20;
+  const endY = sy + (Math.random() - 0.5) * 24;
+  const steps = 3 + Math.floor(intensity * 4);
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const jitter = 6 * intensity;
+    pts.push({
+      x: sx + (endX - sx) * t + (Math.random() - 0.5) * jitter,
+      y: sy + (endY - sy) * t + (Math.random() - 0.5) * jitter,
+    });
+  }
+  return pts;
+}
+
+function tickArcs(dt) {
+  for (let i = state.arcs.length - 1; i >= 0; i--) {
+    state.arcs[i].life -= dt;
+    if (state.arcs[i].life <= 0) state.arcs.splice(i, 1);
+  }
+}
+
+// Glowing debris — brush/commutator fragments thrown far from motor
+function emitDebris() {
+  const a = Math.random() * Math.PI * 2;
+  const sp = 80 + Math.random() * 200;
+  const pieceType = Math.random();
+  let color, size, shape;
+  if (pieceType < 0.5) {
+    color = '#b87333'; size = 2 + Math.random() * 4; shape = 'wedge'; // copper commutator
+  } else {
+    color = '#1a1a1a'; size = 3 + Math.random() * 4; shape = 'rect'; // carbon brush
+  }
+  state.shrapnel.push({
+    x: MCX + (Math.random() - 0.5) * 30,
+    y: MCY + (Math.random() - 0.5) * 30,
+    vx: Math.cos(a) * sp,
+    vy: Math.sin(a) * sp - 40,
+    rot: Math.random() * Math.PI * 2,
+    omega: (Math.random() - 0.5) * 20,
+    life: 0.8 + Math.random() * 1,
+    maxLife: 1.8,
+    size, color, shape,
+  });
+  // Spark trail from the glowing fragment
+  state.sparks.push({
+    x: MCX + (Math.random() - 0.5) * 30,
+    y: MCY + (Math.random() - 0.5) * 30,
+    vx: Math.cos(a) * sp * 0.8,
+    vy: Math.sin(a) * sp * 0.8 - 30,
+    life: 0.2 + Math.random() * 0.3, maxLife: 0.5,
+    size: 1 + Math.random() * 2,
+    escapes: true,
+  });
+}
+
+function tickShrapnel(dt) {
+  for (let i = state.shrapnel.length - 1; i >= 0; i--) {
+    const s = state.shrapnel[i];
+    s.life -= dt;
+    if (s.life <= 0) { state.shrapnel.splice(i, 1); continue; }
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    s.vy += 200 * dt; // gravity
+    s.vx *= 0.99;
+    s.rot += s.omega * dt;
+  }
+}
+
+// ── Explosion ──
+function explode() {
+  state.exploded = true;
+  state.sparks = [];
+
+  // ── Dying explosion sequence: rapid bursts, pauses, rapid again, until dead ──
+  let waveNum = 0;
+  let totalElapsed = 0;
+  const maxDuration = 4 + Math.random() * 3; // total time before final death
+
+  function scheduleNext() {
+    if (!state.exploded || totalElapsed > maxDuration) {
+      // Final death — let the motor coast down gradually via destroyed damping
+      state.fullyDestroyed = true;
+      state.powered = false;
+      state.torque = 0;
+      return;
+    }
+
+    // Each explosion bumps speed up
+    state.omega += (Math.random() * 2 + 1) * Math.sign(state.omega || 1);
+    state.ringFire = 1;
+
+    // Fire one rapid burst
+    explosionBurst(waveNum);
+    if (audio.started) audio.playExplosionWave(waveNum);
+    waveNum++;
+    totalElapsed += 0.08 + Math.random() * 0.05;
+
+    // Schedule next burst — sometimes rapid, sometimes a pause
+    const gap = Math.random() < 0.3
+      ? 0.3 + Math.random() * 0.6  // unpredictable pause
+      : 0.06 + Math.random() * 0.08; // rapid
+    totalElapsed += gap;
+    setTimeout(scheduleNext, gap * 1000);
+  }
+
+  // Initial blast
+  explosionBurst(0);
+  if (audio.started) audio.playExplosion();
+  waveNum = 1;
+  totalElapsed = 0.1;
+  setTimeout(scheduleNext, 100);
+}
+
+// Single explosion burst — sparks, arcs, fire, smoke, shrapnel
+function explosionBurst(waveNum) {
+  const intensity = Math.max(0.5, 1 - waveNum * 0.04);
+  // Arcs reaching far beyond motor
+  const numArcs = 8 + Math.floor(Math.random() * 10);
+  for (let i = 0; i < numArcs; i++) {
+    const sx = MCX + (Math.random() - 0.5) * 120;
+    const sy = MCY + (Math.random() - 0.5) * 100;
+    state.arcs.push({
+      x: sx, y: sy, side: 1, intensity: 0.8 + Math.random() * 0.2,
+      life: 0.1 + Math.random() * 0.15, maxLife: 0.25,
+      points: generateArcPath(sx, sy, 1.5),
+    });
+  }
+  // Violent sparks thrown far beyond the motor
+  const sparkCount = 40 + Math.floor(Math.random() * 40);
+  for (let i = 0; i < sparkCount; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 100 + Math.random() * 400;
+    state.sparks.push({
+      x: MCX + (Math.random() - 0.5) * 40,
+      y: MCY + (Math.random() - 0.5) * 40,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp - 40,
+      life: 0.3 + Math.random() * 0.6, maxLife: 0.9,
+      size: 1.2 + Math.random() * 3 * intensity,
+      escapes: true,
+    });
+  }
+  // Fire
+  for (let i = 0; i < 12; i++) {
+    state.fire.push({
+      x: MCX + (Math.random() - 0.5) * 50,
+      y: MCY + (Math.random() - 0.5) * 40,
+      vx: (Math.random() - 0.5) * 80,
+      vy: -30 - Math.random() * 70,
+      life: 0.3 + Math.random() * 0.5, maxLife: 0.8,
+      size: 5 + Math.random() * 12,
+    });
+  }
+  // Smoke
+  for (let i = 0; i < 5; i++) {
+    state.smoke.push({
+      x: MCX + (Math.random() - 0.5) * 60,
+      y: MCY + (Math.random() - 0.5) * 50,
+      vx: (Math.random() - 0.5) * 40,
+      vy: -20 - Math.random() * 40,
+      life: 2 + Math.random() * 2, maxLife: 4,
+      size: 10 + Math.random() * 15,
+      growth: 20 + Math.random() * 20,
+      dark: 0.1 + Math.random() * 0.1,
+    });
+  }
+  // Shrapnel on some bursts
+  if (waveNum % 3 === 0) {
+    const numShrapnel = 4 + Math.floor(Math.random() * 6);
+    for (let i = 0; i < numShrapnel; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 100 + Math.random() * 200;
+      const pieceType = Math.random();
+      let color, size, shape;
+      if (pieceType < 0.3) { color = '#1a1a1a'; size = 4 + Math.random() * 4; shape = 'rect'; }
+      else if (pieceType < 0.6) { color = '#b87333'; size = 3 + Math.random() * 5; shape = 'wedge'; }
+      else if (pieceType < 0.85) { color = '#4a4a5a'; size = 5 + Math.random() * 8; shape = 'rect'; }
+      else { color = Math.random() < 0.5 ? '#cc3333' : '#3333cc'; size = 6 + Math.random() * 6; shape = 'wedge'; }
+      state.shrapnel.push({
+        x: MCX + (Math.random() - 0.5) * 40,
+        y: MCY + (Math.random() - 0.5) * 40,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 50,
+        rot: Math.random() * Math.PI * 2,
+        omega: (Math.random() - 0.5) * 15,
+        life: 1.5 + Math.random() * 1.5, maxLife: 3,
+        size, color, shape,
+      });
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════════════════════════════════
+const audio = {
+  ctx: null, master: null, started: false,
+  osc1: null, osc2: null, g1: null, g2: null,
+  noise: null, noiseGain: null, noiseFilt: null,
+  subOsc: null, subGain: null,
+  lastSparkSound: 0,
+
+  init() {
+    if (this.started) {
+      if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+      return;
+    }
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.25;
+    this.master.connect(this.ctx.destination);
+    this.started = true;
+    this.startEngine();
+  },
+
+  startEngine() {
+    const c = this.ctx, now = c.currentTime;
+    this.osc1 = c.createOscillator(); this.osc1.type = 'sawtooth';
+    this.osc1.frequency.value = 40;
+    this.g1 = c.createGain(); this.g1.gain.value = 0;
+    this.osc1.connect(this.g1); this.g1.connect(this.master); this.osc1.start(now);
+
+    this.osc2 = c.createOscillator(); this.osc2.type = 'triangle';
+    this.osc2.frequency.value = 80;
+    this.g2 = c.createGain(); this.g2.gain.value = 0;
+    this.osc2.connect(this.g2); this.g2.connect(this.master); this.osc2.start(now);
+
+    this.subOsc = c.createOscillator(); this.subOsc.type = 'sine';
+    this.subOsc.frequency.value = 20;
+    this.subGain = c.createGain(); this.subGain.gain.value = 0;
+    this.subOsc.connect(this.subGain); this.subGain.connect(this.master); this.subOsc.start(now);
+
+    // Noise for brush crackling
+    const buf = c.createBuffer(1, c.sampleRate, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    this.noise = c.createBufferSource(); this.noise.buffer = buf; this.noise.loop = true;
+    this.noiseFilt = c.createBiquadFilter(); this.noiseFilt.type = 'lowpass';
+    this.noiseFilt.frequency.value = 1000; this.noiseFilt.Q.value = 0.5;
+    this.noiseGain = c.createGain(); this.noiseGain.gain.value = 0;
+    this.noise.connect(this.noiseFilt); this.noiseFilt.connect(this.noiseGain);
+    this.noiseGain.connect(this.master); this.noise.start(now);
+  },
+
+  update() {
+    if (!this.started) return;
+    const c = this.ctx, t = c.currentTime + 0.03;
+    const rpm = Math.abs(state.omega) * 60 / (2 * Math.PI);
+    const freq = Math.max(10, rpm * cfg.poles / 120 * 2); // electrical freq
+    const load = Math.min(1, state.current / cfg.maxCurrent);
+    const running = state.powered;
+    const coasting = !state.powered && !state.burnedOut && rpm > 5; // whir audible while coasting
+
+    // Per-motor-type sound character
+    const profiles = {
+      brushed:  { type1: 'sawtooth', type2: 'square',   f1: freq * 0.5, f2: freq, g1: 0.06, g2: 0.04, sub: 0.03, noise: 0.02 },
+      induction:{ type1: 'sine',     type2: 'triangle', f1: freq,       f2: freq*2, g1: 0.05, g2: 0.02, sub: 0.04, noise: 0.01 },
+      synchronous:{type1: 'sine',    type2: 'sine',     f1: freq,       f2: freq*3, g1: 0.04, g2: 0.02, sub: 0.03, noise: 0.005 },
+      pmsm:     { type1: 'triangle', type2: 'sine',     f1: freq,       f2: freq*2, g1: 0.05, g2: 0.03, sub: 0.02, noise: 0.008 },
+      bldc:     { type1: 'sawtooth', type2: 'triangle', f1: freq,       f2: freq*1.5,g1: 0.06, g2: 0.04, sub: 0.02, noise: 0.015 },
+      seriesdc: { type1: 'sawtooth', type2: 'square',   f1: freq * 0.5, f2: freq, g1: 0.07, g2: 0.04, sub: 0.04, noise: 0.025 },
+      shunt:    { type1: 'sawtooth', type2: 'triangle', f1: freq * 0.5, f2: freq, g1: 0.06, g2: 0.03, sub: 0.03, noise: 0.02 },
+      universal:{ type1: 'sawtooth', type2: 'square',   f1: 60,          f2: freq, g1: 0.07, g2: 0.04, sub: 0.04, noise: 0.03 },
+      repulsion:{ type1: 'sawtooth', type2: 'triangle', f1: 60,          f2: freq, g1: 0.06, g2: 0.04, sub: 0.03, noise: 0.025 },
+      syncrel:  { type1: 'sine',     type2: 'triangle', f1: freq,       f2: freq*2, g1: 0.05, g2: 0.02, sub: 0.03, noise: 0.01 },
+    };
+    const p = profiles[cfg.key] || profiles.brushed;
+    const ts = state.timeScale; // slow-mo pitch shift
+
+    if (running) {
+      this.osc1.type = p.type1; this.osc2.type = p.type2;
+      this.osc1.frequency.setTargetAtTime(p.f1 * ts, t, 0.05);
+      this.osc2.frequency.setTargetAtTime(p.f2 * ts, t, 0.05);
+      this.subOsc.frequency.setTargetAtTime(p.f1 * 0.5 * ts, t, 0.05);
+      // Failing motor: cracky, poppy, sputtering sound
+      if (state.failing) {
+        const now = c.currentTime;
+        if (cfg.brushedType) {
+          // Brushed motors failing: crackle/fizzle/sizzle/pop on top of a
+          // subdued whir — keep the motor tone but drop the squeaky/metallic
+          // pitch jitter so the dominant texture is electrical crackling.
+          const sputterGain = 0.3 + Math.random() * 0.7;
+          this.g1.gain.setTargetAtTime(p.g1 * (0.3 + load * 0.7) * sputterGain, t, 0.05);
+          this.g2.gain.setTargetAtTime(p.g2 * (0.2 + load * 0.5) * sputterGain, t, 0.05);
+          this.subGain.gain.setTargetAtTime(p.sub * (0.4 + load * 0.5) * sputterGain, t, 0.05);
+          this.osc1.frequency.setTargetAtTime(p.f1 * ts, t, 0.1);
+          // Sizzle: soft bright noise that breathes with the sparks
+          this.noiseFilt.frequency.setTargetAtTime(2500 + Math.random() * 1500, t, 0.05);
+          this.noiseFilt.Q.value = 0.7;
+          this.noiseGain.gain.setTargetAtTime(0.03 + state.sparkIntensity * 0.04, t, 0.05);
+          // Loud, frequent crackles + pops — the dominant texture
+          if (Math.random() < 0.4) this.playCrackle(now, 0.06 + Math.random() * 0.08);
+          if (Math.random() < 0.5) this.playPop(now, 0.1 + Math.random() * 0.1);
+          // Extra sizzle ticks
+          if (Math.random() < 0.5) this.playSpark(0.4 + Math.random() * 0.5);
+        } else {
+          const sputterGain = 0.3 + Math.random() * 0.7;
+          this.g1.gain.setTargetAtTime(p.g1 * (0.3 + load * 0.7) * sputterGain, t, 0.02);
+          this.g2.gain.setTargetAtTime(p.g2 * (0.3 + load * 0.7) * sputterGain, t, 0.02);
+          this.subGain.gain.setTargetAtTime(p.sub * (0.5 + load * 0.5) * sputterGain, t, 0.02);
+          this.noiseGain.gain.setTargetAtTime(0.08 + Math.random() * 0.06, t, 0.03);
+          // Random pitch jitter for sputter
+          this.osc1.frequency.setTargetAtTime(p.f1 * ts * (0.8 + Math.random() * 0.4), t, 0.02);
+          // Crackling pops — random sharp transients
+          if (Math.random() < 0.15) this.playCrackle(now, 0.04 + Math.random() * 0.06);
+          if (Math.random() < 0.08) this.playPop(now, 0.06 + Math.random() * 0.08);
+        }
+      } else {
+        this.g1.gain.setTargetAtTime(p.g1 * (0.3 + load * 0.7), t, 0.05);
+        this.g2.gain.setTargetAtTime(p.g2 * (0.3 + load * 0.7), t, 0.05);
+        this.subGain.gain.setTargetAtTime(p.sub * (0.3 + load * 0.7), t, 0.05);
+        this.noiseGain.gain.setTargetAtTime(p.noise, t, 0.1);
+      }
+      if (!(cfg.brushedType && state.failing)) {
+        this.noiseFilt.frequency.setTargetAtTime(1000 * ts, t, 0.05);
+        this.noiseFilt.Q.value = 0.5;
+      }
+
+      // Brush crackling — intense during failure, louder for high-voltage ratings
+      if (cfg.brushedType && (state.sparkIntensity > 0.1 || state.failing)) {
+        const now = c.currentTime;
+        const sparkInt = state.failing ? Math.min(1, state.sparkIntensity + 0.4) : state.sparkIntensity;
+        const voltBoost = cfg.baseVoltage ? Math.min(2.5, Math.sqrt(cfg.maxVoltage / cfg.baseVoltage)) : 1;
+        // Sputter: irregular gaps so it crackles instead of buzzing continuously
+        const gap = state.failing ? (0.02 + Math.random() * 0.06) : 0.01;
+        if (now - this.lastSparkSound > gap) {
+          this.lastSparkSound = now;
+          // Occasionally skip a tick for a rougher, less metronomic texture
+          if (Math.random() < 0.85) this.playSpark(sparkInt * voltBoost);
+        }
+      }
+    } else if (coasting) {
+      // Coast-down whir — fades with RPM
+      const coastVol = Math.min(1, rpm / 500);
+      this.osc1.type = p.type1;
+      this.osc1.frequency.setTargetAtTime(p.f1 * ts, t, 0.1);
+      this.osc2.frequency.setTargetAtTime(p.f2 * ts, t, 0.1);
+      this.subOsc.frequency.setTargetAtTime(p.f1 * 0.5 * ts, t, 0.1);
+      this.g1.gain.setTargetAtTime(p.g1 * coastVol * 0.5, t, 0.1);
+      this.g2.gain.setTargetAtTime(p.g2 * coastVol * 0.5, t, 0.1);
+      this.subGain.gain.setTargetAtTime(p.sub * coastVol * 0.5, t, 0.1);
+      this.noiseGain.gain.setTargetAtTime(p.noise * coastVol * 0.3, t, 0.1);
+      this.noiseFilt.frequency.setTargetAtTime(1000 * ts, t, 0.1);
+    } else if (state.burnedOut) {
+      // Burned out but still spinning — whir fades with RPM, no noise
+      const coastVol = Math.min(1, rpm / 500);
+      this.osc1.frequency.setTargetAtTime(p.f1 * ts, t, 0.1);
+      this.osc2.frequency.setTargetAtTime(p.f2 * ts, t, 0.1);
+      this.subOsc.frequency.setTargetAtTime(p.f1 * 0.5 * ts, t, 0.1);
+      this.g1.gain.setTargetAtTime(p.g1 * coastVol * 0.4, t, 0.1);
+      this.g2.gain.setTargetAtTime(p.g2 * coastVol * 0.3, t, 0.1);
+      this.subGain.gain.setTargetAtTime(p.sub * coastVol * 0.3, t, 0.1);
+      this.noiseGain.gain.setTargetAtTime(0, t, 0.05);
+      this.noiseFilt.frequency.setTargetAtTime(1000 * ts, t, 0.1);
+    } else {
+      this.g1.gain.setTargetAtTime(0, t, 0.2);
+      this.g2.gain.setTargetAtTime(0, t, 0.2);
+      this.subGain.gain.setTargetAtTime(0, t, 0.2);
+      this.noiseGain.gain.setTargetAtTime(0, t, 0.2);
+    }
+  },
+
+  playSpark(intensity) {
+    const c = this.ctx, now = c.currentTime;
+    const buf = c.createBuffer(1, c.sampleRate * 0.04, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      const e = Math.exp(-i / (c.sampleRate * 0.006));
+      d[i] = (Math.random() * 2 - 1) * e * (Math.random() < 0.25 ? 1.5 : 0.4);
+    }
+    const src = c.createBufferSource(); src.buffer = buf;
+    // Bandpass ~1.2kHz gives a snappy electrical-arc tick without the harsh fizz
+    const filt = c.createBiquadFilter(); filt.type = 'bandpass';
+    filt.frequency.value = 1200 + Math.random() * 400; filt.Q.value = 0.8;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3500;
+    const g = c.createGain(); g.gain.value = 0.025 * Math.min(2, intensity);
+    src.connect(filt); filt.connect(lp); lp.connect(g); g.connect(this.master);
+    src.start(now); src.stop(now + 0.05);
+  },
+
+  playCrackle(now, intensity) {
+    const c = this.ctx;
+    const buf = c.createBuffer(1, c.sampleRate * 0.04, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      const e = Math.exp(-i / (c.sampleRate * 0.005));
+      d[i] = (Math.random() * 2 - 1) * e * (Math.random() < 0.3 ? 2 : 0.5);
+    }
+    const src = c.createBufferSource(); src.buffer = buf;
+    const filt = c.createBiquadFilter(); filt.type = 'lowpass';
+    filt.frequency.value = 600 + Math.random() * 400; filt.Q.value = 1;
+    const g = c.createGain(); g.gain.value = 0.05 * intensity;
+    src.connect(filt); filt.connect(g); g.connect(this.master);
+    src.start(now); src.stop(now + 0.05);
+  },
+
+  playPop(now, intensity) {
+    const c = this.ctx;
+    // Low-frequency pop — like a backfire or short circuit pop
+    const osc = c.createOscillator(); osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(40, now + 0.08);
+    const g = c.createGain(); g.gain.setValueAtTime(0.08 * intensity, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    osc.connect(g); g.connect(this.master);
+    osc.start(now); osc.stop(now + 0.12);
+    // Add a crackle layer to the pop
+    const buf = c.createBuffer(1, c.sampleRate * 0.03, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      const e = Math.exp(-i / (c.sampleRate * 0.004));
+      d[i] = (Math.random() * 2 - 1) * e;
+    }
+    const src = c.createBufferSource(); src.buffer = buf;
+    const filt = c.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 1800;
+    const g2 = c.createGain(); g2.gain.value = 0.03 * intensity;
+    src.connect(filt); filt.connect(g2); g2.connect(this.master);
+    src.start(now); src.stop(now + 0.04);
+  },
+
+  playExplosion() {
+    if (!this.started) return;
+    const c = this.ctx, now = c.currentTime;
+    // 1. Sharp crack
+    const crackBuf = c.createBuffer(1, c.sampleRate * 0.1, c.sampleRate);
+    const cd = crackBuf.getChannelData(0);
+    for (let i = 0; i < cd.length; i++) {
+      const e = Math.exp(-i / (c.sampleRate * 0.008));
+      cd[i] = (Math.random() * 2 - 1) * e;
+    }
+    const crackSrc = c.createBufferSource(); crackSrc.buffer = crackBuf;
+    const crackFilt = c.createBiquadFilter(); crackFilt.type = 'highpass'; crackFilt.frequency.value = 800;
+    const crackG = c.createGain(); crackG.gain.value = 0.3;
+    crackSrc.connect(crackFilt); crackFilt.connect(crackG); crackG.connect(this.master);
+    crackSrc.start(now); crackSrc.stop(now + 0.12);
+    // 2. Low boom
+    const boomOsc = c.createOscillator(); boomOsc.type = 'sine';
+    boomOsc.frequency.setValueAtTime(120, now);
+    boomOsc.frequency.exponentialRampToValueAtTime(25, now + 0.4);
+    const boomG = c.createGain(); boomG.gain.setValueAtTime(0.35, now);
+    boomG.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    boomOsc.connect(boomG); boomG.connect(this.master);
+    boomOsc.start(now); boomOsc.stop(now + 0.55);
+    // 3. Noise rumble
+    const rumbleBuf = c.createBuffer(1, c.sampleRate * 0.5, c.sampleRate);
+    const rd = rumbleBuf.getChannelData(0);
+    for (let i = 0; i < rd.length; i++) {
+      const e = Math.exp(-i / (c.sampleRate * 0.15));
+      rd[i] = (Math.random() * 2 - 1) * e;
+    }
+    const rumbleSrc = c.createBufferSource(); rumbleSrc.buffer = rumbleBuf;
+    const rumbleFilt = c.createBiquadFilter(); rumbleFilt.type = 'lowpass'; rumbleFilt.frequency.value = 400;
+    const rumbleG = c.createGain(); rumbleG.gain.value = 0.15;
+    rumbleSrc.connect(rumbleFilt); rumbleFilt.connect(rumbleG); rumbleG.connect(this.master);
+    rumbleSrc.start(now); rumbleSrc.stop(now + 0.6);
+
+    // 4. Prolonged series of explosion waves — each wave calls playExplosionWave() separately
+  },
+
+  playExplosionWave(waveIdx) {
+    if (!this.started) return;
+    const c = this.ctx, now = c.currentTime;
+    const decay = 1 - waveIdx * 0.08; // each wave slightly quieter
+    // Sharp crack
+    const crackBuf = c.createBuffer(1, c.sampleRate * 0.08, c.sampleRate);
+    const cd = crackBuf.getChannelData(0);
+    for (let i = 0; i < cd.length; i++) {
+      const e = Math.exp(-i / (c.sampleRate * 0.007));
+      cd[i] = (Math.random() * 2 - 1) * e;
+    }
+    const crackSrc = c.createBufferSource(); crackSrc.buffer = crackBuf;
+    const crackFilt = c.createBiquadFilter(); crackFilt.type = 'highpass'; crackFilt.frequency.value = 600 + Math.random() * 600;
+    const crackG = c.createGain(); crackG.gain.value = 0.2 * decay;
+    crackSrc.connect(crackFilt); crackFilt.connect(crackG); crackG.connect(this.master);
+    crackSrc.start(now); crackSrc.stop(now + 0.1);
+    // Electrical zap
+    const zapOsc = c.createOscillator(); zapOsc.type = 'sawtooth';
+    zapOsc.frequency.setValueAtTime(300 + Math.random() * 500, now);
+    zapOsc.frequency.exponentialRampToValueAtTime(50, now + 0.12);
+    const zapG = c.createGain(); zapG.gain.setValueAtTime(0.1 * decay, now);
+    zapG.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    zapOsc.connect(zapG); zapG.connect(this.master);
+    zapOsc.start(now); zapOsc.stop(now + 0.18);
+    // Low thump
+    const thumpOsc = c.createOscillator(); thumpOsc.type = 'sine';
+    thumpOsc.frequency.setValueAtTime(100 + Math.random() * 60, now);
+    thumpOsc.frequency.exponentialRampToValueAtTime(30, now + 0.2);
+    const thumpG = c.createGain(); thumpG.gain.setValueAtTime(0.15 * decay, now);
+    thumpG.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    thumpOsc.connect(thumpG); thumpG.connect(this.master);
+    thumpOsc.start(now); thumpOsc.stop(now + 0.3);
+    // Noise burst
+    const nBuf = c.createBuffer(1, c.sampleRate * 0.1, c.sampleRate);
+    const nd = nBuf.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) {
+      const e = Math.exp(-i / (c.sampleRate * 0.02));
+      nd[i] = (Math.random() * 2 - 1) * e;
+    }
+    const nSrc = c.createBufferSource(); nSrc.buffer = nBuf;
+    const nFilt = c.createBiquadFilter(); nFilt.type = 'lowpass'; nFilt.frequency.value = 3000;
+    const nG = c.createGain(); nG.gain.value = 0.12 * decay;
+    nSrc.connect(nFilt); nFilt.connect(nG); nG.connect(this.master);
+    nSrc.start(now); nSrc.stop(now + 0.12);
+  },
+};
+
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// RENDERING — Motor Cross-Section
+// ═══════════════════════════════════════════════════════════════════════
+const mCanvas = document.getElementById('motorCanvas');
+const mCtx = mCanvas.getContext('2d');
+const MW = mCanvas.width, MH = mCanvas.height;
+const MCX = MW / 2, MCY = MH / 2;
+const capOffscreen = document.createElement('canvas');
+capOffscreen.width = MW; capOffscreen.height = MH;
+
+function drawMotor() {
+  mCtx.clearRect(0, 0, MW, MH);
+
+  // Background grid (skip on low)
+  if (state.quality !== 'low') {
+    mCtx.strokeStyle = 'rgba(30,30,50,0.3)';
+    mCtx.lineWidth = 1;
+    for (let x = 0; x < MW; x += 40) { mCtx.beginPath(); mCtx.moveTo(x, 0); mCtx.lineTo(x, MH); mCtx.stroke(); }
+    for (let y = 0; y < MH; y += 40) { mCtx.beginPath(); mCtx.moveTo(0, y); mCtx.lineTo(MW, y); mCtx.stroke(); }
+  }
+
+  const isAC = cfg.phases === 3;
+  if (isAC) drawACMotor();
+  else drawBrushedMotor();
+
+  if (state.endCap && cfg.brushedType) {
+    // Internal effects — visible through translucent plastic cap
+    if (state.ringFire > 0.05) drawRingOfFire();
+    drawArcs();
+    drawSparks();
+    // Translucent end cap drawn on top — internals visible through it
+    drawEndCap(150);
+    // Cap-surface fire, shrapnel, and smoke — visible on top of cap
+    drawShrapnel();
+    drawFire();
+    drawSmoke();
+  } else {
+    if (cfg.brushedType && state.ringFire > 0.05) drawRingOfFire();
+    drawArcs();
+    drawSparks();
+    drawShrapnel();
+    drawFire();
+    drawSmoke();
+  }
+
+  // Temperature glow overlay
+  if (state.temp > 60) {
+    const intensity = Math.min(1, (state.temp - 60) / 100);
+    mCtx.fillStyle = `rgba(255,40,0,${intensity * 0.05})`;
+    mCtx.fillRect(0, 0, MW, MH);
+  }
+
+  // FAILING / BURNED OUT / EXPLODED stamp
+  if (state.burnedOut || state.failing) {
+    mCtx.save();
+    mCtx.fillStyle = state.failing ? 'rgba(255,140,0,0.8)' : 'rgba(255,0,0,0.8)';
+    mCtx.font = 'bold 20px system-ui';
+    mCtx.textAlign = 'center';
+    const stageLabel = state.failing ? ` [STAGE ${state.failStage + 1}/4]` : '';
+    const stamp = state.fullyDestroyed ? '☠ DESTROYED ☠'
+      : state.burnedOut
+      ? (state.exploded ? '💥 EXPLODED 💥' : '⚠ BURNED OUT ⚠')
+      : '⚠ FAILING ⚠' + stageLabel;
+    mCtx.fillText(stamp, MCX, MH - 12);
+    mCtx.restore();
+  }
+
+  // Brushes removed indicator
+  if (cfg.brushedType && cfg.brushes === false && !state.burnedOut) {
+    mCtx.save();
+    mCtx.fillStyle = 'rgba(255,140,0,0.7)';
+    mCtx.font = 'bold 14px system-ui';
+    mCtx.textAlign = 'center';
+    mCtx.fillText('⚠ BRUSHES REMOVED', MCX, MH - 12);
+    mCtx.restore();
+  }
+
+  // Slow-mo indicator
+  if (state.timeScale < 0.5) {
+    mCtx.save();
+    mCtx.fillStyle = 'rgba(200,154,255,0.7)';
+    mCtx.font = 'bold 11px system-ui';
+    mCtx.textAlign = 'right';
+    mCtx.fillText('🐌 SLOW-MO', MW - 8, 14);
+    mCtx.restore();
+  }
+
+  drawHighlight();
+}
+
+function drawStatorMagnet(angle, statorR, rotorR, gap, isN, numPoles = 2) {
+  const innerR = rotorR + gap;
+  const outerR = statorR;
+  const poleArc = Math.min(Math.PI * 0.72, (2 * Math.PI / numPoles) * 0.82);
+  mCtx.save();
+  mCtx.translate(MCX, MCY);
+  mCtx.rotate(angle);
+  const cDark = isN ? '#aa2222' : '#2222aa';
+  const cBright = isN ? '#ff4444' : '#4444ff';
+  const grad = mCtx.createLinearGradient(innerR, 0, outerR, 0);
+  grad.addColorStop(0, cDark); grad.addColorStop(0.5, cBright); grad.addColorStop(1, cDark);
+  mCtx.fillStyle = grad;
+  mCtx.beginPath();
+  mCtx.arc(0, 0, outerR, -poleArc/2, poleArc/2);
+  mCtx.arc(0, 0, innerR, poleArc/2, -poleArc/2, true);
+  mCtx.closePath();
+  mCtx.fill();
+  mCtx.strokeStyle = isN ? '#ff6666' : '#6666ff';
+  mCtx.lineWidth = 1; mCtx.stroke();
+  mCtx.fillStyle = '#fff';
+  mCtx.font = `bold ${numPoles > 6 ? 12 : 18}px system-ui`;
+  mCtx.textAlign = 'center'; mCtx.textBaseline = 'middle';
+  mCtx.fillText(isN ? 'N' : 'S', (innerR + outerR) / 2, 0);
+  mCtx.restore();
+}
+
+function drawWoundFieldPole(angle, statorR, rotorR, gap, isN, numPoles = 2) {
+  const innerR = rotorR + gap;
+  const outerR = statorR;
+  const poleArc = Math.min(Math.PI * 0.72, (2 * Math.PI / numPoles) * 0.82);
+  mCtx.save();
+  mCtx.translate(MCX, MCY);
+  mCtx.rotate(angle);
+
+  const energized = state.powered && Math.abs(state.current) > 0.1;
+  const intensity = energized ? Math.min(1, Math.abs(state.current) / cfg.maxCurrent) : 0;
+  const currentSign = state.current >= 0 ? 1 : -1;
+  const poleIsN = currentSign > 0 ? isN : !isN;
+
+  // Steel pole piece
+  const grad = mCtx.createLinearGradient(innerR, 0, outerR, 0);
+  if (energized && poleIsN) {
+    grad.addColorStop(0, '#3a2222'); grad.addColorStop(0.5, '#6a3838'); grad.addColorStop(1, '#3a2222');
+  } else if (energized && !poleIsN) {
+    grad.addColorStop(0, '#22223a'); grad.addColorStop(0.5, '#38386a'); grad.addColorStop(1, '#22223a');
+  } else {
+    grad.addColorStop(0, '#2a2a34'); grad.addColorStop(0.5, '#3e3e4a'); grad.addColorStop(1, '#2a2a34');
+  }
+  mCtx.fillStyle = grad;
+  mCtx.beginPath();
+  mCtx.arc(0, 0, outerR, -poleArc/2, poleArc/2);
+  mCtx.arc(0, 0, innerR, poleArc/2, -poleArc/2, true);
+  mCtx.closePath();
+  mCtx.fill();
+  mCtx.strokeStyle = '#555'; mCtx.lineWidth = 1; mCtx.stroke();
+
+  // Copper coil windings
+  const coilR = (innerR + outerR) / 2;
+  const numTurns = 7;
+  const turnSpacing = 4.5;
+  const tempHeat = Math.max(0, (state.temp - 20) / 130);
+  for (let t = 0; t < numTurns; t++) {
+    const ty = -((numTurns - 1) * turnSpacing) / 2 + t * turnSpacing;
+    let r, g, b;
+    if (state.burnDamage > 0.7) { r = 30; g = 15; b = 8; }
+    else {
+      r = Math.min(255, 184 + tempHeat * 60 + intensity * 50);
+      g = Math.max(40, 115 - tempHeat * 60 + intensity * 20);
+      b = Math.max(10, 51 - tempHeat * 40);
+    }
+    mCtx.fillStyle = `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
+    mCtx.beginPath();
+    mCtx.ellipse(coilR, ty, 7, 3.2, 0, 0, Math.PI * 2);
+    mCtx.fill();
+    mCtx.strokeStyle = 'rgba(60,30,10,0.5)';
+    mCtx.lineWidth = 0.5;
+    mCtx.stroke();
+  }
+
+  // N/S label when energized
+  if (energized) {
+    mCtx.fillStyle = poleIsN ? '#ff8888' : '#8888ff';
+    mCtx.font = `bold ${numPoles > 6 ? 12 : 16}px system-ui`;
+    mCtx.textAlign = 'center'; mCtx.textBaseline = 'middle';
+    mCtx.fillText(poleIsN ? 'N' : 'S', coilR, 0);
+  }
+
+  mCtx.restore();
+}
+
+function drawPMField(statorR, rotorR, gap) {
+  const intensity = Math.min(0.5, state.current / cfg.maxCurrent * 0.5);
+  const numLines = 7;
+  for (let i = 0; i < numLines; i++) {
+    const x = MCX + (i - (numLines-1)/2) * 22;
+    const topY = MCY - rotorR - gap;
+    const botY = MCY + rotorR + gap;
+    const curve = (i - (numLines-1)/2) * 4;
+    mCtx.strokeStyle = `rgba(255,140,40,${intensity * 0.35})`;
+    mCtx.lineWidth = 1;
+    mCtx.beginPath();
+    mCtx.moveTo(x, topY);
+    mCtx.bezierCurveTo(x + curve, MCY - rotorR * 0.3, x + curve, MCY + rotorR * 0.3, x, botY);
+    mCtx.stroke();
+    if (intensity > 0.05) {
+      mCtx.fillStyle = `rgba(255,140,40,${intensity * 0.6})`;
+      mCtx.beginPath();
+      mCtx.moveTo(x, MCY + 4);
+      mCtx.lineTo(x - 3, MCY - 2);
+      mCtx.lineTo(x + 3, MCY - 2);
+      mCtx.closePath();
+      mCtx.fill();
+    }
+  }
+}
+
+function drawBrushedMotor() {
+  const statorR = 150, rotorR = 85;
+  const gap = 10;
+  const numSlots = cfg.slots || 12;
+  const angle = state.angle;
+
+  // Stator housing
+  mCtx.strokeStyle = '#3a3a48'; mCtx.lineWidth = 4;
+  mCtx.beginPath(); mCtx.arc(MCX, MCY, statorR + 4, 0, Math.PI * 2); mCtx.stroke();
+
+  // Stator: permanent magnets (PMDC) or wound-field poles (series/shunt/universal/repulsion)
+  const numPoles = cfg.poles;
+  for (let i = 0; i < numPoles; i++) {
+    const ang = (i / numPoles) * Math.PI * 2 - Math.PI / 2;
+    const isN = i % 2 === 0;
+    if (cfg.field && cfg.field !== 'pm') {
+      drawWoundFieldPole(ang, statorR, rotorR, gap, isN, numPoles);
+    } else {
+      drawStatorMagnet(ang, statorR, rotorR, gap, isN, numPoles);
+    }
+  }
+
+  // Air gap indicator
+  mCtx.strokeStyle = 'rgba(60,80,120,0.12)'; mCtx.lineWidth = 1;
+  mCtx.setLineDash([2, 4]);
+  mCtx.beginPath(); mCtx.arc(MCX, MCY, rotorR + gap/2, 0, Math.PI * 2); mCtx.stroke();
+  mCtx.setLineDash([]);
+
+  // Field lines
+  if (state.powered && cfg.poles === 2 && cfg.field === 'pm') drawPMField(statorR, rotorR, gap);
+
+  // ── Rotor ──
+  mCtx.save();
+  mCtx.translate(MCX, MCY);
+  mCtx.rotate(angle);
+
+  const rGrad = mCtx.createRadialGradient(0, 0, 10, 0, 0, rotorR);
+  rGrad.addColorStop(0, '#3e3e52'); rGrad.addColorStop(0.7, '#343448'); rGrad.addColorStop(1, '#2a2a3e');
+  mCtx.fillStyle = rGrad;
+  mCtx.beginPath(); mCtx.arc(0, 0, rotorR, 0, Math.PI * 2); mCtx.fill();
+  mCtx.strokeStyle = '#444'; mCtx.lineWidth = 2; mCtx.stroke();
+
+  // Lamination lines (skip on low)
+  if (state.quality !== 'low') {
+    mCtx.strokeStyle = 'rgba(55,55,75,0.2)'; mCtx.lineWidth = 0.5;
+    for (let r = 18; r < rotorR - 5; r += 7) { mCtx.beginPath(); mCtx.arc(0, 0, r, 0, Math.PI*2); mCtx.stroke(); }
+  }
+
+  // Armature slots with copper coil windings
+  const slotR = rotorR * 0.74;
+  const ss = rotorR * 0.17; // slot size
+  const tempHeat = Math.max(0, (state.temp - 20) / 130); // 0-1 thermal factor
+  for (let i = 0; i < numSlots; i++) {
+    const sa = (i / numSlots) * Math.PI * 2;
+    const saStator = sa + angle;
+    const sx = Math.cos(sa) * slotR;
+    const sy = Math.sin(sa) * slotR;
+    const statorY = Math.sin(saStator);
+    const absY = Math.abs(statorY);
+    const inComm = absY < 0.24;
+    const fade = inComm ? Math.max(0, (absY - 0.06) / 0.18) : 1;
+
+    mCtx.save();
+    mCtx.translate(sx, sy);
+    mCtx.rotate(sa + Math.PI/2);
+
+    // Slot recess (darker with burn damage)
+    const slotDark = state.burnDamage > 0.3 ? '#0a0805' : '#151522';
+    mCtx.fillStyle = slotDark;
+    mCtx.fillRect(-ss/2, -ss*0.9, ss, ss*1.8);
+    mCtx.strokeStyle = '#333'; mCtx.lineWidth = 1;
+    mCtx.strokeRect(-ss/2, -ss*0.9, ss, ss*1.8);
+
+    // Copper coil windings — multiple turns visible in each slot
+    const turns = 3;
+    const turnW = ss * 0.28;
+    for (let t = 0; t < turns; t++) {
+      const ty = -ss * 0.6 + t * (ss * 1.2 / (turns - 1));
+      for (const layer of [-ss * 0.22, ss * 0.22]) {
+        const cx = layer;
+        const cy = ty;
+        // Copper color shifts with temperature: bright copper → dark red → black when burned
+        let r, g, b;
+        if (state.burnDamage > 0.7) {
+          r = 30 + Math.random() * 20; g = 15 + Math.random() * 10; b = 8;
+        } else if (state.burnDamage > 0.3) {
+          r = 100 + tempHeat * 50; g = 40 + tempHeat * 20; b = 15;
+        } else {
+          // Normal copper: #b87333 with slight variation
+          const heatR = Math.min(255, 184 + tempHeat * 60);
+          const heatG = Math.max(40, 115 - tempHeat * 60);
+          const heatB = Math.max(10, 51 - tempHeat * 40);
+          r = heatR + (Math.random() - 0.5) * 15;
+          g = heatG + (Math.random() - 0.5) * 10;
+          b = heatB + (Math.random() - 0.5) * 8;
+        }
+        // Current glow — coils carrying current glow brighter/orange
+        let glow = 0;
+        if (state.powered && state.current > 0.1 && fade > 0.05) {
+          glow = Math.min(1, state.current / cfg.maxCurrent) * fade;
+        }
+        if (glow > 0) {
+          r = Math.min(255, r + glow * 70);
+          g = Math.min(255, g + glow * 40);
+        }
+        mCtx.fillStyle = `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
+        mCtx.beginPath();
+        mCtx.arc(cx, cy, turnW * 0.45, 0, Math.PI * 2);
+        mCtx.fill();
+        // Wire highlight (shiny copper)
+        if (state.burnDamage < 0.5) {
+          mCtx.fillStyle = `rgba(255,${200 + glow * 55},${150 + glow * 50},0.3)`;
+          mCtx.beginPath();
+          mCtx.arc(cx - turnW * 0.12, cy - turnW * 0.12, turnW * 0.18, 0, Math.PI * 2);
+          mCtx.fill();
+        }
+        // Wire outline
+        mCtx.strokeStyle = `rgba(60,30,10,0.5)`;
+        mCtx.lineWidth = 0.5;
+        mCtx.beginPath();
+        mCtx.arc(cx, cy, turnW * 0.45, 0, Math.PI * 2);
+        mCtx.stroke();
+      }
+    }
+
+    // Current direction indicators (⊗ / ⊙) overlaid on coils
+    if (state.powered && state.current > 0.1 && fade > 0.05) {
+      const intensity = Math.min(1, state.current / cfg.maxCurrent);
+      const midY = 0;
+      if (statorY > 0) {
+        // ⊗ into page (under N) — orange
+        const col = `rgba(255,${160+intensity*60},${60+intensity*40},${0.7*fade})`;
+        mCtx.strokeStyle = col; mCtx.lineWidth = 1.2;
+        mCtx.beginPath(); mCtx.arc(0, midY, ss*0.5, 0, Math.PI*2); mCtx.stroke();
+        mCtx.beginPath();
+        mCtx.moveTo(-ss*0.3, midY - ss*0.3); mCtx.lineTo(ss*0.3, midY + ss*0.3);
+        mCtx.moveTo(ss*0.3, midY - ss*0.3); mCtx.lineTo(-ss*0.3, midY + ss*0.3);
+        mCtx.stroke();
+      } else {
+        // ⊙ out of page (under S) — blue
+        const col = `rgba(${80+intensity*40},${160+intensity*60},255,${0.7*fade})`;
+        mCtx.fillStyle = col;
+        mCtx.beginPath(); mCtx.arc(0, midY, ss*0.16, 0, Math.PI*2); mCtx.fill();
+      }
+    }
+
+    // Commutation zone glow
+    if (inComm && state.powered) {
+      mCtx.fillStyle = `rgba(255,200,50,${0.15 * (1-fade)})`;
+      mCtx.fillRect(-ss/2, -ss*0.9, ss, ss*1.8);
+    }
+    // Burn damage smoke wisps from slots
+    if (state.burnDamage > 0.5 && Math.random() < 0.02) {
+      mCtx.fillStyle = `rgba(40,30,25,${state.burnDamage * 0.3})`;
+      mCtx.beginPath();
+      mCtx.arc(0, -ss * 0.9, 3 + Math.random() * 3, 0, Math.PI * 2);
+      mCtx.fill();
+    }
+    mCtx.restore();
+  }
+
+  // Commutator (with thermal discoloration)
+  const commR = 32;
+  const commHeat = Math.max(0, (state.temp - 20) / 130);
+  for (let i = 0; i < numSlots; i++) {
+    const a0 = (i / numSlots) * Math.PI * 2;
+    const a1 = ((i+1) / numSlots) * Math.PI * 2;
+    const segMid = ((i+0.5)/numSlots) * Math.PI * 2 + angle;
+    const nearBrush = Math.abs(Math.sin(segMid)) < 0.13;
+    mCtx.beginPath(); mCtx.moveTo(0, 0);
+    mCtx.arc(0, 0, commR, a0, a1); mCtx.closePath();
+    // Color shifts from steel grey to dark brown/black with heat/burn
+    let r, g, b;
+    if (nearBrush && state.powered) {
+      r = 122 + commHeat * 60; g = 74 + commHeat * 20; b = 42;
+    } else {
+      r = 74 - commHeat * 30; g = 74 - commHeat * 35; b = 90 - commHeat * 50;
+    }
+    if (state.burnDamage > 0.5) { r *= 0.4; g *= 0.3; b *= 0.2; }
+    mCtx.fillStyle = `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
+    mCtx.fill();
+    mCtx.strokeStyle = '#1a1a24'; mCtx.lineWidth = 1; mCtx.stroke();
+  }
+  // Commutator ring outline — glows when ring of fire active
+  mCtx.strokeStyle = state.ringFire > 0.1 ? `rgba(255,150,30,${state.ringFire * 0.6})` : '#555';
+  mCtx.lineWidth = state.ringFire > 0.1 ? 2 : 1;
+  mCtx.beginPath(); mCtx.arc(0, 0, commR, 0, Math.PI*2); mCtx.stroke();
+
+  // Shaft
+  mCtx.fillStyle = '#777';
+  mCtx.beginPath(); mCtx.arc(0, 0, 11, 0, Math.PI*2); mCtx.fill();
+  mCtx.strokeStyle = '#999'; mCtx.lineWidth = 1; mCtx.stroke();
+  mCtx.fillStyle = '#5a9fd4'; mCtx.fillRect(0, -3, 12, 6);
+
+  mCtx.restore();
+
+  // ── Brushes (fixed at neutral axis = horizontal, or angled for repulsion) ──
+  if (cfg.brushes !== false) {
+  mCtx.save();
+  if (cfg.field === 'repulsion') { mCtx.translate(MCX, MCY); mCtx.rotate(Math.PI / 4); mCtx.translate(-MCX, -MCY); }
+  for (const side of [-1, 1]) {
+    const bx = MCX + side * (commR + 14);
+    const by = MCY;
+    const isPos = side > 0;
+    // Holder
+    mCtx.fillStyle = '#2a2a38'; mCtx.fillRect(bx - 6, by - 18, 12, 36);
+    mCtx.strokeStyle = '#444'; mCtx.lineWidth = 1; mCtx.strokeRect(bx - 6, by - 18, 12, 36);
+    // Spring
+    mCtx.strokeStyle = '#666'; mCtx.lineWidth = 1;
+    mCtx.beginPath();
+    const se = isPos ? bx + 6 : bx - 6;
+    const sd = isPos ? 1 : -1;
+    mCtx.moveTo(se, by - 18);
+    for (let s = 0; s < 4; s++) mCtx.lineTo(se + sd * (3 + s%2*4), by - 15 + s*3);
+    mCtx.lineTo(se + sd * 8, by - 6); mCtx.stroke();
+    // Carbon brush (wears/discolors with heat)
+    const brushHeat = Math.max(0, (state.temp - 20) / 130);
+    const br = Math.floor(26 - brushHeat * 15 - state.burnDamage * 20);
+    const bg2 = Math.floor(26 - brushHeat * 15 - state.burnDamage * 20);
+    const bb2 = Math.floor(26 - brushHeat * 10 - state.burnDamage * 15);
+    mCtx.fillStyle = state.powered ? `rgb(${br},${bg2},${bb2})` : '#0d0d0d';
+    mCtx.fillRect(bx - 4, by - 10, 8, 20);
+    mCtx.strokeStyle = '#555'; mCtx.lineWidth = 1; mCtx.strokeRect(bx - 4, by - 10, 8, 20);
+    // Brush wear line (contact face)
+    mCtx.strokeStyle = `rgba(100,60,20,${0.3 + brushHeat * 0.4})`;
+    mCtx.lineWidth = 1;
+    mCtx.beginPath(); mCtx.moveTo(bx - side * 4, by - 8); mCtx.lineTo(bx - side * 4, by + 8); mCtx.stroke();
+    // Intense spark glow + arc at brush contact
+    if (state.powered && state.sparkIntensity > 0.05) {
+      const gr = 6 + state.sparkIntensity * 20;
+      const glow = mCtx.createRadialGradient(bx - side*4, by, 0, bx - side*4, by, gr);
+      glow.addColorStop(0, `rgba(255,255,220,${state.sparkIntensity*0.6})`);
+      glow.addColorStop(0.3, `rgba(180,220,255,${state.sparkIntensity*0.3})`);
+      glow.addColorStop(0.6, `rgba(255,150,50,${state.sparkIntensity*0.2})`);
+      glow.addColorStop(1, 'rgba(255,100,0,0)');
+      mCtx.fillStyle = glow;
+      mCtx.fillRect(bx - side*4 - gr, by - gr, gr*2, gr*2);
+    }
+    // Ring of fire glow on brush
+    if (state.ringFire > 0.2) {
+      const rg = mCtx.createRadialGradient(bx - side * 4, by, 0, bx - side * 4, by, 15);
+      rg.addColorStop(0, `rgba(255,200,50,${state.ringFire * 0.4})`);
+      rg.addColorStop(1, 'rgba(255,80,0,0)');
+      mCtx.fillStyle = rg;
+      mCtx.fillRect(bx - side * 4 - 15, by - 15, 30, 30);
+    }
+    // Lead wire
+    mCtx.strokeStyle = state.powered ? (isPos ? '#ff6600' : '#3366ff') : '#553311';
+    mCtx.lineWidth = 2;
+    mCtx.beginPath(); mCtx.moveTo(bx, by - 18); mCtx.lineTo(bx, by - 40); mCtx.stroke();
+    // Terminal
+    mCtx.fillStyle = isPos ? '#ff6600' : '#5a9fd4';
+    mCtx.font = 'bold 14px system-ui'; mCtx.textAlign = 'center';
+    mCtx.fillText(isPos ? '+' : '−', bx, by - 44);
+  }
+  mCtx.restore();
+  }
+
+}
+
+function drawEndCap(statorR) {
+  const capR = statorR + 6;
+
+  // ── Opaque beige plastic disc — blurs internals like frosted end bell ──
+  mCtx.save();
+  const capAlpha = 0.82 - state.capFire * 0.2; // slightly more transparent as it burns/melts
+  mCtx.globalAlpha = capAlpha;
+  const capGrad = mCtx.createRadialGradient(MCX - 30, MCY - 30, 10, MCX, MCY, capR);
+  capGrad.addColorStop(0, '#d4c9a8');
+  capGrad.addColorStop(0.3, '#c4b896');
+  capGrad.addColorStop(0.55, '#b8ac88');
+  capGrad.addColorStop(0.8, '#a89c78');
+  capGrad.addColorStop(1, '#988a68');
+  mCtx.fillStyle = capGrad;
+  mCtx.beginPath(); mCtx.arc(MCX, MCY, capR, 0, Math.PI * 2); mCtx.fill();
+  // Frosted blur layer — semi-opaque wash that obscures internals
+  mCtx.globalAlpha = capAlpha * 0.4;
+  const blurGrad = mCtx.createRadialGradient(MCX, MCY, 20, MCX, MCY, capR);
+  blurGrad.addColorStop(0, 'rgba(200,188,150,0.5)');
+  blurGrad.addColorStop(0.7, 'rgba(180,168,130,0.3)');
+  blurGrad.addColorStop(1, 'rgba(160,148,110,0.1)');
+  mCtx.fillStyle = blurGrad;
+  mCtx.beginPath(); mCtx.arc(MCX, MCY, capR, 0, Math.PI * 2); mCtx.fill();
+  mCtx.globalAlpha = capAlpha;
+  // Plastic glossy sheen
+  if (state.quality !== 'low') {
+    const sheen = mCtx.createRadialGradient(MCX - 40, MCY - 50, 5, MCX - 40, MCY - 50, 80);
+    sheen.addColorStop(0, 'rgba(255,255,240,0.15)');
+    sheen.addColorStop(1, 'rgba(255,255,240,0)');
+    mCtx.fillStyle = sheen;
+    mCtx.beginPath(); mCtx.arc(MCX, MCY, capR, 0, Math.PI * 2); mCtx.fill();
+  }
+  // Mold parting line
+  if (state.quality !== 'low') {
+    mCtx.strokeStyle = 'rgba(120,108,80,0.25)';
+    mCtx.lineWidth = 1;
+    mCtx.beginPath(); mCtx.arc(MCX, MCY, capR * 0.7, 0, Math.PI * 2); mCtx.stroke();
+  }
+  mCtx.restore();
+
+  // ── Shaft bushing — solid metal bushing in beige cap ──
+  mCtx.fillStyle = '#3a3a48';
+  mCtx.beginPath(); mCtx.arc(MCX, MCY, 14, 0, Math.PI * 2); mCtx.fill();
+  mCtx.strokeStyle = '#888'; mCtx.lineWidth = 1.5; mCtx.stroke();
+  mCtx.fillStyle = '#6a6a78';
+  mCtx.beginPath(); mCtx.arc(MCX, MCY, 12, 0, Math.PI * 2); mCtx.fill();
+  mCtx.strokeStyle = '#aaa'; mCtx.lineWidth = 1; mCtx.stroke();
+  mCtx.fillStyle = '#5a5a68';
+  mCtx.beginPath(); mCtx.arc(MCX, MCY, 8, 0, Math.PI * 2); mCtx.fill();
+  mCtx.strokeStyle = '#999'; mCtx.lineWidth = 1; mCtx.stroke();
+  for (let i = 0; i < 6; i++) {
+    const ba = (i / 6) * Math.PI * 2;
+    mCtx.fillStyle = '#bbb';
+    mCtx.beginPath(); mCtx.arc(MCX + Math.cos(ba) * 10, MCY + Math.sin(ba) * 10, 1.5, 0, Math.PI * 2); mCtx.fill();
+  }
+  mCtx.fillStyle = '#4a4a58';
+  mCtx.beginPath(); mCtx.arc(MCX, MCY, 5, 0, Math.PI * 2); mCtx.fill();
+
+  // ── Outer rim ──
+  mCtx.strokeStyle = 'rgba(255,250,230,0.12)';
+  mCtx.lineWidth = 1;
+  mCtx.beginPath(); mCtx.arc(MCX, MCY, capR - 1, 0, Math.PI * 2); mCtx.stroke();
+  mCtx.strokeStyle = 'rgba(80,70,50,0.7)';
+  mCtx.lineWidth = 1.5;
+  mCtx.beginPath(); mCtx.arc(MCX, MCY, capR, 0, Math.PI * 2); mCtx.stroke();
+
+  // ── Plastic cap burning / melting effects ──
+  if (state.capFire > 0.02) {
+    const charGrad = mCtx.createRadialGradient(MCX, MCY, 10, MCX, MCY, capR);
+    charGrad.addColorStop(0, `rgba(10,8,5,${state.capFire * 0.5})`);
+    charGrad.addColorStop(0.6, `rgba(20,12,5,${state.capFire * 0.6})`);
+    charGrad.addColorStop(1, `rgba(5,3,0,${state.capFire * 0.8})`);
+    mCtx.fillStyle = charGrad;
+    mCtx.beginPath(); mCtx.arc(MCX, MCY, capR, 0, Math.PI * 2); mCtx.fill();
+    const numBlisters = Math.floor(state.capFire * 8);
+    for (let i = 0; i < numBlisters; i++) {
+      const ba = (i / 8) * Math.PI * 2 + state.angle * 0.3;
+      const br = 30 + (i % 3) * 35;
+      const bx = MCX + Math.cos(ba) * br;
+      const by = MCY + Math.sin(ba) * br;
+      const bsz = 6 + state.capFire * 10;
+      const bg = mCtx.createRadialGradient(bx, by, 0, bx, by, bsz);
+      bg.addColorStop(0, `rgba(255,200,50,${state.capFire * 0.6})`);
+      bg.addColorStop(0.4, `rgba(255,100,0,${state.capFire * 0.4})`);
+      bg.addColorStop(1, 'rgba(200,40,0,0)');
+      mCtx.fillStyle = bg;
+      mCtx.fillRect(bx - bsz, by - bsz, bsz * 2, bsz * 2);
+    }
+    mCtx.strokeStyle = `rgba(255,80,20,${state.capFire * 0.5})`;
+    mCtx.lineWidth = 2 + state.capFire * 3;
+    mCtx.beginPath(); mCtx.arc(MCX, MCY, capR, 0, Math.PI * 2); mCtx.stroke();
+  }
+
+  // ── Two terminal tabs at top ──
+  for (const side of [-1, 1]) {
+    const tabAngle = -Math.PI / 2 + side * 0.38;
+    const tx = MCX + Math.cos(tabAngle) * capR;
+    const ty = MCY + Math.sin(tabAngle) * capR;
+    mCtx.save();
+    mCtx.translate(tx, ty);
+    mCtx.rotate(tabAngle + Math.PI / 2);
+    const tabGrad = mCtx.createLinearGradient(-8, 0, 8, 0);
+    tabGrad.addColorStop(0, '#a89c78');
+    tabGrad.addColorStop(0.5, '#c4b896');
+    tabGrad.addColorStop(1, '#a89c78');
+    mCtx.fillStyle = tabGrad;
+    mCtx.fillRect(-8, -3, 16, 28);
+    mCtx.strokeStyle = '#80704a'; mCtx.lineWidth = 1;
+    mCtx.strokeRect(-8, -3, 16, 28);
+    mCtx.strokeStyle = 'rgba(255,250,230,0.15)'; mCtx.lineWidth = 1;
+    mCtx.beginPath(); mCtx.moveTo(-7, -2); mCtx.lineTo(7, -2); mCtx.stroke();
+    mCtx.fillStyle = '#988a68';
+    mCtx.beginPath(); mCtx.arc(0, 10, 5, 0, Math.PI * 2); mCtx.fill();
+    mCtx.strokeStyle = '#333'; mCtx.lineWidth = 1; mCtx.stroke();
+    mCtx.strokeStyle = '#555'; mCtx.lineWidth = 1.5;
+    mCtx.beginPath(); mCtx.moveTo(-3, 10); mCtx.lineTo(3, 10); mCtx.stroke();
+    const isPos = side > 0;
+    mCtx.fillStyle = isPos ? '#ff6600' : '#3366ff';
+    mCtx.font = 'bold 11px system-ui'; mCtx.textAlign = 'center'; mCtx.textBaseline = 'middle';
+    mCtx.fillText(isPos ? '+' : '−', 0, 21);
+    mCtx.restore();
+  }
+
+  // ── Mounting snap-tabs at 3 & 9 o'clock (molded plastic) ──
+  for (const side of [-1, 1]) {
+    const bx = MCX + side * capR;
+    const by = MCY;
+    mCtx.fillStyle = '#a89c78';
+    mCtx.beginPath(); mCtx.arc(bx, by, 4.5, 0, Math.PI * 2); mCtx.fill();
+    mCtx.strokeStyle = '#80704a'; mCtx.lineWidth = 1; mCtx.stroke();
+    mCtx.strokeStyle = 'rgba(255,250,230,0.15)'; mCtx.lineWidth = 1;
+    mCtx.beginPath(); mCtx.arc(bx, by, 3, 0, Math.PI * 2); mCtx.stroke();
+  }
+}
+function drawACMotor() {
+  const statorR = 150, rotorR = 95;
+  const ns = cfg.poles;
+  const angle = state.angle;
+
+  // Stator with 3-phase windings
+  const phaseColors = ['#ff4444', '#44ff44', '#4488ff']; // R, G, B phases
+  for (let i = 0; i < ns; i++) {
+    const pa = (i / ns) * Math.PI * 2 - Math.PI / 2;
+    const phaseIdx = i % 3;
+    drawStatorPoleAC(pa, statorR, rotorR, phaseIdx, i, ns, phaseColors);
+  }
+
+  // Stator ring
+  mCtx.strokeStyle = '#333'; mCtx.lineWidth = 3;
+  mCtx.beginPath(); mCtx.arc(MCX, MCY, statorR, 0, Math.PI * 2); mCtx.stroke();
+
+  // Rotor
+  mCtx.save();
+  mCtx.translate(MCX, MCY);
+  mCtx.rotate(angle);
+
+  const rGrad = mCtx.createRadialGradient(0, 0, 0, 0, 0, rotorR);
+  rGrad.addColorStop(0, '#3a3a4e'); rGrad.addColorStop(1, '#2a2a3e');
+  mCtx.fillStyle = rGrad;
+  mCtx.beginPath(); mCtx.arc(0, 0, rotorR, 0, Math.PI * 2); mCtx.fill();
+  mCtx.strokeStyle = '#444'; mCtx.lineWidth = 2; mCtx.stroke();
+
+  // Rotor type-specific details
+  if (cfg.key === 'induction') {
+    // Squirrel cage bars
+    const bars = 16;
+    for (let i = 0; i < bars; i++) {
+      const ba = (i / bars) * Math.PI * 2;
+      const bx = Math.cos(ba) * rotorR * 0.82;
+      const by = Math.sin(ba) * rotorR * 0.82;
+      const slip = state.powered ? Math.abs((state.omega - 0) / Math.max(1, state.omega)) : 0;
+      mCtx.fillStyle = `rgba(200,150,50,${0.5 + (state.powered ? 0.3 : 0)})`;
+      mCtx.beginPath(); mCtx.arc(bx, by, 4, 0, Math.PI * 2); mCtx.fill();
+      mCtx.strokeStyle = '#553311'; mCtx.lineWidth = 1; mCtx.stroke();
+    }
+    // End ring
+    mCtx.strokeStyle = '#8a6a3a'; mCtx.lineWidth = 3;
+    mCtx.beginPath(); mCtx.arc(0, 0, rotorR * 0.82, 0, Math.PI * 2); mCtx.stroke();
+  } else if (cfg.key === 'synchronous') {
+    // Salient pole rotor with field winding
+    const polePairs = ns / 2;
+    for (let i = 0; i < polePairs; i++) {
+      const pa = (i / polePairs) * Math.PI * 2;
+      mCtx.save();
+      mCtx.rotate(pa);
+      mCtx.fillStyle = '#4a3a2a';
+      mCtx.beginPath();
+      mCtx.ellipse(0, -rotorR * 0.5, rotorR * 0.25, rotorR * 0.35, 0, 0, Math.PI * 2);
+      mCtx.fill();
+      mCtx.strokeStyle = '#3a2a1a'; mCtx.lineWidth = 1; mCtx.stroke();
+      // Field winding indicator
+      mCtx.fillStyle = state.powered ? '#ff6600' : '#553311';
+      mCtx.fillRect(-3, -rotorR * 0.5 - 4, 6, 8);
+      mCtx.restore();
+    }
+  } else if (cfg.key === 'syncrel') {
+    // Salient pole rotor with flux barriers (no magnets, no field winding)
+    const polePairs = ns / 2;
+    for (let i = 0; i < polePairs; i++) {
+      const pa = (i / polePairs) * Math.PI * 2;
+      mCtx.save();
+      mCtx.rotate(pa);
+      // Salient iron pole
+      mCtx.fillStyle = '#4a4a5a';
+      mCtx.beginPath();
+      mCtx.ellipse(0, -rotorR * 0.5, rotorR * 0.28, rotorR * 0.38, 0, 0, Math.PI * 2);
+      mCtx.fill();
+      mCtx.strokeStyle = '#3a3a4e'; mCtx.lineWidth = 1; mCtx.stroke();
+      // Flux barriers (air slots)
+      for (let b = 0; b < 3; b++) {
+        mCtx.fillStyle = '#151522';
+        mCtx.beginPath();
+        mCtx.ellipse(0, -rotorR * 0.2 - b * 10, rotorR * 0.22, 2.5, 0, 0, Math.PI * 2);
+        mCtx.fill();
+      }
+      mCtx.restore();
+    }
+  } else if (cfg.key === 'pmsm' || cfg.key === 'bldc') {
+    // Permanent magnets on rotor
+    const magPairs = ns / 2;
+    for (let i = 0; i < ns; i++) {
+      const ma = (i / ns) * Math.PI * 2;
+      const mx = Math.cos(ma) * rotorR * 0.75;
+      const my = Math.sin(ma) * rotorR * 0.75;
+      const isN = i % 2 === 0;
+      mCtx.save();
+      mCtx.translate(mx, my);
+      mCtx.rotate(ma + Math.PI / 2);
+      mCtx.fillStyle = isN ? '#cc3333' : '#3333cc';
+      mCtx.fillRect(-rotorR * 0.3, -6, rotorR * 0.3, 12);
+      mCtx.strokeStyle = isN ? '#ff6666' : '#6666ff';
+      mCtx.lineWidth = 1; mCtx.strokeRect(-rotorR * 0.3, -6, rotorR * 0.3, 12);
+      mCtx.fillStyle = '#fff'; mCtx.font = 'bold 8px system-ui';
+      mCtx.textAlign = 'center'; mCtx.textBaseline = 'middle';
+      mCtx.fillText(isN ? 'N' : 'S', 0, 0);
+      mCtx.restore();
+    }
+  }
+
+  // Shaft
+  mCtx.fillStyle = '#666';
+  mCtx.beginPath(); mCtx.arc(0, 0, 14, 0, Math.PI * 2); mCtx.fill();
+  mCtx.strokeStyle = '#888'; mCtx.lineWidth = 1; mCtx.stroke();
+  mCtx.strokeStyle = '#5a9fd4'; mCtx.lineWidth = 2;
+  mCtx.beginPath(); mCtx.moveTo(0, 0); mCtx.lineTo(10, 0); mCtx.stroke();
+
+  mCtx.restore();
+
+  // Rotating magnetic field visualization
+  if (state.powered) {
+    drawRotatingField(angle, ns, statorR);
+  }
+}
+
+function drawStatorPole(angle, statorR, rotorR, idx, ns) {
+  const innerR = rotorR + 8;
+  const outerR = statorR;
+  const poleW = (Math.PI * 2 / ns) * 0.6;
+
+  mCtx.save();
+  mCtx.translate(MCX, MCY);
+  mCtx.rotate(angle);
+
+  // Pole shoe
+  mCtx.fillStyle = '#3a3a4e';
+  mCtx.beginPath();
+  mCtx.arc(0, 0, outerR, -poleW/2, poleW/2);
+  mCtx.arc(0, 0, innerR, poleW/2, -poleW/2, true);
+  mCtx.closePath();
+  mCtx.fill();
+  mCtx.strokeStyle = '#555'; mCtx.lineWidth = 1; mCtx.stroke();
+
+  // Winding coil
+  const coilR = (innerR + outerR) / 2;
+  const energized = state.powered && state.current > 0.1;
+  const polarity = idx % 2 === 0 ? 1 : -1;
+  mCtx.fillStyle = energized
+    ? (polarity > 0 ? `rgba(255,80,30,${0.3 + state.current/cfg.maxCurrent*0.4})` : `rgba(30,80,255,${0.3 + state.current/cfg.maxCurrent*0.4})`)
+    : '#222';
+  mCtx.beginPath();
+  mCtx.ellipse(Math.cos(0) * coilR, Math.sin(0) * coilR, 12, 18, 0, 0, Math.PI * 2);
+  mCtx.fill();
+
+  // N/S label
+  if (energized) {
+    mCtx.fillStyle = '#fff';
+    mCtx.font = 'bold 10px system-ui';
+    mCtx.textAlign = 'center'; mCtx.textBaseline = 'middle';
+    mCtx.fillText(polarity > 0 ? 'N' : 'S', coilR, 0);
+  }
+
+  mCtx.restore();
+}
+
+function drawStatorPoleAC(angle, statorR, rotorR, phaseIdx, idx, ns, colors) {
+  const innerR = rotorR + 8;
+  const outerR = statorR;
+  const poleW = (Math.PI * 2 / ns) * 0.55;
+
+  mCtx.save();
+  mCtx.translate(MCX, MCY);
+  mCtx.rotate(angle);
+
+  // Pole shoe
+  mCtx.fillStyle = '#3a3a4e';
+  mCtx.beginPath();
+  mCtx.arc(0, 0, outerR, -poleW/2, poleW/2);
+  mCtx.arc(0, 0, innerR, poleW/2, -poleW/2, true);
+  mCtx.closePath();
+  mCtx.fill();
+  mCtx.strokeStyle = '#555'; mCtx.lineWidth = 1; mCtx.stroke();
+
+  // Winding with phase color
+  const coilR = (innerR + outerR) / 2;
+  const phaseCurrent = state.phaseCurrents[phaseIdx] || 0;
+  const intensity = state.powered ? Math.min(1, Math.abs(phaseCurrent) / cfg.maxCurrent) : 0;
+  const c = colors[phaseIdx];
+  const cr = parseInt(c.substr(1, 2), 16);
+  const cg = parseInt(c.substr(3, 2), 16);
+  const cb = parseInt(c.substr(5, 2), 16);
+  mCtx.fillStyle = `rgba(${cr},${cg},${cb},${0.15 + intensity * 0.5})`;
+  mCtx.beginPath();
+  mCtx.ellipse(coilR, 0, 10, 16, 0, 0, Math.PI * 2);
+  mCtx.fill();
+  mCtx.strokeStyle = `rgba(${cr},${cg},${cb},${0.3 + intensity * 0.5})`;
+  mCtx.lineWidth = 1; mCtx.stroke();
+
+  // Phase label
+  mCtx.fillStyle = `rgba(${cr},${cg},${cb},${0.5 + intensity * 0.5})`;
+  mCtx.font = 'bold 8px system-ui';
+  mCtx.textAlign = 'center'; mCtx.textBaseline = 'middle';
+  mCtx.fillText(['U','V','W'][phaseIdx], coilR, 0);
+
+  mCtx.restore();
+}
+
+function drawMagneticField(rotorAngle, ns, statorR, rotorR) {
+  const intensity = Math.min(0.3, state.current / cfg.maxCurrent * 0.3);
+  mCtx.strokeStyle = `rgba(255,100,50,${intensity})`;
+  mCtx.lineWidth = 1;
+  for (let i = 0; i < 8; i++) {
+    const a = rotorAngle + (i / 8) * Math.PI * 2;
+    mCtx.beginPath();
+    for (let r = rotorR; r < statorR; r += 3) {
+      const curl = Math.sin((r - rotorR) / 10 + rotorAngle * 2) * 5;
+      const x = MCX + Math.cos(a + curl * 0.01) * r;
+      const y = MCY + Math.sin(a + curl * 0.01) * r;
+      if (r === rotorR) mCtx.moveTo(x, y); else mCtx.lineTo(x, y);
+    }
+    mCtx.stroke();
+  }
+}
+
+function drawRotatingField(angle, ns, statorR) {
+  // Draw the rotating magnetic field vector
+  const fieldAngle = angle * (ns / 2) * 0 + state.angle * cfg.poles / 2; // follows electrical angle for sync
+  // For induction, field rotates at synchronous speed
+  const syncAngle = state.powered ? performance.now() * 0.003 * cfg.poles / 2 : 0;
+
+  mCtx.strokeStyle = 'rgba(255,200,50,0.3)';
+  mCtx.lineWidth = 2;
+  for (let i = 0; i < 3; i++) {
+    const pa = syncAngle + i * 2 * Math.PI / 3;
+    const phaseCurrent = state.phaseCurrents[i] || 0;
+    const intensity = Math.min(1, Math.abs(phaseCurrent) / cfg.maxCurrent);
+    if (intensity < 0.05) continue;
+    const colors = ['255,80,80', '80,255,80', '80,128,255'];
+    mCtx.strokeStyle = `rgba(${colors[i]},${intensity * 0.4})`;
+    mCtx.lineWidth = 2;
+    mCtx.beginPath();
+    mCtx.moveTo(MCX, MCY);
+    mCtx.lineTo(MCX + Math.cos(pa) * statorR * 0.7, MCY + Math.sin(pa) * statorR * 0.7);
+    mCtx.stroke();
+  }
+}
+
+function drawSparks(filterFn) {
+  mCtx.save();
+  mCtx.globalCompositeOperation = 'lighter';
+  // Clip internal sparks to cap radius so glow can't bleed through metal
+  const isInternal = filterFn && filterFn({escapes: true}) === false;
+  if (isInternal && state.endCap && cfg.brushedType) {
+    mCtx.beginPath();
+    mCtx.arc(MCX, MCY, 150, 0, Math.PI * 2);
+    mCtx.clip();
+  }
+  const intense = state.failing || state.burnedOut;
+  for (const s of state.sparks) {
+    if (filterFn && !filterFn(s)) continue;
+    const a = s.life / s.maxLife;
+    if (intense) {
+      // Blinding streaks of light with intense bloom
+      const arcing = s.arcing;
+      const gr = s.size * 10;
+      const grad = mCtx.createRadialGradient(s.x, s.y, 0, s.x, s.y, gr);
+      if (arcing) {
+        // Arcing sparks glow orange-yellow (less white-blue, more molten metal)
+        grad.addColorStop(0, `rgba(255,240,180,${a})`);
+        grad.addColorStop(0.15, `rgba(255,210,90,${a * 0.95})`);
+        grad.addColorStop(0.4, `rgba(255,150,30,${a * 0.6})`);
+        grad.addColorStop(0.7, `rgba(255,90,10,${a * 0.25})`);
+        grad.addColorStop(1, 'rgba(200,40,0,0)');
+      } else {
+        grad.addColorStop(0, `rgba(255,255,255,${a})`);
+        grad.addColorStop(0.1, `rgba(255,255,200,${a * 0.95})`);
+        grad.addColorStop(0.35, `rgba(255,160,30,${a * 0.5})`);
+        grad.addColorStop(0.7, `rgba(255,60,0,${a * 0.15})`);
+        grad.addColorStop(1, 'rgba(255,0,0,0)');
+      }
+      mCtx.fillStyle = grad;
+      mCtx.fillRect(s.x - gr, s.y - gr, gr * 2, gr * 2);
+      // Light streak in direction of motion
+      const speed = Math.sqrt(s.vx * s.vx + s.vy * s.vy);
+      if (speed > 5) {
+        const len = Math.min(25, speed * 0.15);
+        const nx = s.vx / speed, ny = s.vy / speed;
+        const sg = mCtx.createLinearGradient(s.x, s.y, s.x - nx * len, s.y - ny * len);
+        if (arcing) {
+          sg.addColorStop(0, `rgba(255,230,140,${a * 0.9})`);
+          sg.addColorStop(0.5, `rgba(255,170,40,${a * 0.5})`);
+          sg.addColorStop(1, 'rgba(255,80,0,0)');
+        } else {
+          sg.addColorStop(0, `rgba(255,255,255,${a * 0.9})`);
+          sg.addColorStop(0.5, `rgba(255,200,80,${a * 0.4})`);
+          sg.addColorStop(1, 'rgba(255,100,0,0)');
+        }
+        mCtx.strokeStyle = sg;
+        mCtx.lineWidth = s.size * 0.8;
+        mCtx.beginPath();
+        mCtx.moveTo(s.x, s.y);
+        mCtx.lineTo(s.x - nx * len, s.y - ny * len);
+        mCtx.stroke();
+      }
+      // White-hot core (orange-yellow for arcing)
+      mCtx.fillStyle = arcing ? `rgba(255,235,160,${a})` : `rgba(255,255,255,${a})`;
+      mCtx.beginPath();
+      mCtx.arc(s.x, s.y, s.size * 1.5, 0, Math.PI * 2);
+      mCtx.fill();
+    } else {
+      // Normal small dim sparks
+      if (state.quality !== 'low') {
+        const gr = s.size * 3;
+        const grad = mCtx.createRadialGradient(s.x, s.y, 0, s.x, s.y, gr);
+        grad.addColorStop(0, `rgba(255,220,120,${a * 0.5})`);
+        grad.addColorStop(1, 'rgba(255,100,0,0)');
+        mCtx.fillStyle = grad;
+        mCtx.fillRect(s.x - gr, s.y - gr, gr * 2, gr * 2);
+      }
+      mCtx.fillStyle = `rgba(255,230,150,${a * 0.8})`;
+      mCtx.fillRect(s.x - s.size / 2, s.y - s.size / 2, s.size, s.size);
+    }
+  }
+  mCtx.restore();
+}
+
+// ── Ring of fire ──
+function drawRingOfFire() {
+  const r = 32; // commutator radius
+  const intensity = state.ringFire;
+  mCtx.save();
+  mCtx.globalCompositeOperation = 'lighter';
+  // Clip to cap radius when end cap is on
+  if (state.endCap && cfg.brushedType) {
+    mCtx.beginPath();
+    mCtx.arc(MCX, MCY, 150, 0, Math.PI * 2);
+    mCtx.clip();
+  }
+
+  // Glowing ring around commutator
+  const grad = mCtx.createRadialGradient(MCX, MCY, r * 0.7, MCX, MCY, r * 2.5);
+  grad.addColorStop(0, `rgba(255,200,50,${intensity * 0.4})`);
+  grad.addColorStop(0.3, `rgba(255,120,20,${intensity * 0.3})`);
+  grad.addColorStop(0.7, `rgba(255,60,0,${intensity * 0.15})`);
+  grad.addColorStop(1, 'rgba(255,0,0,0)');
+  mCtx.fillStyle = grad;
+  mCtx.fillRect(MCX - r * 3, MCY - r * 3, r * 6, r * 6);
+
+  // Arcing ring segments
+  const segs = 8;
+  for (let i = 0; i < segs; i++) {
+    if (Math.random() > intensity * 0.7) continue;
+    const a0 = (i / segs) * Math.PI * 2 + state.angle * 0.5;
+    const a1 = a0 + (Math.PI * 2 / segs) * (0.3 + Math.random() * 0.4);
+    mCtx.strokeStyle = `rgba(255,${180 + Math.random() * 60},${50 + Math.random() * 80},${intensity * 0.6})`;
+    mCtx.lineWidth = 1 + Math.random() * 2;
+    mCtx.beginPath();
+    mCtx.arc(MCX, MCY, r + 2 + Math.random() * 4, a0, a1);
+    mCtx.stroke();
+  }
+
+  // Bright sparks dancing on the ring
+  for (let i = 0; i < 3 + intensity * 6; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const dist = r + Math.random() * 6;
+    const sx = MCX + Math.cos(a) * dist;
+    const sy = MCY + Math.sin(a) * dist;
+    const sz = 2 + Math.random() * 3 * intensity;
+    const sg = mCtx.createRadialGradient(sx, sy, 0, sx, sy, sz * 3);
+    sg.addColorStop(0, `rgba(255,255,220,${intensity})`);
+    sg.addColorStop(0.5, `rgba(255,160,40,${intensity * 0.5})`);
+    sg.addColorStop(1, 'rgba(255,80,0,0)');
+    mCtx.fillStyle = sg;
+    mCtx.fillRect(sx - sz * 3, sy - sz * 3, sz * 6, sz * 6);
+  }
+
+  mCtx.restore();
+}
+
+// ── Electrical arcs ──
+function drawArcs(filterFn) {
+  mCtx.save();
+  mCtx.globalCompositeOperation = 'lighter';
+  const clipToCap = state.endCap && cfg.brushedType;
+  if (clipToCap) {
+    mCtx.beginPath();
+    mCtx.arc(MCX, MCY, 150, 0, Math.PI * 2);
+    mCtx.clip();
+  }
+  for (const arc of state.arcs) {
+    if (filterFn && !filterFn(arc)) continue;
+    const a = arc.life / arc.maxLife;
+    const intensity = arc.intensity;
+    mCtx.beginPath();
+    mCtx.moveTo(arc.points[0].x, arc.points[0].y);
+    for (let i = 1; i < arc.points.length; i++) mCtx.lineTo(arc.points[i].x, arc.points[i].y);
+    // Wide outer blaze
+    mCtx.strokeStyle = `rgba(80,150,255,${a * intensity * 0.4})`;
+    mCtx.lineWidth = 8;
+    mCtx.stroke();
+    // Mid glow
+    mCtx.strokeStyle = `rgba(120,200,255,${a * intensity * 0.7})`;
+    mCtx.lineWidth = 4;
+    mCtx.stroke();
+    // Bright core
+    mCtx.strokeStyle = `rgba(200,240,255,${a * intensity})`;
+    mCtx.lineWidth = 1.5;
+    mCtx.stroke();
+    // Blinding white center
+    mCtx.strokeStyle = `rgba(255,255,255,${a * intensity})`;
+    mCtx.lineWidth = 0.5;
+    mCtx.stroke();
+  }
+  mCtx.restore();
+}
+
+// ── Smoke ──
+function drawSmoke() {
+  mCtx.save();
+  for (const s of state.smoke) {
+    const a = (s.life / s.maxLife) * 0.4;
+    if (state.quality === 'low') {
+      // Simple flat circles
+      mCtx.fillStyle = `rgba(${Math.floor(s.dark * 90)},${Math.floor(s.dark * 90)},${Math.floor(s.dark * 100)},${a})`;
+      mCtx.beginPath(); mCtx.arc(s.x, s.y, s.size * 0.7, 0, Math.PI * 2); mCtx.fill();
+    } else {
+      const grad = mCtx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.size);
+      grad.addColorStop(0, `rgba(${Math.floor(s.dark * 100)},${Math.floor(s.dark * 100)},${Math.floor(s.dark * 110)},${a})`);
+      grad.addColorStop(0.6, `rgba(${Math.floor(s.dark * 80)},${Math.floor(s.dark * 80)},${Math.floor(s.dark * 90)},${a * 0.6})`);
+      grad.addColorStop(1, `rgba(0,0,0,0)`);
+      mCtx.fillStyle = grad;
+      mCtx.fillRect(s.x - s.size, s.y - s.size, s.size * 2, s.size * 2);
+    }
+  }
+  mCtx.restore();
+}
+
+// ── Fire ──
+function drawFire() {
+  mCtx.save();
+  mCtx.globalCompositeOperation = 'lighter';
+  for (const f of state.fire) {
+    const a = f.life / f.maxLife;
+    // Age-based color shift: young = white-yellow core, mature = orange, dying = red smoke
+    const age = 1 - a;
+    const flick = 0.85 + 0.15 * Math.sin((f.seed || 0) * 40 + performance.now() * 0.02);
+    const sz = f.size * 1.6 * flick;
+    if (state.quality === 'low') {
+      mCtx.fillStyle = `rgba(255,140,30,${a * 0.6})`;
+      mCtx.beginPath(); mCtx.arc(f.x, f.y, sz * 0.6, 0, Math.PI * 2); mCtx.fill();
+    } else {
+      // Outer cool glow — large soft red halo
+      const halo = sz * 1.4;
+      const hg = mCtx.createRadialGradient(f.x, f.y, 0, f.x, f.y, halo);
+      hg.addColorStop(0, `rgba(255,80,0,${a * 0.18})`);
+      hg.addColorStop(0.6, `rgba(220,40,0,${a * 0.1})`);
+      hg.addColorStop(1, 'rgba(120,0,0,0)');
+      mCtx.fillStyle = hg;
+      mCtx.fillRect(f.x - halo, f.y - halo, halo * 2, halo * 2);
+      // Main flame body — tapered hot gradient
+      const grad = mCtx.createRadialGradient(f.x, f.y + sz * 0.2, 0, f.x, f.y, sz);
+      if (age < 0.35) {
+        grad.addColorStop(0, `rgba(255,255,230,${a})`);
+        grad.addColorStop(0.18, `rgba(255,230,140,${a * 0.95})`);
+        grad.addColorStop(0.4, `rgba(255,170,40,${a * 0.8})`);
+        grad.addColorStop(0.7, `rgba(255,90,10,${a * 0.45})`);
+        grad.addColorStop(1, 'rgba(200,30,0,0)');
+      } else {
+        grad.addColorStop(0, `rgba(255,200,90,${a * 0.9})`);
+        grad.addColorStop(0.25, `rgba(255,150,30,${a * 0.75})`);
+        grad.addColorStop(0.55, `rgba(255,80,10,${a * 0.45})`);
+        grad.addColorStop(0.85, `rgba(180,30,0,${a * 0.15})`);
+        grad.addColorStop(1, 'rgba(80,0,0,0)');
+      }
+      mCtx.fillStyle = grad;
+      mCtx.fillRect(f.x - sz, f.y - sz, sz * 2, sz * 2);
+      // Bright core tongue (only while young/hot)
+      if (age < 0.5) {
+        const cs = sz * 0.35;
+        const cg = mCtx.createRadialGradient(f.x, f.y, 0, f.x, f.y, cs);
+        cg.addColorStop(0, `rgba(255,255,240,${a * 0.9})`);
+        cg.addColorStop(1, 'rgba(255,220,120,0)');
+        mCtx.fillStyle = cg;
+        mCtx.fillRect(f.x - cs, f.y - cs, cs * 2, cs * 2);
+      }
+    }
+  }
+  mCtx.restore();
+}
+
+// ── Shrapnel (flying debris) ──
+function drawShrapnel() {
+  mCtx.save();
+  for (const s of state.shrapnel) {
+    const a = Math.min(1, s.life / 0.5);
+    mCtx.save();
+    mCtx.translate(s.x, s.y);
+    mCtx.rotate(s.rot);
+    mCtx.globalAlpha = a;
+    mCtx.fillStyle = s.color;
+    mCtx.strokeStyle = 'rgba(0,0,0,0.4)';
+    mCtx.lineWidth = 0.5;
+    if (s.shape === 'wedge') {
+      mCtx.beginPath();
+      mCtx.moveTo(0, 0);
+      mCtx.arc(0, 0, s.size, -0.4, 0.4);
+      mCtx.closePath();
+      mCtx.fill(); mCtx.stroke();
+    } else {
+      mCtx.fillRect(-s.size/2, -s.size/3, s.size, s.size * 0.67);
+      mCtx.strokeRect(-s.size/2, -s.size/3, s.size, s.size * 0.67);
+    }
+    mCtx.restore();
+  }
+  mCtx.globalAlpha = 1;
+  mCtx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RENDERING — Oscilloscope
+// ═══════════════════════════════════════════════════════════════════════
+const sCanvas = document.getElementById('scopeCanvas');
+const sCtx = sCanvas.getContext('2d');
+const SW = sCanvas.width, SH = sCanvas.height;
+
+function drawScope() {
+  sCtx.fillStyle = '#080812';
+  sCtx.fillRect(0, 0, SW, SH);
+
+  // Grid
+  sCtx.strokeStyle = 'rgba(30,40,60,0.5)';
+  sCtx.lineWidth = 1;
+  for (let x = 0; x < SW; x += 20) { sCtx.beginPath(); sCtx.moveTo(x, 0); sCtx.lineTo(x, SH); sCtx.stroke(); }
+  for (let y = 0; y < SH; y += 20) { sCtx.beginPath(); sCtx.moveTo(0, y); sCtx.lineTo(SW, y); sCtx.stroke(); }
+
+  // Center line
+  sCtx.strokeStyle = 'rgba(60,80,120,0.5)';
+  sCtx.beginPath(); sCtx.moveTo(0, SH/2); sCtx.lineTo(SW, SH/2); sCtx.stroke();
+
+  // Back-EMF trace (yellow)
+  sCtx.strokeStyle = '#ffdd44';
+  sCtx.lineWidth = 1.5;
+  sCtx.beginPath();
+  const data2 = state.scopeData2;
+  const max2 = Math.max(1, cfg.maxVoltage);
+  for (let i = 0; i < data2.length; i++) {
+    const x = (i / 200) * SW;
+    const y = SH/2 - (data2[i] / max2) * (SH * 0.4);
+    if (i === 0) sCtx.moveTo(x, y); else sCtx.lineTo(x, y);
+  }
+  sCtx.stroke();
+
+  // Current trace (cyan)
+  sCtx.strokeStyle = '#5a9fd4';
+  sCtx.lineWidth = 1.5;
+  sCtx.beginPath();
+  const data = state.scopeData;
+  const max = Math.max(1, cfg.maxCurrent);
+  for (let i = 0; i < data.length; i++) {
+    const x = (i / 200) * SW;
+    const y = SH/2 - (data[i] / max) * (SH * 0.4);
+    if (i === 0) sCtx.moveTo(x, y); else sCtx.lineTo(x, y);
+  }
+  sCtx.stroke();
+
+  // Labels
+  sCtx.fillStyle = '#ffdd44'; sCtx.font = '9px system-ui'; sCtx.textAlign = 'left';
+  sCtx.fillText('EMF', 4, 12);
+  sCtx.fillStyle = '#5a9fd4';
+  sCtx.fillText('Current', 4, 24);
+
+  // 3-phase traces for AC motors
+  if (cfg.phases === 3 && state.powered) {
+    const phaseColors = ['#ff4444', '#44ff44', '#4488ff'];
+    const labels = ['U', 'V', 'W'];
+    for (let ph = 0; ph < 3; ph++) {
+      sCtx.strokeStyle = phaseColors[ph];
+      sCtx.globalAlpha = 0.5;
+      sCtx.lineWidth = 1;
+      sCtx.beginPath();
+      const wt = state.angle * cfg.poles / 2;
+      for (let i = 0; i < SW; i++) {
+        const t = (i / SW) * 4 * Math.PI;
+        const v = state.phaseVoltages[ph];
+        // Draw a snapshot of the waveform
+        const snapshotAngle = wt + (i / SW) * Math.PI * 4;
+        const val = cfg.maxVoltage * Math.sin(snapshotAngle + ph * 2 * Math.PI / 3);
+        const y = SH/2 - (val / cfg.maxVoltage) * (SH * 0.35);
+        if (i === 0) sCtx.moveTo(i, y); else sCtx.lineTo(i, y);
+      }
+      sCtx.stroke();
+      sCtx.globalAlpha = 1;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════════════════════════
+const rpmVal = document.getElementById('rpmVal');
+const torqueVal = document.getElementById('torqueVal');
+const currentVal = document.getElementById('currentVal');
+const emfVal = document.getElementById('emfVal');
+const powerVal = document.getElementById('powerVal');
+const effVal = document.getElementById('effVal');
+const tempVal = document.getElementById('tempVal');
+const tempFill = document.getElementById('tempFill');
+const curFill = document.getElementById('curFill');
+const effFill = document.getElementById('effFill');
+const curPct = document.getElementById('curPct');
+const effPct = document.getElementById('effPct');
+const powerBtn = document.getElementById('powerBtn');
+const motorInfoName = document.querySelector('#motorInfo .mname');
+const motorInfoDesc = document.querySelector('#motorInfo .mdesc');
+const motorInfoStats = document.querySelector('#motorInfo .mstats');
+const voltSlider = document.getElementById('voltSlider');
+const loadSlider = document.getElementById('loadSlider');
+const voltLabel = document.getElementById('voltLabel');
+const voltMax = document.getElementById('voltMax');
+const loadLabel = document.getElementById('loadLabel');
+
+function updateVoltageLabel() {
+  const vs = document.getElementById('voltSlider');
+  const v = (vs.value / 100) * cfg.sliderMaxVoltage;
+  state.voltage = v;
+  state.sliderVoltage = v;
+  document.getElementById('voltLabel').textContent = v.toFixed(1) + ' V';
+  document.getElementById('voltMax').textContent = '±' + cfg.sliderMaxVoltage + ' V';
+  const ratedEl = document.getElementById('voltRated');
+  if (cfg.sliderMaxVoltage > cfg.maxVoltage) {
+    ratedEl.textContent = '⚠ Rated: ' + cfg.maxVoltage + ' V';
+    ratedEl.style.color = Math.abs(v) > cfg.maxVoltage ? '#ff4444' : '#555';
+  } else {
+    ratedEl.textContent = '';
+  }
+  const voltLabelEl = document.getElementById('voltLabel');
+  if (Math.abs(v) > cfg.maxVoltage * 1.1) {
+    voltLabelEl.style.color = '#ff4444';
+    voltLabelEl.textContent = v.toFixed(1) + ' V ⚠';
+  } else if (v < 0) {
+    voltLabelEl.style.color = '#9a5ad4';
+    voltLabelEl.textContent = v.toFixed(1) + ' V ↩';
+  } else {
+    voltLabelEl.style.color = '#666';
+  }
+}
+
+function updateLoadLabel() {
+  const ls = document.getElementById('loadSlider');
+  const l = ls.value / 100;
+  if (cfg.brushedType) {
+    state.loadTorque = l * cfg.ke * (cfg.maxVoltage / cfg.resistance);
+  } else {
+    state.loadTorque = l * cfg.torqueConst * cfg.maxCurrent * 3;
+  }
+  document.getElementById('loadLabel').textContent = (l * 100).toFixed(0) + '%';
+}
+
+voltSlider.addEventListener('input', () => { updateVoltageLabel(); });
+loadSlider.addEventListener('input', () => { updateLoadLabel(); });
+
+function updateMotorInfo() {
+  motorInfoName.textContent = cfg.name;
+  motorInfoDesc.textContent = cfg.desc;
+  const typeLabel = cfg.isCustom ? root.motors[cfg.key] ? root.motors[cfg.key].name : cfg.key : cfg.name;
+  let stats = `${cfg.poles} poles · ${cfg.phases} phase<br>${cfg.kv} Kv · ${cfg.resistance}Ω · ${cfg.maxVoltage}V rated`;
+  if (cfg.brushedType) {
+    stats += `<br>${cfg.slots} slots · ${cfg.brushDrop}V brush drop · ${cfg.sliderMaxVoltage}V max supply`;
+    if (cfg.isCustom && !cfg.brushes) stats += `<br>⚠ BRUSHES REMOVED — open circuit`;
+  }
+  motorInfoStats.innerHTML = stats;
+}
+
+window.togglePower = function() {
+  // Clicking the power button while in a terminal failure state repairs the motor
+  if (state.fullyDestroyed || state.burnedOut || state.exploded) {
+    repairMotor();
+    return;
+  }
+  state.powered = !state.powered;
+  audio.init();
+  if (!state.powered) {
+    powerBtn.textContent = 'POWER ON';
+    powerBtn.classList.remove('on');
+  } else {
+    powerBtn.textContent = 'POWER OFF';
+    powerBtn.classList.add('on');
+  }
+};
+
+window.repairMotor = function() {
+  state.burnedOut = false;
+  state.exploded = false;
+  state.fullyDestroyed = false;
+  state.wreckTime = 0;
+  state._wreckThreshold = 0;
+  state.burnDamage = 0;
+  state.failing = false;
+  state.failStage = 0;
+  state._resolvedFailMode = 0;
+  cfg._failFriction = 0;
+  cfg._failRate = 0;
+  state.temp = 20;
+  state.smoke = [];
+  state.fire = [];
+  state.arcs = [];
+  state.sparks = [];
+  state.shrapnel = [];
+  state.ringFire = 0;
+  state.capFire = 0;
+  state.powered = false;
+  state.angle = 0; state.omega = 0;
+  // Reset the supply voltage to 0 — motor returns repaired and unpowered
+  voltSlider.value = 0;
+  updateVoltageLabel();
+  powerBtn.textContent = 'POWER ON';
+  powerBtn.classList.remove('on');
+};
+
+window.toggleEndCap = function() {
+  state.endCap = !state.endCap;
+  const check = document.getElementById('endCapCheck');
+  if (check) check.checked = state.endCap;
+  const label = check ? check.parentElement : null;
+  if (label) {
+    if (state.endCap) { label.style.borderColor = '#5a9fd4'; label.style.color = '#5a9fd4'; }
+    else { label.style.borderColor = ''; label.style.color = ''; }
+  }
+};
+
+window.toggleSlowMo = function() {
+  state.timeScale = state.timeScale > 0.5 ? 0.2 : 1;
+  const btn = document.getElementById('slowMoBtn');
+  const on = state.timeScale < 0.5;
+  btn.textContent = '🐌 SLOW-MO: ' + (on ? 'ON' : 'OFF');
+  if (on) { btn.style.borderColor = '#9a5ad4'; btn.style.color = '#c89aff'; btn.style.background = '#1a1a2e'; }
+  else { btn.style.borderColor = ''; btn.style.color = ''; btn.style.background = '#1a1a2e'; }
+};
+
+function updateEndCapBtnVisibility() {
+  const check = document.getElementById('endCapCheck');
+  if (check) check.parentElement.hidden = !cfg.brushedType;
+}
+
+function updateSlotsUI() {
+  const ctn = document.getElementById('slotsCtn');
+  const slider = document.getElementById('slotsSlider');
+  const val = document.getElementById('slotsVal');
+  if (!ctn) return;
+  // Show only for non-custom brushed rotors (custom has its own slots slider)
+  if (cfg.brushedType && !cfg.isCustom) {
+    ctn.hidden = false;
+    const s = cfg.slots || 12;
+    if (slider) slider.value = s;
+    if (val) val.textContent = s;
+  } else {
+    ctn.hidden = true;
+  }
+}
+
+window.applySlots = function(v) {
+  const n = parseInt(v, 10);
+  slotOverride = n;
+  const val = document.getElementById('slotsVal');
+  if (val) val.textContent = n;
+  if (cfg.brushedType && !cfg.isCustom) {
+    cfg.slots = n;
+    // Recompute slot factor: fewer slots = faster (lower ke), more = slower
+    const slotFactor = Math.max(0.5, Math.min(2, n / 12));
+    cfg._slotFactor = slotFactor;
+    cfg.ke = (cfg.baseKe || cfg.ke) * slotFactor;
+    cfg.kv = (cfg.baseKv || cfg.kv) / slotFactor;
+    cfg.torqueConst = (cfg.baseTorqueConst || cfg.torqueConst) * slotFactor;
+    updateMotorInfo();
+  }
+};
+
+function updateVoltRatingUI() {
+  const ctn = document.getElementById('voltRatingCtn');
+  const sel = document.getElementById('voltRatingSelect');
+  if (cfg.brushedType && cfg.voltageRatings) {
+    ctn.hidden = false;
+    sel.innerHTML = '';
+    for (const v of cfg.voltageRatings) {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v + 'V';
+      if (Math.abs(v - cfg.maxVoltage) < 0.1) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  } else {
+    ctn.hidden = true;
+  }
+}
+
+function updateFreqUI() {
+  const ctn = document.getElementById('freqCtn');
+  const sel = document.getElementById('freqSelect');
+  if (cfg.isAC) {
+    ctn.hidden = false;
+    sel.value = String(state.lineFreq);
+  } else {
+    ctn.hidden = true;
+  }
+}
+
+window.applyFreq = function(f) {
+  state.lineFreq = parseFloat(f);
+};
+
+function updateFailModeUI() {
+  const sel = document.getElementById('failModeSelect');
+  const labels = {
+    auto: 'Auto (Random)', thermal: 'Thermal — Overheat & Burn', overspeed: 'Overspeed — Rotor Tears Apart',
+    brush: 'Brush Failure — Commutator Destruction', short: 'Short Circuit — Windings Melt',
+    bearing: 'Bearing Seizure — Grind to Death', overvolt: 'Overvolt — Catastrophic Arcing',
+    centrifugal: 'Centrifugal — Rotor Explodes Outward', flood: 'Flood — Short & Steam',
+    phase: 'Phase Loss — Sputtering Imbalance', magnet: 'Magnet Demag — Field Collapse',
+    wire: 'Wire Snap — Terminal Arcing',
+    ac: 'AC Power — Vibrate & Burn',
+  };
+  sel.innerHTML = '';
+  const auto = document.createElement('option');
+  auto.value = 'auto'; auto.textContent = 'Auto (Random)';
+  sel.appendChild(auto);
+  for (const fm of cfg.failModes) {
+    const opt = document.createElement('option');
+    opt.value = fm; opt.textContent = labels[fm] || fm;
+    sel.appendChild(opt);
+  }
+  sel.value = 'auto';
+  state.failMode = 'auto';
+}
+
+window.applyFailMode = function(m) {
+  state.failMode = m;
+};
+
+window.applyVoltageRating = function(v) {
+  v = parseFloat(v);
+  if (!cfg.baseVoltage) return;
+  const ratio = v / cfg.baseVoltage; // scaling factor
+  // Same physical motor at different voltage: N_turns ∝ V, so R ∝ V², L ∝ V², I ∝ 1/V, kv ∝ 1/V
+  cfg.maxVoltage = v;
+  cfg.sliderMaxVoltage = Math.max(Math.round(v * 5), 50);
+  cfg.resistance = cfg.baseResistance * ratio * ratio;
+  cfg.inductance = cfg.baseInductance * ratio * ratio;
+  cfg.maxCurrent = cfg.baseMaxCurrent / ratio;
+  cfg.kv = Math.round(cfg.baseKv / ratio);
+  cfg.ke = 1 / (cfg.kv * (2 * Math.PI / 60));
+  cfg.torqueConst = cfg.baseTorqueConst * ratio; // kt ∝ N ∝ V
+  // Reapply slot factor on top of voltage-rating scaling (fewer slots = faster)
+  if (cfg._slotFactor) {
+    cfg.ke *= cfg._slotFactor;
+    cfg.kv /= cfg._slotFactor;
+    cfg.torqueConst *= cfg._slotFactor;
+  }
+  // Higher voltage = better insulation = higher burn temp; lower voltage = fails faster
+  cfg.burnTemp = cfg.baseBurnTemp + (v - cfg.baseVoltage) * 0.5;
+  cfg.smokeTemp = cfg.baseSmokeTemp + (v - cfg.baseVoltage) * 0.3;
+  // Reset motor state for the new rating
+  state.powered = false;
+  state.omega = 0; state.current = 0; state.emf = 0; state.torque = 0;
+  state.temp = 20; state.sparkIntensity = 0; state.ringFire = 0; state.capFire = 0;
+  state.sparks = []; state.arcs = []; state.smoke = []; state.fire = []; state.shrapnel = [];
+  state.burnedOut = false; state.exploded = false; state.fullyDestroyed = false; state.wreckTime = 0; state.burnDamage = 0; state.failing = false; state.failStage = 0; state._resolvedFailMode = 0;
+  cfg._failFriction = 0; cfg._failRate = 0;
+  powerBtn.textContent = 'POWER ON';
+  powerBtn.classList.remove('on');
+  const vs = document.getElementById('voltSlider');
+  vs.value = Math.round(cfg.maxVoltage / cfg.sliderMaxVoltage * 100 * 0.4);
+  updateMotorInfo();
+  updateVoltageLabel();
+  updateLoadLabel();
+};
+
+window.setQuality = function(q) {
+  state.quality = q;
+  document.querySelectorAll('.qbtn').forEach(b => {
+    const sel = b.dataset.q === q;
+    b.classList.toggle('sel', sel);
+    b.style.borderColor = sel ? '#5a9fd4' : '#333';
+    b.style.background = sel ? '#1a2a3e' : '#111';
+    b.style.color = sel ? '#5a9fd4' : '#777';
+  });
+};
+
+function updateCustomPanelVisibility() {
+  const ctn = document.getElementById('customCtn');
+  if (ctn) ctn.hidden = !cfg.isCustom;
+  if (cfg.isCustom) {
+    syncCustomSliders();
+    updateCustomControlsVisibility();
+  }
+}
+
+function updateCustomControlsVisibility() {
+  const isBT = isBrushedType(customParams.motorType);
+  document.getElementById('custBrushesRow').hidden = !isBT;
+  document.getElementById('custBrushDropRow').hidden = !isBT;
+  document.getElementById('custSlotsRow').hidden = !isBT;
+  // Poles step: brushed types use step=2 (even), AC types too
+}
+
+function syncCustomSliders() {
+  const map = {
+    kv: ['custKv', 'custKvVal', v => v],
+    resistance: ['custR', 'custRVal', v => v.toFixed(1)],
+    maxVoltage: ['custV', 'custVVal', v => v],
+    maxCurrent: ['custI', 'custIVal', v => v],
+    slots: ['custSlots', 'custSlotsVal', v => v],
+    inertia: ['custInertia', 'custInertiaVal', v => Math.round(v / 1e-6)],
+    poles: ['custPoles', 'custPolesVal', v => v],
+    brushDrop: ['custBrushDrop', 'custBrushDropVal', v => v.toFixed(1)],
+  };
+  for (const [param, [sliderId, labelId, fmt]] of Object.entries(map)) {
+    const s = document.getElementById(sliderId);
+    const l = document.getElementById(labelId);
+    if (s) s.value = param === 'inertia' ? Math.round(customParams[param] / 1e-6) : customParams[param];
+    if (l) l.textContent = fmt(customParams[param]);
+  }
+  const mtSel = document.getElementById('custMotorType');
+  if (mtSel) mtSel.value = customParams.motorType;
+  const brCheck = document.getElementById('custBrushes');
+  const brVal = document.getElementById('custBrushesVal');
+  if (brCheck) brCheck.checked = customParams.brushes;
+  if (brVal) brVal.textContent = customParams.brushes ? 'ON' : 'OFF';
+}
+
+window.applyCustomParam = function(param, val) {
+  if (!cfg.isCustom) return;
+  if (param === 'inertia') {
+    customParams.inertia = parseFloat(val) * 1e-6;
+  } else if (param === 'motorType') {
+    customParams.motorType = val;
+    // Switching motor type may need state reset for AC vs brushed
+    const wasBT = cfg.brushedType;
+    const newBT = isBrushedType(val);
+    if (wasBT !== newBT) {
+      state.powered = false;
+      state.omega = 0; state.current = 0; state.emf = 0; state.torque = 0;
+      state.angle = 0;
+      state.scopeData = []; state.scopeData2 = [];
+      for (let i = 0; i < 3; i++) { state.phaseCurrents[i] = 0; state.phaseVoltages[i] = 0; state.phaseEMF[i] = 0; }
+      powerBtn.textContent = 'POWER ON';
+      powerBtn.classList.remove('on');
+    }
+  } else if (param === 'brushes') {
+    customParams.brushes = val;
+    const brVal = document.getElementById('custBrushesVal');
+    if (brVal) brVal.textContent = val ? 'ON' : 'OFF';
+  } else if (param === 'brushDrop') {
+    customParams.brushDrop = parseFloat(val);
+  } else {
+    customParams[param] = parseFloat(val);
+  }
+  // Update label for slider params
+  if (param !== 'motorType' && param !== 'brushes') {
+    const cap = param.charAt(0).toUpperCase() + param.slice(1);
+    const labelEl = document.getElementById('cust' + cap + 'Val');
+    if (labelEl) {
+      if (param === 'resistance' || param === 'brushDrop') labelEl.textContent = parseFloat(val).toFixed(1);
+      else if (param === 'inertia') labelEl.textContent = val;
+      else labelEl.textContent = val;
+    }
+  }
+  // Recompute derived values and reload
+  customParams.ke = 1 / (customParams.kv * (2 * Math.PI / 60));
+  const wasPowered = state.powered;
+  loadMotor('custom');
+  state.powered = wasPowered;
+  updateMotorInfo();
+  updateVoltageLabel();
+  updateLoadLabel();
+};
+
+// Motor selector
+const selectorEl = document.getElementById('motorSelector');
+motorKeys.forEach(key => {
+  const btn = document.createElement('div');
+  btn.className = 'mbtn' + (key === currentMotor ? ' sel' : '');
+  btn.textContent = root.motors[key].name;
+  btn.dataset.key = key;
+  btn.onclick = () => switchMotor(key);
+  selectorEl.appendChild(btn);
+});
+
+function switchMotor(key) {
+  state.powered = false;
+  audio.update();
+  powerBtn.textContent = 'POWER ON';
+  powerBtn.classList.remove('on');
+  loadMotor(key);
+  state.angle = 0; state.omega = 0; state.current = 0; state.emf = 0;
+  state.torque = 0; state.temp = 20; state.sparkIntensity = 0;
+  state.burnedOut = false; state.exploded = false; state.fullyDestroyed = false; state.wreckTime = 0; state.burnDamage = 0; state.failing = false; state.failStage = 0; state._resolvedFailMode = 0; state.ringFire = 0; state.capFire = 0; cfg._failFriction = 0; cfg._failRate = 0;
+  state.sparks = []; state.smoke = []; state.fire = []; state.arcs = []; state.shrapnel = [];
+  state.scopeData = []; state.scopeData2 = [];
+  state.commutatorSegment = 0;
+  for (let i = 0; i < 3; i++) { state.phaseCurrents[i] = 0; state.phaseVoltages[i] = 0; state.phaseEMF[i] = 0; }
+  setHighlight(null);
+  updateMotorInfo();
+  updateVoltageLabel();
+  updateLoadLabel();
+  updateVoltRatingUI();
+  updateFreqUI();
+  document.querySelectorAll('.mbtn').forEach(b => b.classList.toggle('sel', b.dataset.key === key));
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PART HIGHLIGHT SYSTEM — click any motor part to highlight it in gold
+// ═══════════════════════════════════════════════════════════════════════
+let highlightedPart = null;
+let highlightPulse = 0;
+
+const PART_CATALOG = [
+  { id:'magnet',     icon:'🧲', name:'Neodymium Magnet',  desc:'Rare-earth N52 magnets producing intense field flux — the heart of a PM motor' },
+  { id:'windings',   icon:'🟤', name:'Copper Magnet Wire', desc:'Enameled AWG copper wire — low resistance, high current capacity' },
+  { id:'brush',      icon:'⬛', name:'Carbon Brush',       desc:'Graphite-carbon block conducting current from leads to the spinning commutator' },
+  { id:'commutator', icon:'⚙️', name:'Commutator',         desc:'Segmented copper ring that mechanically reverses current direction each half-rotation' },
+  { id:'rotor',      icon:'🌀', name:'Rotor Core',          desc:'Stacked silicon-steel laminations carrying the armature windings' },
+  { id:'insulation', icon:'🛡️', name:'Insulation (Kapton)', desc:'Polyimide film and slot liners preventing coil-to-core electrical shorts' },
+  { id:'bearing',    icon:'🔩', name:'Bearings',            desc:'Sealed precision ball bearings supporting the rotor shaft at both ends' },
+  { id:'shaft',      icon:'➖', name:'Shaft',               desc:'Hardened steel shaft transmitting mechanical torque to the load' },
+  { id:'stator',     icon:'🏛️', name:'Stator Core',         desc:'Laminated steel housing with field poles or permanent magnets' },
+  { id:'varnish',    icon:'🧴', name:'Winding Varnish',     desc:'Epoxy resin impregnation that locks windings and improves thermal conductivity' },
+];
+
+const CATALOG_TO_PART = {
+  magnet:'magnet', windings:'windings', brush:'brush', commutator:'commutator',
+  rotor:'rotor', insulation:'windings', bearing:'shaft', shaft:'shaft',
+  stator:'stator', varnish:'windings',
+};
+
+function hitTestMotor(mx, my) {
+  const dx = mx - MCX, dy = my - MCY;
+  const d = Math.hypot(dx, dy);
+  const isAC = cfg.phases === 3;
+
+  if (isAC) {
+    const statorR = 150, rotorR = 95, shaftR = 14;
+    if (d > statorR + 8) return null;
+    if (d > rotorR + 4) return { id:'stator', name:'Stator Core & Windings', desc:'Laminated steel stator with 3-phase copper windings' };
+    if (d > rotorR) return { id:'airgap', name:'Air Gap', desc:'Magnetic air gap between rotor and stator — field energy transfers here' };
+    if (d > shaftR + 2) {
+      if (cfg.key === 'induction') return { id:'rotor', name:'Squirrel-Cage Rotor', desc:'Aluminum or copper bars shorted by end rings — current induced by slip' };
+      if (cfg.key === 'synchronous') return { id:'rotor', name:'Salient Pole Rotor', desc:'Wound rotor with DC field excitation coils on protruding poles' };
+      if (cfg.key === 'syncrel') return { id:'rotor', name:'Reluctance Rotor', desc:'Salient iron rotor with flux barriers — no magnets or windings' };
+      if (cfg.key === 'pmsm' || cfg.key === 'bldc') return { id:'magnet', name:'Rotor Magnets', desc:'Surface-mounted rare-earth permanent magnets on the rotor' };
+      return { id:'rotor', name:'Rotor', desc:'Rotating element of the motor' };
+    }
+    return { id:'shaft', name:'Shaft', desc:'Hardened steel output shaft' };
+  }
+
+  // Brushed motor
+  const statorR = 150, rotorR = 85, gap = 10, commR = 32, shaftR = 11;
+
+  // Brushes first (outside rotor circle)
+  if (cfg.brushes !== false) {
+    let bao = cfg.field === 'repulsion' ? Math.PI / 4 : 0;
+    const cb = Math.cos(bao), sb = Math.sin(bao);
+    for (const side of [-1, 1]) {
+      const bx0 = side * (commR + 14), by0 = 0;
+      const rx = bx0 * cb - by0 * sb, ry = bx0 * sb + by0 * cb;
+      if (Math.hypot(dx - rx, dy - ry) < 16)
+        return { id:'brush', name:'Carbon Brush', desc:'Graphite-carbon block conducting current to the commutator' };
+    }
+  }
+
+  if (d > statorR + 8) return null;
+  if (d > rotorR + gap) {
+    if (cfg.field && cfg.field !== 'pm')
+      return { id:'magnet', name:'Wound Field Pole', desc:'Electromagnetic field pole with copper excitation winding' };
+    return { id:'magnet', name:'Stator Magnet', desc:'Permanent magnet providing the static field flux' };
+  }
+  if (d > rotorR) return { id:'airgap', name:'Air Gap', desc:'Magnetic air gap between rotor and stator' };
+  const slotR = rotorR * 0.74, ss = rotorR * 0.17;
+  if (d > commR + 2) {
+    if (d > slotR - ss * 1.3 && d < slotR + ss * 1.3)
+      return { id:'windings', name:'Armature Windings', desc:'Copper coils in rotor slots carrying armature current' };
+    return { id:'rotor', name:'Rotor Core', desc:'Stacked silicon-steel laminations carrying the armature' };
+  }
+  if (d > shaftR + 1) return { id:'commutator', name:'Commutator', desc:'Segmented copper ring that reverses current each half-turn' };
+  return { id:'shaft', name:'Shaft', desc:'Hardened steel output shaft' };
+}
+
+function setHighlight(part) {
+  highlightedPart = part;
+  const infoEl = document.getElementById('partInfoEl');
+  if (part) {
+    infoEl.hidden = false;
+    infoEl.querySelector('.part-info-name').textContent = part.name;
+    infoEl.querySelector('.part-info-desc').textContent = part.desc;
+  } else {
+    infoEl.hidden = true;
+  }
+  document.querySelectorAll('.part-card').forEach(c => {
+    const partId = CATALOG_TO_PART[c.dataset.catId];
+    c.classList.toggle('active', !!(part && part.id === partId));
+  });
+}
+
+function highlightFromCatalog(catId) {
+  const cat = PART_CATALOG.find(c => c.id === catId);
+  const partId = CATALOG_TO_PART[catId];
+  const names = {
+    magnet: cfg.phases === 3 ? (cfg.key === 'pmsm' || cfg.key === 'bldc' ? 'Rotor Magnets' : 'Stator Core') : (cfg.field && cfg.field !== 'pm' ? 'Wound Field Pole' : 'Stator Magnet'),
+    windings: cfg.phases === 3 ? 'Stator Windings' : 'Armature Windings',
+    brush: 'Carbon Brush', commutator: 'Commutator',
+    rotor: cfg.phases === 3 ? 'Rotor' : 'Rotor Core',
+    shaft: 'Shaft', stator: 'Stator Core',
+  };
+  setHighlight({ id: partId, name: names[partId] || cat.name, desc: cat.desc });
+}
+
+function drawHighlight() {
+  if (!highlightedPart) return;
+  const id = highlightedPart.id;
+  highlightPulse += 0.08;
+  const pulse = 0.6 + 0.4 * (0.5 + 0.5 * Math.sin(highlightPulse));
+  const isAC = cfg.phases === 3;
+
+  mCtx.save();
+  mCtx.strokeStyle = `rgba(255,215,0,${pulse})`;
+  mCtx.fillStyle = `rgba(255,215,0,${pulse * 0.07})`;
+  mCtx.lineWidth = 3;
+  mCtx.shadowColor = '#ffd700';
+  mCtx.shadowBlur = 12;
+
+  if (isAC) {
+    const statorR = 150, rotorR = 95, shaftR = 14;
+    if (id === 'stator') {
+      for (let i = 0; i < cfg.poles; i++) {
+        const pa = (i / cfg.poles) * Math.PI * 2 - Math.PI / 2;
+        const innerR = rotorR + 8, outerR = statorR;
+        const pw = (Math.PI * 2 / cfg.poles) * 0.55;
+        mCtx.save(); mCtx.translate(MCX, MCY); mCtx.rotate(pa);
+        mCtx.beginPath();
+        mCtx.arc(0, 0, outerR, -pw/2, pw/2);
+        mCtx.arc(0, 0, innerR, pw/2, -pw/2, true);
+        mCtx.closePath(); mCtx.fill(); mCtx.stroke();
+        mCtx.restore();
+      }
+    }
+    if (id === 'airgap') { mCtx.beginPath(); mCtx.arc(MCX, MCY, rotorR + 4, 0, Math.PI*2); mCtx.stroke(); }
+    if (id === 'rotor') {
+      mCtx.save(); mCtx.translate(MCX, MCY); mCtx.rotate(state.angle);
+      mCtx.beginPath(); mCtx.arc(0, 0, rotorR, 0, Math.PI*2); mCtx.fill(); mCtx.stroke();
+      mCtx.restore();
+    }
+    if (id === 'magnet' && (cfg.key === 'pmsm' || cfg.key === 'bldc')) {
+      mCtx.save(); mCtx.translate(MCX, MCY); mCtx.rotate(state.angle);
+      for (let i = 0; i < cfg.poles; i++) {
+        const ma = (i / cfg.poles) * Math.PI * 2;
+        const mr = rotorR * 0.75;
+        mCtx.save(); mCtx.translate(Math.cos(ma)*mr, Math.sin(ma)*mr); mCtx.rotate(ma + Math.PI/2);
+        mCtx.strokeRect(-rotorR * 0.3, -6, rotorR * 0.3, 12);
+        mCtx.restore();
+      }
+      mCtx.restore();
+    }
+    if (id === 'shaft') { mCtx.beginPath(); mCtx.arc(MCX, MCY, shaftR, 0, Math.PI*2); mCtx.fill(); mCtx.stroke(); }
+  } else {
+    const statorR = 150, rotorR = 85, gap = 10, commR = 32, shaftR = 11;
+    if (id === 'stator') { mCtx.beginPath(); mCtx.arc(MCX, MCY, statorR + 4, 0, Math.PI*2); mCtx.fill(); mCtx.stroke(); }
+    if (id === 'magnet') {
+      for (let i = 0; i < cfg.poles; i++) {
+        const ang = (i / cfg.poles) * Math.PI * 2 - Math.PI / 2;
+        const innerR = rotorR + gap, outerR = statorR;
+        const pa = Math.min(Math.PI * 0.72, (2 * Math.PI / cfg.poles) * 0.82);
+        mCtx.save(); mCtx.translate(MCX, MCY); mCtx.rotate(ang);
+        mCtx.beginPath();
+        mCtx.arc(0, 0, outerR, -pa/2, pa/2);
+        mCtx.arc(0, 0, innerR, pa/2, -pa/2, true);
+        mCtx.closePath(); mCtx.fill(); mCtx.stroke();
+        mCtx.restore();
+      }
+    }
+    if (id === 'airgap') {
+      mCtx.setLineDash([4, 4]);
+      mCtx.beginPath(); mCtx.arc(MCX, MCY, rotorR + gap/2, 0, Math.PI*2); mCtx.stroke();
+      mCtx.setLineDash([]);
+    }
+    if (id === 'rotor') {
+      mCtx.save(); mCtx.translate(MCX, MCY); mCtx.rotate(state.angle);
+      mCtx.beginPath(); mCtx.arc(0, 0, rotorR, 0, Math.PI*2); mCtx.fill(); mCtx.stroke();
+      mCtx.restore();
+    }
+    if (id === 'windings') {
+      mCtx.save(); mCtx.translate(MCX, MCY); mCtx.rotate(state.angle);
+      const slotR = rotorR * 0.74, numSlots = cfg.slots || 12, ss = rotorR * 0.17;
+      for (let i = 0; i < numSlots; i++) {
+        const sa = (i / numSlots) * Math.PI * 2;
+        const sx = Math.cos(sa) * slotR, sy = Math.sin(sa) * slotR;
+        mCtx.beginPath(); mCtx.rect(sx - ss/2, sy - ss*0.9, ss, ss*1.8); mCtx.fill(); mCtx.stroke();
+      }
+      mCtx.restore();
+    }
+    if (id === 'commutator') {
+      mCtx.save(); mCtx.translate(MCX, MCY); mCtx.rotate(state.angle);
+      mCtx.beginPath(); mCtx.arc(0, 0, commR, 0, Math.PI*2); mCtx.fill(); mCtx.stroke();
+      mCtx.restore();
+    }
+    if (id === 'shaft') {
+      mCtx.save(); mCtx.translate(MCX, MCY); mCtx.rotate(state.angle);
+      mCtx.beginPath(); mCtx.arc(0, 0, shaftR, 0, Math.PI*2); mCtx.fill(); mCtx.stroke();
+      mCtx.restore();
+    }
+    if (id === 'brush' && cfg.brushes !== false) {
+      let bao = cfg.field === 'repulsion' ? Math.PI / 4 : 0;
+      mCtx.save(); mCtx.translate(MCX, MCY); mCtx.rotate(bao);
+      for (const side of [-1, 1]) {
+        const bx = side * (commR + 14);
+        mCtx.beginPath(); mCtx.rect(bx - 6, -18, 12, 36); mCtx.fill(); mCtx.stroke();
+      }
+      mCtx.restore();
+    }
+  }
+  mCtx.restore();
+}
+
+// Canvas click + hover
+mCanvas.style.cursor = 'crosshair';
+function canvasCoords(e) {
+  const rect = mCanvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (mCanvas.width / rect.width),
+    y: (e.clientY - rect.top) * (mCanvas.height / rect.height),
+  };
+}
+mCanvas.addEventListener('click', (e) => {
+  const { x, y } = canvasCoords(e);
+  setHighlight(hitTestMotor(x, y));
+});
+mCanvas.addEventListener('mousemove', (e) => {
+  const { x, y } = canvasCoords(e);
+  mCanvas.style.cursor = hitTestMotor(x, y) ? 'pointer' : 'default';
+});
+
+// Build parts catalog
+const partsListEl = document.getElementById('partsList');
+PART_CATALOG.forEach(cat => {
+  const card = document.createElement('div');
+  card.className = 'part-card';
+  card.dataset.catId = cat.id;
+  card.innerHTML = `<span class="part-icon">${cat.icon}</span><span class="part-name">${cat.name}</span>`;
+  card.onclick = () => highlightFromCatalog(cat.id);
+  partsListEl.appendChild(card);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// MAIN LOOP
+// ═══════════════════════════════════════════════════════════════════════
+function updateUI() {
+  const rpm = Math.abs(state.omega) * 60 / (2 * Math.PI);
+  rpmVal.textContent = Math.round(rpm);
+  torqueVal.textContent = (state.torque * 1000).toFixed(0);
+  currentVal.textContent = state.current.toFixed(1);
+  emfVal.textContent = state.emf.toFixed(1);
+  powerVal.textContent = state.powerIn.toFixed(1);
+  effVal.textContent = state.efficiency > 0 ? state.efficiency.toFixed(0) : '—';
+
+  tempVal.textContent = Math.round(state.temp) + '°C';
+  const tempPct = Math.min(100, (state.temp / 200) * 100);
+  tempFill.style.width = tempPct + '%';
+  if (state.temp > cfg.burnTemp) tempVal.style.color = '#ff4444';
+  else if (state.temp > cfg.smokeTemp) tempVal.style.color = '#ffaa00';
+  else tempVal.style.color = '#666';
+  const curPctVal = Math.min(100, (state.current / cfg.maxCurrent) * 100);
+  curFill.style.width = curPctVal + '%';
+  curPct.textContent = curPctVal.toFixed(0) + '%';
+  const effPctVal = state.efficiency;
+  effFill.style.width = effPctVal + '%';
+  effPct.textContent = effPctVal > 0 ? effPctVal.toFixed(0) + '%' : '—%';
+
+  // Power button reflects burnout/failing
+  if (state.fullyDestroyed) {
+    powerBtn.textContent = '☠ DESTROYED ☠';
+    powerBtn.classList.remove('on');
+    powerBtn.style.borderColor = '#ff0000';
+    powerBtn.style.color = '#ff0000';
+  } else if (state.burnedOut && !state.powered) {
+    powerBtn.textContent = state.exploded ? '💥 EXPLODED' : '⚠ BURNED OUT';
+    powerBtn.classList.remove('on');
+    powerBtn.style.borderColor = '#ff4444';
+    powerBtn.style.color = '#ff4444';
+  } else if (state.burnedOut && state.powered) {
+    powerBtn.textContent = state.exploded ? '💥 EXPLODED ⚡' : '⚠ BURNED OUT ⚡';
+    powerBtn.classList.add('on');
+    powerBtn.style.borderColor = '#ff4444';
+    powerBtn.style.color = '#ff4444';
+  } else if (state.failing) {
+    powerBtn.textContent = '⚠ FAILING';
+    powerBtn.style.borderColor = '#ff8800';
+    powerBtn.style.color = '#ff8800';
+  } else {
+    powerBtn.textContent = state.powered ? 'POWER OFF' : 'POWER ON';
+    powerBtn.style.borderColor = '';
+    powerBtn.style.color = '';
+  }
+}
+
+// Init
+updateMotorInfo();
+updateVoltageLabel();
+updateLoadLabel();
+
+let lastTime = performance.now();
+let _fpsAccum = 0, _fpsFrames = 0, _fpsLastUpdate = 0;
+function loop(now) {
+  const realDt = Math.min(0.02, (now - lastTime) / 1000);
+  lastTime = now;
+  _fpsAccum += realDt; _fpsFrames++;
+  if (now - _fpsLastUpdate > 500) {
+    const fps = _fpsFrames / _fpsAccum;
+    document.getElementById('fpsCounter').textContent = Math.round(fps) + ' FPS';
+    _fpsAccum = 0; _fpsFrames = 0; _fpsLastUpdate = now;
+  }
+  const dt = realDt * state.timeScale;
+  const steps = state.quality === 'low' ? 2 : 4;
+  for (let i = 0; i < steps; i++) physicsStep(dt / steps);
+  // Cap particle counts for performance
+  const maxSparks = state.quality === 'low' ? 60 : state.quality === 'medium' ? 150 : 500;
+  const maxSmoke = state.quality === 'low' ? 15 : state.quality === 'medium' ? 40 : 120;
+  const maxFire = state.quality === 'low' ? 15 : state.quality === 'medium' ? 40 : 120;
+  const maxShrapnel = state.quality === 'low' ? 10 : 30;
+  if (state.sparks.length > maxSparks) state.sparks.splice(0, state.sparks.length - maxSparks);
+  if (state.smoke.length > maxSmoke) state.smoke.splice(0, state.smoke.length - maxSmoke);
+  if (state.fire.length > maxFire) state.fire.splice(0, state.fire.length - maxFire);
+  if (state.shrapnel.length > maxShrapnel) state.shrapnel.splice(0, state.shrapnel.length - maxShrapnel);
+  tickSparks(dt);
+  tickSmoke(dt);
+  tickFire(dt);
+  tickArcs(dt);
+  tickShrapnel(dt);
+  audio.update();
+  drawMotor();
+  drawScope();
+  updateUI();
+}
+
+let _timer = setInterval(() => loop(performance.now()), 16);
+</script>
+
+</body>
+</html>

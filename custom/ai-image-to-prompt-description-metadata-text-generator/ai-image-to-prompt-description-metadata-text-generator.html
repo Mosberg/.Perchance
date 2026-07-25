@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-image-to-prompt-description-metadata-text-generator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="mainCtn" style="max-width:800px; margin:0 auto; padding:20px; font-family:sans-serif;">
+  <h1 style="text-align:center; margin-bottom:10px; color:white;">AI Image Prompt & Metadata Generator</h1>
+  <p style="text-align:center; color:#aaa; margin-bottom:30px;">Turn concepts into detailed prompts, descriptions, and tags.</p>
+
+  <!-- Input Section -->
+  <div style="display:flex; flex-direction:column; gap:15px; margin-bottom:20px;">
+    <textarea id="conceptInput" rows="3" placeholder="Describe your image idea (e.g. 'A cyberpunk samurai cat in a neon-lit city')" style="padding:15px; font-size:16px; border:1px solid #444; background:#222; color:white; border-radius:8px; resize:vertical;"></textarea>
+    
+    <div style="display:flex; gap:10px;">
+      <select id="styleSelect" style="flex:1; padding:12px; background:#222; color:white; border:1px solid #444; border-radius:8px; cursor:pointer;">
+        <option value="photorealistic">Photorealistic</option>
+        <option value="anime">Anime</option>
+        <option value="digital art">Digital Art</option>
+        <option value="oil painting">Oil Painting</option>
+        <option value="3d render">3D Render</option>
+        <option value="cinematic">Cinematic</option>
+        <option value="pixel art">Pixel Art</option>
+        <option value="watercolor">Watercolor</option>
+      </select>
+      <button id="generateBtn" onclick="startGeneration()" style="flex:1; padding:12px; background:#007bff; color:white; border:none; border-radius:8px; cursor:pointer; font-size:16px; font-weight:bold; transition:background 0.2s;">Generate</button>
+    </div>
+  </div>
+
+  <!-- Loading Indicator -->
+  <div id="loadingEl" hidden style="text-align:center; margin:20px; color:#aaa; font-size:14px;">
+    ⏳ Generating optimized prompts and metadata...
+  </div>
+
+  <!-- Results Section -->
+  <div id="resultsCtn" hidden style="display:flex; flex-direction:column; gap:15px;">
+    
+    <!-- Prompt Card -->
+    <div style="background:#2a2a2a; padding:15px; border-radius:8px; border:1px solid #333; position:relative;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 style="margin:0; color:#007bff;">🖼️ Main Prompt</h3>
+        <button onclick="copyToClipboard('promptOutputEl', this)" style="padding:5px 10px; background:#444; color:white; border:none; border-radius:4px; cursor:pointer; font-size:12px;">Copy</button>
+      </div>
+      <p id="promptOutputEl" style="white-space:pre-wrap; color:#ddd; font-size:14px; line-height:1.5; margin:0;"></p>
+    </div>
+
+    <!-- Negative Prompt Card -->
+    <div style="background:#2a2a2a; padding:15px; border-radius:8px; border:1px solid #333; position:relative;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 style="margin:0; color:#ff5555;">🚫 Negative Prompt</h3>
+        <button onclick="copyToClipboard('negativeOutputEl', this)" style="padding:5px 10px; background:#444; color:white; border:none; border-radius:4px; cursor:pointer; font-size:12px;">Copy</button>
+      </div>
+      <p id="negativeOutputEl" style="white-space:pre-wrap; color:#888; font-size:14px; line-height:1.5; margin:0;"></p>
+    </div>
+
+    <!-- Description Card -->
+    <div style="background:#2a2a2a; padding:15px; border-radius:8px; border:1px solid #333; position:relative;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 style="margin:0; color:#55ff55;">📝 Description</h3>
+        <button onclick="copyToClipboard('descOutputEl', this)" style="padding:5px 10px; background:#444; color:white; border:none; border-radius:4px; cursor:pointer; font-size:12px;">Copy</button>
+      </div>
+      <p id="descOutputEl" style="white-space:pre-wrap; color:#ddd; font-size:14px; line-height:1.5; margin:0;"></p>
+    </div>
+
+    <!-- Metadata/Tags Card -->
+    <div style="background:#2a2a2a; padding:15px; border-radius:8px; border:1px solid #333; position:relative;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 style="margin:0; color:#ffff55;">🏷️ Metadata & Tags</h3>
+        <button onclick="copyToClipboard('tagsOutputEl', this)" style="padding:5px 10px; background:#444; color:white; border:none; border-radius:4px; cursor:pointer; font-size:12px;">Copy</button>
+      </div>
+      <div id="tagsOutputEl" style="color:#ddd; font-size:14px; line-height:1.5;"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  async function startGeneration() {
+    if(!conceptInput.value.trim()) {
+      conceptInput.style.borderColor = "#ff5555"; // Visual feedback
+      setTimeout(() => conceptInput.style.borderColor = "#444", 1000);
+      return;
+    }
+
+    generateBtn.disabled = true;
+    generateBtn.textContent = "⏳ Generating...";
+    generateBtn.style.opacity = "0.7";
+    loadingEl.hidden = false;
+    resultsCtn.hidden = true;
+
+    let concept = conceptInput.value;
+    let style = styleSelect.value;
+
+    // We use generateText to create a structured response
+    let instruction = `
+      Act as a professional AI Prompt Engineer.
+      Create content for the concept: "${concept}"
+      Style: "${style}"
+
+      Output format must strictly follow this pattern (do not include markdown formatting like \`\`\`):
+      ## PROMPT_START
+      [Insert high quality, detailed comma-separated prompt here optimized for Stable Diffusion/Midjourney. Include camera angle, lighting, rendering engine details.]
+      ## PROMPT_END
+
+      ## NEGATIVE_START
+      [Insert a strong negative prompt here to avoid artifacts, blur, bad anatomy, etc.]
+      ## NEGATIVE_END
+
+      ## DESC_START
+      [Insert a vivid 2-sentence description of the scene for accessibility/storytelling.]
+      ## DESC_END
+
+      ## TAGS_START
+      [Insert a comma-separated list of relevant tags.]
+      ## TAGS_END
+    `;
+
+    try {
+      let response = await generateText(instruction);
+      parseResponse(response);
+    } catch (e) {
+      console.error(e);
+      alert("Generation failed. Please try again.");
+    } finally {
+      generateBtn.disabled = false;
+      generateBtn.textContent = "Generate";
+      generateBtn.style.opacity = "1";
+      loadingEl.hidden = true;
+    }
+  }
+
+  function parseResponse(text) {
+    // Helper to extract text between delimiters
+    let getSection = (startTag, endTag) => {
+      let startIndex = text.indexOf(startTag);
+      let endIndex = text.indexOf(endTag);
+      if(startIndex !== -1 && endIndex !== -1) {
+        return text.substring(startIndex + startTag.length, endIndex).trim();
+      }
+      return "Error: Could not extract section.";
+    };
+
+    promptOutputEl.textContent = getSection("## PROMPT_START", "## PROMPT_END");
+    negativeOutputEl.textContent = getSection("## NEGATIVE_START", "## NEGATIVE_END");
+    descOutputEl.textContent = getSection("## DESC_START", "## DESC_END");
+    tagsOutputEl.textContent = getSection("## TAGS_START", "## TAGS_END");
+    
+    resultsCtn.hidden = false;
+  }
+
+  function copyToClipboard(elementId, btnElement) {
+    let text = document.getElementById(elementId).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      let originalText = btnElement.textContent;
+      btnElement.textContent = "Copied!";
+      btnElement.style.background = "#28a745";
+      setTimeout(() => {
+        btnElement.textContent = originalText;
+        btnElement.style.background = "#444";
+      }, 2000);
+    });
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>00mtg — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- 
+Design Logic:
+1. UI: Dark, pixel-art themed interface inspired by Minecraft menus.
+2. Functionality: Uses the provided `root.generateImage` to create textures based on specific Minecraft guidelines (16x16, pixel art, tiling, top-left lighting).
+3. Features:
+   - Input fields for Subject, Type (Block/Item), and Material context.
+   - "Tiling Preview" that automatically creates a 3x3 grid of the result to check for repetition artifacts (per the guide).
+   - A "Style Guide Checklist" integrated into the UI so users can QA the AI's result against the provided rules (No mixels, Top-left lighting, etc.).
+4. Tech: Vanilla JS, simple state management, inline styles for layout.
+-->
+
+<div style="font-family: 'Courier New', Courier, monospace; background-color:#1a1a1a; color:#e0e0e0; display:flex; flex-direction:column; align-items:center; min-height:100vh; padding:20px;">
+
+  <!-- Header -->
+  <header style="text-align:center; margin-bottom:30px; border-bottom:2px solid #5f5; padding-bottom:20px; width:100%; max-width:800px;">
+    <h1 style="color:#5f5; text-shadow:2px 2px #000; margin:0; font-size:2.5rem; letter-spacing:-2px;">MINECRAFT TEXTURE GEN</h1>
+    <p style="color:#aaa; margin-top:10px;">AI-Powered Pixel Art Texture Generator</p>
+  </header>
+
+  <!-- Main Workspace -->
+  <div style="display:flex; flex-wrap:wrap; gap:30px; justify-content:center; width:100%; max-width:1200px;">
+
+    <!-- Left Column: Controls -->
+    <div style="flex:1; min-width:300px; max-width:400px; display:flex; flex-direction:column; gap:20px;">
+      
+      <!-- Input Card -->
+      <div style="background:#2d2d2d; border:2px solid #444; padding:20px; box-shadow:4px 4px 0px #000;">
+        <h3 style="margin-top:0; color:#ddd; border-bottom:1px solid #555; padding-bottom:10px;">1. Configuration</h3>
+        
+        <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:#aaa;">Subject / Name</label>
+        <input id="subjectInput" type="text" value="Ancient Stone" placeholder="e.g. Oak Planks, Diamond" style="width:100%; background:#111; border:1px solid #555; color:white; padding:10px; font-family:inherit; margin-bottom:15px; box-sizing:border-box;">
+
+        <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:#aaa;">Texture Type</label>
+        <select id="typeSelect" style="width:100%; background:#111; border:1px solid #555; color:white; padding:10px; font-family:inherit; margin-bottom:15px; box-sizing:border-box;">
+          <option value="block">Block (Tiling)</option>
+          <option value="item">Item (Icon)</option>
+        </select>
+
+        <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:#aaa;">Material Family</label>
+        <select id="materialSelect" style="width:100%; background:#111; border:1px solid #555; color:white; padding:10px; font-family:inherit; margin-bottom:15px; box-sizing:border-box;">
+          <option value="stone">Stone / Rock</option>
+          <option value="wood">Wood / Planks</option>
+          <option value="metal">Metal / Ore</option>
+          <option value="organic">Organic / Dirt / Grass</option>
+          <option value="magic">Magic / Glow</option>
+        </select>
+
+        <button id="generateBtn" onclick="generateTexture()" style="width:100%; background:#5f5; border:none; border-bottom:4px solid #383; color:#000; font-weight:bold; font-size:1.1rem; padding:15px; cursor:pointer; font-family:inherit; text-transform:uppercase;">
+          Generate Texture
+        </button>
+      </div>
+
+      <!-- Guide Checklist (Based on user instruction) -->
+      <div style="background:#2d2d2d; border:2px solid #444; padding:20px; box-shadow:4px 4px 0px #000;">
+        <h3 style="margin-top:0; color:#ddd; border-bottom:1px solid #555; padding-bottom:10px;">2. QA Checklist</h3>
+        <div style="font-size:0.85rem; line-height:1.6; color:#ccc;">
+          <p><strong>Check your result:</strong></p>
+          <ul style="padding-left:20px; margin:0;">
+            <li><input type="checkbox" id="chk1"> <label for="chk1">No stretched UV/Pixels stay square</label></li>
+            <li><input type="checkbox" id="chk2"> <label for="chk2">No mixels (consistent scale)</label></li>
+            <li><input type="checkbox" id="chk3"> <label for="chk3">Palette has intentional ramps</label></li>
+            <li><input type="checkbox" id="chk4"> <label for="chk4">Shading avoids banding/pillow/pancake</label></li>
+            <li><input type="checkbox" id="chk5"> <label for="chk5">Blocks tile cleanly in preview below</label></li>
+            <li><input type="checkbox" id="chk6"> <label for="chk6">Lighting source is Top-Left</label></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Output -->
+    <div style="flex:1; min-width:300px; max-width:600px; display:flex; flex-direction:column; gap:20px;">
+      
+      <!-- Main Preview -->
+      <div id="loadingMsg" hidden style="text-align:center; padding:40px; color:#5f5; font-size:1.2rem;">⏳ Mining for pixels...</div>
+
+      <div id="outputCard" hidden style="background:#2d2d2d; border:2px solid #444; padding:20px; box-shadow:4px 4px 0px #000; text-align:center;">
+        <h3 style="margin-top:0; color:#ddd;">Generated Result</h3>
+        <div style="display:flex; justify-content:center; margin-bottom:20px;">
+          <!-- We use image-rendering: pixelated to keep it sharp -->
+          <img id="resultImg" style="width:256px; height:256px; image-rendering: pixelated; border:4px solid #000; box-shadow:0 0 10px rgba(0,0,0,0.5); background:repeating-conic-gradient(#222 0% 25%, #333 0% 50%) 50% / 20px 20px;">
+        </div>
+        <a id="downloadLink" href="#" download="texture.png" style="display:inline-block; background:#444; color:white; padding:8px 16px; text-decoration:none; border:1px solid #666; margin-bottom:20px;">Download Texture</a>
+        
+        <!-- Tiling Check -->
+        <div style="text-align:left;">
+          <p style="margin-bottom:5px; color:#aaa; font-size:0.9rem;">3x3 Tiling Test:</p>
+          <div id="tilingPreview" style="width:100%; height:200px; border:2px solid #000; background-color:#111; background-repeat:repeat; background-size:64px 64px; box-shadow:inset 0 0 20px #000;"></div>
+          <p style="font-size:0.75rem; color:#666; margin-top:5px;">Check for visible repetition artifacts.</p>
+        </div>
+      </div>
+
+      <!-- Placeholder State -->
+      <div id="placeholderCard" style="background:#222; border:2px dashed #444; padding:40px; text-align:center; color:#555;">
+        <p>Configure settings and click Generate to create a texture.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let p = null; // Promise holder for generateImage
+
+    async function generateTexture() {
+      // UI State
+      generateBtn.disabled = true;
+      generateBtn.textContent = "⏳ Generating...";
+      generateBtn.style.background = "#aa5";
+      placeholderCard.hidden = true;
+      outputCard.hidden = true;
+      loadingMsg.hidden = false;
+
+      // Gather Inputs
+      let subject = subjectInput.value.trim() || "Minecraft Block";
+      let type = typeSelect.value;
+      let material = materialSelect.value;
+
+      // Construct Prompt based on User's Style Guide
+      // Note: We enforce 16x16 style, pixel art, specific lighting, and tiling constraints.
+      let prompt = "";
+      
+      if (type === "block") {
+        prompt = `Minecraft 16x16 texture pixel art. Subject: ${subject}. Material type: ${material}.
+        Style constraints:
+        - Top-down seamless tiling texture pattern.
+        - High contrast, clean pixel placement.
+        - Lighting from top-left.
+        - No anti-aliasing, no gradients, no noise, no blur.
+        - Avoid banding and pillow shading.
+        - Background must be transparent or solid single color to allow tiling check.
+        - Flat design, pixel perfect.
+        Style reference: Vanilla Minecraft textures (Stone, Bricks, Planks).`;
+      } else {
+        prompt = `Minecraft 16x16 item icon pixel art. Subject: ${subject}. Material type: ${material}.
+        Style constraints:
+        - Centered object icon.
+        - Distinct silhouette with dark outline.
+        - Top-left lighting (highlight top-left, shadow bottom-right).
+        - No anti-aliasing, no gradients, no noise, no blur.
+        - Flat design, pixel perfect.
+        Style reference: Vanilla Minecraft items (Diamond Sword, Pickaxe).`;
+      }
+
+      try {
+        // Generate Image using the global provided by the system
+        p = root.generateImage(prompt, { resolution: "512x512" }); // Request 512 for better pixel detail
+        let dataUrl = await p;
+
+        // Display Result
+        resultImg.src = dataUrl;
+        downloadLink.href = dataUrl;
+        
+        // Setup Tiling Preview
+        tilingPreview.style.backgroundImage = `url(${dataUrl})`;
+
+        // Show Output
+        loadingMsg.hidden = true;
+        outputCard.hidden = false;
+
+      } catch (err) {
+        alert("Generation failed: " + err.message);
+        loadingMsg.hidden = true;
+        placeholderCard.hidden = false;
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = "Generate Texture";
+        generateBtn.style.background = "#5f5";
+      }
+    }
+  </script>
+
+</div>
+</body>
+</html>

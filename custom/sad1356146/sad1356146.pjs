@@ -1,0 +1,3282 @@
+selectOne
+selectAll
+selectMany
+selectSpecific
+selectOrder
+selectRange
+selectExcept
+selectUnique
+selectShuffle
+selectWeighted
+selectPath
+selectWhere
+
+function isPrimitive(value) {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+
+function extractLeafValue(node) {
+  if (!node) return undefined;
+  if (isPrimitive(node)) return node;
+  if (node.value !== undefined) return node.value;
+  if (node.text !== undefined) return node.text;
+  if (node.label !== undefined) return node.label;
+  if (node.name !== undefined) return node.name;
+  return undefined;
+}
+
+function asJoinedArray(arr) {
+  arr.toString = function() {
+    if (this.length === 0) return "";
+    return this.join("");
+  };
+  return arr;
+}
+
+function _selectOneX(listx, maxDepth = 10000) {
+  let i = 0;
+  let result;
+
+  while (i++ < maxDepth) {
+    try {
+      if (listx && typeof listx.selectOne === "function" && !Array.isArray(listx)) {
+        result = listx.selectOne();
+      } else if (Array.isArray(listx)) {
+        if (listx.length === 0) return "(no list found)";
+        result = listx[Math.floor(Math.random() * listx.length)];
+      } else {
+        if (isPrimitive(listx)) return listx;
+        if (!listx || Object.keys(listx).length === 0) return "(no list found)";
+        let extracted = extractLeafValue(listx);
+        if (extracted !== undefined) {
+          result = extracted;
+        } else {
+          let keys = Object.keys(listx);
+          result = listx[keys[Math.floor(Math.random() * keys.length)]];
+        }
+      }
+
+      if (result === null || result === undefined) return "(no list found)";
+      if (isPrimitive(result)) return result;
+      if (Array.isArray(result)) {
+        if (result.length === 0) return "(no list found)";
+        listx = result[Math.floor(Math.random() * result.length)];
+        continue;
+      }
+      if (result && typeof result.selectOne === "function") {
+        listx = result;
+        continue;
+      }
+      if (result && Object.keys(result).length === 0) return "";
+      let keys = Object.keys(result || {});
+      if (keys.length === 0) return "(no list found)";
+      listx = result[keys[Math.floor(Math.random() * keys.length)]];
+    } catch (e) {
+      return "(error in the-list-plugin-v2: " + e + ")";
+    }
+  }
+
+  return "(error in the-list-plugin-v2: max depth)";
+}
+
+function _getAllValues(node) {
+  if (!node) return [];
+  if (isPrimitive(node)) return [node];
+  if (Array.isArray(node)) return node.flatMap(_getAllValues);
+  if (typeof node === "object") {
+    if (Object.keys(node).length === 0) return [];
+    let extracted = extractLeafValue(node);
+    if (extracted !== undefined) return [extracted];
+    if (typeof node.selectAll !== "undefined") {
+      return _getAllValues(node.selectAll);
+    }
+    return Object.values(node).flatMap(_getAllValues);
+  }
+  return [];
+}
+
+function _getValueByIndex(list, index) {
+  const values = _getAllValues(list);
+  if (values.length === 0) return "(no list found)";
+  index = Number(index) - 1;
+  if (isNaN(index) || index < 0 || index >= values.length) return "(index out of range)";
+  return values[index];
+}
+
+function _pickCount(...a) {
+  let num = 1;
+  if (a.length === 1) {
+    if (Array.isArray(a[0])) {
+      num = Number(a[0][Math.floor(Math.random() * a[0].length)]);
+    } else {
+      num = Number(a[0]);
+    }
+  } else if (a.length === 2) {
+    num = Number(a[0]) + Math.round(Math.random() * (Number(a[1]) - Number(a[0])));
+  } else if (a.length > 2) {
+    num = Number(a[Math.floor(Math.random() * a.length)]);
+  }
+  if (isNaN(num) || num < 1) num = 1;
+  return num;
+}
+
+function _selectManyX(list, ...a) {
+  let num = _pickCount(...a);
+  let arr = [];
+  for (let i = 0; i < num; i++) {
+    arr.push(_selectOneX(list));
+  }
+  return asJoinedArray(arr);
+}
+
+function _selectOrderX(list, ...indices) {
+  const values = _getAllValues(list);
+  if (values.length === 0) return asJoinedArray([]);
+  const result = indices.map(i => {
+    const idx = Number(i) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= values.length) return "(index out of range)";
+    return values[idx];
+  });
+  return asJoinedArray(result);
+}
+
+function _selectRangeX(list, start, end) {
+  const values = _getAllValues(list);
+  if (values.length === 0) return asJoinedArray([]);
+  start = Number(start);
+  end = Number(end);
+  if (isNaN(start) || isNaN(end)) return asJoinedArray(["(invalid range)"]);
+  if (start > end) {
+    let t = start;
+    start = end;
+    end = t;
+  }
+  return asJoinedArray(values.slice(start - 1, end));
+}
+
+function _selectExceptX(list, ...indices) {
+  const values = _getAllValues(list);
+  if (values.length === 0) return asJoinedArray([]);
+  const excluded = new Set(indices.map(i => Number(i) - 1).filter(i => !isNaN(i)));
+  return asJoinedArray(values.filter((_, i) => !excluded.has(i)));
+}
+
+function _selectUniqueX(list, count) {
+  const values = [..._getAllValues(list)];
+  if (values.length === 0) return asJoinedArray([]);
+  count = Number(count);
+  if (isNaN(count) || count < 1) count = 1;
+  let result = [];
+  while (values.length > 0 && result.length < count) {
+    const i = Math.floor(Math.random() * values.length);
+    result.push(values.splice(i, 1)[0]);
+  }
+  return asJoinedArray(result);
+}
+
+function _shuffleArray(arr) {
+  let copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = copy[i];
+    copy[i] = copy[j];
+    copy[j] = t;
+  }
+  return copy;
+}
+
+function _selectShuffleX(list) {
+  return asJoinedArray(_shuffleArray(_getAllValues(list)));
+}
+
+function _selectWeightedX(list, weights) {
+  const values = _getAllValues(list);
+  if (values.length === 0) return "(no list found)";
+  let w = Array.isArray(weights) ? weights.map(Number) : [Number(weights)];
+  while (w.length < values.length) w.push(1);
+  let total = 0;
+  for (let i = 0; i < values.length; i++) {
+    const weight = (!isNaN(w[i]) && w[i] > 0) ? w[i] : 0;
+    total += weight;
+  }
+  if (total <= 0) return "(invalid weights)";
+  let r = Math.random() * total;
+  for (let i = 0; i < values.length; i++) {
+    const weight = (!isNaN(w[i]) && w[i] > 0) ? w[i] : 0;
+    r -= weight;
+    if (r <= 0) return values[i];
+  }
+  return values[values.length - 1];
+}
+
+function _getPathNode(root, path) {
+  if (!root || !path) return undefined;
+  const parts = (path + "").split(".");
+  let node = root;
+  for (let part of parts) {
+    if (!node || typeof node !== "object" || !(part in node)) return undefined;
+    node = node[part];
+  }
+  return node;
+}
+
+function _selectPathX(root, path) {
+  const node = _getPathNode(root, path);
+  if (node === undefined) return asJoinedArray(["(path not found)"]);
+  return asJoinedArray(_getAllValues(node));
+}
+
+function _selectWhereX(list, predicate) {
+  const values = _getAllValues(list);
+  if (values.length === 0) return asJoinedArray([]);
+  if (typeof predicate !== "function") return asJoinedArray(values);
+  return asJoinedArray(values.filter((item, i, arr) => {
+    try {
+      return !!predicate(item, i + 1, arr);
+    } catch (e) {
+      return false;
+    }
+  }));
+}
+
+$output selectOne = (list) => {
+  if (!list) return "(no list given to selectOne)";
+  return _selectOneX(list);
+};
+
+$output selectAll = (list) => {
+  if (!list) return "(no list given to selectAll)";
+  return asJoinedArray(_getAllValues(list));
+};
+
+$output selectMany = (list, ...a) => {
+  if (!list) return "(no list given to selectMany)";
+  return _selectManyX(list, ...a);
+};
+
+$output selectSpecific = (list, index) => {
+  if (!list) return "(no list given to selectSpecific)";
+  if (index === undefined) return "(no index given to selectSpecific)";
+  return _getValueByIndex(list, index);
+};
+
+$output selectOrder = (list, ...indices) => {
+  if (!list) return "(no list given to selectOrder)";
+  if (!indices || indices.length === 0) return "(no indices given to selectOrder)";
+  return _selectOrderX(list, ...indices);
+};
+
+$output selectRange = (list, start, end) => {
+  if (!list) return "(no list given to selectRange)";
+  if (start === undefined || end === undefined) return "(start and end are required for selectRange)";
+  return _selectRangeX(list, start, end);
+};
+
+$output selectExcept = (list, ...indices) => {
+  if (!list) return "(no list given to selectExcept)";
+  if (!indices || indices.length === 0) return asJoinedArray(_getAllValues(list));
+  return _selectExceptX(list, ...indices);
+};
+
+$output selectUnique = (list, count) => {
+  if (!list) return "(no list given to selectUnique)";
+  return _selectUniqueX(list, count);
+};
+
+$output selectShuffle = (list) => {
+  if (!list) return "(no list given to selectShuffle)";
+  return _selectShuffleX(list);
+};
+
+$output selectWeighted = (list, weights) => {
+  if (!list) return "(no list given to selectWeighted)";
+  if (weights === undefined) return "(no weights given to selectWeighted)";
+  return _selectWeightedX(list, weights);
+};
+
+$output selectPath = (root, path) => {
+  if (!root) return "(no root given to selectPath)";
+  if (path === undefined) return "(no path given to selectPath)";
+  return _selectPathX(root, path);
+};
+
+$output selectWhere = (list, predicate) => {
+  if (!list) return "(no list given to selectWhere)";
+  if (predicate === undefined) return asJoinedArray(_getAllValues(list));
+  return _selectWhereX(list, predicate);
+};
+
+// --------------------------
+// --- Character Identity ---
+// --------------------------
+
+// The character's core identity, including name, age, gender, species, and other defining traits.
+
+character
+
+// Identity encompasses all the fundamental attributes that define who the character is, including their name, age, gender, species, and other key characteristics that shape their identity and how they are perceived in the world.
+  identity
+
+// Name and Naming Conventions
+    name
+
+// Common first names categorized by gender
+      first
+
+// Common first names for males
+        male
+          Aaron
+          Adam
+          Adrian
+          Aidan
+          Alan
+          Alex
+          Andrew
+          Anthony
+          Arthur
+          Benjamin
+          Brian
+          Charles
+          Daniel
+          David
+          Edward
+          Eric
+          Ethan
+          George
+          Henry
+          Jack
+          James
+          John
+          Joseph
+          Kevin
+          Liam
+          Mark
+          Matthew
+          Michael
+          Nathan
+          Nicholas
+          Oliver
+          Patrick
+          Paul
+          Peter
+          Richard
+          Robert
+          Samuel
+          Scott
+          Stephen
+          Thomas
+          William
+
+// Common first names for females
+        female
+          Abigail
+          Ada
+          Adele
+          Adeline
+          Alice
+          Allison
+          Amber
+          Amy
+          Anna
+          Ashley
+          Audrey
+          Ava
+          Bella
+          Beth
+          Brianna
+          Brooke
+          Caitlin
+          Caroline
+          Charlotte
+          Chloe
+          Claire
+          Daisy
+          Danielle
+          Ella
+          Emily
+          Emma
+          Eva
+          Evelyn
+          Fiona
+          Gabriella
+          Grace
+          Hannah
+          Harper
+          Hazel
+          Isabella
+          Jade
+          Jessica
+          Julia
+          Kaitlyn
+          Katherine
+          Lauren
+          Leah
+          Lily
+          Lucy
+          Madison
+          Maria
+          Mia
+          Natalie
+          Olivia
+          Rachel
+          Riley
+          Ruby
+          Samantha
+          Sarah
+          Savannah
+          Scarlett
+          Sophia
+          Sophie
+          Stella
+          Victoria
+          Zoe
+
+// Unisex names that can be used for any gender
+        unisex
+          Alex
+          Avery
+          Casey
+          Charlie
+          Dakota
+          Jamie
+          Jordan
+          Morgan
+          Riley
+          Taylor
+          Skyler
+          Quinn
+          Rowan
+          Reese
+          Robin
+          Sage
+          Sam
+          Sydney
+
+// Unisex last names that can be used for any gender
+      last
+        common
+          Smith
+          Johnson
+          Williams
+          Brown
+          Jones
+          Miller
+          Davis
+          Wilson
+          Taylor
+          Anderson
+          Thomas
+          Moore
+          Martin
+          Lee
+          Perez
+          Thompson
+          White
+          Harris
+          Sanchez
+          Clark
+          Ramirez
+          Lewis
+          Robinson
+          Walker
+          Young
+          Allen
+          King
+          Wright
+          Scott
+          Torres
+          Nguyen
+          Hill
+          Flores
+          Green
+          Adams
+          Nelson
+          Baker
+          Hall
+          Rivera
+          Campbell
+          Mitchell
+          Carter
+          Roberts
+          Gomez
+          Phillips
+          Evans
+          Turner
+          Diaz
+          Parker
+          Cruz
+          Edwards
+          Collins
+
+// Fantasy last names that evoke a sense of magic, adventure, or mythical heritage
+        fantasy
+          Stormwind
+          Nightshade
+          Ironfist
+          Shadowalker
+          Blackthorn
+          Frostbane
+          Moonshadow
+          Silverleaf
+          Starfire
+          Ravenshadow
+          Emberfall
+          Duskryn
+          Dawnsinger
+          Goldbranch
+          Shadowvale
+          Windrider
+          Frosthelm
+          Oakenshield
+          Fireheart
+          Mistwalker
+
+// Age and Life Stages
+    age
+      toddler
+        1
+        2
+        3
+      preschooler
+        4
+        5
+        6
+      child
+        7
+        8
+        9
+      pre_teen
+        10
+        11
+        12
+      teenager
+        13
+        14
+        15
+        16
+      adolescent
+        17
+        18
+        19
+      young_adult
+        20
+        21
+        22
+        23
+        24
+        25
+      adult
+        26
+        27
+        28
+        29
+        30
+        31
+        32
+        33
+        34
+        35
+        36
+        37
+        38
+        39
+        40
+      middle_aged_adult
+        41
+        42
+        43
+        44
+        45
+        46
+        47
+        48
+        49
+        50
+        51
+        52
+        53
+        54
+        55
+        56
+        57
+        58
+        59
+        60
+      mature_adult
+        61
+        62
+        63
+        64
+        65
+      senior_adult
+        66
+        67
+        68
+        69
+        70
+        71
+        72
+        73
+        74
+        75
+      older_adult
+        76
+        77
+        78
+        79
+        80
+        81
+        82
+        83
+        84
+        85
+      elderly
+        86
+        87
+        88
+        89
+        90
+        91
+        92
+        93
+        94
+        95
+        96
+        97
+        98
+        99
+        100
+      centenarian
+        101
+        102
+        103
+        104
+        105
+        106
+        107
+        108
+        109
+        110
+      supercentenarian
+        111
+        112
+        113
+        114
+        115
+        116
+        117
+        118
+        119
+        120
+
+// Gender and Pronouns
+    gender
+      male
+        pronouns
+          he/him
+      female
+        pronouns
+          she/her
+      trans
+        pronouns
+          varies
+      nonbinary
+        pronouns
+          they/them
+      agender
+        pronouns
+          they/them
+      genderfluid
+        pronouns
+          varies
+      custom
+        pronouns
+          custom
+
+// Note: Pronouns are listed under each gender for better organization, but can also be accessed directly under the character's identity if needed.
+    pronouns
+      he/him
+      she/her
+      they/them
+      xe/xem
+      ze/zir
+      fae/faer
+      it/its
+      custom
+
+// Species and Subspecies
+    species
+      human
+        description = Versatile, ambitious, adaptable.
+      elf
+        description = Graceful, long-lived, magical.
+      dwarf
+        description = Stout, resilient, master craftsmen.
+      halfling
+        description = Cheerful, nimble, lucky wanderers.
+      gnome
+        description = Inventive, eccentric, magically curious.
+      orc
+        description = Fierce, honor-bound, powerful.
+      goblin
+        description = Cunning, quick, opportunistic.
+      hobgoblin
+        description = Militaristic, disciplined, strategic.
+      bugbear
+        description = Large, stealthy, surprisingly quiet hunters.
+      giantkin
+        description = Humanoids with giant ancestry and immense strength.
+      ogre
+        description = Massive, brutish, simple-minded but loyal.
+      troll
+        description = Regenerative, towering, primal.
+      fae
+        description = Otherworldly, whimsical, unpredictable.
+      merfolk
+        description = Aquatic humanoids with deep cultural lore.
+      naga
+        description = Serpentine humanoids with ancient magic.
+      satyr
+        description = Mischievous, musical, nature‑bound.
+      centaur
+        description = Half-human, half-horse nomads.
+      minotaur
+        description = Bull-headed warriors of labyrinthine cultures.
+      kitsune
+        description = Fox‑spirits with illusion magic.
+      tengu
+        description = Avian humanoids with martial discipline.
+      lizardfolk
+        description = Cold-blooded, pragmatic, survival-focused.
+      kobold
+        description = Small draconic tinkerers and trapmakers.
+      dragonborn
+        description = Proud draconic humanoids with elemental breath.
+      tiefling
+        description = Mortals touched by infernal bloodlines.
+      aasimar
+        description = Celestial‑touched mortals with radiant gifts.
+      genasi
+        description = Elemental‑infused humanoids.
+      changeling
+        description = Subtle shapeshifters with fluid identities.
+      shapeshifter
+        description = Beings able to assume many forms.
+      vampire
+        description = Elegant undead sustained by blood.
+      dhampir
+        description = Half‑vampire mortals with predatory instincts.
+      werewolf
+        description = Lunar‑bound shapeshifters with primal fury.
+      lycanthrope
+        description = Shifters tied to various animal forms.
+      angel
+        description = Celestial beings of radiant purpose.
+      demon
+        description = Fiends born of chaos or corruption.
+      devil
+        description = Lawful, manipulative, contract‑bound fiends.
+      imp
+        description = Small, mischievous fiends with sharp wit.
+      elemental
+        description = Living embodiments of primal forces.
+      construct
+        description = Artificial beings of metal, stone, or arcane design.
+      golem
+        description = Massive constructs bound to commands.
+      automaton
+        description = Clockwork or arcane‑powered humanoids.
+      revenant
+        description = Undead driven by unfinished purpose.
+      wight
+        description = Malicious undead with draining touch.
+      ghost
+        description = Ethereal remnants of the dead.
+      shade
+        description = Shadow‑infused beings of darkness.
+      dryad
+        description = Tree‑bound nature spirits.
+      nymph
+        description = Elemental beauty spirits tied to natural places.
+      sylph
+        description = Air‑spirits of grace and speed.
+      undine
+        description = Water‑spirits with fluid forms.
+      ifrit
+        description = Fire‑spirits of passion and destruction.
+      oread
+        description = Earth‑spirits of stone and endurance.
+      merrow
+        description = Savage deep‑sea merfolk.
+      harpy
+        description = Winged humanoids with predatory instincts.
+      cyclops
+        description = One‑eyed giants with primal strength.
+      faun
+        description = Gentle forest‑dwellers with musical talent.
+      sprite
+        description = Tiny winged fae of mischief and magic.
+      brownie
+        description = Household fae with helpful tendencies.
+      ogre-magi
+        description = Magical ogres with cunning intellect.
+      frostborn
+        description = Cold‑adapted humanoids with icy resilience.
+      fireborn
+        description = Flame‑touched humanoids with burning spirit.
+      stormborn
+        description = Sky‑touched humanoids with lightning affinity.
+      voidborn
+        description = Beings touched by cosmic darkness.
+      starborn
+        description = Celestial‑infused mortals with astral gifts.
+      fungalfolk
+        description = Mycelial humanoids with spore‑based biology.
+      plantfolk
+        description = Living plant‑beings with regenerative growth.
+      crystalborn
+        description = Mineral‑based humanoids with crystalline bodies.
+      beastkin
+        description = Humanoids with animalistic traits.
+      ratfolk
+        description = Quick, clever, urban scavengers.
+      catfolk
+        description = Agile, curious, feline humanoids.
+      wolfkin
+        description = Pack‑oriented humanoids with keen senses.
+      avian
+        description = Birdlike humanoids with hollow bones and sharp vision.
+      insectoid
+        description = Chitin‑armored beings with hive instincts.
+      arachnid
+        description = Spider‑folk with silk‑weaving abilities.
+      drider
+        description = Spider‑centaur hybrids with dark magic.
+      djinn
+        description = Wish‑bound elemental spirits of air.
+      efreet
+        description = Tyrannical fire‑spirits ruling molten realms.
+      marid
+        description = Water‑spirits of pride and power.
+      dao
+        description = Earth‑spirits of wealth and stubbornness.
+      celestial
+        description = Pure beings of divine light.
+      infernal
+        description = Hell‑forged beings of fire and ambition.
+      abyssal
+        description = Chaotic fiends of endless hunger.
+      eldritch
+        description = Beings touched by incomprehensible cosmic forces.
+      mimic
+        description = Shape‑stealing predators that imitate objects.
+      slimefolk
+        description = Amorphous beings of gelatinous biology.
+      ooze
+        description = Mindless or semi‑sentient blobs of corrosive matter.
+      wisp
+        description = Floating motes of magical energy.
+      spirit
+        description = Incorporeal beings tied to emotion or memory.
+      custom
+        description = A unique species defined by the player.
+    elf_subspecies
+      high_elf
+        description = Arcane‑focused elves of ancient cities.
+      wood_elf
+        description = Forest‑dwelling hunters with keen senses.
+      shadow_elf
+        description = Dark‑adapted elves tied to twilight magic.
+      sun_elf
+        description = Radiant elves with solar affinity.
+      moon_elf
+        description = Mystical elves tied to lunar cycles.
+      frost_elf
+        description = Cold‑adapted elves of icy realms.
+      desert_elf
+        description = Heat‑hardened nomads with mirage magic.
+      deep_elf
+        description = Subterranean elves with darkvision and secrecy.
+      storm_elf
+        description = Sky‑born elves with lightning affinity.
+    dwarf_subspecies
+      mountain_dwarf
+        description = Hardy miners and smiths of high peaks.
+      hill_dwarf
+        description = Wise, enduring dwarves of rolling hills.
+      deep_dwarf
+        description = Underground dwellers with stone‑sense.
+      ember_dwarf
+        description = Fire‑forged dwarves with volcanic heritage.
+      frost_dwarf
+        description = Ice‑born dwarves of frozen halls.
+      rune_dwarf
+        description = Magic‑inscribing dwarves with ancient lore.
+    fae_subspecies
+      pixie
+        description = Tiny winged tricksters.
+      sprite
+        description = Nature‑bound fae of light and color.
+      leanan_sidhe
+        description = Muse‑spirits offering inspiration at a cost.
+      briar_fae
+        description = Thorn‑armored guardians of wild forests.
+      court_fae
+        description = Nobles of the Seelie or Unseelie courts.
+    lycan_subspecies
+      werewolf
+        description = Wolf‑shifters of primal fury.
+      weretiger
+        description = Stealthy feline hunters.
+      werebear
+        description = Massive, protective shifters.
+      wererat
+        description = Urban, cunning, plague‑resistant shifters.
+      wereboar
+        description = Ferocious, unstoppable chargers.
+    dragonborn_subspecies
+      red
+        description = Fire‑breathing, proud, destructive.
+      blue
+        description = Lightning‑breathing strategists.
+      green
+        description = Poison‑breathing manipulators.
+      black
+        description = Acid‑breathing swamp hunters.
+      white
+        description = Frost‑breathing survivalists.
+      gold
+        description = Noble fire‑breathers with radiant power.
+      silver
+        description = Cold‑aligned, honorable warriors.
+      bronze
+        description = Storm‑aligned coastal guardians.
+      brass
+        description = Talkative desert wanderers.
+    vampire_subspecies
+      noble_vampire
+        description = Aristocratic, elegant, politically powerful.
+      feral_vampire
+        description = Bestial, uncontrollable, driven by hunger.
+      daywalker
+        description = Sun‑resistant hybrids with unique gifts.
+      sanguine_mage
+        description = Blood‑magic wielders with arcane focus.
+      shadow_vampire
+        description = Darkness‑bound vampires with stealth powers.
+
+// Sexuality and Orientation
+    sexuality
+      heterosexual
+        description = Primarily attracted to a different gender.
+      homosexual
+        description = Primarily attracted to the same gender.
+      bisexual
+        description = Attracted to more than one gender.
+      pansexual
+        description = Attraction not limited by gender; person-focused.
+      asexual
+        description = Experiences little or no sexual attraction.
+      demisexual
+        description = Sexual attraction develops only after strong emotional connection.
+      graysexual
+        description = Experiences sexual attraction infrequently or under specific conditions.
+      queer
+        description = Broad, fluid identity outside traditional labels.
+      questioning
+        description = Exploring or unsure about their sexual identity.
+      custom
+        description = A unique or personal identity not listed.
+
+    orientation
+      romantic
+        description = Experiences romantic attraction toward others.
+      aromantic
+        description = Experiences little or no romantic attraction.
+      biromantic
+        description = Romantic attraction toward more than one gender.
+      panromantic
+        description = Romantic attraction not limited by gender.
+      demiromantic
+        description = Romantic attraction develops only after emotional closeness.
+      custom
+        description = A unique or personal romantic identity.
+
+// Alignment and Morality
+    alignment
+      lawful_good
+        description = Upholds order and justice with compassion.
+      neutral_good
+        description = Does good without strict adherence to rules.
+      chaotic_good
+        description = Follows conscience over laws; values freedom.
+      lawful_neutral
+        description = Values order, structure, and tradition above all.
+      true_neutral
+        description = Balanced, impartial, avoids extremes.
+      chaotic_neutral
+        description = Values personal freedom; unpredictable but not malicious.
+      lawful_evil
+        description = Uses order and structure for personal gain or control.
+      neutral_evil
+        description = Self‑serving, acting without regard for others.
+      chaotic_evil
+        description = Destructive, unpredictable, and driven by selfish impulses.
+
+// Cultural and Social Background
+    culture
+      fantasy
+        description = Rooted in magical or mythic traditions.
+      modern
+        description = Reflects contemporary real‑world societies.
+      sci_fi
+        description = Influenced by advanced technology and futuristic settings.
+      historical
+        description = Based on real or fictional past eras.
+      post_apocalyptic
+        description = Shaped by survival after societal collapse.
+      steampunk
+        description = Blends Victorian aesthetics with steam‑powered tech.
+      cyberpunk
+        description = High‑tech, low‑life worlds of neon and networks.
+      custom
+        description = A unique cultural background.
+
+// Language and Communication
+    language
+      common
+        description = Widely spoken lingua franca.
+      elvish
+        description = Elegant, melodic language of elves.
+      dwarvish
+        description = Deep, resonant language of dwarves.
+      orcish
+        description = Harsh, guttural language of orc cultures.
+      draconic
+        description = Ancient, powerful tongue of dragons.
+      infernal
+        description = Precise, formal language of fiendish realms.
+      celestial
+        description = Harmonious, radiant language of divine beings.
+      sign_language
+        description = Visual, gesture‑based communication.
+      custom
+        description = A unique or homebrew language.
+
+// Nationality and Political Structure
+    nationality
+      kingdom
+        description = Ruled by a monarch; structured hierarchy.
+      empire
+        description = Large, expansionist state with centralized power.
+      republic
+        description = Governed by elected representatives.
+      federation
+        description = Alliance of semi‑autonomous regions.
+      tribe
+        description = Community bound by kinship and tradition.
+      clan
+        description = Extended family group with shared ancestry.
+      city_state
+        description = Independent city with its own government.
+      custom
+        description = A unique political or national identity.
+
+// Religion and Belief Systems
+    religion
+      polytheist
+        description = Worships multiple deities.
+      monotheist
+        description = Worships a single deity.
+      atheist
+        description = Does not believe in deities.
+      agnostic
+        description = Uncertain or open regarding the existence of deities.
+      animist
+        description = Believes spirits inhabit natural objects and places.
+      spiritualist
+        description = Focuses on personal spirituality over organized religion.
+      cultist
+        description = Follows a fringe or secretive belief system.
+      custom
+        description = A unique or personal belief system.
+
+// Background and Upbringing
+    background
+      noble
+        description = Raised in wealth, privilege, and influence.
+      commoner
+        description = Ordinary upbringing with modest means.
+      merchant
+        description = Grew up in trade, commerce, or markets.
+      peasant
+        description = Rural upbringing with labor‑focused life.
+      criminal
+        description = Shaped by underground or illicit activity.
+      orphan
+        description = Raised without parents or guardians.
+      scholar
+        description = Educated in knowledge, books, and study.
+      soldier
+        description = Trained in discipline, combat, and duty.
+      artisan
+        description = Skilled in crafts, tools, or creative trades.
+      entertainer
+        description = Performer, storyteller, or artist.
+      clergy
+        description = Raised within religious institutions.
+      outcast
+        description = Lived on the fringes of society.
+      explorer
+        description = Grew up traveling or seeking new horizons.
+      custom
+        description = A unique upbringing.
+
+// Occupation
+    occupation
+      adventurer
+        description = Lives by exploration, quests, and risk.
+      warrior
+        description = Trained in martial combat.
+      mage
+        description = Practitioner of arcane arts.
+      rogue
+        description = Skilled in stealth, agility, and cunning.
+      cleric
+        description = Channeler of divine power.
+      bard
+        description = Performer who blends art and magic.
+      ranger
+        description = Tracker and survivalist of the wilds.
+      druid
+        description = Guardian of nature and shapeshifting magic.
+      paladin
+        description = Holy warrior bound by oath.
+      monk
+        description = Disciplined martial artist.
+      merchant
+        description = Trader of goods and services.
+      artisan
+        description = Creator of crafted items or art.
+      scholar
+        description = Researcher, academic, or historian.
+      noble
+        description = Leader or administrator of high status.
+      peasant
+        description = Laborer or farmer of humble means.
+      criminal
+        description = Operates outside the law.
+      sailor
+        description = Works on ships or coastal trade.
+      hunter
+        description = Tracker and provider through hunting.
+      healer
+        description = Uses knowledge or magic to mend others.
+      custom
+        description = A unique profession.
+
+// Education and Knowledge
+    education
+      none
+        description = No formal education.
+      basic
+        description = Fundamental literacy and practical skills.
+      advanced
+        description = Higher learning or specialized study.
+      magical
+        description = Trained in arcane or mystical arts.
+      military
+        description = Combat, discipline, and tactical training.
+      religious
+        description = Instruction in doctrine, ritual, and philosophy.
+      self_taught
+        description = Learned through personal experience and study.
+      custom
+        description = A unique educational background.
+
+// Wealth and Economic Status
+    wealth
+      destitute
+        description = Lacks basic resources; struggling to survive.
+      poor
+        description = Limited means; lives modestly.
+      modest
+        description = Stable with enough for daily needs.
+      comfortable
+        description = Secure with occasional luxuries.
+      wealthy
+        description = Significant resources and influence.
+      noble
+        description = Inherited wealth and status.
+      royal
+        description = Highest tier of wealth and authority.
+
+// Social and Legal Status
+    status
+      free
+        description = Independent and self‑governing.
+      enslaved
+        description = Held under forced servitude.
+      indentured
+        description = Bound by contract or obligation.
+      fugitive
+        description = Escaping legal or social pursuit.
+      wanted
+        description = Actively sought by authorities.
+      exiled
+        description = Banished from home or homeland.
+      honored
+        description = Respected and recognized for deeds.
+      disgraced
+        description = Lost status due to failure or scandal.
+      custom
+        description = A unique social standing.
+
+// Appearance
+  appearance
+
+// Skin
+    skin
+
+// Skin Tone
+      tone
+        pale
+          description = Very light complexion.
+        fair
+          description = Light complexion with warm or cool undertones.
+        light
+          description = Soft, lightly pigmented skin.
+        medium
+          description = Moderately pigmented skin.
+        olive
+          description = Green‑gold undertones with medium depth.
+        tan
+          description = Sun‑warmed medium tone.
+        brown
+          description = Rich, deep pigmentation.
+        dark
+          description = Deep, cool or warm dark tone.
+        ebony
+          description = Very deep, rich pigmentation.
+        blue
+          description = Non‑human or magical blue skin.
+        green
+          description = Non‑human or magical green skin.
+        red
+          description = Non‑human or magical red skin.
+        gold
+          description = Metallic or radiant golden skin.
+        silver
+          description = Metallic or ethereal silver skin.
+        custom
+          description = A unique skin tone.
+
+
+// Skin Features
+      markings
+        freckles
+          description = Small, scattered pigmented spots.
+        moles
+          description = Darker, raised or flat skin marks.
+        scars
+          description = Healed marks from injury or surgery.
+        tattoos
+          description = Inked designs on the skin.
+        birthmarks
+          description = Natural marks present from birth.
+        vitiligo
+          description = Patches of depigmented skin.
+        burns
+          description = Healed or visible burn patterns.
+        cybernetics
+          description = Technological implants or enhancements.
+        magical
+          description = Arcane symbols or glowing patterns.
+        none
+          description = No notable markings.
+        custom
+          description = A unique marking type.
+
+// Eyes
+    eyes
+
+// Eye Color
+      color
+        blue
+          description = Shades from pale to deep blue.
+        green
+          description = Bright or muted green tones.
+        brown
+          description = Light to dark brown.
+        hazel
+          description = Mixed green‑brown with shifting tones.
+        gray
+          description = Cool, stormy gray hues.
+        amber
+          description = Warm golden‑brown.
+        violet
+          description = Rare purple coloration.
+        red
+          description = Magical or non‑human red eyes.
+        gold
+          description = Metallic or radiant gold.
+        silver
+          description = Metallic or reflective silver.
+        heterochromatic
+          description = Two different eye colors.
+        black
+          description = Deep, fully dark eyes.
+        white
+          description = Pale or glowing white eyes.
+        custom
+          description = A unique eye color.
+
+// Eye Shape
+      shape
+        almond
+          description = Tapered at both corners; balanced shape.
+        round
+          description = Large, open, circular appearance.
+        hooded
+          description = Fold of skin partially covers the lid.
+        monolid
+          description = Smooth lid without a crease.
+        upturned
+          description = Outer corners tilt upward.
+        downturned
+          description = Outer corners tilt downward.
+        custom
+          description = A unique eye shape.
+
+// Eye Features
+      features
+        long_lashes
+          description = Naturally long eyelashes.
+        thick_brows
+          description = Full, dense eyebrows.
+        thin_brows
+          description = Fine, narrow eyebrows.
+        bushy_brows
+          description = Thick, untamed eyebrows.
+        arched_brows
+          description = High, curved eyebrow shape.
+        custom
+          description = A unique eye feature.
+
+// Hair
+    hair
+
+// Hair Colors
+      color
+        black
+          description = Deep, dark black.
+        brown
+          description = Light to dark brown.
+        blonde
+          description = Pale yellow to golden tones.
+        red
+          description = Copper to deep auburn.
+        gray
+          description = Naturally grayed hair.
+        white
+          description = Pure white or bleached.
+        pastel
+          description = Soft dyed colors like pink or mint.
+        rainbow
+          description = Multi‑colored or gradient hues.
+        blue
+          description = Dyed or magical blue.
+        green
+          description = Dyed or magical green.
+        pink
+          description = Dyed or magical pink.
+        purple
+          description = Dyed or magical purple.
+        silver
+          description = Metallic silver.
+        gold
+          description = Metallic gold.
+        custom
+          description = A unique hair color.
+
+
+// Hair Styles
+      style
+        short
+          description = Cut above the ears.
+        medium
+          description = Reaches neck or shoulders.
+        long
+          description = Extends past the shoulders.
+        buzzcut
+          description = Very short, even length.
+        crewcut
+          description = Short top with faded sides.
+        undercut
+          description = Shaved sides with longer top.
+        bob
+          description = Chin‑length straight cut.
+        pixie
+          description = Short, layered, and textured.
+        shag
+          description = Messy, layered style.
+        lob
+          description = Long bob reaching collarbone.
+        wolfcut
+          description = Shaggy, voluminous hybrid cut.
+        braids
+          description = Hair woven into strands.
+        ponytail
+          description = Hair tied back.
+        bun
+          description = Hair wrapped into a knot.
+        dreadlocks
+          description = Rope‑like locked strands.
+        mohawk
+          description = Central strip of longer hair.
+        quiff
+          description = Styled upward front section.
+        pompadour
+          description = Voluminous swept‑back top.
+        curly
+          description = Natural or styled curls.
+        wavy
+          description = Loose, flowing waves.
+        straight
+          description = Smooth, straight strands.
+        spiky
+          description = Styled into pointed shapes.
+        messy
+          description = Intentionally tousled.
+        shaved
+          description = Fully shaved scalp.
+        topknot
+          description = High knot or bun.
+        custom
+          description = A unique hairstyle.
+
+// Facial Hair
+      facial
+        beard
+          description = Full facial hair along jaw and chin.
+        mustache
+          description = Hair above the upper lip.
+        goatee
+          description = Hair on chin and mustache combined.
+        sideburns
+          description = Hair along the sides of the face.
+        stubble
+          description = Short, rough facial hair.
+        clean_shaven
+          description = No facial hair.
+        none
+          description = Naturally no facial hair.
+        custom
+          description = A unique facial hair style.
+
+// Height Categories and Ranges
+    height
+      tiny
+        50cm
+        51cm
+        52cm
+        53cm
+        54cm
+        55cm
+        56cm
+        57cm
+        58cm
+        59cm
+        60cm
+        61cm
+        62cm
+        63cm
+        64cm
+        65cm
+        66cm
+        67cm
+        68cm
+        69cm
+        70cm
+        71cm
+        72cm
+        73cm
+        74cm
+        75cm
+        76cm
+        77cm
+        78cm
+        79cm
+        80cm
+        81cm
+        82cm
+        83cm
+        84cm
+        85cm
+        86cm
+        87cm
+        88cm
+        89cm
+        90cm
+        91cm
+        92cm
+        93cm
+        94cm
+        95cm
+        96cm
+        97cm
+        98cm
+        99cm
+        100cm
+      short
+        110cm
+        111cm
+        112cm
+        113cm
+        114cm
+        115cm
+        116cm
+        117cm
+        118cm
+        119cm
+        120cm
+        121cm
+        122cm
+        123cm
+        124cm
+        125cm
+        126cm
+        127cm
+        128cm
+        129cm
+        130cm
+        131cm
+        132cm
+        133cm
+        134cm
+        135cm
+        136cm
+        137cm
+        138cm
+        139cm
+        140cm
+        141cm
+        142cm
+        143cm
+        144cm
+        145cm
+        146cm
+        147cm
+        148cm
+        149cm
+        150cm
+        151cm
+        152cm
+        153cm
+        154cm
+        155cm
+        156cm
+        157cm
+        158cm
+        159cm
+        160cm
+      average
+        161cm
+        162cm
+        163cm
+        164cm
+        165cm
+        166cm
+        167cm
+        168cm
+        169cm
+        170cm
+        171cm
+        172cm
+        173cm
+        174cm
+        175cm
+        176cm
+        177cm
+        178cm
+        179cm
+        180cm
+      tall
+        181cm
+        182cm
+        183cm
+        184cm
+        185cm
+        186cm
+        187cm
+        188cm
+        189cm
+        190cm
+        191cm
+        192cm
+        193cm
+        194cm
+        195cm
+        196cm
+        197cm
+        198cm
+        199cm
+        200cm
+        201cm
+        202cm
+        203cm
+        204cm
+        205cm
+        206cm
+        207cm
+        208cm
+        209cm
+        210cm
+        211cm
+        212cm
+        213cm
+        214cm
+        215cm
+        216cm
+        217cm
+        218cm
+        219cm
+        220cm
+      custom
+
+// Weight Categories and Ranges
+    weight
+      light
+        40kg
+        41kg
+        42kg
+        43kg
+        44kg
+        45kg
+        46kg
+        47kg
+        48kg
+        49kg
+        50kg
+        51kg
+        52kg
+        53kg
+        54kg
+        55kg
+        56kg
+        57kg
+        58kg
+        59kg
+        60kg
+      average
+        61kg
+        62kg
+        63kg
+        64kg
+        65kg
+        66kg
+        67kg
+        68kg
+        69kg
+        70kg
+        71kg
+        72kg
+        73kg
+        74kg
+        75kg
+        76kg
+        77kg
+        78kg
+        79kg
+        80kg
+        81kg
+        82kg
+        83kg
+        84kg
+        85kg
+        86kg
+        87kg
+        88kg
+        89kg
+        90kg
+      heavy
+        91kg
+        92kg
+        93kg
+        94kg
+        95kg
+        96kg
+        97kg
+        98kg
+        99kg
+        100kg
+        101kg
+        102kg
+        103kg
+        104kg
+        105kg
+        106kg
+        107kg
+        108kg
+        109kg
+        110kg
+        111kg
+        112kg
+        113kg
+        114kg
+        115kg
+        116kg
+        117kg
+        118kg
+        119kg
+        120kg
+        121kg
+        122kg
+        123kg
+        124kg
+        125kg
+        126kg
+        127kg
+        128kg
+        129kg
+        130kg
+      very_heavy
+        131kg
+        132kg
+        133kg
+        134kg
+        135kg
+        136kg
+        137kg
+        138kg
+        139kg
+        140kg
+        141kg
+        142kg
+        143kg
+        144kg
+        145kg
+        146kg
+        147kg
+        148kg
+        149kg
+        150kg
+      custom
+
+// Build Categories and Ranges
+    build
+      slender
+        description = Narrow frame, delicate proportions, minimal body mass.
+      slim
+        description = Lean build with light muscle definition and low body fat.
+      average
+        description = Balanced proportions with typical muscle and fat distribution.
+      athletic
+        description = Toned physique with visible muscle definition and strong posture.
+      muscular
+        description = Broad, powerful build with pronounced muscle mass.
+      curvy
+        description = Soft contours with fuller hips, chest, or thighs.
+      chubby
+        description = Rounder shape with noticeable softness and extra body mass.
+      obese
+        description = Large, heavyset build with significant body mass and fullness.
+      stocky
+        description = Shorter, thick build with dense muscle and solid frame.
+      petite
+        description = Small, compact frame with delicate proportions.
+      lanky
+        description = Tall, thin build with long limbs and minimal mass.
+      burly
+        description = Large, rugged build with heavy muscle and imposing presence.
+      wiry
+        description = Lean but strong, with ropey muscles and low fat.
+      broad
+        description = Wide shoulders and chest, sturdy and powerful silhouette.
+      barrel_chested
+        description = Thick torso with strong ribcage and heavy upper‑body mass.
+      soft
+        description = Gentle, rounded build with minimal muscle definition.
+      toned
+        description = Lean with clear muscle lines and athletic conditioning.
+      hulking
+        description = Massive, intimidating build with extreme muscle bulk.
+      delicate
+        description = Fine‑boned, fragile‑looking frame with subtle proportions.
+      towering
+        description = Exceptionally tall build with long limbs and commanding presence.
+      stout
+        description = Short, wide, and solidly built with dense mass.
+      rotund
+        description = Round, full-bodied shape with pronounced belly and softness.
+      sinewy
+        description = Thin but strong, with visible tendons and wiry muscle.
+      rugged
+        description = Weathered, sturdy build with hardened muscle and rough edges.
+      imposing
+        description = Physically dominant build that commands attention.
+      custom
+        description = A unique body type defined by the player.
+
+// Genital Categories and Ranges
+    genitals
+
+// Penis Categories, Shapes and Ranges
+      penis
+        penis_shape
+          straight
+            description = Shaft aligns vertically without noticeable curvature.
+          upward_curve
+            description = Natural upward curvature when erect; a common variation.
+          downward_curve
+            description = Natural downward curvature; typically mild and harmless.
+          left_curve
+            description = Shaft curves gently to the left.
+          right_curve
+            description = Shaft curves gently to the right.
+          tapered
+            description = Narrower toward the tip with a gradual taper.
+          cylindrical
+            description = Even thickness along most of the shaft.
+          wide_base
+            description = Thicker at the base with a narrower mid‑shaft.
+          wide_tip
+            description = Slightly broader near the glans.
+          foreskin_present
+            description = Foreskin fully or partially covers the glans when flaccid.
+          foreskin_retracted
+            description = Foreskin naturally rests behind the glans.
+          prominent_ridge
+            description = Well‑defined coronal ridge around the glans.
+          smooth_glans
+            description = Glans has a more uniform, rounded shape.
+          prominent_veins
+            description = Visible superficial veins along the shaft.
+          minimal_veins
+            description = Smooth appearance with fewer visible veins.
+          custom
+            description = A unique natural variation not covered above.
+
+// Penis Lengths
+        penis_length
+          very_short
+            description = Falls within the smallest natural size range.
+          short
+            description = Below average length within natural variation.
+          medium
+            description = Within the typical average range.
+          long
+            description = Above average length within natural variation.
+          very_long
+            description = Falls within the largest natural size range.
+          custom
+            description = A unique or unspecified length category.
+            length
+              1cm
+              2cm
+              3cm
+              4cm
+              5cm
+              6cm
+              7cm
+              8cm
+              9cm
+              10cm
+              11cm
+              12cm
+              13cm
+              14cm
+              15cm
+              16cm
+              17cm
+              18cm
+              19cm
+              20cm
+              21cm
+              22cm
+              23cm
+              24cm
+              25cm
+              26cm
+              27cm
+              28cm
+              29cm
+              30cm
+              31cm
+              32cm
+              33cm
+              34cm
+              35cm
+              36cm
+              37cm
+              38cm
+              39cm
+              40cm
+
+// Penis Girth/Circumference
+        penis_girth
+          very_slender
+            description = Falls within the smallest natural circumference range.
+          slender
+            description = Below average circumference.
+          average
+            description = Within the typical circumference range.
+          thick
+            description = Above average circumference.
+          very_thick
+            description = Falls within the largest natural circumference range.
+          custom
+            description = A unique or unspecified girth category.
+            girth
+              3cm
+              4cm
+              5cm
+              6cm
+              7cm
+              8cm
+              9cm
+              10cm
+              11cm
+              12cm
+              13cm
+              14cm
+              15cm
+              16cm
+              17cm
+              18cm
+              19cm
+              20cm
+
+// Vagina Categories and Shapes
+      vagina
+        vulva_shape
+          asymmetrical_inner_lips
+            description = One inner lip is longer or larger than the other; a very common natural variation.
+          prominent_inner_lips
+            description = Inner lips extend beyond the outer lips; may be subtle or pronounced.
+          prominent_outer_lips
+            description = Outer lips are fuller or lower-set, usually covering the inner lips.
+          curved_outer_lips
+            description = Outer lips form a gentle horseshoe shape, with the inner lips visible toward the front.
+          visible_inner_lips
+            description = Inner and outer lips are similar in size, with the inner lips naturally peeking through.
+          small_open_outer_lips
+            description = Outer lips lie flat against the pubic area with a slight separation, showing the inner lips.
+          small_closed_outer_lips
+            description = Outer lips meet fully in the center, concealing the inner lips completely.
+          long_inner_lips
+            description = Inner lips extend noticeably beyond the outer lips, sometimes with additional folds.
+          long_outer_lips
+            description = Outer lips are longer or looser, sometimes extending downward and exposing the inner lips.
+          custom
+            description = A unique natural variation not covered by the categories above.
+
+// Both Genital Sets
+      both
+        combined_anatomy
+          distinct_structures
+            description = External traits from both sets are present as separate structures.
+          partially_fused
+            description = Some tissues blend or overlap, forming intermediate structures.
+          asymmetric_combination
+            description = One side presents traits from one set, the other from another.
+          reduced_structures
+            description = One or more structures are present in smaller or simplified form.
+          prominent_structures
+            description = Both sets of external traits are well‑defined and visible.
+          custom
+            description = A unique combination not covered above.
+
+// Intersex Variations
+      intersex
+        intersex_variation
+          atypical_lip_development
+            description = Outer or inner folds develop in patterns outside typical ranges.
+          atypical_phallic_development
+            description = External phallic structure varies in size or shape.
+          partially_fused_folds
+            description = Outer folds meet or fuse to varying degrees.
+          prominent_clitoral_structure
+            description = Clitoral tissue is larger or more pronounced than average.
+          reduced_phallic_structure
+            description = External phallic tissue is smaller or less defined.
+          mixed_characteristics
+            description = Combination of traits typically associated with different sexes.
+          variable_urethral_position
+            description = Urethral opening appears in a non‑typical location.
+          custom
+            description = A unique natural variation not covered above.
+
+// None/Absent Genitalia
+      none
+        no_external_genitalia
+          smooth_surface
+            description = No external structures; surface is continuous and unbroken.
+          minimal_ridge
+            description = Slight contour or ridge without defined anatomy.
+          recessed_opening
+            description = A small, non‑sexual opening for biological functions.
+          sealed_surface
+            description = Fully smooth with no visible openings.
+          custom
+            description = A unique configuration not covered above.
+
+
+// Other Physical Attributes
+      custom
+        description = A unique physical trait not covered by existing categories.
+
+
+    chest
+      flat
+        description = Minimal chest projection; smooth, compact profile.
+      small
+        description = Slight chest projection with subtle contour.
+      average
+        description = Moderate chest size with balanced proportions.
+      large
+        description = Noticeable chest projection with fuller shape.
+      very_large
+        description = Prominent, highly developed chest size.
+      custom
+        description = A unique chest shape or size.
+
+// Body Modifications
+    body_modifications
+      tattoos
+        description = Inked designs or symbols on the skin.
+      piercings
+        description = Decorative or cultural body jewelry.
+      scars
+        description = Healed marks from past injuries or surgeries.
+      brandings
+        description = Burned or marked symbols on the skin.
+      implants
+        description = Subdermal or structural enhancements.
+      cybernetics
+        description = Technological augmentations integrated into the body.
+      magical
+        description = Arcane markings, runes, or enchanted alterations.
+      prosthetics
+        description = Artificial limbs or body parts replacing lost ones.
+      none
+        description = No notable body modifications.
+      custom
+        description = A unique or uncommon modification.
+
+// Complexion
+    complexion
+      clear
+        description = Smooth, even skin without blemishes.
+      freckled
+        description = Skin with small, scattered pigmented spots.
+      scarred
+        description = Skin marked by healed wounds or injuries.
+      tattooed
+        description = Skin adorned with inked designs.
+      birthmarked
+        description = Natural marks present from birth.
+      custom
+        description = A unique complexion type.
+
+// Clothing and Style
+    clothing
+      casual
+        description = Everyday wear; comfortable and practical.
+      formal
+        description = Elegant attire for ceremonies or important events.
+      armor
+        description = Protective gear for combat or hazardous environments.
+      uniform
+        description = Standardized clothing for an organization or role.
+      robes
+        description = Flowing garments often used by scholars or mages.
+      suit
+        description = Tailored, structured outfit for formal settings.
+      dress
+        description = One‑piece garment with varied styles and lengths.
+      lingerie
+        description = Light, intimate clothing; minimal coverage.
+      swimwear
+        description = Clothing designed for water activities.
+      nude
+        description = No clothing worn.
+      fantasy
+        description = Genre‑specific attire with magical or mythical elements.
+      sci_fi
+        description = Futuristic clothing with advanced materials or tech.
+      historical
+        description = Clothing inspired by past eras or cultures.
+      custom
+        description = A unique or personalized clothing style.
+
+// Accessories and Adornments
+    accessories
+      glasses
+        description = Eyewear for vision correction or style.
+      monocle
+        description = Single corrective or decorative lens.
+      eyepatch
+        description = Cover worn over one eye for protection or concealment.
+      jewelry
+        description = Decorative items such as rings, necklaces, or earrings.
+      hat
+        description = Headwear for style, protection, or identity.
+      gloves
+        description = Hand coverings for warmth, work, or fashion.
+      scarf
+        description = Fabric worn around the neck or shoulders.
+      mask
+        description = Face covering for identity, protection, or ritual.
+      choker
+        description = Close‑fitting necklace worn around the neck.
+      body_chains
+        description = Decorative chains worn across the torso or limbs.
+      cane
+        description = Walking aid or ornamental staff.
+      umbrella
+        description = Tool for protection from rain or sun.
+      bag
+        description = Container for carrying personal items.
+      custom
+        description = A unique accessory not listed.
+
+// Posture
+    posture
+      upright
+        description = Straight, aligned posture conveying alertness.
+      slouched
+        description = Relaxed or drooping posture.
+      confident
+        description = Open, strong stance with assured presence.
+      shy
+        description = Closed or withdrawn posture.
+      aggressive
+        description = Forward‑leaning, tense, dominant stance.
+      relaxed
+        description = Loose, comfortable, at‑ease posture.
+      tense
+        description = Rigid, tight posture indicating stress or readiness.
+      custom
+        description = A unique posture or body language style.
+
+// Gait
+    gait
+      brisk
+        description = Quick, purposeful steps.
+      slow
+        description = Unhurried, measured pace.
+      limping
+        description = Uneven steps due to injury or condition.
+      graceful
+        description = Smooth, fluid, controlled movement.
+      clumsy
+        description = Unsteady or awkward steps.
+      swagger
+        description = Confident, exaggerated stride.
+      custom
+        description = A unique walking style.
+
+// Voice
+    voice
+      deep
+        description = Low‑pitched, resonant voice.
+      high
+        description = Higher‑pitched, bright voice.
+      soft
+        description = Gentle, quiet, or soothing tone.
+      raspy
+        description = Rough, textured vocal quality.
+      melodic
+        description = Smooth, musical, pleasant tone.
+      monotone
+        description = Even, unchanging pitch.
+      gravelly
+        description = Harsh, gritty vocal texture.
+      nasal
+        description = Voice with strong resonance in the nasal cavity.
+      custom
+        description = A unique vocal quality.
+
+// Personality
+  personality
+
+// Traits
+    traits
+
+// Positive Traits
+      positive
+        brave
+          description = Faces danger or difficulty with courage.
+        kind
+          description = Shows compassion and warmth toward others.
+        loyal
+          description = Stands by allies and commitments.
+        honest
+          description = Values truth and transparency.
+        creative
+          description = Thinks imaginatively and inventively.
+        intelligent
+          description = Learns quickly and solves problems well.
+        witty
+          description = Quick with clever remarks or humor.
+        patient
+          description = Remains calm and tolerant under stress.
+        generous
+          description = Freely gives time, resources, or support.
+        optimistic
+          description = Expects positive outcomes and sees the good.
+        determined
+          description = Persists despite obstacles.
+        empathetic
+          description = Understands and shares others’ feelings.
+        disciplined
+          description = Maintains focus and self‑control.
+        charismatic
+          description = Naturally draws attention and admiration.
+        passionate
+          description = Approaches interests with strong enthusiasm.
+        resourceful
+          description = Finds solutions with limited tools.
+        adaptable
+          description = Adjusts easily to new situations.
+        independent
+          description = Prefers self‑reliance and autonomy.
+        observant
+          description = Notices details others overlook.
+        thoughtful
+          description = Considers actions carefully and respectfully.
+
+// Negative Traits
+      negative
+        arrogant
+          description = Overestimates own importance or ability.
+        stubborn
+          description = Resists change or compromise.
+        impulsive
+          description = Acts without thinking ahead.
+        selfish
+          description = Prioritizes personal needs over others.
+        jealous
+          description = Feels threatened by others’ success or relationships.
+        cynical
+          description = Distrusts motives and expects the worst.
+        impatient
+          description = Struggles with waiting or delays.
+        reckless
+          description = Takes unnecessary risks without caution.
+        manipulative
+          description = Influences others through deceit or pressure.
+        pessimistic
+          description = Expects negative outcomes.
+        secretive
+          description = Hides information or feelings.
+        insecure
+          description = Doubts self‑worth or abilities.
+        aggressive
+          description = Confrontational or hostile in behavior.
+        lazy
+          description = Avoids effort or responsibility.
+        rude
+          description = Lacks politeness or tact.
+        cowardly
+          description = Avoids danger or confrontation excessively.
+        vain
+          description = Obsessed with appearance or admiration.
+        gullible
+          description = Easily deceived or misled.
+        controlling
+          description = Attempts to dominate situations or people.
+        aloof
+          description = Emotionally distant or detached.
+
+// Neutral Traits
+      neutral
+        quiet
+          description = Speaks little; reserved in expression.
+        loud
+          description = Expressive, energetic, or boisterous.
+        reserved
+          description = Keeps emotions and thoughts private.
+        outgoing
+          description = Social, friendly, and energized by others.
+        serious
+          description = Focused, solemn, or no‑nonsense.
+        playful
+          description = Lighthearted, humorous, or mischievous.
+        curious
+          description = Eager to learn or explore.
+        cautious
+          description = Careful and risk‑averse.
+        eccentric
+          description = Unconventional or quirky in behavior.
+        stoic
+          description = Shows little outward emotion.
+        sarcastic
+          description = Uses irony or sharp humor.
+        blunt
+          description = Speaks directly, sometimes harshly.
+        polite
+          description = Courteous and respectful.
+        competitive
+          description = Driven to outperform others.
+        cooperative
+          description = Works well with teams and groups.
+        dreamy
+          description = Often lost in imagination or thought.
+        practical
+          description = Focused on realistic, useful solutions.
+        meticulous
+          description = Pays close attention to detail.
+        spontaneous
+          description = Acts on impulse or inspiration.
+        traditional
+          description = Values customs, rules, and established ways.
+
+// Quirks
+    quirks
+      bites_lip
+        description = Bites lip when thinking or nervous.
+      plays_with_hair
+        description = Twirls or touches hair absentmindedly.
+      taps_fingers
+        description = Drums fingers when bored or focused.
+      hums_quietly
+        description = Softly hums tunes without noticing.
+      talks_to_self
+        description = Verbalizes thoughts or plans aloud.
+      collects_oddities
+        description = Keeps unusual trinkets or curios.
+      doodles
+        description = Draws idly on any available surface.
+      fidgets
+        description = Constant small movements or restlessness.
+      paces
+        description = Walks back and forth while thinking.
+      makes_puns
+        description = Frequently creates wordplay or jokes.
+      laughs_at_own_jokes
+        description = Finds personal humor especially funny.
+      always_late
+        description = Habitually arrives behind schedule.
+      forgets_names
+        description = Struggles to remember people’s names.
+      wears_odd_socks
+        description = Intentionally or unintentionally mismatches socks.
+      custom
+        description = A unique personal quirk.
+
+// Alignments
+    alignment
+      lawful_good
+        description = Upholds order and justice with compassion.
+      neutral_good
+        description = Does good without strict adherence to rules.
+      chaotic_good
+        description = Follows conscience over laws; values freedom.
+      lawful_neutral
+        description = Values order, structure, and tradition.
+      true_neutral
+        description = Balanced, impartial, avoids extremes.
+      chaotic_neutral
+        description = Values personal freedom; unpredictable but not malicious.
+      lawful_evil
+        description = Uses order and structure for personal gain or control.
+      neutral_evil
+        description = Self‑serving, acting without regard for others.
+      chaotic_evil
+        description = Destructive, unpredictable, and driven by selfish impulses.
+
+// Values
+    values
+      justice
+        description = Believes in fairness and accountability.
+      freedom
+        description = Prioritizes autonomy and choice.
+      loyalty
+        description = Values commitment and trust.
+      power
+        description = Seeks influence or control.
+      knowledge
+        description = Pursues learning and understanding.
+      love
+        description = Values connection and affection.
+      tradition
+        description = Upholds customs and heritage.
+      innovation
+        description = Embraces change and new ideas.
+      wealth
+        description = Values material security or prosperity.
+      fame
+        description = Seeks recognition or legacy.
+      peace
+        description = Desires harmony and stability.
+      revenge
+        description = Motivated by settling past wrongs.
+      survival
+        description = Focused on staying alive or secure.
+      custom
+        description = A unique guiding value.
+
+// Fear and Phobias
+    fears
+      heights
+        description = Discomfort or fear of high places.
+      darkness
+        description = Anxiety in low‑light or unseen spaces.
+      spiders
+        description = Fear of arachnids.
+      crowds
+        description = Unease in large groups of people.
+      failure
+        description = Fear of not meeting expectations.
+      rejection
+        description = Fear of being dismissed or unloved.
+      death
+        description = Anxiety about mortality.
+      loneliness
+        description = Fear of isolation or abandonment.
+      fire
+        description = Fear of flames or burning.
+      water
+        description = Fear of deep or open water.
+      confined_spaces
+        description = Discomfort in tight or enclosed areas.
+      custom
+        description = A unique fear or phobia.
+
+// Motivations
+    motivations
+      adventure
+        description = Seeks excitement, travel, and discovery.
+      revenge
+        description = Driven to right a personal wrong.
+      love
+        description = Motivated by affection or connection.
+      duty
+        description = Acts out of responsibility or obligation.
+      curiosity
+        description = Pursues knowledge or mysteries.
+      redemption
+        description = Seeks to atone for past actions.
+      power
+        description = Desires influence or control.
+      survival
+        description = Motivated by staying alive or secure.
+      discovery
+        description = Driven to uncover new truths or places.
+      legacy
+        description = Wants to be remembered or make an impact.
+      custom
+        description = A unique personal motivation.
+
+// Flaws
+    flaws
+      pride
+        description = Overconfidence or inflated self‑importance.
+      wrath
+        description = Quick to anger or vengeance.
+      envy
+        description = Resentful of others’ success.
+      sloth
+        description = Avoids effort or responsibility.
+      gluttony
+        description = Overindulgence or lack of restraint.
+      lust
+        description = Driven by intense desire or impulse.
+      greed
+        description = Excessive desire for wealth or gain.
+      custom
+        description = A unique personal flaw.
+
+// Mental and Emotional States
+    mental_health
+      stable
+        description = Generally balanced and emotionally steady.
+      anxious
+        description = Frequently worried or tense.
+      depressed
+        description = Low mood, reduced energy, or sadness.
+      manic
+        description = High energy, impulsive, or overly driven.
+      paranoid
+        description = Distrustful or fearful of hidden threats.
+      obsessive
+        description = Fixated on specific thoughts or routines.
+      dissociative
+        description = Detached from surroundings or self.
+      neurodivergent
+        description = Thinks or processes differently from typical patterns.
+      custom
+        description = A unique mental or emotional state.
+
+// Temperament
+    temperament
+      choleric
+        description = Ambitious, driven, and quick‑tempered.
+      sanguine
+        description = Social, enthusiastic, and lively.
+      melancholic
+        description = Thoughtful, analytical, and sensitive.
+      phlegmatic
+        description = Calm, reliable, and steady.
+      custom
+        description = A unique temperament style.
+
+//
+  background
+
+//
+    origin
+      city
+        description = Born in a densely populated urban center with diverse cultures and opportunities.
+      village
+        description = Raised in a small, close‑knit rural community.
+      forest
+        description = Grew up among dense woods, wildlife, and natural mysticism.
+      mountains
+        description = Originates from high altitudes, rugged terrain, and isolated settlements.
+      desert
+        description = Raised in arid lands with harsh climates and resilient cultures.
+      island
+        description = Comes from a coastal or oceanic community surrounded by water.
+      underground
+        description = Born beneath the surface in caves, tunnels, or subterranean cities.
+      underwater
+        description = Originates from aquatic or amphibious civilizations.
+      sky
+        description = Raised in floating cities, aerial tribes, or cloud‑borne realms.
+      otherworldly
+        description = Comes from a realm beyond the mortal world—magical, celestial, or alien.
+      custom
+        description = A unique or homebrew origin.
+
+// Family and Relationships
+    family
+
+// Parentage and Family Structure
+      parents
+        alive
+          description = Both or one parent is living and possibly involved.
+        deceased
+          description = One or both parents have passed away.
+        unknown
+          description = Parentage is a mystery or lost to time.
+        estranged
+          description = Relationship severed due to conflict or distance.
+        adoptive
+          description = Raised by adoptive parents.
+        foster
+          description = Grew up in temporary or rotating guardianship.
+        custom
+          description = A unique parental situation.
+
+// Sibling and Offspring Relationships
+      siblings
+        none
+          description = Grew up without siblings.
+        older
+          description = Has older siblings who influenced upbringing.
+        younger
+          description = Has younger siblings they may have cared for.
+        twin
+          description = Shares a birth with a twin sibling.
+        half
+          description = Shares one parent with a sibling.
+        step
+          description = Related through blended families.
+        adopted
+          description = Adopted siblings from outside the bloodline.
+        custom
+          description = A unique sibling arrangement.
+
+// Children and Descendants
+      children
+        none
+          description = Has no children.
+        one
+          description = Parent to a single child.
+        multiple
+          description = Parent to several children.
+        adopted
+          description = Parent to adopted children.
+        estranged
+          description = Children exist but the relationship is distant or broken.
+        custom
+          description = A unique family structure.
+
+// Marital and Romantic Status
+      marital_status
+        single
+          description = Not currently in a romantic partnership.
+        married
+          description = Legally or culturally bonded to a partner.
+        divorced
+          description = Formerly married; relationship ended.
+        widowed
+          description = Lost a spouse to death.
+        partnered
+          description = In a committed relationship without formal marriage.
+        polyamorous
+          description = Engages in multiple consensual relationships.
+        custom
+          description = A unique relationship status.
+
+// Social Standing
+      social_class
+        lower
+          description = Limited resources; struggles with basic needs.
+        middle
+          description = Stable, modest lifestyle with some comfort.
+        upper
+          description = Wealthy, influential, and socially privileged.
+        noble
+          description = Born or elevated into aristocratic status.
+        royal
+          description = Member of a ruling or monarchic
+        outcast
+          description = Rejected or excluded from mainstream society.
+        custom
+          description = A unique social standing.
+
+// Reputation and Public Perception
+      reputation
+        unknown
+          description = Little to no public recognition.
+        infamous
+          description = Widely known for negative deeds or scandal.
+        notorious
+          description = Recognized for bold, controversial, or dangerous actions.
+        respected
+          description = Held in high regard by peers or society.
+        feared
+          description = Known for power, danger, or intimidation.
+        beloved
+          description = Admired and cherished by many.
+        custom
+          description = A unique reputation.
+
+// Criminal History
+      criminal_record
+        none
+          description = No history of criminal activity.
+        minor
+          description = Small infractions or petty crimes.
+        major
+          description = Serious offenses or repeated criminal behavior.
+        wanted
+          description = Actively pursued by authorities.
+        pardoned
+          description = Crimes forgiven or legally cleared.
+        custom
+          description = A unique legal history.
+
+// Notable Life Events
+      notable_events
+        war
+          description = Lived through or participated in a major conflict.
+        disaster
+          description = Survived a natural or man‑made catastrophe.
+        betrayal
+          description = Experienced deep personal or political betrayal.
+        triumph
+          description = Achieved a significant victory or success.
+        loss
+          description = Endured the death or departure of someone important.
+        discovery
+          description = Found something valuable, magical, or world‑changing.
+        invention
+          description = Created a device, spell, or idea of importance.
+        scandal
+          description = Became involved in public controversy.
+        prophecy
+          description = Connected to a foretold destiny or omen.
+        custom
+          description = A unique life‑shaping event.
+
+// Affiliations and Associations
+      affiliations
+        guild
+          description = Member of a trade, craft, or adventurer guild.
+        order
+          description = Part of a disciplined or religious organization.
+        cult
+          description = Follower of a secretive or fringe belief group.
+        faction
+          description = Aligned with a political or ideological group.
+        school
+          description = Trained in an academic or magical institution.
+        army
+          description = Served in a military force.
+        crew
+          description = Works with a ship, airship, or team of travelers.
+        club
+          description = Member of a social or recreational group.
+        none
+          description = No formal affiliations.
+        custom
+          description = A unique organization or group.
+
+// Mentors and Guiding Figures
+      mentor
+        none
+          description = No guiding figure in their life.
+        teacher
+          description = Educated by an instructor or academic mentor.
+        master
+          description = Trained under a highly skilled expert.
+        parent
+          description = Guided by a parental figure.
+        friend
+          description = Learned from a close companion.
+        rival
+          description = Improved through competition with an adversary.
+        spirit
+          description = Guided by a supernatural or ancestral presence.
+        deity
+          description = Inspired or instructed by a divine being.
+        custom
+          description = A unique mentor figure.
+
+// Rivalries
+      rival
+        none
+          description = No significant rival.
+        childhood
+          description = Rivalry formed during early life.
+        professional
+          description = Competitor in career or skill.
+        romantic
+          description = Rival in matters of love or affection.
+        nemesis
+          description = Deep, long‑standing adversary.
+        custom
+          description = A unique rivalry.
+
+// Nemeses
+      nemesis
+        none
+          description = No true nemesis.
+        monster
+          description = A creature that haunts or opposes them.
+        villain
+          description = A sentient foe with malicious intent.
+        ex_friend
+          description = Former ally turned enemy.
+        ex_lover
+          description = Past romantic partner now in conflict.
+        custom
+          description = A unique nemesis.
+
+// Friends and Companions
+      friends
+        none
+          description = No close companions.
+        childhood
+          description = Friends from early life.
+        close
+          description = Deep, trusted friendships.
+        many
+          description = Broad social circle.
+        few
+          description = Select, meaningful friendships.
+        imaginary
+          description = Non‑physical or imagined companions.
+        animal
+          description = Strong bond with an animal companion.
+        custom
+          description = A unique friendship pattern.
+
+// Pets and Animal Companions
+      pets
+        none
+          description = No pets or animal companions.
+        dog
+          description = Loyal canine companion.
+        cat
+          description = Independent feline companion.
+        bird
+          description = Avian companion, from songbird to raptor.
+        reptile
+          description = Cold‑blooded companion such as lizards or snakes.
+        rodent
+          description = Small, clever companions like mice or ferrets.
+        magical
+          description = Enchanted, mythical, or supernatural creature.
+        custom
+          description = A unique or unusual pet.
+
+
+// Skills and Abilities
+  skills
+
+// Combat and Physical Abilities
+    combat
+      swordsmanship
+        description = Skilled in using bladed weapons with precision and technique.
+      archery
+        description = Proficient with bows or ranged projectile weapons.
+      unarmed
+        description = Trained in hand‑to‑hand combat and martial arts.
+      tactics
+        description = Understands battlefield strategy and coordinated maneuvers.
+      defense
+        description = Skilled at blocking, parrying, and avoiding harm.
+      intimidation
+        description = Uses presence or force of personality to deter opponents.
+      custom
+        description = A unique combat skill.
+
+// Magical and Supernatural Abilities
+    magic
+      elemental
+        description = Manipulates natural forces such as fire, water, air, or earth.
+      healing
+        description = Restores health or mends injuries through magical means.
+      illusion
+        description = Creates sensory deceptions or disguises.
+      necromancy
+        description = Manipulates life force, spirits, or the dead.
+      enchantment
+        description = Imbues objects or beings with magical properties.
+      summoning
+        description = Calls forth creatures, spirits, or constructs.
+      divination
+        description = Perceives hidden truths, omens, or possible futures.
+      custom
+        description = A unique magical discipline.
+
+// Talents and Non‑Combat Skills
+    talents
+      music
+        description = Plays instruments or sings with skill.
+      art
+        description = Creates visual works such as drawings, paintings, or sculptures.
+      dance
+        description = Expresses movement with rhythm and grace.
+      cooking
+        description = Prepares meals with creativity and technique.
+      athletics
+        description = Excels in physical strength, speed, or endurance.
+      stealth
+        description = Moves quietly and avoids detection.
+      persuasion
+        description = Influences others through charm or argument.
+      investigation
+        description = Gathers clues and uncovers hidden information.
+      survival
+        description = Thrives in wilderness or harsh environments.
+      crafting
+        description = Creates tools, items, or equipment by hand.
+      custom
+        description = A unique talent or skill.
+
+// Languages
+    languages
+      common
+        description = Widely spoken language understood by most.
+      elvish
+        description = Elegant, melodic language of elven cultures.
+      dwarvish
+        description = Deep, resonant language of dwarves.
+      orcish
+        description = Harsh, guttural language of orc tribes.
+      draconic
+        description = Ancient, powerful language of dragons.
+      infernal
+        description = Precise, formal language of fiendish realms.
+      celestial
+        description = Harmonious, radiant language of divine beings.
+      sign_language
+        description = Visual, gesture‑based communication.
+      custom
+        description = A unique or homebrew language.
+
+// Knowledge and Expertise
+    knowledge
+      history
+        description = Understanding of past events, cultures, and civilizations.
+      arcana
+        description = Knowledge of magical theory, spells, and artifacts.
+      religion
+        description = Familiarity with deities, rituals, and spiritual traditions.
+      nature
+        description = Understanding of flora, fauna, and ecosystems.
+      geography
+        description = Knowledge of lands, terrain, and travel routes.
+      politics
+        description = Insight into governments, factions, and power structures.
+      etiquette
+        description = Skilled in social norms, manners, and diplomacy.
+      custom
+        description = A unique area of expertise.
+
+// Tools and Practical Skills
+    tools
+      lockpicking
+        description = Opens locks using precision tools and technique.
+      alchemy
+        description = Creates potions, mixtures, or chemical compounds.
+      smithing
+        description = Forges metal tools, weapons, or armor.
+      tailoring
+        description = Crafts clothing or fabric goods.
+      carpentry
+        description = Builds or repairs wooden structures and items.
+      navigation
+        description = Reads maps, stars, or instruments to guide travel.
+      custom
+        description = A unique tool proficiency.
+
+// Vehicles and Mounts
+    vehicles
+      horse
+        description = Skilled at riding and controlling horses.
+      carriage
+        description = Operates wagons or drawn vehicles.
+      ship
+        description = Navigates or sails waterborne vessels.
+      airship
+        description = Pilots flying ships or dirigibles.
+      motorcycle
+        description = Rides two‑wheeled motor vehicles.
+      car
+        description = Drives ground‑based motor vehicles.
+      spaceship
+        description = Operates advanced interstellar craft.
+      custom
+        description = A unique vehicle proficiency.
+
+// Relationships and Social Skills
+  relationships
+
+// Orientation and Relationship Preferences
+    orientation
+      heterosexual
+        description = Attracted to a different gender.
+      homosexual
+        description = Attracted to the same gender.
+      bisexual
+        description = Attracted to more than one gender.
+      pansexual
+        description = Attraction not limited by gender.
+      asexual
+        description = Experiences little or no sexual attraction.
+      demiromantic
+        description = Romantic attraction forms only after emotional closeness.
+      aromantic
+        description = Experiences little or no romantic attraction.
+      polyamorous
+        description = Engages in multiple consensual relationships.
+      monogamous
+        description = Prefers exclusive romantic partnerships.
+      open
+        description = Engages in non‑exclusive relationships with consent.
+      custom
+        description = A unique romantic orientation.
+
+// Status and History
+    status
+      single
+        description = Not currently in a romantic relationship.
+      dating
+        description = Actively seeing or courting someone.
+      engaged
+        description = Committed to marriage or long‑term union.
+      married
+        description = Legally or culturally bonded to a partner.
+      separated
+        description = Temporarily or permanently apart from a partner.
+      divorced
+        description = Formerly married; relationship ended.
+      widowed
+        description = Lost a spouse to death.
+      complicated
+        description = Relationship status is unclear or unstable.
+      custom
+        description = A unique relationship status.
+
+// History and Experiences
+    history
+      first_love
+        description = Experienced a meaningful early romance.
+      heartbreak
+        description = Endured emotional loss or breakup.
+      forbidden
+        description = Relationship opposed by society or circumstance.
+      unrequited
+        description = Loved someone who did not return the feeling.
+      long_distance
+        description = Maintained a relationship across great distance.
+      arranged
+        description = Relationship formed through family or cultural agreement.
+      secret
+        description = Relationship kept hidden from others.
+      tragic
+        description = Romance ended through misfortune or loss.
+      custom
+        description = A unique romantic history.
+
+// Equipment and Possessions
+  equipment
+
+// Clothing and Attire
+    clothing
+      casual
+        description = Comfortable, everyday attire.
+      formal
+        description = Elegant clothing for important events.
+      armor
+        description = Protective gear for dangerous situations.
+      uniform
+        description = Standardized outfit for a role or organization.
+      robes
+        description = Flowing garments often used by scholars or mages.
+      suit
+        description = Tailored, structured formal wear.
+      dress
+        description = One‑piece garment with varied styles.
+      lingerie
+        description = Light, minimal undergarments.
+      swimwear
+        description = Clothing designed for water activities.
+      fantasy
+        description = Genre‑specific attire with magical or mythical elements.
+      sci_fi
+        description = Futuristic clothing with advanced materials.
+      historical
+        description = Clothing inspired by past eras.
+      custom
+        description = A unique clothing style.
+
+// Weapons and Combat Gear
+    weapons
+      sword
+        description = Bladed weapon for close combat.
+      dagger
+        description = Small, quick blade for precision.
+      axe
+        description = Heavy bladed tool or weapon.
+      bow
+        description = Ranged weapon using arrows.
+      staff
+        description = Long pole used for magic or defense.
+      spear
+        description = Polearm with a pointed tip.
+      whip
+        description = Flexible weapon for reach and control.
+      gun
+        description = Projectile‑based ranged weapon.
+      magic
+        description = Offensive or defensive magical focus.
+      improvised
+        description = Everyday objects used as weapons.
+      none
+        description = Carries no weapons.
+      custom
+        description = A unique weapon type.
+
+// Items and Personal Belongings
+    items
+      backpack
+        description = Carries supplies and gear.
+      pouch
+        description = Small container for valuables or tools.
+      potion
+        description = Liquid with beneficial or magical effects.
+      scroll
+        description = Written spell, map, or knowledge.
+      map
+        description = Chart of terrain or locations.
+      compass
+        description = Tool for navigation.
+      food
+        description = Rations or meals for travel.
+      water
+        description = Essential hydration supply.
+      rope
+        description = Useful for climbing or securing objects.
+      lantern
+        description = Portable light source.
+      lockpick
+        description = Tools for opening locks.
+      book
+        description = Contains knowledge, stories, or spells.
+      trinket
+        description = Small sentimental or mysterious object.
+      relic
+        description = Ancient or sacred artifact.
+      custom
+        description = A unique item.
+
+// Valuables and Wealth
+    valuables
+      coin
+        description = Currency used for trade.
+      gem
+        description = Precious stone of value.
+      jewelry
+        description = Decorative or valuable adornments.
+      artifact
+        description = Rare or powerful historical object.
+      heirloom
+        description = Item passed down through generations.
+      custom
+        description = A unique valuable.
+
+// Mounts and Vehicles
+    mounts
+      horse
+        description = Reliable land‑based riding animal.
+      wolf
+        description = Large, trained canine mount.
+      dragon
+        description = Powerful flying or terrestrial draconic mount.
+      griffin
+        description = Majestic hybrid creature with wings.
+      mechanical
+        description = Constructed or engineered mount.
+      none
+        description = Does not use a mount.
+      custom
+        description = A unique or unusual mount.
+
+// Image Generation Traits
+  portrait
+
+// Image Generation Styles
+    style
+      digital_art
+        description = Clean, modern artwork created with digital tools.
+      photorealistic
+        description = Highly detailed style resembling real photography.
+      oil_painting
+        description = Textured, classical style with rich brushstrokes.
+      watercolor
+        description = Soft, fluid style with translucent color washes.
+      sketch
+        description = Rough or refined pencil or ink linework.
+      anime
+        description = Stylized Japanese-inspired character art.
+      cartoon
+        description = Simplified, expressive, exaggerated features.
+      pixel
+        description = Retro, low-resolution pixel-based artwork.
+      3d_render
+        description = Fully modeled and rendered three-dimensional imagery.
+      custom
+        description = A unique or hybrid artistic style.
+
+// Image Generation Poses
+    pose
+      standing
+        description = Upright posture, full-body or mid-shot.
+      sitting
+        description = Seated pose, relaxed or formal.
+      kneeling
+        description = One or both knees on the ground.
+      reclining
+        description = Lying down or leaning back comfortably.
+      action
+        description = Dynamic movement captured mid-motion.
+      relaxed
+        description = Casual, natural posture with ease.
+      provocative
+        description = Bold, attention-grabbing pose with strong attitude.
+      dynamic
+        description = Energetic, expressive pose with dramatic angles.
+      custom
+        description = A unique or stylized pose.
+
+// Image Generation Clothing
+    clothing
+      nude
+        description = Artistic depiction without clothing; focuses on form and anatomy.
+      lingerie
+        description = Light, minimal clothing used in stylized or fashion portraits.
+      armor
+        description = Protective gear, fantasy or realistic.
+      robes
+        description = Flowing garments, often magical or ceremonial.
+      casual
+        description = Everyday modern or relaxed attire.
+      formal
+        description = Elegant clothing for high-status or ceremonial scenes.
+      fantasy
+        description = Genre-inspired outfits with magical or mythical elements.
+      sci_fi
+        description = Futuristic attire with advanced materials or tech.
+      historical
+        description = Clothing inspired by past eras or cultures.
+      custom
+        description = A unique or hybrid clothing style.
+
+// Image Generation Accessories
+    accessories
+      choker
+        description = Close-fitting neckwear for style or symbolism.
+      piercings
+        description = Decorative metal adornments on ears, face, or body.
+      body_chains
+        description = Ornamental chains draped across the torso or limbs.
+      tattoos
+        description = Inked designs adding personality or symbolism.
+      jewelry
+        description = Rings, necklaces, bracelets, or other adornments.
+      glasses
+        description = Eyewear for vision or fashion.
+      hat
+        description = Headwear ranging from casual to ceremonial.
+      mask
+        description = Face covering for mystery, identity, or theme.
+      gloves
+        description = Hand coverings for style or utility.
+      scarf
+        description = Fabric worn around the neck or shoulders.
+      bag
+        description = Satchel, purse, or pack included in the scene.
+      custom
+        description = A unique accessory or adornment.
+
+// Image Generation Lighting
+    lighting
+      candlelight
+        description = Warm, soft illumination with dramatic shadows.
+      moonlight
+        description = Cool, gentle light with ethereal tones.
+      sunlight
+        description = Bright, natural lighting with strong highlights.
+      studio
+        description = Controlled, professional lighting setup.
+      neon
+        description = Vibrant, colorful lighting with cyberpunk vibes.
+      dramatic
+        description = High-contrast lighting emphasizing mood and form.
+      soft
+        description = Diffused, gentle light with minimal shadows.
+      harsh
+        description = Strong, direct light creating sharp contrasts.
+      colored
+        description = Light tinted with specific hues for mood or style.
+      custom
+        description = A unique lighting arrangement.
+
+// Image Generation Background
+    background
+      plain
+        description = Simple, solid-color or minimal backdrop.
+      nature
+        description = Forests, mountains, fields, or natural scenery.
+      city
+        description = Urban environments, streets, or skylines.
+      fantasy
+        description = Magical landscapes, ruins, or mythical realms.
+      sci_fi
+        description = Futuristic cities, starships, or alien worlds.
+      abstract
+        description = Shapes, colors, or patterns without realism.
+      custom
+        description = A unique or thematic background.
+
+// Example Output
+[character.identity.name.first.male.selectOne] [character.identity.name.first.male.selectMany(3).joinItems(", ")] is a [character.joinItems(", ")] Name: [character.identity.name.first] [character.identity.name.last.common] Age: [character.identity.age] Gender: [character.identity.gender] Species: [character.identity.species] Pronouns: [character.identity.pronouns] Species: [character.identity.species.selectOne]

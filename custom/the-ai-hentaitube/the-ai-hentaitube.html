@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>the-ai-hentaitube — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Completed:
+  [x] Main Homepage Layout with Dark Theme
+  [x] Navigation between Gallery, Text Gen, Enhancer, Text-to-Image, Upload, Scratchpad
+  [x] AI Text-to-Text Prompt Generator
+  [x] AI Text-to-Text Random Prompt Generator
+  [x] AI Text-to-Text Prompt Enhancer
+  [x] AI Text-to-Text Copy Functionality
+  [x] Scratchpad/Notebook with tabs and pages
+  [x] AI Text-to-Image Generator (with loading states)
+  [x] Multi-image generation (1-12 images)
+  [x] Image Seed option
+  [x] AI Hentai Styles
+  [x] AI Hentai Categories
+  [x] Persistent Image Gallery using 'kv' storage
+  [x] Image Metadata handling (Title, Prompt, Date)
+  [x] Download functionality for generated images
+  [x] Upload functionality (converting local files to gallery items)
+Possible Next Steps:
+  [ ] Add search/filter functionality to the gallery
+  [ ] Implement user accounts/specific galleries via 'kv' namespaces
+  [ ] Add "Edit Prompt" feature for existing gallery items to regenerate variations
+-->
+<style>
+  body { background:#111; color:#eee; font-family:system-ui, sans-serif; margin:0; text-align:left; }
+  header { background:#000; padding:1rem; border-bottom:2px solid #f0f; display:flex; justify-content:space-between; align-items:center; }
+  h1 { margin:0; font-size:1.5rem; color:#f0f; }
+  nav button { background:transparent; border:none; color:#888; cursor:pointer; font-size:1rem; margin-left:1rem; padding:0.5rem; }
+  nav button.active { color:#f0f; border-bottom:2px solid #f0f; }
+  main { padding:1rem; max-width:1200px; margin:0 auto; }
+  .section { display:none; }
+  .section.active { display:block; }
+  
+  /* Form Elements */
+  input, textarea, select { width:100%; padding:0.8rem; margin-bottom:1rem; background:#222; border:1px solid #444; color:#fff; box-sizing:border-box; }
+  button.action-btn { background:#f0f; color:#fff; border:none; padding:0.8rem 1.5rem; font-size:1rem; cursor:pointer; border-radius:4px; width:100%; }
+  button.action-btn:hover { background:#d0d; }
+  button.action-btn:disabled { background:#555; cursor:not-allowed; }
+  
+  /* Gallery Grid */
+  .gallery-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:1rem; }
+  .img-card { background:#222; border:1px solid #333; border-radius:8px; overflow:hidden; position:relative; }
+  .img-card img { width:100%; height:200px; object-fit:cover; display:block; cursor:pointer; transition:opacity 0.2s; }
+  .img-card img:hover { opacity:0.8; }
+  .img-meta { padding:0.5rem; font-size:0.8rem; }
+  .img-title { font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#f0f; }
+  .img-actions { margin-top:0.5rem; display:flex; gap:0.5rem; }
+  .small-btn { background:#444; border:none; color:#fff; padding:0.2rem 0.5rem; font-size:0.7rem; cursor:pointer; border-radius:3px; }
+  .small-btn:hover { background:#666; }
+
+  /* Generator Preview */
+  .preview-box { margin-top:1rem; min-height:200px; background:#222; border:1px dashed #444; display:flex; align-items:center; justify-content:center; }
+  .preview-box img { max-width:100%; max-height:500px; }
+  .preview-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:1rem; width:100%; padding:1rem; }
+  .preview-item { position:relative; }
+  .preview-item img { width:100%; height:200px; object-fit:cover; border-radius:4px; }
+  .preview-item .select-btn { position:absolute; top:5px; right:5px; background:#f0f; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; }
+  .preview-item .select-btn.selected { background:#0f0; }
+  .preview-item .select-btn:hover { background:#d0d; }
+  .preview-item .select-btn.selected:hover { background:#00c000; }
+  
+  /* Modal */
+  .modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:1000; display:flex; justify-content:center; align-items:center; opacity:0; pointer-events:none; transition:opacity 0.3s; }
+  .modal-overlay.open { opacity:1; pointer-events:auto; }
+  .modal-content { background:#111; padding:2rem; max-width:90%; max-height:90%; overflow:auto; border:1px solid #333; border-radius:8px; text-align:center; }
+  .modal-img { max-width:100%; max-height:70vh; border-radius:4px; margin-bottom:1rem; }
+  .modal-details { text-align:left; font-size:0.9rem; color:#ccc; margin-bottom:1rem; max-height:100px; overflow-y:auto; }
+  
+  /* Scratchpad */
+  .scratchpad-tabs { display:flex; border-bottom:1px solid #333; margin-bottom:1rem; overflow-x:auto; padding-bottom:0.5rem; }
+  .scratchpad-tab { padding:0.5rem 1rem; background:#222; border:1px solid #333; border-bottom:none; cursor:pointer; margin-right:0.25rem; white-space:nowrap; }
+  .scratchpad-tab.active { background:#333; border-bottom:1px solid #333; }
+  .scratchpad-tabs button { margin-left:0.25rem; width:auto; }
+  .scratchpad-pages { display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap; }
+  .scratchpad-page { padding:0.25rem 0.75rem; background:#222; border:1px solid #444; border-radius:4px; cursor:pointer; }
+  .scratchpad-page.active { background:#f0f; border-color:#f0f; }
+  .scratchpad-pages button { width:auto; }
+  
+  /* Copy button */
+  .copy-btn { background:#444; border:none; color:#fff; padding:0.3rem 0.6rem; border-radius:4px; cursor:pointer; margin-top:0.5rem; width:auto; }
+  .copy-btn:hover { background:#666; }
+</style>
+
+<header>
+  <h1>The AI Hentai Tube</h1>
+  <nav>
+    <button id="navGalleryBtn" class="active" onclick="switchTab('gallery')">Gallery</button>
+    <button id="navT2tBtn" onclick="switchTab('t2t')">Prompt Gen</button>
+    <button id="navEnhancerBtn" onclick="switchTab('enhancer')">Enhancer</button>
+    <button id="navT2iBtn" onclick="switchTab('t2i')">Image Gen</button>
+    <button id="navScratchpadBtn" onclick="switchTab('scratchpad')">Scratchpad</button>
+    <button id="navUploadBtn" onclick="switchTab('upload')">Upload</button>
+  </nav>
+</header>
+
+<main>
+  <!-- GALLERY SECTION -->
+  <div id="gallerySection" class="section active">
+    <div class="gallery-grid" id="galleryGrid">
+      <!-- Images injected here -->
+    </div>
+    <div id="emptyGalleryMsg" style="padding:2rem; color:#666; text-align:center;">No images yet. Generate or upload some!</div>
+  </div>
+
+  <!-- TEXT TO TEXT GENERATOR -->
+  <div id="t2tSection" class="section">
+    <h2>AI Hentai Prompt Generator</h2>
+    <p>Enter a topic or concept to get a detailed AI prompt.</p>
+    <input id="t2tInput" placeholder="e.g. nurse, cat girl, cyberpunk...">
+    <div style="display:flex; gap:0.5rem;">
+      <button id="t2tBtn" class="action-btn" onclick="generatePrompt()">Generate Prompt</button>
+      <button id="t2tRandomBtn" class="action-btn" onclick="generateRandomPrompt()">Random Prompt</button>
+    </div>
+    <textarea id="t2tOutput" rows="6" placeholder="Generated prompt will appear here..."></textarea>
+    <button id="t2tCopyBtn" class="copy-btn" onclick="copyToClipboard('t2tOutput')">Copy Prompt</button>
+  </div>
+
+  <!-- PROMPT ENHANCER -->
+  <div id="enhancerSection" class="section">
+    <h2>AI Prompt Enhancer</h2>
+    <p>Make your existing prompt more detailed and explicit.</p>
+    <textarea id="enhancerInput" rows="4" placeholder="Paste your basic prompt here..."></textarea>
+    <button id="enhancerBtn" class="action-btn" onclick="enhancePrompt()">Enhance Prompt</button>
+    <textarea id="enhancerOutput" rows="6" placeholder="Enhanced prompt will appear here..."></textarea>
+    <button id="enhancerCopyBtn" class="copy-btn" onclick="copyToClipboard('enhancerOutput')">Copy Enhanced Prompt</button>
+  </div>
+
+  <!-- TEXT TO IMAGE GENERATOR -->
+  <div id="t2iSection" class="section">
+    <h2>AI Image Generator</h2>
+    <p>Create hentai images from text prompts.</p>
+    <input id="t2iPromptInput" placeholder="Describe the image you want...">
+    <div style="display:flex; gap:1rem;">
+        <input id="t2iTitleInput" placeholder="Image Title (for gallery)" style="flex:1;">
+        <select id="t2iResInput" style="width:150px;">
+            <option value="512x512">Square</option>
+            <option value="512x768">Portrait</option>
+            <option value="768x512">Landscape</option>
+        </select>
+    </div>
+    
+    <div style="display:flex; gap:1rem;">
+        <select id="t2iStyleInput">
+            <option value="">Default Style</option>
+            <option value="anime">Anime Style</option>
+            <option value="realistic">Realistic Style</option>
+            <option value="3d">3D Render</option>
+            <option value="watercolor">Watercolor</option>
+            <option value="sketch">Sketch</option>
+        </select>
+        
+        <select id="t2iCategoryInput">
+            <option value="">No Category</option>
+            <option value="fantasy">Fantasy</option>
+            <option value="sci-fi">Sci-Fi</option>
+            <option value="romance">Romance</option>
+            <option value="action">Action</option>
+            <option value="horror">Horror</option>
+        </select>
+        
+        <input id="t2iSeedInput" placeholder="Seed (optional, e.g., 12345)" type="number">
+    </div>
+    
+    <div style="display:flex; gap:1rem; align-items:center; margin-top:0.5rem;">
+      <label>Number of images:</label>
+      <input id="t2iCountInput" type="number" min="1" max="12" value="1" style="width:80px;">
+    </div>
+    
+    <button id="t2iBtn" class="action-btn" onclick="generateImages()">Generate Images</button>
+    
+    <div id="t2iPreview" class="preview-box">
+        <span style="color:#666;">Image preview will appear here</span>
+    </div>
+    
+    <div id="imageSelectionControls" hidden>
+      <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+        <button id="selectAllBtn" class="copy-btn" onclick="selectAllImages()">Select All</button>
+        <button id="deselectAllBtn" class="copy-btn" onclick="deselectAllImages()">Deselect All</button>
+      </div>
+      <button id="saveToGalleryBtn" class="action-btn" style="margin-top:1rem; background:#4caf50;" onclick="saveSelectedImages()">Save Selected to Gallery</button>
+    </div>
+  </div>
+
+  <!-- SCRATCHPAD SECTION -->
+  <div id="scratchpadSection" class="section">
+    <h2>Scratchpad</h2>
+    <p>Save and organize your favorite prompts.</p>
+    
+    <div class="scratchpad-tabs" id="scratchpadTabs">
+      <div class="scratchpad-tab active" data-tab="tab1">Tab 1</div>
+      <button class="copy-btn" onclick="addNewTab()">+ Add Tab</button>
+    </div>
+    
+    <div class="scratchpad-pages" id="scratchpadPages">
+      <div class="scratchpad-page active" data-page="page1">Page 1</div>
+      <button class="copy-btn" onclick="addNewPage()">+ Add Page</button>
+    </div>
+    
+    <textarea id="scratchpadContent" rows="10" placeholder="Type or paste prompts here..."></textarea>
+    <button id="saveScratchpadBtn" class="action-btn" onclick="saveScratchpadContent()">Save Content</button>
+  </div>
+
+  <!-- UPLOAD SECTION -->
+  <div id="uploadSection" class="section">
+    <h2>Upload Image</h2>
+    <p>Add your own images to the gallery.</p>
+    <input type="file" id="fileInput" accept="image/*">
+    <input id="uploadTitleInput" placeholder="Image Title">
+    <textarea id="uploadDescInput" placeholder="Description / Prompt used..."></textarea>
+    <button id="uploadBtn" class="action-btn" onclick="handleUpload()">Upload & Add to Gallery</button>
+  </div>
+</main>
+
+<!-- IMAGE MODAL -->
+<div id="imageModal" class="modal-overlay" onclick="if(event.target===this) closeModal()">
+  <div class="modal-content">
+    <img id="modalImg" class="modal-img" src="">
+    <h3 id="modalTitle" style="color:#f0f; margin-top:0;"></h3>
+    <div id="modalMeta" class="modal-details"></div>
+    <a id="modalDownloadBtn" class="action-btn" style="display:inline-block; width:auto; text-decoration:none;" download="image.png">Download</a>
+    <button class="action-btn" style="background:#d32f2f; width:auto;" onclick="deleteCurrentImage()">Delete</button>
+    <button class="small-btn" style="margin-top:1rem;" onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<script type="module">
+  // Access globals via root for module scope
+  const generateText = window.root.generateText;
+  const generateImage = window.root.generateImage;
+  const kv = window.root.kv;
+
+  let currentGeneratedImages = []; // Store generated image URLs
+  let currentModalImageId = null;
+  let currentTab = "tab1";
+  let currentPage = "page1";
+  let scratchpadData = {}; // Store scratchpad content by tab and page
+
+  // --- Navigation ---
+  window.switchTab = (tabName) => {
+    document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('nav button').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById(`${tabName}Section`).classList.add('active');
+    document.getElementById(`nav${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Btn`).classList.add('active');
+    
+    if(tabName === 'gallery') loadGallery();
+    if(tabName === 'scratchpad') loadScratchpadContent();
+  };
+
+  // --- Text Generation ---
+  window.generatePrompt = async () => {
+    const btn = t2tBtn;
+    const input = t2tInput.value;
+    if(!input) return;
+    
+    btn.disabled = true;
+    btn.textContent = "⏳ Generating...";
+    
+    try {
+      const prompt = await generateText(`Generate a detailed, explicit, and high-quality text-to-image prompt for AI Hentai art based on this topic: ${input}. Focus on visual descriptions, style, and composition.`);
+      t2tOutput.value = prompt;
+    } catch(e) { console.error(e); }
+    
+    btn.disabled = false;
+    btn.textContent = "Generate Prompt";
+  };
+
+  window.generateRandomPrompt = async () => {
+    const btn = t2tRandomBtn;
+    
+    btn.disabled = true;
+    btn.textContent = "⏳ Generating...";
+    
+    try {
+      const prompt = await generateText(`Generate a completely random, detailed, and high-quality text-to-image prompt for AI Hentai art. Be creative with the character, setting, pose, and art style.`);
+      t2tOutput.value = prompt;
+    } catch(e) { console.error(e); }
+    
+    btn.disabled = false;
+    btn.textContent = "Random Prompt";
+  };
+
+  window.enhancePrompt = async () => {
+    const btn = enhancerBtn;
+    const input = enhancerInput.value;
+    if(!input) return;
+    
+    btn.disabled = true;
+    btn.textContent = "⏳ Enhancing...";
+    
+    try {
+      const enhanced = await generateText(`Enhance and expand this AI image generation prompt to be more detailed and higher quality: ${input}. Add specific tags for anime style, lighting, and camera angle.`);
+      enhancerOutput.value = enhanced;
+    } catch(e) { console.error(e); }
+    
+    btn.disabled = false;
+    btn.textContent = "Enhance Prompt";
+  };
+
+  window.copyToClipboard = async (elementId) => {
+    const text = document.getElementById(elementId).value;
+    if(!text) return;
+    
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("Copied to clipboard!");
+    } catch(err) {
+      console.error("Failed to copy: ", err);
+      alert("Failed to copy to clipboard");
+    }
+  };
+
+  // --- Image Generation ---
+  window.generateImages = async () => {
+    const btn = t2iBtn;
+    const prompt = t2iPromptInput.value;
+    const res = t2iResInput.value;
+    const style = t2iStyleInput.value;
+    const category = t2iCategoryInput.value;
+    const seed = t2iSeedInput.value;
+    const count = parseInt(t2iCountInput.value) || 1;
+    
+    if(!prompt) return;
+    
+    btn.disabled = true;
+    btn.textContent = "⏳ Generating (may take 30s+)...";
+    imageSelectionControls.hidden = true;
+    t2iPreview.innerHTML = '<span style="color:#f0f;">Generating...</span>';
+    
+    currentGeneratedImages = [];
+    
+    try {
+      for(let i = 0; i < count; i++) {
+        let enhancedPrompt = prompt;
+        
+        if(style) {
+          enhancedPrompt += `, ${style} style`;
+        }
+        
+        if(category) {
+          enhancedPrompt += `, ${category} theme`;
+        }
+        
+        let options = {resolution: res};
+        if(seed) {
+          options.seed = seed + i; // Slightly modify seed for each image
+        }
+        
+        const dataUrl = await generateImage(enhancedPrompt, options);
+        currentGeneratedImages.push({
+          url: dataUrl,
+          selected: false
+        });
+      }
+      
+      renderGeneratedImages();
+      imageSelectionControls.hidden = false;
+    } catch(e) {
+      t2iPreview.innerHTML = '<span style="color:red;">Generation failed. Try again.</span>';
+      console.error(e);
+    }
+    
+    btn.disabled = false;
+    btn.textContent = "Generate Images";
+  };
+
+  function renderGeneratedImages() {
+    if(currentGeneratedImages.length === 0) {
+      t2iPreview.innerHTML = '<span style="color:#666;">No images generated</span>';
+      return;
+    }
+    
+    t2iPreview.innerHTML = `<div class="preview-grid">
+      ${currentGeneratedImages.map((img, index) => `
+        <div class="preview-item">
+          <img src="${img.url}">
+          <button class="select-btn ${img.selected ? 'selected' : ''}" onclick="toggleImageSelection(${index})">
+            ${img.selected ? '✓' : ''}
+          </button>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
+  window.toggleImageSelection = (index) => {
+    currentGeneratedImages[index].selected = !currentGeneratedImages[index].selected;
+    renderGeneratedImages();
+  };
+
+  window.selectAllImages = () => {
+    currentGeneratedImages.forEach(img => img.selected = true);
+    renderGeneratedImages();
+  };
+
+  window.deselectAllImages = () => {
+    currentGeneratedImages.forEach(img => img.selected = false);
+    renderGeneratedImages();
+  };
+
+  window.saveSelectedImages = async () => {
+    const selectedImages = currentGeneratedImages.filter(img => img.selected);
+    if(selectedImages.length === 0) {
+      alert("Please select at least one image to save");
+      return;
+    }
+    
+    const title = t2iTitleInput.value || "Untitled AI Hentai";
+    const prompt = t2iPromptInput.value;
+    
+    for(const img of selectedImages) {
+      const imgData = {
+        id: Date.now() + Math.random(), // Unique ID
+        url: img.url,
+        title: title,
+        prompt: prompt,
+        date: new Date().toLocaleDateString()
+      };
+      
+      await saveToKv(imgData);
+    }
+    
+    alert(`Saved ${selectedImages.length} image(s) to gallery!`);
+    currentGeneratedImages = [];
+    imageSelectionControls.hidden = true;
+    t2iPreview.innerHTML = '<span style="color:#666;">Images saved. Generate more?</span>';
+    t2iPromptInput.value = "";
+  };
+
+  // --- Upload Logic ---
+  window.handleUpload = async () => {
+    const file = fileInput.files[0];
+    if(!file) return alert("Please select a file");
+    
+    const title = uploadTitleInput.value || file.name;
+    const desc = uploadDescInput.value;
+    
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = "Processing...";
+    
+    // Simple file reader for local demo (uploads to kv as base64)
+    // Ideally we'd use uploadPlugin but base64 is simpler for pure local persistence in this constrained env
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target.result;
+      const imgData = {
+        id: Date.now(),
+        url: dataUrl,
+        title: title,
+        prompt: desc || "User Upload",
+        date: new Date().toLocaleDateString()
+      };
+      
+      await saveToKv(imgData);
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = "Upload & Add to Gallery";
+      alert("Upload complete!");
+      fileInput.value = "";
+      switchTab('gallery');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // --- Storage & Gallery ---
+  async function saveToKv(imgObj) {
+    let currentImages = await kv.gallery.get('images') || [];
+    currentImages.unshift(imgObj); // Add to top
+    await kv.gallery.set('images', currentImages);
+  }
+
+  async function loadGallery() {
+    const grid = galleryGrid;
+    const images = await kv.gallery.get('images') || [];
+    
+    if(images.length === 0) {
+      emptyGalleryMsg.hidden = false;
+      grid.innerHTML = "";
+      return;
+    }
+    
+    emptyGalleryMsg.hidden = true;
+    grid.innerHTML = images.map(img => `
+      <div class="img-card">
+        <img src="${img.url}" onclick="openModal(${img.id})">
+        <div class="img-meta">
+          <div class="img-title">${img.title}</div>
+          <div style="font-size:0.7rem; color:#888;">${img.date}</div>
+          <div class="img-actions">
+            <button class="small-btn" onclick="openModal(${img.id})">View</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // --- Modal Logic ---
+  window.openModal = async (id) => {
+    const images = await kv.gallery.get('images') || [];
+    const img = images.find(i => i.id === id);
+    if(!img) return;
+    
+    currentModalImageId = id;
+    modalImg.src = img.url;
+    modalTitle.textContent = img.title;
+    modalMeta.innerHTML = `<strong>Date:</strong> ${img.date}<br><br><strong>Prompt/Description:</strong><br>${img.prompt.replace(/\n/g, '<br>')}`;
+    modalDownloadBtn.href = img.url;
+    
+    imageModal.classList.add('open');
+  };
+
+  window.closeModal = () => {
+    imageModal.classList.remove('open');
+    setTimeout(() => { modalImg.src = ""; }, 300); // Clear src after fade out
+  };
+
+  window.deleteCurrentImage = async () => {
+    if(!confirm("Are you sure you want to delete this image?")) return;
+    
+    let images = await kv.gallery.get('images') || [];
+    images = images.filter(i => i.id !== currentModalImageId);
+    await kv.gallery.set('images', images);
+    
+    closeModal();
+    loadGallery(); // Refresh if on gallery tab
+  };
+
+  // --- Scratchpad Logic ---
+  window.addNewTab = async () => {
+    const tabCount = document.querySelectorAll('.scratchpad-tab').length;
+    const newTabId = `tab${tabCount + 1}`;
+    
+    // Create new tab element
+    const newTab = document.createElement('div');
+    newTab.className = 'scratchpad-tab';
+    newTab.dataset.tab = newTabId;
+    newTab.textContent = `Tab ${tabCount + 1}`;
+    newTab.onclick = () => switchScratchpadTab(newTabId);
+    
+    // Insert before the "Add Tab" button
+    const addButton = scratchpadTabs.querySelector('button');
+    scratchpadTabs.insertBefore(newTab, addButton);
+    
+    // Initialize this tab with a default page
+    scratchpadData[newTabId] = {
+      page1: ""
+    };
+    
+    await saveScratchpadData();
+    switchScratchpadTab(newTabId);
+  };
+
+  window.addNewPage = async () => {
+    const pageCount = document.querySelectorAll('.scratchpad-page').length;
+    const newPageId = `page${pageCount + 1}`;
+    
+    // Create new page element
+    const newPage = document.createElement('div');
+    newPage.className = 'scratchpad-page';
+    newPage.dataset.page = newPageId;
+    newPage.textContent = `Page ${pageCount + 1}`;
+    newPage.onclick = () => switchScratchpadPage(newPageId);
+    
+    // Insert before the "Add Page" button
+    const addButton = scratchpadPages.querySelector('button');
+    scratchpadPages.insertBefore(newPage, addButton);
+    
+    // Initialize this page in the current tab
+    if(!scratchpadData[currentTab]) {
+      scratchpadData[currentTab] = {};
+    }
+    scratchpadData[currentTab][newPageId] = "";
+    
+    await saveScratchpadData();
+    switchScratchpadPage(newPageId);
+  };
+
+  window.switchScratchpadTab = (tabId) => {
+    // Update active tab UI
+    document.querySelectorAll('.scratchpad-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.tab === tabId);
+    });
+    
+    currentTab = tabId;
+    
+    // Reset to first page of this tab
+    const pages = Object.keys(scratchpadData[tabId] || {});
+    if(pages.length > 0) {
+      switchScratchpadPage(pages[0]);
+    } else {
+      switchScratchpadPage('page1');
+    }
+  };
+
+  window.switchScratchpadPage = (pageId) => {
+    // Update active page UI
+    document.querySelectorAll('.scratchpad-page').forEach(page => {
+      page.classList.toggle('active', page.dataset.page === pageId);
+    });
+    
+    currentPage = pageId;
+    loadScratchpadContent();
+  };
+
+  window.loadScratchpadContent = async () => {
+    await loadScratchpadData();
+    
+    if(scratchpadData[currentTab] && scratchpadData[currentTab][currentPage]) {
+      scratchpadContent.value = scratchpadData[currentTab][currentPage];
+    } else {
+      scratchpadContent.value = "";
+    }
+  };
+
+  window.saveScratchpadContent = async () => {
+    if(!scratchpadData[currentTab]) {
+      scratchpadData[currentTab] = {};
+    }
+    
+    scratchpadData[currentTab][currentPage] = scratchpadContent.value;
+    await saveScratchpadData();
+    alert("Content saved!");
+  };
+
+  async function loadScratchpadData() {
+    try {
+      const data = await kv.scratchpad.get('data');
+      if(data) {
+        scratchpadData = data;
+      } else {
+        // Initialize default structure if no data exists
+        scratchpadData = {
+          tab1: {
+            page1: ""
+          }
+        };
+      }
+    } catch(e) {
+      console.error("Error loading scratchpad data:", e);
+      // Initialize default structure if error
+      scratchpadData = {
+        tab1: {
+          page1: ""
+        }
+      };
+    }
+    
+    // Ensure UI matches data
+    updateScratchpadUI();
+  }
+
+  async function saveScratchpadData() {
+    try {
+      await kv.scratchpad.set('data', scratchpadData);
+    } catch(e) {
+      console.error("Error saving scratchpad data:", e);
+      alert("Failed to save scratchpad content");
+    }
+  }
+
+  function updateScratchpadUI() {
+    // Update tabs
+    const existingTabs = document.querySelectorAll('.scratchpad-tab');
+    const tabIds = Object.keys(scratchpadData);
+    
+    // Remove tabs that don't exist in data
+    existingTabs.forEach(tab => {
+      if(!tabIds.includes(tab.dataset.tab)) {
+        tab.remove();
+      }
+    });
+    
+    // Add tabs that exist in data but not in UI
+    const existingTabIds = Array.from(existingTabs).map(tab => tab.dataset.tab);
+    tabIds.forEach((tabId, index) => {
+      if(!existingTabIds.includes(tabId)) {
+        const newTab = document.createElement('div');
+        newTab.className = 'scratchpad-tab';
+        newTab.dataset.tab = tabId;
+        newTab.textContent = `Tab ${index + 1}`;
+        newTab.onclick = () => switchScratchpadTab(tabId);
+        
+        const addButton = scratchpadTabs.querySelector('button');
+        scratchpadTabs.insertBefore(newTab, addButton);
+      }
+    });
+    
+    // Update pages for current tab
+    if(scratchpadData[currentTab]) {
+      const pageIds = Object.keys(scratchpadData[currentTab]);
+      const existingPages = document.querySelectorAll('.scratchpad-page');
+      
+      // Remove pages that don't exist in data for current tab
+      existingPages.forEach(page => {
+        if(!pageIds.includes(page.dataset.page)) {
+          page.remove();
+        }
+      });
+      
+      // Add pages that exist in data but not in UI
+      const existingPageIds = Array.from(existingPages).map(page => page.dataset.page);
+      pageIds.forEach((pageId, index) => {
+        if(!existingPageIds.includes(pageId)) {
+          const newPage = document.createElement('div');
+          newPage.className = 'scratchpad-page';
+          newPage.dataset.page = pageId;
+          newPage.textContent = `Page ${index + 1}`;
+          newPage.onclick = () => switchScratchpadPage(pageId);
+          
+          const addButton = scratchpadPages.querySelector('button');
+          scratchpadPages.insertBefore(newPage, addButton);
+        }
+      });
+    }
+  }
+
+  // Initialize scratchpad UI
+  loadScratchpadData();
+
+  // Init
+  loadGallery();
+
+</script>
+</body>
+</html>

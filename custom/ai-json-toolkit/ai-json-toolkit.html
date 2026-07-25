@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-json-toolkit — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="toolContainer" style="max-width:1200px; margin:0 auto; padding:20px; font-family:Arial,sans-serif;">
+  <h1 style="text-align:center; color:#4a90e2;">AI JSON Tool Kit for Minecraft 1.21.10 Java Edition</h1>
+  <p style="text-align:center; color:#666;">Resource pack format: 69.0 | Data pack format: 88.0</p>
+  
+  <div id="schemaSelector" style="margin:20px 0; padding:15px; background:#f5f7fa; border-radius:8px;">
+    <label for="jsonType" style="font-weight:bold;">Select JSON Type:</label>
+    <select id="jsonTypeEl" style="width:100%; padding:8px; margin-top:5px; border-radius:4px; border:1px solid #ddd;">
+      <option value="">-- Select JSON Type --</option>
+      <option value="advancement">Advancements</option>
+      <option value="loot_table">Loot Tables</option>
+      <option value="model">Models (item/block)</option>
+      <option value="blockstates">Blockstates</option>
+      <option value="recipe">Recipes</option>
+      <option value="sounds">Sounds</option>
+      <option value="lang">Lang Files</option>
+      <option value="pack_mcmeta">Pack.mcmeta</option>
+      <option value="animation_mcmeta">Animation.mcmeta</option>
+      <option value="config">Configs</option>
+      <option value="fishing">Fishing</option>
+      <option value="smelting">Smelting</option>
+      <option value="mining">Mining</option>
+      <option value="nbt">NBT SNBT Wrapper</option>
+    </select>
+  </div>
+  
+  <div id="editorContainerEl" style="display:none; margin:20px 0;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <h2 id="schemaTitleEl" style="margin:0; color:#4a90e2;"></h2>
+      <button id="validateBtn" style="padding:8px 16px; background:#4a90e2; color:white; border:none; border-radius:4px; cursor:pointer;">Validate JSON</button>
+    </div>
+    
+    <textarea id="jsonEditorEl" rows="20" style="width:100%; padding:10px; border-radius:4px; border:1px solid #ddd; font-family:monospace;"></textarea>
+    
+    <div id="validationResultsEl" style="margin-top:15px; padding:15px; border-radius:4px; display:none;"></div>
+  </div>
+  
+  <div id="schemaInfoEl" style="display:none; margin-top:20px; padding:15px; background:#eef7ff; border-left:4px solid #4a90e2;">
+    <h3 style="margin-top:0;">Schema Information</h3>
+    <div id="schemaDetailsEl"></div>
+  </div>
+</div>
+
+<script>
+  // Schema definitions
+  const schemas = {
+    advancement: {
+      title: "Advancement Schema",
+      description: "Defines display, criteria, requirements, rewards, and parent hierarchy for advancements.",
+      schema: {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://schemas.example.com/minecraft/1.21.10/advancement.json",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "parent": { "type": "string" },
+          "display": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "icon": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": { "type": "string" },
+                  "components": { "type": "object" }
+                },
+                "required": ["id"]
+              },
+              "title": { "type": ["string", "object"] },
+              "description": { "type": ["string", "object"] },
+              "background": { "type": "string" },
+              "frame": { "enum": ["task", "goal", "challenge"] },
+              "show_toast": { "type": "boolean" },
+              "announcetochat": { "type": "boolean" },
+              "hidden": { "type": "boolean" }
+            },
+            "required": ["icon", "title", "description", "frame"]
+          },
+          "criteria": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "trigger": { "type": "string" },
+                "conditions": { "type": "object" }
+              },
+              "required": ["trigger"]
+            }
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            }
+          },
+          "rewards": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "experience": { "type": "integer", "minimum": 0 },
+              "loot": { "type": "array", "items": { "type": "string" } },
+              "recipes": { "type": "array", "items": { "type": "string" } },
+              "function": { "type": "string" }
+            }
+          },
+          "sendstelemetryevent": { "type": "boolean" }
+        },
+        "required": ["criteria"]
+      }
+    },
+    loot_table: {
+      title: "Loot Table Schema",
+      description: "Defines pools, entries, conditions, functions, and roll distributions for blocks, entities, chests, etc.",
+      schema: {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://schemas.example.com/minecraft/1.21.10/loot_table.json",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "enum": [
+              "minecraft:block",
+              "minecraft:entity",
+              "minecraft:chest",
+              "minecraft:fishing",
+              "minecraft:gift",
+              "minecraft:barter",
+              "minecraft:advancement_reward",
+              "minecraft:equipment"
+            ]
+          },
+          "pools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "rolls": {
+                  "oneOf": [
+                    { "type": "integer", "minimum": 0 },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "min": { "type": "number" },
+                        "max": { "type": "number" }
+                      },
+                      "required": ["min", "max"]
+                    }
+                  ]
+                },
+                "bonus_rolls": {
+                  "oneOf": [
+                    { "type": "integer", "minimum": 0 },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "min": { "type": "number" },
+                        "max": { "type": "number" }
+                      },
+                      "required": ["min", "max"]
+                    }
+                  ]
+                },
+                "entries": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "minecraft:empty",
+                          "minecraft:item",
+                          "minecraft:tag",
+                          "minecraft:loot_table",
+                          "minecraft:group",
+                          "minecraft:alternatives",
+                          "minecraft:sequence",
+                          "minecraft:dynamics"
+                        ]
+                      },
+                      "name": { "type": "string" },
+                      "expand": { "type": "boolean" },
+                      "functions": { "$ref": "#/$defs/functions" },
+                      "conditions": { "$ref": "#/$defs/conditions" },
+                      "children": {
+                        "type": "array",
+                        "items": { "$ref": "#/$defs/entryRef" }
+                      },
+                      "weight": { "type": "integer", "minimum": 0 },
+                      "quality": { "type": "integer" }
+                    },
+                    "required": ["type"]
+                  }
+                },
+                "conditions": { "$ref": "#/$defs/conditions" }
+              },
+              "required": ["rolls", "entries"]
+            }
+          },
+          "functions": { "$ref": "#/$defs/functions" }
+        },
+        "required": ["pools"],
+        "$defs": {
+          "conditions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "condition": { "type": "string" }
+              },
+              "required": ["condition"]
+            }
+          },
+          "functions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "function": { "type": "string" }
+              },
+              "required": ["function"]
+            }
+          },
+          "entryRef": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" }
+            },
+            "required": ["type"]
+          }
+        }
+      }
+    },
+    model: {
+      title: "Model Schema",
+      description: "Defines elements, parents, textures, display transforms, and overrides for items and blocks.",
+      schema: {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://schemas.example.com/minecraft/1.21.10/model.json",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "parent": { "type": "string" },
+          "ambientocclusion": { "type": "boolean" },
+          "textures": { "type": "object", "additionalProperties": { "type": "string" } },
+          "elements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "from": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+                "to": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+                "rotation": {
+                  "type": "object",
+                  "properties": {
+                    "origin": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+                    "axis": { "enum": ["x", "y", "z"] },
+                    "angle": { "type": "number" },
+                    "rescale": { "type": "boolean" }
+                  },
+                  "required": ["axis", "angle"]
+                },
+                "shade": { "type": "boolean" },
+                "faces": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "texture": { "type": "string" },
+                      "uv": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 },
+                      "rotation": { "type": "integer", "enum": [0, 90, 180, 270] },
+                      "tintindex": { "type": "integer" }
+                    },
+                    "required": ["texture"]
+                  }
+                }
+              },
+              "required": ["from", "to", "faces"]
+            }
+          },
+          "display": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "rotation": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+                "translation": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+                "scale": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }
+              }
+            }
+          },
+          "overrides": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "predicate": { "type": "object", "additionalProperties": { "type": "number" } },
+                "model": { "type": "string" }
+              },
+              "required": ["predicate", "model"]
+            }
+          }
+        }
+      }
+    },
+    blockstates: {
+      title: "Blockstates Schema",
+      description: "Maps variant strings or multipart conditions to model applications with rotations and uvlock.",
+      schema: {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://schemas.example.com/minecraft/1.21.10/blockstates.json",
+        "type": "object",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "variants": {
+                "type": "object",
+                "additionalProperties": {
+                  "oneOf": [
+                    { "$ref": "#/$defs/modelDescriptor" },
+                    {
+                      "type": "array",
+                      "items": { "$ref": "#/$defs/modelDescriptorWeighted" }
+                    }
+                  ]
+                }
+              }
+            },
+            "required": ["variants"]
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "multipart": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "apply": {
+                      "oneOf": [
+                        { "$ref": "#/$defs/modelDescriptor" },
+                        {
+                          "type": "array",
+                          "items": { "$ref": "#/$defs/modelDescriptorWeighted" }
+                        }
+                      ]
+                    },
+                    "when": {
+                      "type": "object",
+                      "oneOf": [
+                        { "$ref": "#/$defs/case" },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "OR": {
+                              "type": "array",
+                              "items": { "$ref": "#/$defs/case" }
+                            }
+                          },
+                          "required": ["OR"]
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["apply"]
+                }
+              }
+            },
+            "required": ["multipart"]
+          }
+        ],
+        "$defs": {
+          "case": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "modelDescriptor": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "model": { "type": "string" },
+              "x": { "type": "integer", "enum": [0, 90, 180, 270] },
+              "y": { "type": "integer", "enum": [0, 90, 180, 270] },
+              "uvlock": { "type": "boolean" }
+            },
+            "required": ["model"]
+          },
+          "modelDescriptorWeighted": {
+            "allOf": [
+              { "$ref": "#/$defs/modelDescriptor" },
+              {
+                "type": "object",
+                "properties": { "weight": { "type": "integer", "minimum": 1 } },
+                "required": ["weight"]
+              }
+            ]
+          }
+        }
+      }
+    },
+    recipe: {
+      title: "Recipe Schema",
+      description: "Defines shaped, shapeless, smelting-like types, and special categories for crafting recipes.",
+      schema: {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://schemas.example.com/minecraft/1.21.10/recipe.json",
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "minecraft:crafting_shaped",
+              "minecraft:crafting_shapeless",
+              "minecraft:smelting",
+              "minecraft:blasting",
+              "minecraft:smoking",
+              "minecraft:campfire_cooking",
+              "minecraft:stonecutting"
+            ]
+          },
+          "group": { "type": "string" },
+          "category": {
+            "enum": ["building", "redstone", "equipment", "misc", "food"]
+          },
+          "show_notification": { "type": "boolean" },
+          "pattern": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "key": {
+            "type": "object",
+            "additionalProperties": {
+              "oneOf": [
+                { "$ref": "#/$defs/ingredient" },
+                {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/ingredient" },
+                  "minItems": 1
+                }
+              ]
+            }
+          },
+          "ingredients": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "$ref": "#/$defs/ingredient" },
+                {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/ingredient" },
+                  "minItems": 1
+                }
+              ]
+            },
+            "minItems": 1
+          },
+          "result": { "$ref": "#/$defs/result" },
+          "experience": { "type": "number", "minimum": 0 },
+          "cookingtime": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["type"],
+        "allOf": [
+          {
+            "if": { "properties": { "type": { "const": "minecraft:crafting_shaped" } } },
+            "then": { "required": ["pattern", "key", "result"] }
+          },
+          {
+            "if": { "properties": { "type": { "const": "minecraft:crafting_shapeless" } } },
+            "then": { "required": ["ingredients", "result"] }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "minecraft:smelting",
+                    "minecraft:blasting",
+                    "minecraft:smoking",
+                    "minecraft:campfire_cooking",
+                    "minecraft:stonecutting"
+                  ]
+                }
+              }
+            },
+            "then": { "required": ["ingredient", "result"] }
+          }
+        ],
+        "$defs": {
+          "itemStack": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "count": { "type": "integer", "minimum": 1 },
+              "components": { "type": "object" }
+            },
+            "required": ["id"]
+          },
+          "ingredient": {
+            "type": "object",
+            "properties": {
+              "item": { "type": "string" },
+              "tag": { "type": "string" }
+            },
+            "oneOf": [
+              { "required": ["item"] },
+              { "required": ["tag"] }
+            ]
+          },
+          "result": {
+            "oneOf": [
+              { "$ref": "#/$defs/itemStack" },
+              {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "count": { "type": "integer", "minimum": 1 }
+                },
+                "required": ["id"]
+              }
+            ]
+          },
+          "ingredient_singleton": { "$ref": "#/$defs/ingredient" },
+          "ingredient_array": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/ingredient" }
+          }
+        }
+      }
+    },
+    sounds: {
+      title: "Sounds Schema",
+      description: "Maps sound event keys to arrays with file, volume, pitch, stream, and attenuation type.",
+      schema: {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://schemas.example.com/minecraft/1.21.10/sounds.json",
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "replace": { "type": "boolean" },
+            "subtitle": { "type": "string" },
+            "sounds": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  { "type": "string" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": { "type": "string" },
+                      "volume": { "type": "number", "minimum": 0 },
+                      "pitch": { "type": "number", "minimum": 0 },
+                      "weight": { "type": "integer", "minimum": 1 },
+                      "stream": { "type": "boolean" },
+                      "attenuation_distance": { "type": "integer", "minimum": 0 },
+                      "preload": { "type": "boolean" },
+                      "type": { "enum": ["sound", "event"] }
+                    },
+                    "required": ["name"]
+                  }
+                ]
+              }
+            }
+          },
+          "required": ["sounds"]
+        }
+      }
+    },
+    lang: {
+      title: "Lang File Schema",
+      description: "Simple key-value JSON for language files in assets/<namespace>/lang/*.json.",
+      schema: {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://schemas.example.com/minecraft/1.21.10/lang.json",
+        "type": "object",
+        "additionalProperties": { "type": "string" }
+      }
+    },
+    pack_mcmeta: {
+      title: "Pack.mcmeta Schema",
+      description: "Metadata for data and resource packs including format version and overlays.",
+      schema: {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://schemas.example.com/minecraft/1.21.10/pack.mcmeta.json",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "pack": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "description": { "type": ["string", "object"] },
+              "pack_format": { "type": "integer" },
+              "supported_formats": {
+                "oneOf": [
+                  { "type": "integer" },
+                  {
+                    "type": "array",
+                    "items": { "type": "integer" },
+                    "minItems": 1
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "min_inclusive": { "type": "integer" },
+                      "max_inclusive": { "type": "integer" }
+                    },
+                    "required": ["mininclusive", "maxinclusive"]
+                  }
+                ]
+              },
+              "min_format": {
+                "oneOf": [
+                  { "type": "integer" },
+                  { "type": "array", "items": { "type": "integer" }, "minItems": 1, "maxItems": 2 }
+                ]
+              },
+              "max_format": {
+                "oneOf": [
+                  { "type": "integer" },
+                  { "type": "array", "items": { "type": "integer" }, "minItems": 1, "maxItems": 2 }
+                ]
+              },
+              "features": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "array", "items": { "type": "string" } }
+                }
+              },
+              "filter": {
+                "type": "object",
+                "properties": {
+                  "block": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "namespace": { "type": "string" },
+                        "path": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              },
+              "overlays": {
+                "type": "object",
+                "properties": {
+                  "entries": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "directory": { "type": "string", "pattern": "^[a-z0-9_\\-]+$" },
+                        "min_format": {
+                          "oneOf": [
+                            { "type": "integer" },
+                            { "type": "array", "items": { "type": "integer" }, "minItems": 1, "maxItems": 2 }
+                          ]
+                        },
+                        "max_format": {
+                          "oneOf": [
+                            { "type": "integer" },
+                            { "type": "array", "items": { "type": "integer" }, "minItems": 1, "maxItems": 2 }
+                          ]
+                        },
+                        "formats": {
+                          "oneOf": [
+                            { "type": "integer" },
+                            {
+                              "type": "array",
+                              "items": { "type": "integer" },
+                              "minItems": 1
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "min_inclusive": { "type": "integer" },
+                                "max_inclusive": { "type": "integer" }
+                              },
+                              "required": ["mininclusive", "maxinclusive"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["directory"]
+                    }
+                  }
+                }
+              }
+            },
+            "required": ["description"]
+          },
+          "language": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "region": { "type": "string" },
+                "bidirectional": { "type": "boolean" }
+              },
+              "required": ["name", "region"]
+            }
+          }
+        }
+      }
+    },
+    animation_mcmeta: {
+      title: "Animation.mcmeta Schema",
+      description: "Controls texture animation frames and timing.",
+      schema: {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://schemas.example.com/minecraft/1.21.10/animation.mcmeta.json",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "animation": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "frametime": { "type": "integer", "minimum": 1 },
+              "frames": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    { "type": "integer", "minimum": 0 },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "index": { "type": "integer", "minimum": 0 },
+                        "time": { "type": "integer", "minimum": 1 }
+                      },
+                      "required": ["index"]
+                    }
+                  ]
+                }
+              },
+              "interpolate": { "type": "boolean" }
+            }
+          }
+        },
+        "required": ["animation"]
+      }
+    },
+    config: {
+      title: "Config Schema",
+      description: "General schema for mod configs and data-driven tuning.",
+      schema: {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://schemas.example.com/minecraft/1.21.10/config.json",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mimic": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "spawn_weight": { "type": "integer", "minimum": 0 },
+              "maxgroupsize": { "type": "integer", "minimum": 1 },
+              "biome_tags": { "type": "array", "items": { "type": "string" } },
+              "loot_table": { "type": "string" },
+              "ambient_sounds": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "balance": {
+            "type": "object",
+            "properties": {
+              "damage_scale": { "type": "number", "minimum": 0 },
+              "health_scale": { "type": "number", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    fishing: {
+      title: "Fishing Loot Schema",
+      description: "Standard loot table of type minecraft:fishing for fishing loot.",
+      schema: {
+        "$schema": "https://schemas.example.com/minecraft/1.21.10/loot_table.json",
+        "type": "object",
+        "properties": {
+          "type": { "const": "minecraft:fishing" }
+        },
+        "required": ["type"]
+      }
+    },
+    smelting: {
+      title: "Smelting Recipe Schema",
+      description: "Cooking recipes including smelting, blasting, smoking, and campfire types.",
+      schema: {
+        "$schema": "https://schemas.example.com/minecraft/1.21.10/recipe.json",
+        "type": "object",
+        "properties": {
+          "type": { 
+            "enum": [
+              "minecraft:smelting",
+              "minecraft:blasting",
+              "minecraft:smoking",
+              "minecraft:campfire_cooking"
+            ]
+          },
+          "ingredient": { 
+            "$ref": "https://schemas.example.com/minecraft/1.21.10/recipe.json#/$defs/ingredient" 
+          },
+          "result": { 
+            "$ref": "https://schemas.example.com/minecraft/1.21.10/recipe.json#/$defs/result" 
+          },
+          "experience": { "type": "number", "minimum": 0 },
+          "cookingtime": { "type": "integer", "minimum": 0 },
+          "group": { "type": "string" },
+          "show_notification": { "type": "boolean" }
+        },
+        "required": ["type", "ingredient", "result"]
+      }
+    },
+    mining: {
+      title: "Mining Loot Schema",
+      description: "Block drops controlled by block loot tables and conditions.",
+      schema: {
+        "$schema": "https://schemas.example.com/minecraft/1.21.10/loot_table.json",
+        "type": "object",
+        "properties": {
+          "type": { "const": "minecraft:block" }
+        },
+        "required": ["type"]
+      }
+    },
+    nbt: {
+      title: "NBT SNBT Wrapper",
+      description: "Wrapper for SNBT strings used in commands and components.",
+      schema: {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://schemas.example.com/minecraft/1.21.10/nbtsnbtwrapper.json",
+        "type": "object",
+        "properties": {
+          "snbt": {
+            "type": "string",
+            "description": "SNBT payload (e.g., {CustomName:'{\"text\":\"Bob\"}',NoAI:1b})"
+          }
+        },
+        "required": ["snbt"]
+      }
+    }
+  };
+
+  // DOM elements
+  const jsonType = jsonTypeEl;
+  const editorContainer = editorContainerEl;
+  const schemaTitle = schemaTitleEl;
+  const jsonEditor = jsonEditorEl;
+    const validationResults = validationResultsEl;
+  const schemaInfo = schemaInfoEl;
+  const schemaDetails = schemaDetailsEl;
+
+  // Event listeners
+  jsonType.addEventListener('change', function() {
+    const selectedType = this.value;
+    if (selectedType) {
+      const schema = schemas[selectedType];
+      schemaTitle.textContent = schema.title;
+      jsonEditor.value = JSON.stringify(schema.schema, null, 2);
+      editorContainer.style.display = 'block';
+      schemaInfo.style.display = 'block';
+      schemaDetails.innerHTML = `
+        <p><strong>Description:</strong> ${schema.description}</p>
+        <p><strong>Schema ID:</strong> ${schema.schema.$id}</p>
+      `;
+      validationResults.style.display = 'none';
+    } else {
+      editorContainer.style.display = 'none';
+      schemaInfo.style.display = 'none';
+    }
+  });
+
+  validateBtn.addEventListener('click', function() {
+    const selectedType = jsonType.value;
+    if (!selectedType) return;
+    
+    validationResults.style.display = 'block';
+    validationResults.innerHTML = '<div style="color:#4a90e2;">Validating JSON...</div>';
+    
+    try {
+      const userJson = JSON.parse(jsonEditor.value);
+      const schema = schemas[selectedType].schema;
+      
+      // Simple validation logic (in a real implementation, use a JSON schema validator)
+      let isValid = true;
+      let errors = [];
+      
+      // Check required properties (simplified for this example)
+      if (schema.required) {
+        for (let prop of schema.required) {
+          if (!userJson.hasOwnProperty(prop)) {
+            isValid = false;
+            errors.push(`Missing required property: ${prop}`);
+          }
+        }
+      }
+      
+      // Display results
+      if (isValid) {
+        validationResults.innerHTML = `
+          <div style="color:#28a745;">
+            <strong>✓ Valid JSON</strong>
+            <p>Your JSON is valid according to the ${schemas[selectedType].title} schema.</p>
+          </div>
+        `;
+      } else {
+        validationResults.innerHTML = `
+          <div style="color:#dc3545;">
+            <strong>✗ Invalid JSON</strong>
+            <ul>${errors.map(e => `<li>${e}</li>`).join('')}</ul>
+          </div>
+        `;
+      }
+    } catch (e) {
+      validationResults.innerHTML = `
+        <div style="color:#dc3545;">
+          <strong>✗ JSON Parse Error</strong>
+          <p>${e.message}</p>
+        </div>
+      `;
+    }
+  });
+</script>
+</body>
+</html>

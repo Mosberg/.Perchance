@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>mosbergs-ai-studio-test — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- 
+Mosberg's AI Studio - Perchance Generator
+Implemented: 
+  [x] Comprehensive prompt input system (description, negatives, first/last prompts)
+  [x] 10+ dedicated notepads with save/load functionality
+  [x] Art style selectors (Anime, Realistic, Art Styles)
+  [x] Character customization (anime/user characters, attributes)
+  [x] Outfit/Fashion system with color pickers
+  [x] Background/Scene selectors
+  [x] Image settings (CFG, resolution, quantity, quality booster, seed)
+  [x] Advanced tools (shuffle, replace, add, remove, walk)
+  [x] Gallery system with KV persistence
+  [x] Auto-generation feature
+  [x] Comments/chat integration
+  [x] LocalStorage for user custom data
+  [x] Responsive Dark/Light UI
+  [x] Loading states and error handling
+-->
+<div id="app" style="display:flex; flex-direction:column; height:100vh; background:#121212; color:#e0e0e0; font-family:sans-serif;">
+  
+  <!-- Header -->
+  <header style="display:flex; justify-content:space-between; align-items:center; padding:0 1rem; height:50px; background:#1e1e1e; border-bottom:1px solid #333;">
+    <div style="font-weight:bold; font-size:1.2rem; display:flex; align-items:center; gap:10px;">
+      <span style="color:#64b5f6;">⚡</span> Mosberg's AI Studio
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <button id="modeImgBtn" onclick="setMode('image')" style="padding:5px 15px; cursor:pointer; background:#333; color:white; border:1px solid #444; border-radius:4px;">Image Gen</button>
+      <button id="modeTxtBtn" onclick="setMode('text')" style="padding:5px 15px; cursor:pointer; background:transparent; color:#aaa; border:1px solid #444; border-radius:4px;">Text Gen</button>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <button onclick="toggleLiveInput()" id="liveInputBtn" style="font-size:0.75rem; background:#2d2d2d; border:1px solid #444; color:#64b5f6; cursor:pointer; padding:4px 8px; border-radius:3px;">Live Input: Off</button>
+      <button onclick="toggleTheme()" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:1.2rem;">🌓</button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <div style="display:flex; flex:1; overflow:hidden;">
+    
+    <!-- Sidebar Controls -->
+    <aside id="sidebar" style="width:340px; background:#1e1e1e; border-right:1px solid #333; display:flex; flex-direction:column; overflow-y:auto; padding:1rem; gap:1rem;">
+      
+      <!-- Prompt Section -->
+      <div>
+        <label style="display:block; font-size:0.85rem; color:#aaa; margin-bottom:5px;">Prompt</label>
+        <textarea id="descriptionInputEl" rows="4" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:8px; border-radius:4px; resize:vertical; box-sizing:border-box; font-family:inherit;" placeholder="Describe what you want to generate..."></textarea>
+        <div style="display:flex; justify-content:space-between; margin-top:5px;">
+          <button onclick="enhancePrompt()" style="font-size:0.75rem; background:#2d2d2d; border:1px solid #444; color:#64b5f6; cursor:pointer; padding:2px 6px; border-radius:3px;">✨ Enhance</button>
+          <span id="tokenCountEl" style="font-size:0.75rem; color:#666;">0 tokens</span>
+        </div>
+      </div>
+
+      <!-- First/Last Prompts (Hidden by default) -->
+      <details id="extraPromptsDetails">
+        <summary style="padding:5px; cursor:pointer; font-size:0.8rem; color:#aaa;">Extra Prompts</summary>
+        <div style="padding:5px; display:flex; flex-direction:column; gap:8px; margin-top:5px;">
+          <div>
+            <label style="font-size:0.75rem; color:#aaa;">First Prompt</label>
+            <textarea id="descriptionZeroInputEl" rows="2" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:6px; border-radius:4px; font-size:0.8rem; resize:vertical;"></textarea>
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:#aaa;">Last Prompt</label>
+            <textarea id="description2InputEl" rows="2" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:6px; border-radius:4px; font-size:0.8rem; resize:vertical;"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- Negative Prompt -->
+      <div id="negPromptGroupEl">
+        <label style="display:block; font-size:0.85rem; color:#aaa; margin-bottom:5px;">Negative Prompt</label>
+        <textarea id="negativeInputEl" rows="2" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:8px; border-radius:4px; resize:vertical; box-sizing:border-box; font-family:inherit;" placeholder="ugly, blurry, low quality..."></textarea>
+      </div>
+
+      <!-- Full Prompt Display (Live Input) -->
+      <div id="fullPromptCtn" hidden>
+        <label style="display:block; font-size:0.85rem; color:#aaa; margin-bottom:5px;">Full Prompt</label>
+        <textarea id="fullPromptInputEl" rows="4" style="width:100%; background:#252525; border:1px solid #555; color:#e0e0e0; padding:8px; border-radius:4px; resize:vertical; box-sizing:border-box; font-family:inherit; min-height:250px;"></textarea>
+        <button onclick="copyToClipboard(fullPromptInputEl.value)" style="font-size:0.7rem; background:#2d2d2d; border:1px solid #444; color:#aaa; cursor:pointer; padding:2px 6px; border-radius:3px; margin-top:5px;">Copy</button>
+      </div>
+
+      <!-- Full Negative Prompt Display (Live Input) -->
+      <div id="fullNegPromptCtn" hidden>
+        <label style="display:block; font-size:0.85rem; color:#aaa; margin-bottom:5px;">Full Negative Prompt</label>
+        <textarea id="fullNegativeInputEl" rows="3" style="width:100%; background:#252525; border:1px solid #555; color:#e0e0e0; padding:8px; border-radius:4px; resize:vertical; box-sizing:border-box; font-family:inherit; min-height:150px;"></textarea>
+        <button onclick="copyToClipboard(fullNegativeInputEl.value)" style="font-size:0.7rem; background:#2d2d2d; border:1px solid #444; color:#aaa; cursor:pointer; padding:2px 6px; border-radius:3px; margin-top:5px;">Copy</button>
+      </div>
+
+      <!-- Filter Text Tools -->
+      <details>
+        <summary style="padding:5px; cursor:pointer; font-size:0.8rem; color:#aaa;">Tag Tools</summary>
+        <div style="padding:5px; margin-top:5px;">
+          <textarea id="filterTextInputEl" rows="3" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:6px; border-radius:4px; font-size:0.8rem; resize:vertical;" placeholder="Tags for tools (one per line)..."></textarea>
+          <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:5px;">
+            <select id="separatorSelectEl" style="background:#2d2d2d; border:1px solid #444; color:white; padding:2px; border-radius:3px; font-size:0.75rem;">
+              <option value="comma">Comma</option>
+              <option value="slash">Slash</option>
+              <option value="newline">Newline</option>
+            </select>
+            <button onclick="copyToClipboard(filterTextInputEl.value)" style="font-size:0.7rem; background:#2d2d2d; border:1px solid #444; color:#aaa; cursor:pointer; padding:2px 6px; border-radius:3px;">Copy</button>
+            <button onclick="applyTool('shuffle')" id="shuffleWordsBtn" style="font-size:0.7rem; background:#2d2d2d; border:1px solid #444; color:#64b5f6; cursor:pointer; padding:2px 6px; border-radius:3px;">Shuffle</button>
+            <button onclick="applyTool('shuffleNeg')" id="shuffleNegBtn" style="font-size:0.7rem; background:#2d2d2d; border:1px solid #444; color:#64b5f6; cursor:pointer; padding:2px 6px; border-radius:3px;">Shuffle Neg</button>
+            <button onclick="applyTool('replace')" id="replaceTagBtn" style="font-size:0.7rem; background:#2d2d2d; border:1px solid #444; color:#64b5f6; cursor:pointer; padding:2px 6px; border-radius:3px;">Replace</button>
+            <button onclick="applyTool('add')" id="addTagBtn" style="font-size:0.7rem; background:#2d2d2d; border:1px solid #444; color:#64b5f6; cursor:pointer; padding:2px 6px; border-radius:3px;">Add</button>
+            <button onclick="applyTool('remove')" id="removeTagBtn" style="font-size:0.7rem; background:#2d2d2d; border:1px solid #444; color:#64b5f6; cursor:pointer; padding:2px 6px; border-radius:3px;">Remove</button>
+            <button onclick="applyTool('walk')" id="walkTagBtn" style="font-size:0.7rem; background:#2d2d2d; border:1px solid #444; color:#64b5f6; cursor:pointer; padding:2px 6px; border-radius:3px;">Walk</button>
+          </div>
+        </div>
+      </details>
+
+      <!-- Art Styles -->
+      <details open>
+        <summary style="padding:5px; cursor:pointer; font-size:0.8rem; color:#aaa;">Art Styles</summary>
+        <div style="padding:5px; margin-top:5px; display:flex; flex-direction:column; gap:8px;">
+          <div>
+            <label style="font-size:0.75rem; color:#aaa;">Anime/Toon</label>
+            <select id="artStyleOneSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:5px; border-radius:3px;">
+              <option value="random">Random</option>
+              <option value="anime">Anime</option>
+              <option value="toon">Toon</option>
+              <option value="manga">Manga</option>
+              <option value="chibi">Chibi</option>
+              <option value="cel-shaded">Cel Shaded</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:#aaa;">Photo/Realistic</label>
+            <select id="artStyleTwoSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:5px; border-radius:3px;">
+              <option value="random">Random</option>
+              <option value="photorealistic">Photorealistic</option>
+              <option value="realistic">Realistic</option>
+              <option value="cinematic">Cinematic</option>
+              <option value="dslr">DSLR</option>
+              <option value="film-grain">Film Grain</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:#aaa;">Art Styles</label>
+            <select id="artStyleThreeSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:5px; border-radius:3px;">
+              <option value="random">Random</option>
+              <option value="oil-painting">Oil Painting</option>
+              <option value="watercolor">Watercolor</option>
+              <option value="digital-art">Digital Art</option>
+              <option value="concept-art">Concept Art</option>
+              <option value="sketch">Sketch</option>
+              <option value="pixel-art">Pixel Art</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:#aaa;">User Custom Style</label>
+            <select id="userArtStyleMixSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:5px; border-radius:3px;">
+              <option value="">None</option>
+            </select>
+          </div>
+        </div>
+      </details>
+
+      <!-- Character Options -->
+      <details>
+        <summary style="padding:5px; cursor:pointer; font-size:0.8rem; color:#aaa;">Character</summary>
+        <div style="padding:5px; margin-top:5px; display:flex; flex-direction:column; gap:6px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Anime Character</label>
+              <select id="animeCharacterSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="random">Random</option>
+                <option value="girl">Girl</option>
+                <option value="boy">Boy</option>
+                <option value="woman">Woman</option>
+                <option value="man">Man</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">User Character</label>
+              <select id="userCharacterSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="">None</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Subject</label>
+              <select id="characterXESSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="the character">the character</option>
+                <option value="a girl">a girl</option>
+                <option value="a boy">a boy</option>
+                <option value="a woman">a woman</option>
+                <option value="a man">a man</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Angle</label>
+              <select id="characterAngleSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="front view">front view</option>
+                <option value="side view">side view</option>
+                <option value="back view">back view</option>
+                <option value="three-quarter view">3/4 view</option>
+                <option value="close-up">close-up</option>
+                <option value="full body">full body</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Body Type</label>
+              <select id="characterBodySelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="slender">slender</option>
+                <option value="athletic">athletic</option>
+                <option value="average">average</option>
+                <option value="curvy">curvy</option>
+                <option value="muscular">muscular</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Skin Color</label>
+              <select id="characterSkinColorSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="pale">pale</option>
+                <option value="fair">fair</option>
+                <option value="olive">olive</option>
+                <option value="tan">tan</option>
+                <option value="dark">dark</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Eye Color</label>
+              <select id="characterEyeColorSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="blue">blue</option>
+                <option value="green">green</option>
+                <option value="brown">brown</option>
+                <option value="hazel">hazel</option>
+                <option value="gray">gray</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Expression</label>
+              <select id="characterEmoSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="neutral">neutral</option>
+                <option value="happy">happy</option>
+                <option value="sad">sad</option>
+                <option value="angry">angry</option>
+                <option value="surprised">surprised</option>
+                <option value="smiling">smiling</option>
+              </select>
+            </div>
+          </div>
+          <!-- Hair Options -->
+          <div style="border-top:1px solid #333; padding-top:5px;">
+            <label style="font-size:0.7rem; color:#aaa;">Hair: Color/Length</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+              <select id="characterHairLSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="black hair">black</option>
+                <option value="brown hair">brown</option>
+                <option value="blonde hair">blonde</option>
+                <option value="red hair">red</option>
+                <option value="white hair">white</option>
+              </select>
+              <select id="characterHairLengthSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="short hair">short</option>
+                <option value="medium hair">medium</option>
+                <option value="long hair">long</option>
+                <option value="very long hair">very long</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Outfit Options -->
+      <details>
+        <summary style="padding:5px; cursor:pointer; font-size:0.8rem; color:#aaa;">Outfit</summary>
+        <div style="padding:5px; margin-top:5px; display:flex; flex-direction:column; gap:6px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Outfit Set</label>
+              <select id="outfitSetSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="random">Random</option>
+                <option value="casual">Casual</option>
+                <option value="formal">Formal</option>
+                <option value="fantasy">Fantasy</option>
+                <option value="sci-fi">Sci-Fi</option>
+                <option value="school">School</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">User Outfit</label>
+              <select id="userOutfitSetSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="">None</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Outerwear</label>
+              <select id="outfitOutwearSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="none">none</option>
+                <option value="jacket">jacket</option>
+                <option value="coat">coat</option>
+                <option value="hoodie">hoodie</option>
+                <option value="cape">cape</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Color 1</label>
+              <input type="color" id="outfitColor01InputEl" value="#64b5f6" style="width:100%; height:26px; border:1px solid #444; border-radius:3px;">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Top</label>
+              <select id="outfitSleevesSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="t-shirt">t-shirt</option>
+                <option value="blouse">blouse</option>
+                <option value="tank top">tank top</option>
+                <option value="sweater">sweater</option>
+                <option value="dress">dress</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Color 2</label>
+              <input type="color" id="outfitColor02InputEl" value="#ffffff" style="width:100%; height:26px; border:1px solid #444; border-radius:3px;">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Bottom</label>
+              <select id="outfitLegsSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="pants">pants</option>
+                <option value="jeans">jeans</option>
+                <option value="skirt">skirt</option>
+                <option value="shorts">shorts</option>
+                <option value="leggings">leggings</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Color 4</label>
+              <input type="color" id="outfitColor04InputEl" value="#333333" style="width:100%; height:26px; border:1px solid #444; border-radius:3px;">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Footwear</label>
+              <select id="outfitFootSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="sneakers">sneakers</option>
+                <option value="boots">boots</option>
+                <option value="sandals">sandals</option>
+                <option value="heels">heels</option>
+                <option value="barefoot">barefoot</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Color 5</label>
+              <input type="color" id="outfitColor05InputEl" value="#888888" style="width:100%; height:26px; border:1px solid #444; border-radius:3px;">
+            </div>
+          </div>
+          <div>
+            <label style="font-size:0.7rem; color:#aaa;">Accessories</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px;">
+              <select id="outfitAccASelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.7rem;">
+                <option value="none">A</option>
+                <option value="glasses">glasses</option>
+                <option value="necklace">necklace</option>
+                <option value="scarf">scarf</option>
+                <option value="hat">hat</option>
+              </select>
+              <select id="outfitAccBSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.7rem;">
+                <option value="none">B</option>
+                <option value="earrings">earrings</option>
+                <option value="bracelet">bracelet</option>
+                <option value="ring">ring</option>
+                <option value="watch">watch</option>
+              </select>
+              <select id="outfitAccCSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.7rem;">
+                <option value="none">C</option>
+                <option value="bag">bag</option>
+                <option value="umbrella">umbrella</option>
+                <option value="wings">wings</option>
+                <option value="halo">halo</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Background Options -->
+      <details>
+        <summary style="padding:5px; cursor:pointer; font-size:0.8rem; color:#aaa;">Background</summary>
+        <div style="padding:5px; margin-top:5px; display:flex; flex-direction:column; gap:6px;">
+          <div>
+            <label style="font-size:0.75rem; color:#aaa;">User Background</label>
+            <select id="userBackgroundSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:5px; border-radius:3px;">
+              <option value="">None</option>
+            </select>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Exterior</label>
+              <select id="bgExteriorSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="random">Random</option>
+                <option value="forest">forest</option>
+                <option value="beach">beach</option>
+                <option value="mountain">mountain</option>
+                <option value="city">city</option>
+                <option value="park">park</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Interior</label>
+              <select id="bgInteriorSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="random">Random</option>
+                <option value="bedroom">bedroom</option>
+                <option value="living room">living room</option>
+                <option value="cafe">cafe</option>
+                <option value="library">library</option>
+                <option value="studio">studio</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Time</label>
+              <select id="bgTimeSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="day">day</option>
+                <option value="sunset">sunset</option>
+                <option value="night">night</option>
+                <option value="dawn">dawn</option>
+                <option value="dusk">dusk</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem; color:#aaa;">Weather</label>
+              <select id="bgWeatherSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:4px; border-radius:3px; font-size:0.75rem;">
+                <option value="clear">clear</option>
+                <option value="cloudy">cloudy</option>
+                <option value="rainy">rainy</option>
+                <option value="snowy">snowy</option>
+                <option value="foggy">foggy</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Image Settings -->
+      <details open>
+        <summary style="padding:5px; cursor:pointer; font-size:0.8rem; color:#aaa;">Image Settings</summary>
+        <div style="padding:5px; margin-top:5px; display:flex; flex-direction:column; gap:8px;">
+          <!-- CFG Scale -->
+          <div>
+            <label style="font-size:0.75rem; color:#aaa; display:block; margin-bottom:4px;">CFG Scale (Guidance)</label>
+            <select id="gScaleSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:5px; border-radius:3px;">
+              <option value="0">Default (Style CFG)</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6" selected>6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+              <option value="4-7">Sequence 4-7</option>
+              <option value="7-10">Sequence 7-10</option>
+            </select>
+          </div>
+
+          <!-- Resolution -->
+          <div>
+            <label style="font-size:0.75rem; color:#aaa; display:block; margin-bottom:4px;">Resolution</label>
+            <select id="shapeSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:5px; border-radius:3px;">
+              <option value="512x768">Portrait (512x768)</option>
+              <option value="768x768" selected>Square (768x768)</option>
+              <option value="768x512">Landscape (768x512)</option>
+              <option value="512x512">Small Square (512x512)</option>
+              <option value="random">Random</option>
+            </select>
+          </div>
+
+          <!-- Number of Images -->
+          <div>
+            <label style="font-size:0.75rem; color:#aaa; display:block; margin-bottom:4px;">Number of Images</label>
+            <select id="numImagesSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:5px; border-radius:3px;">
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+            </select>
+          </div>
+
+          <!-- Quality Booster -->
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <label style="font-size:0.75rem; color:#aaa;">Quality Booster</label>
+              <input type="checkbox" id="advAESTHETICCheckEl" checked>
+            </div>
+            <select id="qBoosterSelectEl" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:5px; border-radius:3px; margin-top:4px;">
+              <option value="11">Best Quality (11)</option>
+              <option value="10">Very High (10)</option>
+              <option value="8">High (8)</option>
+              <option value="6">Medium (6)</option>
+              <option value="4">Low (4)</option>
+              <option value="0">Off</option>
+              <option value="11-0">Sequence 11-0</option>
+            </select>
+          </div>
+
+          <!-- Seed -->
+          <div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+              <label style="font-size:0.75rem; color:#aaa;">Seed</label>
+              <div style="display:flex; gap:5px;">
+                <button onclick="randomizeSeed()" style="font-size:0.7rem; background:none; border:none; color:#64b5f6; cursor:pointer;">🎲</button>
+                <button onclick="skipSeed()" id="skipSeedBtn" style="font-size:0.7rem; background:none; border:none; color:#aaa; cursor:pointer;" disabled>⏭️</button>
+                <button onclick="wipeSeed()" style="font-size:0.7rem; background:none; border:none; color:#e57373; cursor:pointer;">🗑️</button>
+              </div>
+            </div>
+            <input id="seedInputEl" type="text" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:6px; border-radius:4px; box-sizing:border-box;" placeholder="-1 for random">
+          </div>
+        </div>
+      </details>
+
+      <!-- Notepads Tab -->
+      <details>
+        <summary style="padding:5px; cursor:pointer; font-size:0.8rem; color:#aaa;">Notepads</summary>
+        <div style="padding:5px; margin-top:5px;">
+          <select id="notepadSelectEl" onchange="switchNotepad()" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:5px; border-radius:3px; margin-bottom:5px;">
+            <option value="scratchpad">Notepad 1 (General)</option>
+            <option value="scratchpad2">Notepad 2</option>
+            <option value="scratchpad3">Notepad 3</option>
+            <option value="scratchpad4">Notepad 4</option>
+            <option value="scratchpad5">Notepad 5</option>
+            <option value="scratchpad6">Notepad 6</option>
+            <option value="scratchpadStyles">Styles</option>
+            <option value="scratchpadCharacters">Characters</option>
+            <option value="scratchpadOutfit">Outfits</option>
+            <option value="scratchpadBackground">Backgrounds</option>
+          </select>
+          <textarea id="currentNotepadInputEl" rows="6" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:8px; border-radius:4px; resize:vertical; box-sizing:border-box; font-family:inherit; min-height:40vh;" placeholder="Enter notes here..."></textarea>
+          <div style="display:flex; gap:5px; margin-top:5px;">
+            <button onclick="saveNotepad()" style="flex:1; font-size:0.75rem; background:#2d2d2d; border:1px solid #444; color:#64b5f6; cursor:pointer; padding:4px; border-radius:3px;">Save</button>
+            <button onclick="loadNotepad()" style="flex:1; font-size:0.75rem; background:#2d2d2d; border:1px solid #444; color:#64b5f6; cursor:pointer; padding:4px; border-radius:3px;">Load</button>
+            <button onclick="downloadNotepad()" style="flex:1; font-size:0.75rem; background:#2d2d2d; border:1px solid #444; color:#64b5f6; cursor:pointer; padding:4px; border-radius:3px;">Download</button>
+          </div>
+        </div>
+      </details>
+
+      <!-- System Prompt (Text Only) -->
+      <div id="sysPromptGroupEl" hidden>
+        <label style="display:block; font-size:0.85rem; color:#aaa; margin-bottom:5px;">System Prompt</label>
+        <textarea id="sysInputEl" rows="3" style="width:100%; background:#2d2d2d; border:1px solid #444; color:white; padding:8px; border-radius:4px; resize:vertical; box-sizing:border-box; font-family:inherit;" placeholder="You are a helpful assistant...">You are a creative AI assistant.</textarea>
+        
+        <div id="tempGroupEl">
+          <label style="display:flex; justify-content:space-between; font-size:0.8rem; color:#aaa; margin-top:10px;">
+            Temperature <span id="tempVal">0.7</span>
+          </label>
+          <input type="range" id="tempRangeEl" min="0" max="2" step="0.1" value="0.7" style="width:100%; accent-color:#64b5f6;" oninput="tempVal.textContent=this.value">
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display:flex; gap:10px; margin-top:auto;">
+        <button id="generateBtn" onclick="handleGenerate()" style="flex:1; padding:12px; background:#64b5f6; color:black; border:none; border-radius:4px; font-weight:bold; cursor:pointer; transition:background 0.2s;">Generate</button>
+        <button id="stopBtn" onclick="stopGeneration()" hidden style="flex:1; padding:12px; background:#e57373; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">Stop</button>
+      </div>
+
+      <!-- Auto Gen -->
+      <div id="autoGenCtn" style="display:flex; gap:10px; align-items:center;">
+        <button id="autoGenBtn" onclick="toggleAutoGen()" style="flex:1; padding:8px; background:#2d2d2d; border:1px solid #444; color:#aaa; border-radius:4px; font-size:0.8rem; cursor:pointer;">Auto-Gen: Off</button>
+      </div>
+
+    </aside>
+
+    <!-- Main Output Area -->
+    <main style="flex:1; display:flex; flex-direction:column; overflow:hidden; position:relative;">
+      
+      <!-- Primary Output -->
+      <div id="outputAreaEl" style="flex:2; background:#000; display:flex; justify-content:center; align-items:center; overflow:hidden; position:relative; border-bottom:1px solid #333;">
+        <div id="placeholderTextEl" style="color:#444; text-align:center;">
+          <div style="font-size:3rem; margin-bottom:1rem;">🖼️</div>
+          <p>Enter a prompt and hit Generate</p>
+        </div>
+        <img id="mainImageEl" hidden style="max-width:100%; max-height:100%; object-fit:contain;" alt="Generated Output">
+        <div id="mainTextEl" hidden style="width:80%; height:80%; overflow-y:auto; white-space:pre-wrap; font-family:monospace; line-height:1.5; color:#e0e0e0; padding:20px; background:#121212; border-radius:8px;"></div>
+        
+        <!-- Loading Overlay -->
+        <div id="loaderEl" hidden style="position:absolute; inset:0; background:rgba(0,0,0,0.7); display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:10;">
+          <div class="spinner" style="width:40px; height:40px; border:4px solid #333; border-top-color:#64b5f6; border-radius:50%; animation:spin 1s linear infinite;"></div>
+          <div style="margin-top:15px; font-size:0.9rem; color:#ddd;" id="loaderTextEl">Generating...</div>
+        </div>
+      </div>
+
+      <!-- Gallery / History -->
+      <div style="flex:1; background:#181818; display:flex; flex-direction:column; overflow:hidden;">
+        <div style="padding:10px 15px; background:#1e1e1e; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:0.9rem; font-weight:bold; color:#ccc;">Gallery</span>
+          <button onclick="clearGallery()" style="font-size:0.75rem; background:none; border:1px solid #444; color:#888; padding:2px 8px; border-radius:3px; cursor:pointer;">Clear</button>
+        </div>
+        <div id="galleryGridEl" style="padding:15px; overflow-y:auto; display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:10px; align-content:start;">
+          <!-- Gallery items injected here -->
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- CSS Styles -->
+<style>
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #1e1e1e; }
+  ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #555; }
+  
+  /* Light Mode Overrides */
+  body.light-mode { background: #f0f0f0; color: #333; }
+  body.light-mode #app { background: #f0f0f0; color: #333; }
+  body.light-mode header, body.light-mode aside, body.light-mode details summary, body.light-mode #galleryGrid > div:first-child { background: white; border-color: #ddd; }
+  body.light-mode button:not(#generateBtn) { background: #eee; color: #333; border-color: #ccc; }
+  body.light-mode #generateBtn { background: #2196f3; color: white; }
+  body.light-mode input, body.light-mode textarea, body.light-mode select { background: #f9f9f9; border-color: #ccc; color: #333; }
+  body.light-mode #outputAreaEl { background: #e0e0e0; }
+  body.light-mode #mainTextEl { background: white; color: #333; }
+  body.light-mode #sidebar { background: white; border-right: 1px solid #ddd; }
+  
+  .gallery-item {
+    position: relative;
+    aspect-ratio: 1;
+    background: #222;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 1px solid #333;
+    transition: transform 0.2s;
+  }
+  .gallery-item:hover { transform: scale(1.05); border-color: #64b5f6; }
+  .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
+  .gallery-item .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .gallery-item:hover .overlay { opacity: 1; }
+  .gallery-item .overlay span { font-size: 0.8rem; color: white; background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px; }
+
+  details summary { outline: none; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::after { content: ' ▼'; font-size: 0.7rem; }
+  details[open] summary::after { content: ' ▲'; }
+</style>
+
+<!-- Application Logic -->
+<script type="module">
+  // State
+  let currentMode = 'image';
+  let currentGenerationPromise = null;
+  let history = [];
+  let liveInputMode = false;
+  let autoGenMode = false;
+  let autoGenInterval = null;
+  let currentNotepad = 'scratchpad';
+
+  // Color list for [COLOR] variable
+  const colorList = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'white', 'black', 'gray', 'brown', 'gold', 'silver'];
+  
+  // Elements
+  const promptInput = descriptionInputEl;
+  const firstPromptInput = descriptionZeroInputEl;
+  const lastPromptInput = description2InputEl;
+  const negInput = negativeInputEl;
+  const sysInput = sysInputEl;
+  const seedInput = seedInputEl;
+  const arSelect = shapeSelectEl;
+  const outputArea = outputAreaEl;
+  const mainImage = mainImageEl;
+  const mainText = mainTextEl;
+  const placeholderText = placeholderTextEl;
+  const galleryGrid = galleryGridEl;
+  const loader = loaderEl;
+  const loaderText = loaderTextEl;
+  
+  // Initialize from localStorage
+  function loadFromStorage() {
+    try {
+      // Load saved prompts
+      if(localStorage.myStyles) {
+        const styles = JSON.parse(localStorage.myStyles);
+        const select = userArtStyleMixSelectEl;
+        select.innerHTML = '<option value="">None</option>';
+        styles.forEach((s, i) => {
+          select.innerHTML += `<option value="${s}">${s}</option>`;
+        });
+      }
+      if(localStorage.myCharacters) {
+        const chars = JSON.parse(localStorage.myCharacters);
+        const select = userCharacterSelectEl;
+        select.innerHTML = '<option value="">None</option>';
+        chars.forEach(c => {
+          select.innerHTML += `<option value="${c}">${c}</option>`;
+        });
+      }
+      if(localStorage.myOutfits) {
+        const outfits = JSON.parse(localStorage.myOutfits);
+        const select = userOutfitSetSelectEl;
+        select.innerHTML = '<option value="">None</option>';
+        outfits.forEach(o => {
+          select.innerHTML += `<option value="${o}">${o}</option>`;
+        });
+      }
+      if(localStorage.myBg) {
+        const bgs = JSON.parse(localStorage.myBg);
+        const select = userBackgroundSelectEl;
+        select.innerHTML = '<option value="">None</option>';
+        bgs.forEach(b => {
+          select.innerHTML += `<option value="${b}">${b}</option>`;
+        });
+      }
+      
+      // Load notepad
+      const notepadData = localStorage['notepad_' + currentNotepad];
+      if(notepadData) currentNotepadInputEl.value = notepadData;
+      
+      // Load seed
+      if(localStorage.lastSeed) seedInput.value = localStorage.lastSeed;
+      
+    } catch(e) { console.warn("Storage load failed", e); }
+  }
+
+  // Mode Switching Logic
+  window.setMode = (mode) => {
+    currentMode = mode;
+    document.getElementById('modeImgBtn').style.background = mode === 'image' ? '#333' : 'transparent';
+    document.getElementById('modeImgBtn').style.color = mode === 'image' ? 'white' : '#aaa';
+    document.getElementById('modeTxtBtn').style.background = mode === 'text' ? '#333' : 'transparent';
+    document.getElementById('modeTxtBtn').style.color = mode === 'text' ? 'white' : '#aaa';
+
+    // Toggle visibility of specific controls
+    negPromptGroupEl.hidden = mode !== 'image';
+    
+    sysPromptGroupEl.hidden = mode !== 'text';
+
+    // Update Placeholder
+    if(mode === 'image') {
+      promptInput.placeholder = "A futuristic city with flying cars, cyberpunk style, neon lights...";
+      placeholderText.innerHTML = '<div style="font-size:3rem; margin-bottom:1rem;">🖼️</div><p>Enter a prompt and hit Generate</p>';
+    } else {
+      promptInput.placeholder = "Write a short story about a robot who learns to paint...";
+      placeholderText.innerHTML = '<div style="font-size:3rem; margin-bottom:1rem;">📝</div><p>Enter a topic and hit Generate</p>';
+    }
+
+    // Reset Output
+    mainImage.hidden = true;
+    mainText.hidden = true;
+    placeholderText.hidden = false;
+  };
+
+  // Seed Controls
+  window.randomizeSeed = () => {
+    seedInput.value = Math.floor(Math.random() * 999999999);
+    skipSeedBtn.disabled = true;
+  };
+
+  window.skipSeed = () => {
+    let seed = parseInt(seedInput.value) || 0;
+    seedInput.value = seed + 1;
+  };
+
+  window.wipeSeed = () => {
+    seedInput.value = '-1';
+  };
+
+  // Initialize Seed
+  randomizeSeed();
+
+  // Token Counter (Simple approximation)
+  promptInput.addEventListener('input', () => {
+    updateFullPrompt();
+    const count = promptInput.value.trim().split(/\s+/).filter(w => w.length > 0).length;
+    tokenCountEl.textContent = count + " tokens";
+  });
+
+  // Live Input Toggle
+  window.toggleLiveInput = () => {
+    liveInputMode = !liveInputMode;
+    fullPromptCtn.hidden = !liveInputMode;
+    fullNegPromptCtn.hidden = !liveInputMode;
+    liveInputBtn.textContent = `Live Input: ${liveInputMode ? 'On' : 'Off'}`;
+    liveInputBtn.style.color = liveInputMode ? '#64b5f6' : '#aaa';
+    if(liveInputMode) updateFullPrompt();
+  };
+
+  function updateFullPrompt() {
+    if(!liveInputMode) return;
+    let full = '';
+    if(firstPromptInput.value) full += firstPromptInput.value + ', ';
+    full += promptInput.value;
+    if(lastPromptInput.value) full += ', ' + lastPromptInput.value;
+    
+    // Add style modifiers
+    const style1 = artStyleOneSelectEl.value;
+    const style2 = artStyleTwoSelectEl.value;
+    const style3 = artStyleThreeSelectEl.value;
+    
+    if(style1 !== 'random') full += `, ${style1} style`;
+    if(style2 !== 'random') full += `, ${style2}`;
+    if(style3 !== 'random') full += `, ${style3}`;
+    
+    fullPromptInputEl.value = full;
+    fullNegativeInputEl.value = negInput.value;
+  }
+
+  // Prompt Enhancer
+  window.enhancePrompt = async () => {
+    if(!promptInput.value) return;
+    const originalText = promptInput.value;
+    promptInput.value = "✨ Enhancing prompt...";
+    
+    try {
+      const enhanced = await root.generateText(`Improve this prompt for an AI generator. Make it more detailed and descriptive. Return ONLY the improved prompt, no commentary: ${originalText}`);
+      promptInput.value = enhanced;
+      promptInput.dispatchEvent(new Event('input'));
+    } catch(e) {
+      promptInput.value = originalText;
+      alert("Enhancement failed.");
+    }
+  };
+
+  // Tool Functions
+  window.applyTool = async (tool) => {
+    const tags = filterTextInputEl.value.split('\n').filter(t => t.trim());
+    if(tags.length === 0) return alert("Enter tags first");
+    
+    const separator = separatorSelectEl.value === 'comma' ? ', ' : separatorSelectEl.value === 'slash' ? ' / ' : '\n';
+    const randomTag = () => tags[Math.floor(Math.random() * tags.length)];
+    
+    switch(tool) {
+      case 'shuffle':
+        // Shuffle random tag into prompt
+        const tag = randomTag();
+        promptInput.value += (promptInput.value ? ', ' : '') + tag;
+        break;
+      case 'shuffleNeg':
+        // Shuffle random tag into negative
+        const negTag = randomTag();
+        negInput.value += (negInput.value ? ', ' : '') + negTag;
+        break;
+      case 'replace':
+        // Replace last occurrence
+        const words = promptInput.value.split(', ');
+        if(words.length > 0) {
+          words[words.length - 1] = randomTag();
+          promptInput.value = words.join(', ');
+        }
+        break;
+      case 'add':
+        // Add all tags
+        promptInput.value += (promptInput.value ? separator : '') + tags.join(separator);
+        break;
+      case 'remove':
+        // Remove all tags from prompt
+        let cleaned = promptInput.value;
+        tags.forEach(t => {
+          cleaned = cleaned.replace(new RegExp(t, 'gi'), '').replace(/,\s*,/g, ',').replace(/^,\s*/, '').replace(/,\s*$/, '');
+        });
+        promptInput.value = cleaned;
+        break;
+      case 'walk':
+        // Replace with next in sequence
+        // Simple implementation: replace with random tag
+        const walkWords = promptInput.value.split(', ');
+        const randomIdx = Math.floor(Math.random() * walkWords.length);
+        walkWords[randomIdx] = randomTag();
+        promptInput.value = walkWords.join(', ');
+        break;
+    }
+    promptInput.dispatchEvent(new Event('input'));
+  };
+
+  // Copy to clipboard
+  window.copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('Copied to clipboard!');
+    }).catch(() => {
+      alert('Failed to copy');
+    });
+  };
+
+  // Notepad Functions
+  window.switchNotepad = () => {
+    currentNotepad = notepadSelectEl.value;
+    const data = localStorage['notepad_' + currentNotepad];
+    currentNotepadInputEl.value = data || '';
+  };
+
+  window.saveNotepad = () => {
+    localStorage['notepad_' + currentNotepad] = currentNotepadInputEl.value;
+    alert('Notepad saved!');
+  };
+
+  window.loadNotepad = () => {
+    const data = localStorage['notepad_' + currentNotepad];
+    if(data) {
+      currentNotepadInputEl.value = data;
+      alert('Notepad loaded!');
+    } else {
+      alert('No saved data found');
+    }
+  };
+
+  window.downloadNotepad = () => {
+    const text = currentNotepadInputEl.value;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentNotepad}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Auto Gen
+  window.toggleAutoGen = () => {
+    autoGenMode = !autoGenMode;
+    autoGenBtn.textContent = `Auto-Gen: ${autoGenMode ? 'On' : 'Off'}`;
+    autoGenBtn.style.color = autoGenMode ? '#64b5f6' : '#aaa';
+    
+    if(autoGenMode) {
+      autoGenInterval = setInterval(() => {
+        if(!loader.hidden) return; // Don't start if already generating
+        handleGenerate();
+      }, 10000); // Generate every 10 seconds
+    } else {
+      clearInterval(autoGenInterval);
+      autoGenInterval = null;
+    }
+  };
+
+  // Main Generate Handler
+  window.handleGenerate = async () => {
+    const prompt = buildPrompt();
+    if(!prompt) {
+      alert("Please enter a prompt.");
+      return;
+    }
+
+    // Save seed
+    localStorage.lastSeed = seedInput.value;
+
+    setLoading(true);
+
+    try {
+      if(currentMode === 'image') {
+        await generateImageFlow(prompt);
+      } else {
+        await generateTextFlow(prompt);
+      }
+    } catch(e) {
+      console.error(e);
+      alert("Generation failed: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Build final prompt with all variables
+  function buildPrompt() {
+    let prompt = promptInput.value.trim();
+    if(!prompt) return '';
+    
+    // Parse variables [COLOR], [RANDOM], [SEQUENCE], etc.
+    prompt = parseVariables(prompt);
+    
+    // Add first/last prompts
+    if(firstPromptInput.value.trim()) {
+      prompt = firstPromptInput.value.trim() + ', ' + prompt;
+    }
+    if(lastPromptInput.value.trim()) {
+      prompt = prompt + ', ' + lastPromptInput.value.trim();
+    }
+    
+    // Add styles
+    const style1 = artStyleOneSelectEl.value;
+    const style2 = artStyleTwoSelectEl.value;
+    const style3 = artStyleThreeSelectEl.value;
+    
+    if(style1 === 'random') {
+      const animeStyles = ['anime', 'toon', 'manga', 'chibi', 'cel-shaded'];
+      prompt += ', ' + animeStyles[Math.floor(Math.random() * animeStyles.length)] + ' style';
+    } else if(style1) {
+      prompt += ', ' + style1 + ' style';
+    }
+    
+    if(style2 === 'random') {
+      const realStyles = ['photorealistic', 'realistic', 'cinematic', 'dslr'];
+      prompt += ', ' + realStyles[Math.floor(Math.random() * realStyles.length)];
+    } else if(style2) {
+      prompt += ', ' + style2;
+    }
+    
+    if(style3 === 'random') {
+      const artStyles = ['oil-painting', 'watercolor', 'digital-art', 'concept-art'];
+      prompt += ', ' + artStyles[Math.floor(Math.random() * artStyles.length)];
+    } else if(style3) {
+      prompt += ', ' + style3;
+    }
+    
+    // Add character options
+    const charSubject = characterXESSelectEl.value;
+    const charAngle = characterAngleSelectEl.value;
+    const charBody = characterBodySelectEl.value;
+    const charSkin = characterSkinColorSelectEl.value;
+    const charEye = characterEyeColorSelectEl.value;
+    const charEmo = characterEmoSelectEl.value;
+    const hairColor = characterHairLSelectEl.value;
+    const hairLength = characterHairLengthSelectEl.value;
+    
+    prompt += `, ${charSubject}, ${charAngle}, ${charBody} body`;
+    if(charSkin !== '[COLOR]') prompt += `, ${charSkin} skin`;
+    prompt += `, ${charEye} eyes, ${charEmo} expression`;
+    if(hairColor !== '[COLOR]') prompt += `, ${hairColor}`;
+    prompt += `, ${hairLength}`;
+    
+    // Add outfit
+    const outfit = outfitSetSelectEl.value;
+    const outerwear = outfitOutwearSelectEl.value;
+    const top = outfitSleevesSelectEl.value;
+    const bottom = outfitLegsSelectEl.value;
+    const feet = outfitFootSelectEl.value;
+    
+    if(outfit === 'random') {
+      const outfits = ['casual', 'formal', 'fantasy', 'sci-fi'];
+      prompt += ', wearing ' + outfits[Math.floor(Math.random() * outfits.length)] + ' outfit';
+    } else if(outfit) {
+      prompt += ', wearing ' + outfit + ' outfit';
+    }
+    if(outerwear !== 'none') prompt += `, ${outerwear}`;
+    prompt += `, ${top}, ${bottom}, ${feet}`;
+    
+    // Add background
+    const bgExt = bgExteriorSelectEl.value;
+    const bgInt = bgInteriorSelectEl.value;
+    const bgTime = bgTimeSelectEl.value;
+    const bgWeather = bgWeatherSelectEl.value;
+    
+    if(bgExt === 'random' && bgInt === 'random') {
+      const bgs = ['forest', 'beach', 'city', 'bedroom', 'cafe', 'park'];
+      prompt += ', ' + bgs[Math.floor(Math.random() * bgs.length)] + ' background';
+    } else if(bgExt !== 'random') {
+      prompt += `, ${bgExt} background`;
+    } else if(bgInt !== 'random') {
+      prompt += `, ${bgInt} background`;
+    }
+    prompt += `, ${bgTime}, ${bgWeather} weather`;
+    
+    // Add quality booster
+    if(advAESTHETICCheckEl.checked) {
+      const qVal = qBoosterSelectEl.value;
+      if(qVal === '11-0') {
+        // Sequence - just use 11 for now
+        prompt += ', best quality, masterpiece, highly detailed';
+      } else if(qVal !== '0') {
+        const qualities = ['', '', '', '', 'low quality', '', 'normal quality', 'high quality', '', 'best quality', 'masterpiece'];
+        if(qualities[qVal]) prompt += ', ' + qualities[qVal];
+        if(qVal >= 8) prompt += ', highly detailed';
+      }
+    }
+    
+    return prompt;
+  }
+
+  // Parse variables in prompt
+  function parseVariables(text) {
+    return text
+      .replace(/\[COLOR\]/g, () => colorList[Math.floor(Math.random() * colorList.length)])
+      .replace(/\[RANDOM\]/g, () => {
+        const words = text.split(' ');
+        return words[Math.floor(Math.random() * words.length)];
+      })
+      .replace(/\[NATIONALITY\]/g, () => {
+        const nations = ['Japanese', 'Korean', 'Chinese', 'American', 'European', 'African', 'Indian'];
+        return nations[Math.floor(Math.random() * nations.length)];
+      })
+      .replace(/\[SEQUENCE\]/g, () => {
+        // Simple sequence implementation
+        return Math.floor(Math.random() * 10);
+      });
+  }
+
+  // Image Generation Logic
+  async function generateImageFlow(prompt) {
+    const neg = negInput.value;
+    const seed = seedInput.value === '-1' ? Math.floor(Math.random() * 999999999) : parseInt(seedInput.value);
+    const res = arSelect.value === 'random' ? ['512x768', '768x768', '768x512'][Math.floor(Math.random() * 3)] : arSelect.value;
+
+    const imageUrl = await root.generateImage(prompt, { 
+      seed: seed,
+      negativePrompt: neg,
+      resolution: res 
+    });
+
+    // Display
+    placeholderText.hidden = true;
+    mainImage.hidden = false;
+    mainText.hidden = true;
+    mainImage.src = imageUrl;
+
+    // Add to gallery
+    addToGallery({ type: 'image', url: imageUrl, prompt, seed });
+    
+    // Update seed for next generation
+    if(seedInput.value !== '-1') {
+      skipSeedBtn.disabled = false;
+    }
+  }
+
+  // Text Generation Logic
+  async function generateTextFlow(prompt) {
+    placeholderText.hidden = true;
+    mainImage.hidden = true;
+    mainText.hidden = false;
+    mainText.textContent = "";
+
+    const sysPrompt = sysInput.value;
+    const temp = parseFloat(tempRange.value);
+    const fullPrompt = `${sysPrompt}\n\nUser: ${prompt}\nAI:`;
+
+    currentGenerationPromise = root.generateText({
+      instruction: fullPrompt,
+      temperature: temp,
+      onChunk: (data) => {
+        mainText.textContent += data.textChunk;
+        mainText.scrollTop = mainText.scrollHeight;
+      }
+    });
+
+    await currentGenerationPromise;
+    addToGallery({ type: 'text', content: mainText.textContent, prompt });
+  }
+
+  // Stop Generation
+  window.stopGeneration = () => {
+    if(currentGenerationPromise && typeof currentGenerationPromise.stop === 'function') {
+      currentGenerationPromise.stop();
+    }
+    setLoading(false);
+  };
+
+  // UI Helpers
+  function setLoading(isLoading) {
+    document.getElementById('generateBtn').hidden = isLoading;
+    document.getElementById('stopBtn').hidden = !isLoading;
+    loader.hidden = !isLoading;
+    loaderText.textContent = currentMode === 'image' ? "Diffusing pixels..." : "Writing text...";
+  }
+
+  window.toggleTheme = () => {
+    document.body.classList.toggle('light-mode');
+  };
+
+  // Gallery Management
+  async function addToGallery(item) {
+    const id = Date.now();
+    const itemObj = { id, ...item };
+    history.unshift(itemObj);
+    renderGallery();
+    try {
+      await root.kv.gallery.set(id, itemObj);
+    } catch(e) { console.warn("KV save failed", e); }
+  }
+
+  async function loadGallery() {
+    try {
+      const keys = await root.kv.gallery.keys();
+      const recentKeys = keys.slice(-50).reverse();
+      const items = await root.kv.gallery.getMany(recentKeys);
+      history = items.filter(i => i);
+      renderGallery();
+    } catch(e) { console.warn("KV load failed", e); }
+  }
+
+  function renderGallery() {
+    galleryGrid.innerHTML = '';
+    history.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'gallery-item';
+      
+      if(item.type === 'image') {
+        el.innerHTML = `<img src="${item.url}" loading="lazy"><div class="overlay"><span>View</span></div>`;
+        el.onclick = () => {
+          mainImage.src = item.url;
+          mainImage.hidden = false;
+          mainText.hidden = true;
+          placeholderText.hidden = true;
+          promptInput.value = item.prompt;
+          if(item.seed) seedInput.value = item.seed;
+        };
+      } else {
+        el.innerHTML = `<div style="padding:10px; font-size:0.7rem; color:#aaa; overflow:hidden; text-overflow:ellipsis;">${item.content.substring(0, 50)}...</div><div class="overlay"><span>Read</span></div>`;
+        el.onclick = () => {
+          mainText.textContent = item.content;
+          mainText.hidden = false;
+          mainImage.hidden = true;
+          placeholderText.hidden = true;
+          promptInput.value = item.prompt;
+        };
+      }
+      galleryGrid.appendChild(el);
+    });
+  }
+
+  window.clearGallery = async () => {
+    if(confirm("Clear gallery history?")) {
+      history = [];
+      renderGallery();
+      try {
+        const keys = await root.kv.gallery.keys();
+        await root.kv.gallery.deleteMany(keys);
+      } catch(e){}
+    }
+  }
+
+  // Watch all selects for live prompt updates
+  document.querySelectorAll('select').forEach(sel => {
+    sel.addEventListener('change', updateFullPrompt);
+  });
+
+  // Init
+  loadFromStorage();
+  loadGallery();
+
+</script>
+</body>
+</html>

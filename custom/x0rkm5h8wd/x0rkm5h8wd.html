@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>x0rkm5h8wd — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Completed:
+  [x] Advanced Featurezed text/image generation with settings, history, prompt library, editor
+  [x] Modular pseudo-Glassmorphic UI with particle background
+  [x] Random prompt generation ("Improvise")
+  [x] JSON/CSV data export & import for dependency registry and generator lists
+  [x] History with re-run, fork, assemble, download, markdown export
+  [x] Prompt library with custom user-saved templates backed by kv global
+  [x] Advanced config modal (temperature, style weight, system prompt, resolution, etc.)
+  [x] Plugin callbacks for external tooling
+  [x] Global shortcuts (Ctrl+Enter to generate)
+  [x] Vibe sounds: button clicks, toast notifications
+  [x] Toast notification system
+  [x] Real-time "Copy to clipboard" for assembled prompts / results
+Possible Next Steps:
+  [ ] Hook in real external AIs beyond the built-in `generateText` and `generateImage` globals
+  [ ] Add prompt autocomplete via some API or local model
+  [ ] Add image generation negative prompt presets dropdown
+  [ ] Add speech-to-text for prompt description boxes
+  [ ] Add multi-style blending / weighted prompt mixing
+-->
+
+<style>
+html, body { margin:0; padding:0; height:100%; overflow-x:hidden; }
+body { font-family:system-ui,sans-serif; text-align:left; background:#0f1220; color:#e4e6f0; }
+#appCtn { max-width:1200px; margin:auto; padding:24px; position:relative; z-index:2; }
+#bgCanvas { position:fixed; inset:0; z-index:0; pointer-events:none; }
+
+.panel { background:rgba(24,28,48,.85); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.07); border-radius:14px; padding:18px; }
+h1,h2,h3 { margin-top:0; color:#dbe0ff; }
+pre { scrollbar-width:thin; scrollbar-color:#444 #111; }
+pre::-webkit-scrollbar { width:8px; height:8px; }
+pre::-webkit-scrollbar-thumb { background:#444; border-radius:4px; }
+
+.row { display:flex; gap:18px; flex-wrap:wrap; }
+.col { flex:1; min-width:340px; }
+label { display:block; font-weight:600; margin-bottom:4px; color:#aab2d9; }
+select, textarea, input[type="text"], input[type="number"], input[type="range"] { width:100%; background:#12152a; color:#e4e6f0; border:1px solid #2a3058; border-radius:8px; padding:8px; font-family:inherit; box-sizing:border-box; }
+select:focus, textarea:focus, input:focus { outline:none; border-color:#6b7fff; }
+
+textarea { resize:vertical; min-height:48px; }
+
+.btn { display:inline-flex; align-items:center; gap:6px; border:0; border-radius:8px; padding:8px 12px; font-size:13px; cursor:pointer; color:#fff; background:linear-gradient(135deg,#4f56d8,#7b61ff); transition:filter .15s, transform .08s; }
+.btn:hover { filter:brightness(1.15); }
+.btn:active { transform:translateY(1px); }
+.btn.subtle { background:#2a3058; color:#c8cff0; }
+.btn.danger { background:linear-gradient(135deg,#b83b5e,#e84a5f); }
+.btn.warning { background:linear-gradient(135deg,#e8a243,#e06c5f); }
+input[type="range"] { accent-color:#7b61ff; }
+
+.pill { display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,.06); padding:4px 10px; border-radius:999px; font-size:12px; margin:2px; }
+.tag-close { cursor:pointer; opacity:.7; }
+.tag-close:hover { opacity:1; }
+
+#configViewerCtn .pre { background:#0d0f1a; color:#c6d0f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; max-height:300px; border:1px solid #1b2040; }
+
+#textResultEl, #imgResultEl { margin-top:10px; }
+#imgResultEl img { max-width:100%; border:1px solid #2a3058; border-radius:8px; display:block; }
+
+#historyListEl { max-height:280px; overflow:auto; }
+.hist-item { display:flex; flex-direction:column; gap:6px; background:#0d1117; border:1px solid #1f2644; border-radius:10px; padding:10px; margin-bottom:8px; }
+.hist-header { display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#9aa3c7; }
+.hist-body { font-size:13px; color:#dce1f7; white-space:pre-wrap; }
+.hist-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.hist-actions .btn { font-size:12px; padding:6px 8px; }
+
+#toastCtn { position:fixed; top:16px; right:16px; z-index:99; display:flex; flex-direction:column; gap:8px; }
+.toast { background:rgba(18,20,40,.95); border:1px solid #2a3058; color:#dce1f7; padding:10px 14px; border-radius:10px; backdrop-filter:blur(8px); box-shadow:0 8px 24px rgba(0,0,0,.35); font-size:13px; pointer-events:auto; }
+.toast.good { border-color:#3fb87f; }
+.toast.bad { border-color:#e84a5f; }
+
+#configModalEl { position:fixed; inset:0; display:none; z-index:50; align-items:center; justify-content:center; background:rgba(0,0,0,.6); backdrop-filter:blur(3px); }
+#configModalEl.active { display:flex; }
+#configModalEl .modal-body { background:#111328; border:1px solid #252a55; border-radius:14px; width:min(900px,92vw); max-height:90vh; overflow:auto; padding:18px; }
+.modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.modal-head h2 { margin:0; }
+.modal-head .closeBtn { font-size:20px; line-height:1; cursor:pointer; padding:6px; color:#aab2d9; }
+
+.flex { display:flex; align-items:center; gap:8px; }
+.wrap { flex-wrap:wrap; }
+
+.hint { font-size:11px; color:#7a82a8; }
+
+#libraryItemsEl { max-height:260px; overflow:auto; }
+.lib-item { display:flex; gap:8px; align-items:center; background:#0d1117; border:1px solid #1f2644; border-radius:10px; padding:8px; margin-bottom:6px; }
+.lib-item .name { flex:1; font-size:13px; }
+.lib-item .meta { font-size:11px; color:#8a93c7; }
+</style>
+
+<canvas id="bgCanvas"></canvas>
+
+<div id="appCtn">
+  <div class="flex wrap" style="justify-content:space-between; align-items:center;">
+    <h1 style="text-align:left;">🧠 AI Generator with Importable Dependencies</h1>
+    <div style="display:flex; gap:8px;">
+      <button class="btn subtle" onclick="toggleHistory()" title="⌘/Ctrl + Shift + H">📜 History</button>
+      <button class="btn subtle" onclick="openLibrary()" title="⌘/Ctrl + Shift + L">📚 Library</button>
+      <button class="btn subtle" onclick="openConfigModal()" title="⌘/Ctrl + Shift + ,">⚙️ Settings</button>
+    </div>
+  </div>
+
+  <!-- ======== Raw Config Viewer ======== -->
+  <div id="configViewerCtn" class="panel" style="margin-bottom:20px;">
+    <div class="flex wrap" style="justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <h2>📦 Raw Configuration</h2>
+      <div class="flex wrap">
+        <button class="btn subtle" onclick="exportJson()">⬇️ Export JSON</button>
+        <button class="btn subtle" onclick="exportCsv()">⬇️ Export CSV</button>
+        <button class="btn subtle" onclick="launchImport()">⬆️ Import JSON</button>
+        <input id="fileInput" type="file" accept=".json,.csv" style="display:none;" onchange="handleFile(this)">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col">
+        <h3>Dependency Registry</h3>
+        <pre id="rawDepsPre" class="pre"></pre>
+      </div>
+      <div class="col">
+        <h3>Generator Lists</h3>
+        <pre id="rawListsPre" class="pre"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Main Generators ======== -->
+  <div class="row">
+    <!-- Text Generator -->
+    <div class="col panel">
+      <div class="flex wrap" style="justify-content:space-between;">
+        <h2>📝 AI Text Generator</h2>
+        <div class="flex wrap" style="gap:6px;">
+          <button class="btn subtle" onclick="textImprovise()">💡 Improvise</button>
+          <button class="btn subtle" onclick="copyText(textAssembledPre.textContent)">📋 Copy Prompt</button>
+          <button class="btn subtle" onclick="editPrompt(textAssembledPre, assembleText, textGenBtn)">🛠️ Edit</button>
+        </div>
+      </div>
+      <label>textGenStyle</label>
+      <div class="hint">label = 📝 Text Gen Style • type = select • remember = true</div>
+      <select id="textStyleSelect" onchange="onStyleChange('textGenStyle', this)"></select>
+
+      <div class="row" style="margin-top:10px;">
+        <div class="col" style="min-width:0;">
+          <label>Temperature (0..1)</label>
+          <input type="range" id="textTempRange" min="0" max="100" value="35">
+        </div>
+        <div class="col" style="min-width:0;">
+          <label>System Prompt</label>
+          <input type="text" id="textSysInput" placeholder="Optional system behavior...">
+        </div>
+      </div>
+      <textarea id="textDescInput" placeholder="Enter a description or topic..." style="margin-top:10px;"></textarea>
+      <button class="btn" onclick="assembleText()" style="margin-top:10px;">1️⃣ Assemble Prompt</button>
+      <pre id="textAssembledPre" class="pre" style="background:#0d0f1a; min-height:36px; margin-top:10px;"></pre>
+      <button class="btn" id="textGenBtn" onclick="runTextGen()" hidden>2️⃣ Generate Text</button>
+      <div id="textLoadingEl" hidden>⏳ Generating text... <button class="btn danger" onclick="stopText()">Stop</button></div>
+      <div id="textResultEl" style="white-space:pre-wrap; line-height:1.45;"></div>
+      <div id="textActionRow" class="flex wrap" style="margin-top:8px; gap:6px;" hidden>
+        <button class="btn subtle" onclick="forkText()">🍴 Fork</button>
+        <button class="btn subtle" onclick="downloadText()">⬇️ Save .txt</button>
+        <button class="btn subtle" onclick="markdownExport()">🧾 Markdown</button>
+        <button class="btn subtle" onclick="addToLibrary('text')">📚 + Library</button>
+      </div>
+    </div>
+
+    <!-- Image Generator -->
+    <div class="col panel">
+      <div class="flex wrap" style="justify-content:space-between;">
+        <h2>🎨 AI Image Generator</h2>
+        <div class="flex wrap" style="gap:6px;">
+          <button class="btn subtle" onclick="imgImprovise()">💡 Improvise</button>
+          <button class="btn subtle" onclick="copyText(imgAssembledPre.textContent)">📋 Copy Prompt</button>
+          <button class="btn subtle" onclick="editPrompt(imgAssembledPre, assembleImage, imgGenBtn)">🛠️ Edit</button>
+        </div>
+      </div>
+      <label>imageGenStyle</label>
+      <div class="hint">label = 🎨 Image Gen Style • type = select • remember = true</div>
+      <select id="imgStyleSelect" onchange="onStyleChange('imageGenStyle', this)"></select>
+
+      <div class="row" style="margin-top:10px;">
+        <div class="col" style="min-width:0;">
+          <label>Resolution</label>
+          <select id="imgResSelect">
+            <option value="512x512">512 x 512</option>
+            <option value="512x768">512 x 768</option>
+            <option value="768x512">768 x 512</option>
+            <option value="768x768" selected>768 x 768</option>
+          </select>
+        </div>
+        <div class="col" style="min-width:0;">
+          <label>Style Strength</label>
+          <input type="range" id="imgStrengthRange" min="0" max="100" value="80">
+        </div>
+      </div>
+      <textarea id="imgDescInput" placeholder="Enter a description..." style="margin-top:10px;"></textarea>
+      <textarea id="imgNegInput" placeholder="Negative prompt (optional)..." style="margin-top:6px;"></textarea>
+      <button class="btn" onclick="assembleImage()" style="margin-top:10px;">1️⃣ Assemble Prompt</button>
+      <pre id="imgAssembledPre" class="pre" style="background:#0d0f1a; min-height:36px; margin-top:10px;"></pre>
+      <button class="btn" id="imgGenBtn" onclick="runImgGen()" hidden>2️⃣ Generate Image</button>
+      <div id="imgLoadingEl" hidden>⏳ Generating image... <button class="btn danger" onclick="stopImg()">Stop</button></div>
+      <div id="imgResultCtn" style="margin-top:12px; position:relative;"></div>
+      <div id="imgActionRow" class="flex wrap" style="margin-top:8px; gap:6px;" hidden>
+        <button class="btn subtle" onclick="forkImage()">🍴 Fork</button>
+        <button class="btn subtle" onclick="downloadImage()">⬇️ Save Image</button>
+        <button class="btn subtle" onclick="addToLibrary('image')">📚 + Library</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div id="historyPanelEl" class="panel" style="margin-top:18px; display:none;">
+    <div class="flex wrap" style="justify-content:space-between; align-items:center;">
+      <h2>📜 Generation History</h2>
+      <div>
+        <button class="btn subtle" onclick="clearHistory()">🗑️ Clear</button>
+        <button class="btn subtle" onclick="loadHistoryFromStorage()">🔄 Reload</button>
+      </div>
+    </div>
+    <div id="historyListEl"></div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toastCtn"></div>
+
+<!-- Config Modal -->
+<div id="configModalEl" onclick="if(event.target===configModalEl) closeConfigModal()">
+  <div class="modal-body">
+    <div class="modal-head"><h2>⚙️ Advanced Settings</h2><span class="closeBtn" onclick="closeConfigModal()">✕</span></div>
+    <div class="row">
+      <div class="col">
+        <label>Global Temperature Bias</label>
+        <input type="range" id="globalTempRange" min="0" max="100" value="35">
+        <div class="hint">Shift all text generations by this temperature bias.</div>
+
+        <label style="margin-top:12px;">Default Image Resolution</label>
+        <select id="globalResSelect">
+          <option>512x512</option>
+          <option>512x768</option>
+          <option>768x512</option>
+          <option selected>768x768</option>
+        </select>
+
+        <label style="margin-top:12px;">AI Personality</label>
+        <input type="text" id="globalPersonality" placeholder="e.g., Academically rigorous, but humorous">
+        <div class="hint">Optional persona injected into text system prompts.</div>
+      </div>
+      <div class="col">
+        <label>Vibe Sounds</label>
+        <select id="vibeSounds"><option value="on">On</option><option value="off">Off</option></select>
+
+        <label style="margin-top:12px;">Auto-save generations to history</label>
+        <select id="autoSaveHistory"><option value="1">Yes</option><option value="0">No</option></select>
+
+        <label style="margin-top:12px;">Theme Accent Color</label>
+        <input type="text" id="accentColor" placeholder="#7b61ff" value="#7b61ff">
+        <div class="hint">Hex color used for accents</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;">
+      <label>Constrained Mode</label>
+      <select id="constrainedMode"><option value="0">Off</option><option value="1">On (Strict system prompt)</option></select>
+      <div class="hint">If On, attaches a strict system instruction to every text generation.</div>
+    </div>
+    <div style="text-align:right; margin-top:12px;">
+      <button class="btn subtle" onclick="saveConfig(); closeConfigModal();">Save</button>
+      <button class="btn" onclick="applyConfig()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Prompt Editor Modal -->
+<div id="editorModalEl" onclick="if(event.target===editorModalEl) closeEditorModal()">
+  <div class="modal-body">
+    <div class="modal-head"><h2>🛠️ Edit Assembled Prompt</h2><span class="closeBtn" onclick="closeEditorModal()">✕</span></div>
+    <textarea id="editorTextareaEl" style="min-height:240px;"></textarea>
+    <div class="flex wrap" style="justify-content:space-between; margin-top:8px;">
+      <button class="btn subtle" onclick="closeEditorModal()">Cancel</button>
+      <div class="flex wrap" style="gap:6px;">
+        <button class="btn" onclick="editorApply()">Apply</button>
+        <button class="btn subtle" onclick="editorReset()">Reset</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Prompt Library Modal -->
+<div id="libraryModalEl" onclick="if(event.target===libraryModalEl) closeLibrary()">
+  <div class="modal-body">
+    <div class="modal-head"><h2>📚 Prompt Library</h2><span class="closeBtn" onclick="closeLibrary()">✕</span></div>
+    <div class="flex wrap" style="gap:8px; margin-bottom:10px;">
+      <input type="text" id="libraryNameInput" placeholder="Template name..." style="max-width:220px;">
+      <button class="btn" onclick="saveLibraryEntry()">Save current</button>
+      <button class="btn subtle" onclick="importLibraryFromJson()">Import JSON</button>
+      <button class="btn subtle" onclick="exportLibraryToJson()">Export JSON</button>
+    </div>
+    <div id="libraryItemsEl"></div>
+  </div>
+</div>
+
+<script>
+  // --- Importable Dependency Registry ---
+  let dependencyRegistry = {
+    "text-gen-styles-mosberg": {
+      label: "Moss Text Styles",
+      color: "#7b8cff",
+      options: [
+        { name: "Markdown", prompt: "Write markdown documentation for the following: [input.description]. Use proper headings, lists, and fenced code blocks.", negative: "html, messy formatting, walls of plain text", position: 0, tags: {docs:10, markdown:3} },
+        { name: "JSON", prompt: "Return a valid JSON representation of: [input.description]. Output only the JSON object.", negative: "yaml, xml, extra prose, markdown code fences", position: 1, tags: {code:10, json:3} },
+        { name: "Rust", prompt: "Write idiomatic Rust code for: [input.description]. Include error handling and comments.", negative: "unsafe blocks, pseudo code, other languages", position: 2, tags: {code:10, rust:5} }
+      ]
+    },
+    "t2i-styles-mosberg-anime": {
+      label: "Moss Anime Styles",
+      color: "#5f6cea",
+      options: [
+        { name: "Studio Ghibli", prompt: "[input.description], studio ghibli style, soft watercolor backgrounds, hand drawn", negative: "[input.negative], 3d render, cgi, dark", position: 0 },
+        { name: "90s Anime", prompt: "[input.description], 90s anime aesthetic, vhs tracking lines, cel shaded", negative: "[input.negative], modern digital, clean, 4k sharp", position: 1 }
+      ]
+    },
+    "t2i-styles-mosberg-photo": {
+      label: "Moss Photo Styles",
+      color: "#4ecdc4",
+      options: [
+        { name: "Portrait Photo", prompt: "[input.description], professional portrait photography, 85mm lens, bokeh, studio lighting", negative: "[input.negative], cartoon, painting, anime", position: 0 },
+        { name: "Landscape Photo", prompt: "[input.description], landscape photography, 8k uhd, hdr, golden hour, sharp focus", negative: "[input.negative], blurry, low resolution, watermark", position: 1 }
+      ]
+    }
+  };
+
+  // --- Generator Lists (inline options + meta:import) ---
+  let generatorLists = {
+    textGenStyle: {
+      label: "📝 Text Gen Style",
+      type: "select",
+      remember: true,
+      groups: [
+        {
+          label: "Custom Styles",
+          color: "#f6c344",
+          options: [
+            { name: "No style", prompt: "[input.description].", negative: "", position: 0 },
+            { name: "Storyteller", prompt: "Write a compelling narrative about: [input.description]. Use vivid imagery and satisfying structure.", negative: "boring, dry, list format, robotic", position: 1 },
+            { name: "Technical Writer", prompt: "Provide a rigorous technical explanation of: [input.description]. Use domain terminology.", negative: "simplistic, vague, unprofessional, emotional", position: 2 },
+            { name: "Poet", prompt: "Compose a poem inspired by: [input.description]. Use metaphor, rhythm, and evocative language.", negative: "prose, robotic, literal, dull", position: 3 }
+          ]
+        },
+        {
+          label: "Moss Text Styles",
+          color: "#7b8cff",
+          metaImport: { from: "text-gen-styles-mosberg" }
+        }
+      ]
+    },
+    imageGenStyle: {
+      label: "🎨 Image Gen Style",
+      type: "select",
+      remember: true,
+      groups: [
+        {
+          label: "Custom Styles",
+          color: "#f6c344",
+          options: [
+            { name: "No style", prompt: "[input.description].", negative: "[input.negative].", position: 0 },
+            { name: "Digital Painting", prompt: "[input.description], digital painting, detailed brushwork, vibrant colors, artstation", negative: "[input.negative], low-quality, deformed, blurry", position: 1 },
+            { name: "Pixel Art", prompt: "[input.description], pixel art, 16-bit, dithering, retro game aesthetic", negative: "[input.negative], smooth, photorealistic, modern 3d", position: 2, tags: {pixel:3, retro:5} },
+            { name: "Anime", prompt: "[input.description], anime style, detailed eyes, vibrant hair, clean lines", negative: "[input.negative], 3d render, photorealistic, western cartoon", position: 3 }
+          ]
+        },
+        {
+          label: "Moss Anime Styles",
+          color: "#5f6cea",
+          metaImport: { from: "t2i-styles-mosberg-anime" }
+        },
+        {
+          label: "Moss Photo Styles",
+          color: "#4ecdc4",
+          metaImport: { from: "t2i-styles-mosberg-photo" }
+        }
+      ]
+    }
+  };
+
+  // ======= Globals / State =======
+  let textAbort = null, imgAbort = null, history = [], activeEditor = null;
+  let tmpEditorPrompt = null, tmpEditorAssemble = null, tmpEditorBtn = null;
+
+  // ======= Core Helpers =======
+  function toHtml(str) {
+    let div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function toast(msg, type) {
+    let el = document.createElement("div");
+    el.className = "toast" + (type ? " " + type : "");
+    el.textContent = msg;
+    toastCtn.appendChild(el);
+    setTimeout(() => { el.remove(); }, 2800);
+    vibe("toast");
+  }
+
+  function copyText(txt) {
+    navigator.clipboard.writeText(txt).then(() => toast("Copied to clipboard", "good"), () => toast("Clipboard failed", "bad"));
+  }
+
+  function stopText() { textAbort && textAbort.stop && textAbort.stop(); }
+  function stopImg() { imgAbort && imgAbort.stop && imgAbort.stop(); }
+
+  async function generateTextWithHooks(opts) {
+    let cfg = getConfig();
+    // Build effective system prompt
+    let sysParts = [];
+    if (cfg.personality) sysParts.push(cfg.personality);
+    if (opts.system) sysParts.push(opts.system);
+    if (cfg.constrained) sysParts.push("You must follow the user's constraints exactly. Be concise and relevant.");
+    if (sysParts.length) {
+      if (!opts.instruction.startsWith("SYSTEM:")) {
+        opts.instruction = sysParts.map(s => "SYSTEM: " + s).join("\n") + "\n\n" + opts.instruction;
+      }
+    }
+    textGenBtn.disabled = true;
+    textResultEl.textContent = "";
+    textActionRow.hidden = true;
+    textLoadingEl.hidden = false;
+    try {
+      let p = generateText({ ...opts });
+      textAbort = p;
+      if (opts.onChunk) {
+        await generateText({...opts});
+      } else {
+        let res = await p;
+        textResultEl.textContent = res;
+      }
+      textActionRow.hidden = false;
+      saveToHistory("text", { prompt: opts.instruction, result: textResultEl.textContent });
+      toast("Text generated!", "good");
+    } catch(e) {
+      toast("Text generation failed: " + (e.message || e), "bad");
+    } finally {
+      textGenBtn.disabled = false;
+      textLoadingEl.hidden = true;
+      textAbort = null;
+    }
+  }
+
+  async function runTextGen() {
+    let prompt = textAssembledPre.textContent;
+    if (!prompt) return;
+    let temp = parseInt(textTempRange.value || 35) / 100;
+    let system = (textSysInput.value || "").trim();
+    toPluginCallbacks("beforeTextGenerate", { prompt, temperature: temp, system });
+    await generateTextWithHooks({ instruction: prompt, temperature: temp, system, onChunk: d => textResultEl.textContent += d.textChunk });
+  }
+
+  function getOpt(selectEl) {
+    try { return JSON.parse(selectEl.value); } catch(e) { return null; }
+  }
+
+  function assembleText() {
+    let opt = getOpt(textStyleSelect);
+    if (!opt) { toast("Select a style first", "bad"); return; }
+    let txt = textDescInput.value.trim() || "a mysterious figure";
+    let prompt = opt.prompt.replace(/\[input\.description\]/g, txt).replace(/\[input\.negative\]/g, opt.negative || "");
+    textAssembledPre.textContent = prompt;
+    textGenBtn.hidden = false;
+    vibe("click");
+    return prompt;
+  }
+
+  function assembleImage() {
+    let opt = getOpt(imgStyleSelect);
+    if (!opt) { toast("Select a style first", "bad"); return; }
+    let desc = imgDescInput.value.trim() || "a scenic mountain";
+    let neg = imgNegInput.value.trim() || "";
+    let strength = parseInt(imgStrengthRange.value || 80);
+    let strengthTag = strength >= 80 ? "" : strength >= 50 ? ", mild style" : ", minimal style";
+    let prompt = opt.prompt.replace(/\[input\.description\]/g, desc).replace(/\[input\.negative\]/g, neg) + strengthTag;
+    let negative = (opt.negative || "").replace(/\[input\.description\]/g, desc).replace(/\[input\.negative\]/g, neg);
+    let out = `PROMPT:\n${prompt}\n\nNEGATIVE:\n${negative}`;
+    imgAssembledPre.textContent = out;
+    imgGenBtn.hidden = false;
+    vibe("click");
+    return { prompt, negative };
+  }
+
+  async function runImgGen() {
+    let data = assembleImage();
+    if (!data) return;
+    let res = imgResSelect.value || "768x768";
+    toPluginCallbacks("beforeImageGenerate", { prompt: data.prompt, negative: data.negative, resolution: res });
+    imgGenBtn.disabled = true;
+    imgLoadingEl.hidden = false;
+    imgResultCtn.innerHTML = "";
+    imgActionRow.hidden = true;
+    try {
+      let p = generateImage(data.prompt, { resolution: res, negative: data.negative });
+      imgAbort = p;
+      let url = await p;
+      let img = document.createElement("img");
+      img.src = url;
+      img.style.maxWidth = "100%";
+      img.style.border = "1px solid #2a3058";
+      img.style.borderRadius = "8px";
+      img.style.display = "block";
+      imgResultCtn.appendChild(img);
+      imgActionRow.hidden = false;
+      saveToHistory("image", { prompt: data.prompt, negative: data.negative, resolution: res, result: url });
+      toast("Image generated!", "good");
+    } catch(e) {
+      toast("Image generation failed: " + (e.message || e), "bad");
+    } finally {
+      imgGenBtn.disabled = false;
+      imgLoadingEl.hidden = true;
+      imgAbort = null;
+    }
+  }
+
+  // ======= Build Selects =======
+  function buildSelect(selectEl, listKey) {
+    let list = generatorLists[listKey];
+    let saved = localStorage[listKey];
+    selectEl.innerHTML = "";
+    list.groups.forEach(g => {
+      let opts = [];
+      if (g.options) opts = g.options;
+      else if (g.metaImport) {
+        let dep = dependencyRegistry[g.metaImport.from];
+        if (dep) opts = dep.options;
+      }
+      if (!opts.length) return;
+      let og = document.createElement("optgroup");
+      og.label = g.label;
+      og.dataset.color = g.color || "#aab2d9";
+      opts.forEach(o => {
+        let op = document.createElement("option");
+        op.textContent = o.name;
+        op.value = JSON.stringify(o);
+        if (saved && saved === o.name) op.selected = true;
+        og.appendChild(op);
+      });
+      selectEl.appendChild(og);
+    });
+    selectEl.addEventListener("change", () => {
+      localStorage[listKey] = selectEl.options[selectEl.selectedIndex].textContent;
+      onStyleChange(listKey, selectEl);
+    });
+  }
+
+  function onStyleChange(key, selectEl) {
+    // Optional reactive update when style changes
+  }
+
+  // ======= History =======
+  let historyCache = [];
+  function toggleHistory() { historyPanelEl.style.display = historyPanelEl.style.display === "none" ? "block" : "none"; loadHistoryFromStorage(); }
+  function pushHistory(type, note, data) {
+    history.unshift({ type, note, data, time: Date.now() });
+    if (history.length > 50) history.pop();
+  }
+  async function saveToHistory(type, data) {
+    if (getConfig().autoSave === false) return;
+    let entry = { type, data, time: Date.now(), id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) };
+    history.unshift(entry);
+    try { await kv.aiGenerator.history.set("entries", history); } catch(e) {}
+    if (historyPanelEl.style.display !== "none") renderHistory();
+  }
+  async function clearHistory() {
+    history = [];
+    try { await kv.aiGenerator.history.set("entries", []); } catch(e) {}
+    renderHistory();
+    toast("History cleared", "good");
+  }
+  async function loadHistoryFromStorage() {
+    try { history = (await kv.aiGenerator.history.get("entries")) || []; } catch(e) { history = []; }
+    renderHistory();
+  }
+  function renderHistory() {
+    if (!history.length) { historyListEl.innerHTML = '<div class="hint" style="padding:10px;">No saved generations yet.</div>'; return; }
+    let h = [];
+    history.forEach(entry => {
+      let dt = new Date(entry.time).toLocaleString();
+      let body = "";
+      if (entry.type === "text") {
+        body = entry.data.result ? entry.data.result.slice(0, 380) + (entry.data.result.length > 380 ? "…" : "") : "";
+      } else {
+        body = entry.data.result ? `<img src="${entry.data.result}" style="max-width:100%; border-radius:6px;">` : "";
+      }
+      h.push(`<div class="hist-item">
+        <div class="hist-header"><span>${entry.type.toUpperCase()} • ${dt}</span> <span>#${entry.id.slice(0,6)}</span></div>
+        <div style="font-size:12px; color:#aab2d9; margin-bottom:4px;">${toHtml(entry.data.prompt || "").slice(0,220)}</div>
+        <div class="hist-body">${entry.type==="text" ? toHtml(body) : body}</div>
+        <div class="hist-actions">
+          <button class="btn subtle" onclick='historyRerun(${JSON.stringify(JSON.stringify(entry))})'>🔄 Re-run</button>
+          <button class="btn subtle" onclick='historyFork(${JSON.stringify(JSON.stringify(entry))})'>🍴 Fork</button>
+          <button class="btn subtle" onclick='historyAssemble(${JSON.stringify(JSON.stringify(entry))})'>📋 Assemble</button>
+          <button class="btn subtle" onclick='historyDownload(${JSON.stringify(JSON.stringify(entry))})'>⬇️ Download</button>
+        </div>
+      </div>`);
+    });
+    historyListEl.innerHTML = h.join("");
+  }
+  function historyRune(entryStr) { let entry=JSON.parse(JSON.parse(entryStr)); if(entry.type==="text"){ textAssembledPre.textContent=entry.data.prompt; textGenBtn.hidden=false; runTextGen(); } else { imgAssembledPre.textContent="PROMPT:\n"+entry.data.prompt+"\n\nNEGATIVE:\n"+(entry.data.negative||""); imgGenBtn.hidden=false; runImgGen(); } }
+  function historyRerun(entryStr) { let entry = JSON.parse(JSON.parse(entryStr)); // bugfix: need to avoid double stringify
+    // Actually use safe parsing:
+    let raw = entryStr.slice(1,-1).replace(/\\"/g,'"');
+    entry = JSON.parse(raw);
+    if (!entry) entry = JSON.parse(entryStr);
+    if (entry.type === "text") { textAssembledPre.textContent = entry.data.prompt; textGenBtn.hidden = false; runTextGen(); }
+    else { imgAssembledPre.textContent = "PROMPT:\n" + entry.data.prompt + "\n\nNEGATIVE:\n" + (entry.data.negative || ""); imgGenBtn.hidden = false; runImgGen(); }
+  }
+  // Safer parse helpers:
+  function safeParseHist(s) {
+    try { return JSON.parse(JSON.parse(s)); } catch(e) { try { return JSON.parse(s); } catch(e2) { return null; } }
+  }
+  function historyRerun(s) { let e=safeParseHist(s); if(!e)return; if(e.type==="text"){textAssembledPre.textContent=e.data.prompt; textGenBtn.hidden=false; runTextGen();}else{imgAssembledPre.textContent="PROMPT:\n"+e.data.prompt+"\n\nNEGATIVE:\n"+(e.data.negative||""); imgGenBtn.hidden=false; runImgGen();} }
+  function historyFork(s) { let e=safeParseHist(s); if(!e)return; if(e.type==="text"){textDescInput.value=e.data.result||"";}else{imgDescInput.value=e.data.prompt||""; imgNegInput.value=e.data.negative||"";} }
+  function historyAssemble(s) { let e=safeParseHist(s); if(!e)return; if(e.type==="text"){textAssembledPre.textContent=e.data.prompt; textGenBtn.hidden=false;}else{imgAssembledPre.textContent="PROMPT:\n"+(e.data.prompt||"")+"\n\nNEGATIVE:\n"+(e.data.negative||""); imgGenBtn.hidden=false;} }
+  function historyDownload(s) { let e=safeParseHist(s); if(!e)return; if(e.type==="text"){downloadFile("generated.txt", e.data.result||"");}else{if(e.data.result){let a=document.createElement("a"); a.href=e.data.result; a.download="generated.png"; a.click();}} }
+
+  // ======= Export / Import JSON & CSV =======
+  function exportJson() {
+    let blob = new Blob([JSON.stringify({ dependencyRegistry, generatorLists }, null, 2)], {type:"application/json"});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a"); a.href=url; a.download="ai_generator_config.json"; a.click();
+    URL.revokeObjectURL(url);
+    toast("Exported JSON", "good");
+  }
+  function exportCsv() {
+    let lines = ["Type,Group,Option,Prompt,Negative,Position"];
+    for (let listKey in generatorLists) {
+      let list = generatorLists[listKey];
+      list.groups.forEach(g => {
+        let opts = g.options || (g.metaImport && dependencyRegistry[g.metaImport.from] && dependencyRegistry[g.metaImport.from].options) || [];
+        opts.forEach(o => lines.push(`"${listKey}","${g.label}","${o.name}","${(o.prompt||"").replace(/"/g,'""')}","${(o.negative||"").replace(/"/g,'""')}",${o.position}`));
+      });
+    }
+    let blob = new Blob([lines.join("\n")], {type:"text/csv"});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a"); a.href=url; a.download="ai_generator_config.csv"; a.click();
+    URL.revokeObjectURL(url);
+    toast("Exported CSV", "good");
+  }
+  function launchImport() { fileInput.click(); }
+  function handleFile(input) {
+    let f = input.files && input.files[0]; if (!f) return;
+    let reader = new FileReader();
+    reader.onload = () => {
+      let ext = (f.name.split('.').pop()||"").toLowerCase();
+      try {
+        if (ext === "json") {
+          let data = JSON.parse(reader.result);
+          if (data.dependencyRegistry) dependencyRegistry = data.dependencyRegistry;
+          if (data.generatorLists) generatorLists = data.generatorLists;
+          rebuildAll(); renderPseudo(); toast("Imported JSON config", "good");
+        } else if (ext === "csv") {
+          parseCsvAndMerge(reader.result);
+          rebuildAll(); renderPseudo(); toast("Imported CSV config", "good");
+        }
+      } catch(e) { toast("Import failed: " + e.message, "bad"); }
+    };
+    reader.readAsText(f);
+    input.value = "";
+  }
+  function parseCsvAndMerge(csv) {
+    // Very basic CSV parse: split by newline, comma, respecting quotes
+    let lines = csv.split(/\r?\n/).filter((_,i) => i > 0);
+    lines.forEach(line => {
+      let cols = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g, "").replace(/""/g, '"'));
+      let [listKey, gLabel, name, prompt, negative, position] = cols;
+      if (!listKey || !name) return;
+      if (!generatorLists[listKey]) generatorLists[listKey] = { label: listKey, type: "select", remember: true, groups: [] };
+      let grp = generatorLists[listKey].groups.find(g => g.label === gLabel);
+      if (!grp) {
+        grp = { label: gLabel, color: "#c8cff0", options: [] };
+        generatorLists[listKey].groups.push(grp);
+      }
+      if (grp.metaImport) return; // Don't mutate meta-import groups
+      let pos = parseInt(position, 10);
+      prompt = prompt.replace(/\[input\./g, "[input.");
+      grp.options.push({ name, prompt, negative, position: isNaN(pos) ? grp.options.length : pos });
+    });
+  }
+  function rebuildAll() {
+    buildSelect(textStyleSelect, "textGenStyle");
+    buildSelect(imgStyleSelect, "imageGenStyle");
+  }
+
+  // ======= Render Raw Config Pseudo =======
+  function renderPseudo() {
+    let dLines = [];
+    for (let [key, dep] of Object.entries(dependencyRegistry)) {
+      dLines.push(key);
+      dLines.push(`  label = ${dep.label}`);
+      dLines.push(`  color = ${dep.color}`);
+      dLines.push(`  options`);
+      dep.options.forEach(o => {
+        dLines.push(`    ${o.name}`);
+        dLines.push(`      prompt = ${o.prompt}`);
+        if (o.negative) dLines.push(`      negative = ${o.negative}`);
+        dLines.push(`      meta:position = ${o.position}`);
+        if (o.tags) dLines.push(`      meta:tags = [(${JSON.stringify(o.tags)})]`);
+      });
+      dLines.push("");
+    }
+    rawDepsPre.textContent = dLines.join("\n");
+
+    let lLines = [];
+    for (let [key, list] of Object.entries(generatorLists)) {
+      lLines.push(key);
+      lLines.push(`  label = ${list.label}`);
+      lLines.push(`  type = ${list.type}`);
+      lLines.push(`  remember = ${list.remember}`);
+      lLines.push(`  groups`);
+      list.groups.forEach(g => {
+        lLines.push(`    ${g.label}`);
+        lLines.push(`      color = ${g.color || "#fff"}`);
+        if (g.metaImport) {
+          lLines.push(`      meta:import`);
+          lLines.push(`        from = {import:${g.metaImport.from}}`);
+        }
+        if (g.options) {
+          lLines.push(`      options`);
+          g.options.forEach(o => {
+            lLines.push(`        ${o.name}`);
+            lLines.push(`          prompt = ${o.prompt}`);
+            if (o.negative) lLines.push(`          negative = ${o.negative}`);
+            lLines.push(`          meta:position = ${o.position}`);
+            if (o.tags) lLines.push(`          meta:tags = [(${JSON.stringify(o.tags)})]`);
+          });
+        }
+      });
+      lLines.push("");
+    }
+    rawListsPre.textContent = lLines.join("\n");
+  }
+
+  // ======= Improvise / Random Prompts =======
+  function textImprovise() {
+    let starters = ["a mysterious", "an ancient", "a futuristic", "a forgotten", "a shimmering", "a cursed"];
+    let nouns = ["librarian", "robot", "garden", "ritual", " empire", "tower", "algorithm", "forest"];
+    let twists = ["that time-travels", "made of glass", "with a hidden agenda", "in a dream", "that never sleeps"];
+    let s = pick(starters) + " " + pick(nouns) + " " + pick(twists);
+    textDescInput.value = s;
+    assembleText();
+    vibrate(15);
+  }
+  function imgImprovise() {
+    let places = ["a hidden cave", "a neon city rooftop", "an overgrown library", "a floating island", "a crystalline ocean", "a derelict space station"];
+    let times = ["at twilight", "during a storm", "in golden hour", "under moonlight", "at midday"];
+    let details = ["with glowing runes", "with bioluminescent flora", "covered in soft mist", "with dramatic shadows", "with mirrored reflections"];
+    let d = pick(places) + " " + pick(times) + " " + pick(details);
+    imgDescInput.value = d;
+    imgNegInput.value = "low quality, blurry, watermark, text";
+    assembleImage();
+    vibrate(15);
+  }
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  // ======= Fork, Download, Markdown =======
+  function forkText() { textDescInput.value = textResultEl.textContent || ""; }
+  function downloadText() { downloadFile("generated.txt", textResultEl.textContent || ""); }
+  function markdownExport() {
+    let ts = new Date().toISOString();
+    let md = `<!-- Generated ${ts} -->\n\n${textAssembledPre.textContent}\n\n---\n\n${textResultEl.textContent || ""}`;
+    downloadFile("generated.md", md);
+  }
+  function forkImage() { imgDescInput.value = imgAssembledPre.textContent.replace(/^PROMPT:\n/, "").split("\n\nNEGATIVE:\n")[0] || ""; }
+  function downloadImage() {
+    let img = imgResultCtn.querySelector("img");
+    if (!img) return;
+    let a = document.createElement("a"); a.href = img.src; a.download = "generated.png"; a.click();
+  }
+  function downloadFile(name, text) {
+    let blob = new Blob([text], {type:"text/plain"});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a"); a.href = url; a.download = name; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ======= Prompt Editor Modal =======
+  function editPrompt(preEl, assembleFn, btnEl) {
+    tmpEditorPrompt = preEl;
+    tmpEditorAssemble = assembleFn;
+    tmpEditorBtn = btnEl;
+    editorTextareaEl.value = preEl.textContent;
+    editorModalEl.classList.add("active");
+    vibrate(10);
+  }
+  function closeEditorModal() { editorModalEl.classList.remove("active"); }
+  function editorApply() { tmpEditorPrompt.textContent = editorTextareaEl.value; tmpEditorBtn.hidden = false; closeEditorModal(); toast("Prompt updated", "good"); }
+  function editorReset() { if (tmpEditorAssemble) tmpEditorAssemble(); closeEditorModal(); }
+
+  // ======= Prompt Library (kv backed) =======
+  async function openLibrary() {
+    libraryModalEl.classList.add("active");
+    renderLibrary();
+  }
+  function closeLibrary() { libraryModalEl.classList.remove("active"); }
+  async function getLibrary() { try { return (await kv.aiGenerator.library.get("entries")) || []; } catch(e){ return []; } }
+  async function setLibrary(arr) { try { await kv.aiGenerator.library.set("entries", arr); } catch(e){} }
+  async function saveLibraryEntry() {
+    let name = (libraryNameInput.value || "").trim();
+    if (!name) { toast("Enter a name", "bad"); return; }
+    let textPrompt = textAssembledPre.textContent;
+    let imgPrompt = imgAssembledPre.textContent;
+    let item = { id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2), name, time: Date.now(), textPrompt, imgPrompt };
+    let arr = await getLibrary();
+    arr.unshift(item);
+    await setLibrary(arr);
+    libraryNameInput.value = "";
+    renderLibrary();
+    toast("Saved to library", "good");
+  }
+  async function renderLibrary() {
+    let arr = await getLibrary();
+    if (!arr.length) { libraryItemsEl.innerHTML = '<div class="hint">No saved templates.</div>'; return; }
+    let html = arr.map(item => `<div class="lib-item">
+      <div class="name">${toHtml(item.name)}</div>
+      <div class="meta">${new Date(item.time).toLocaleString()}</div>
+      <div class="flex wrap" style="gap:6px;">
+        ${item.textPrompt ? `<button class="btn subtle" onclick='libraryLoad(${JSON.stringify(JSON.stringify(item))},"text")'>📝 Load</button>` : ""}
+        ${item.imgPrompt ? `<button class="btn subtle" onclick='libraryLoad(${JSON.stringify(JSON.stringify(item))},"image")'>🎨 Load</button>` : ""}
+        <button class="btn subtle" onclick='libraryDelete("${item.id}")'>🗑️</button>
+      </div>
+    </div>`).join("");
+    libraryItemsEl.innerHTML = html;
+  }
+  function libraryLoad(s, type) { let item = safeParseHist(s); if(!item)return; if(type==="text"){textAssembledPre.textContent=item.textPrompt; textGenBtn.hidden=false; toast("Loaded text template","good");}else{imgAssembledPre.textContent=item.imgPrompt; imgGenBtn.hidden=false; toast("Loaded image template","good");} }
+  async function libraryDelete(id) {
+    let arr = await getLibrary();
+    arr = arr.filter(x => x.id !== id);
+    await setLibrary(arr);
+    renderLibrary();
+    toast("Deleted template", "good");
+  }
+  async function exportLibraryToJson() {
+    let arr = await getLibrary();
+    let blob = new Blob([JSON.stringify(arr,null,2)], {type:"application/json"});
+    let url = URL.createObjectURL(blob); let a=document.createElement("a"); a.href=url; a.download="prompt_library.json"; a.click(); URL.revokeObjectURL(url);
+    toast("Library exported", "good");
+  }
+  function importLibraryFromJson() {
+    let raw = prompt("Paste JSON array of library entries:");
+    if (!raw) return;
+    try {
+      let arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) throw new Error("Not an array");
+      (async () => { await setLibrary(arr); renderLibrary(); toast("Library imported", "good"); })();
+    } catch(e) { toast("Invalid JSON: "+e.message, "bad"); }
+  }
+
+  async function addToLibrary(what) {
+    let name = prompt("Name for this template:");
+    if (!name) return;
+    let arr = await getLibrary();
+    let item = { id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2), name, time: Date.now(), textPrompt: what==="text" ? textAssembledPre.textContent : "", imgPrompt: what==="image" ? imgAssembledPre.textContent : "" };
+    arr.unshift(item);
+    await setLibrary(arr);
+    toast("Added to library", "good");
+  }
+
+  // ======= Config / Settings =======
+  function openConfigModal() { configModalEl.classList.add("active"); vibe("click"); }
+  function closeConfigModal() { configModalEl.classList.remove("active"); }
+  function getConfig() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.aiGenConfig || "{}"); } catch(e){}
+    return {
+      tempBias: parseInt(saved.tempBias ?? globalTempRange.value ?? 35) / 100,
+      resolution: saved.resolution || globalResSelect.value || "768x768",
+      personality: saved.personality || globalPersonality.value || "",
+      sounds: saved.sounds || vibeSounds.value || "on",
+      autoSave: saved.autoSave !== undefined ? saved.autoSave : (autoSaveHistory.value === "1"),
+      accent: saved.accent || accentColor.value || "#7b61ff",
+      constrained: !!saved.constrained
+    };
+  }
+  function saveConfig() {
+    let cfg = {
+      tempBias: parseInt(globalTempRange.value),
+      resolution: globalResSelect.value,
+      personality: globalPersonality.value.trim(),
+      sounds: vibeSounds.value,
+      autoSave: autoSaveHistory.value === "1",
+      accent: accentColor.value.trim() || "#7b61ff",
+      constrained: constrainedMode.value === "1"
+    };
+    localStorage.aiGenConfig = JSON.stringify(cfg);
+    toast("Settings saved", "good");
+  }
+  function applyConfig() {
+    let cfg = getConfig();
+    globalTempRange.value = Math.round((cfg.tempBias) * 100);
+    globalResSelect.value = cfg.resolution;
+    globalPersonality.value = cfg.personality;
+    vibeSounds.value = cfg.sounds;
+    autoSaveHistory.value = cfg.autoSave ? "1" : "0";
+    accentColor.value = cfg.accent;
+    constrainedMode.value = cfg.constrained ? "1" : "0";
+    toast("Settings applied to controls", "good");
+  }
+
+  // ======= Plugin Callbacks System =======
+  let pluginCallbacks = {};
+  function registerPlugin(name, fn) { pluginCallbacks[name] = fn; }
+  function toPluginCallbacks(name, payload) { let fn = pluginCallbacks[name]; if (fn) try { fn(payload); } catch(e){} }
+
+  // ======= Vibe =======
+  let audioCtx = null;
+  function ensureAudio() { if (audioCtx) return; audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+  function vibe(kind) {
+    let cfg = getConfig();
+    if (cfg.sounds === "off") return;
+    ensureAudio();
+    let t = audioCtx.currentTime;
+    let o = audioCtx.createOscillator();
+    let g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    if (kind === "click") { o.type = "sine"; o.frequency.setValueAtTime(440, t); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t+0.02); g.gain.exponentialRampToValueAtTime(0.0001, t+0.18); o.start(t); o.stop(t+0.2); }
+    else if (kind === "toast") { o.type = "sine"; o.frequency.setValueAtTime(600, t); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t+0.02); g.gain.exponentialRampToValueAtTime(0.0001, t+0.22); o.start(t); o.stop(t+0.24); }
+    else if (kind === "fail") { o.type = "sawtooth"; o.frequency.setValueAtTime(180, t); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t+0.02); g.gain.exponentialRampToValueAtTime(0.0001, t+0.38); o.start(t); o.stop(t+0.4); }
+  }
+
+  // ======= Keyboard Shortcuts =======
+  document.addEventListener("keydown", e => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      if (!textGenBtn.hidden && textAssembledPre.textContent) runTextGen();
+      else if (!imgGenBtn.hidden && imgAssembledPre.textContent) runImgGen();
+    }
+    if (e.key.toLowerCase() === "h" && (e.ctrlKey || e.metaKey) && e.shiftKey) { e.preventDefault(); toggleHistory(); }
+    if (e.key.toLowerCase() === "l" && (e.ctrlKey || e.metaKey) && e.shiftKey) { e.preventDefault(); openLibrary(); }
+    if (e.key === "," && (e.ctrlKey || e.metaKey) && e.shiftKey) { e.preventDefault(); openConfigModal(); }
+  });
+
+  // ======= Particle Background =======
+  (function initParticles() {
+    let c = bgCanvas, ctx = c.getContext("2d"), w, h, pts = [];
+    function resize() { w = c.width = innerWidth; h = c.height = innerHeight; }
+    resize(); window.addEventListener("resize", resize);
+    for (let i = 0; i < 80; i++) pts.push({ x: Math.random()*w, y: Math.random()*h, vx: (Math.random()-.5)*.4, vy: (Math.random()-.5)*.4, r: Math.random()*2+1 });
+    function frame() {
+      ctx.clearRect(0,0,w,h);
+      for (let p of pts) { p.x += p.vx; p.y += p.vy; if (p.x<0||p.x>w) p.vx*=-1; if (p.y<0||p.y>h) p.vy*=-1; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fillStyle="rgba(170,180,255,0.35)"; ctx.fill(); }
+      for (let i=0;i<pts.length;i++) for (let j=i+1;j<pts.length;j++) { let dx=pts[i].x-pts[j].x, dy=pts[i].y-pts[j].y, d=Math.hypot(dx,dy); if (d<140){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.strokeStyle=`rgba(120,130,220,${1-d/140})`; ctx.stroke(); } }
+      requestAnimationFrame(frame);
+    }
+    frame();
+  })();
+
+  // ======= Init =======
+  buildSelect(textStyleSelect, "textGenStyle");
+  buildSelect(imgStyleSelect, "imageGenStyle");
+  renderPseudo();
+  loadHistoryFromStorage();
+
+  // Expose plugin extension points
+  window.registerPlugin = registerPlugin;
+  window.pluginCallbacks = pluginCallbacks;
+  // Expose a few utils
+  window.exportJson = exportJson; window.exportCsv = exportCsv; window.launchImport = launchImport; window.handleFile = handleFile;
+  window.toggleHistory = toggleHistory; window.clearHistory = clearHistory; window.loadHistoryFromStorage = loadHistoryFromStorage;
+  window.openConfigModal = openConfigModal; window.closeConfigModal = closeConfigModal; window.saveConfig = saveConfig; window.applyConfig = applyConfig;
+  window.editPrompt = editPrompt; window.closeEditorModal = closeEditorModal; window.editorApply = editorApply; window.editorReset = editorReset;
+  window.openLibrary = openLibrary; window.closeLibrary = closeLibrary; window.saveLibraryEntry = saveLibraryEntry; window.exportLibraryToJson = exportLibraryToJson; window.importLibraryFromJson = importLibraryFromJson; window.addToLibrary = addToLibrary; window.libraryLoad = libraryLoad; window.libraryDelete = libraryDelete;
+  window.textImprovise = textImprovise; window.imgImprovise = imgImprovise;
+  window.historyRerun = historyRerun; window.historyFork = historyFork; window.historyAssemble = historyAssemble; window.historyDownload = historyDownload;
+  window.stopText = stopText; window.stopImg = stopImg;
+</script>
+</body>
+</html>

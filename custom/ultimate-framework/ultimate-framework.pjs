@@ -1,0 +1,885 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  ULTIMATE FRAMEWORK  —  unified t2t + t2i modular system              ║
+// ║  v2.0.0                                                               ║
+// ║  One config-driven API wrapping ai-text + text-to-image plugins,      ║
+// ║  with a pluggable STYLE REGISTRY (text-rewrite AND image-art packs),   ║
+// ║  modular PANEL system, a GENERATOR factory, and migration hooks.     ║
+// ║                                                                        ║
+// ║  To make a NEW generator: edit index.html — declare which panels and   ║
+// ║  style packs you want, and the framework builds the UI. The core      ║
+// ║  (this file) stays shared/upgradeable. See FW.generator() + Studio.   ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+generateText = {import:ai-text-plugin}
+generateImage = {import:text-to-image-plugin}
+uploadPlugin = {import:upload-plugin}
+commentsPlugin = {import:comments-plugin}
+fullscreenButton = {import:fullscreen-button-plugin}
+selectLeaf = {import:select-leaf-plugin}
+
+// Built-in style packs (the registry is pluggable — add more at runtime).
+t2iStyles = {import:t2i-styles}
+t2iStylesNSFW = {import:t2i-styles-mosberg-nsfw}
+t2tStyles = {import:t2t-styles}
+
+FW_VERSION = "2.0.0"
+FW_CHANGELOG = [["2.0.0","Unified t2t+t2i style registry; FW.rewrite(); modular panels; FW.generator() factory; style picker; migration hooks."],["1.0.0","Initial t2t-t2i framework: text, image, chat, vision, pipeline, gallery, share, history, settings, presets, transforms."]]
+
+// output(settings) bootstraps the framework globals.
+// Call [output(settings)] in index.html, then write your UI HTML after it.
+// Importing generators can also call root.output(settings).
+output(settings) =>
+  if(!window.__fw) initFramework(settings);
+  return "";
+
+initFramework(settings) =>
+  let cfg = mergeDefaults(settings || {});
+  let FW = {
+    version: FW_VERSION,
+    changelog: FW_CHANGELOG,
+    config: cfg,
+    state: {
+      clickCount: Number(localStorage.__ultFw_clickCount || 0),
+      activeGenerators: new Set(),
+      history: [],
+      summary: "",
+      lastTextPrompt: null,
+      lastImagePrompt: null,
+      lastImageResult: null,
+    },
+    _panels: [],
+  };
+  window.__fw = FW;
+  window.__generateText = generateText;
+  window.__generateImage = generateImage;
+  window.__uploadPlugin = uploadPlugin;
+  window.__t2iStyles = t2iStyles;
+  window.__t2iStylesNSFW = t2iStylesNSFW;
+  window.__t2tStyles = t2tStyles;
+  attachApi(FW);
+  // register built-in style packs
+  FW.styles.register("t2i-styles", "t2i", t2iStyles, {label:"Image Styles"});
+  FW.styles.register("t2i-styles-mosberg-nsfw", "t2i", t2iStylesNSFW, {label:"Image Styles NSFW"});
+  FW.styles.register("t2t-styles", "t2t", t2tStyles, {label:"Text Styles"});
+  // run migrations
+  FW.upgrade();
+  return FW;
+
+mergeDefaults(s) =>
+  if(!s.text) s.text = {};
+  if(!s.image) s.image = {};
+  if(!s.gallery) s.gallery = {};
+  if(!s.ui) s.ui = {};
+  if(!s.chat) s.chat = {};
+  let td = s.text;
+  if(td.instruction === undefined) td.instruction = "";
+  if(td.startWith === undefined) td.startWith = "";
+  if(td.stopSequences === undefined) td.stopSequences = [];
+  if(td.maxRetries === undefined) td.maxRetries = 3;
+  if(td.timeoutMs === undefined) td.timeoutMs = 60000;
+  if(td.retryDelayMs === undefined) td.retryDelayMs = 1000;
+  if(td.stream === undefined) td.stream = true;
+  if(td.hideStartWith === undefined) td.hideStartWith = false;
+  if(td.endButtons === undefined) td.endButtons = "continue,copy,improve,enchant,regenerate,translate,summarize,count,export,edit,clear,rewrite";
+  if(td.style === undefined) td.style = "";
+  if(td.safetyReminder === undefined) td.safetyReminder = "";
+  if(td.continuePrompt === undefined) td.continuePrompt = "Continue the following text naturally, picking up exactly where it ends. Maintain tone, style, pov, and formatting. Output ONLY the continuation; do not repeat any of the original text.";
+  if(td.improvePrompt === undefined) td.improvePrompt = "Improve the following text: refine the prose, fix awkward phrasing, strengthen word choice, improve flow and clarity, and correct any errors. Preserve meaning, length, and tone. Output only the improved version.";
+  if(td.continueSeparator === undefined) td.continueSeparator = "\\n\\n";
+  if(td.enchantPreset === undefined) td.enchantPreset = "dramatic";
+  let id = s.image;
+  if(id.prompt === undefined) id.prompt = "";
+  if(id.negativePrompt === undefined) id.negativePrompt = "";
+  if(id.resolution === undefined) id.resolution = "768x768";
+  if(id.seed === undefined) id.seed = -1;
+  if(id.guidanceScale === undefined) id.guidanceScale = 7;
+  if(id.removeBackground === undefined) id.removeBackground = false;
+  if(id.saveTitle === undefined) id.saveTitle = "";
+  if(id.saveDescription === undefined) id.saveDescription = "";
+  if(id.hideGalleryButtons === undefined) id.hideGalleryButtons = false;
+  if(id.width === undefined) id.width = 0;
+  if(id.style === undefined) id.style = "border-radius:6px; max-width:100%;";
+  if(id.variations === undefined) id.variations = 1;
+  let gd = s.gallery;
+  if(gd.enabled === undefined) gd.enabled = true;
+  if(gd.sort === undefined) gd.sort = "top";
+  if(gd.contentFilter === undefined) gd.contentFilter = "g";
+  if(gd.timeRange === undefined) gd.timeRange = "all-time";
+  if(gd.hideIfScoreIsBelow === undefined) gd.hideIfScoreIsBelow = -2;
+  if(gd.adaptiveHeight === undefined) gd.adaptiveHeight = true;
+  if(gd.defaultGalleryNames === undefined) gd.defaultGalleryNames = "";
+  if(gd.style === undefined) gd.style = "";
+  let ud = s.ui;
+  if(ud.theme === undefined) ud.theme = "auto";
+  if(ud.showHeader === undefined) ud.showHeader = true;
+  if(ud.showTips === undefined) ud.showTips = true;
+  if(ud.layout === undefined) ud.layout = "tabs";
+  if(ud.maxWidth === undefined) ud.maxWidth = "1100px";
+  if(ud.showEndButtons === undefined) ud.showEndButtons = true;
+  if(ud.endButtonsPosition === undefined) ud.endButtonsPosition = "below";
+  if(ud.defaultTranslateLang === undefined) ud.defaultTranslateLang = "Spanish";
+  if(ud.markdownRender === undefined) ud.markdownRender = false;
+  if(ud.persistHistory === undefined) ud.persistHistory = true;
+  if(ud.persistConfig === undefined) ud.persistConfig = true;
+  let cd = s.chat;
+  if(cd.keep === undefined) cd.keep = 8;
+  if(cd.compactAtRatio === undefined) cd.compactAtRatio = 0.9;
+  if(cd.maxParagraphsPerMessage === undefined) cd.maxParagraphsPerMessage = 2;
+  if(cd.persona === undefined) cd.persona = "Assistant";
+  return s;
+
+// ── migration / upgrade ──
+attachApi(FW) =>
+  FW.upgrade = function() {
+    // migrate old localStorage keys from v1 → v2 namespace
+    try {
+      if(localStorage.__t2tT2iFw_clickCount != null && localStorage.__ultFw_clickCount == null) {
+        localStorage.__ultFw_clickCount = localStorage.__t2tT2iFw_clickCount;
+      }
+      if(localStorage.__t2tT2iFw_config != null && localStorage.__ultFw_config == null) {
+        localStorage.__ultFw_config = localStorage.__t2tT2iFw_config;
+      }
+      if(localStorage.__t2tT2iFw_outHistory != null && localStorage.__ultFw_outHistory == null) {
+        localStorage.__ultFw_outHistory = localStorage.__t2tT2iFw_outHistory;
+      }
+    } catch(e){}
+  };
+
+  // ── token budgeting ──
+  FW.getMeta = () => generateText({getMetaObject:true});
+  FW.countTokens = (text) => FW.getMeta().countTokens(text);
+  FW.idealMaxContextTokens = () => FW.getMeta().idealMaxContextTokens;
+
+  // ── TEXT-TO-TEXT ──
+  FW.text = async function(opts) {
+    if(typeof opts === "string") opts = {instruction: opts};
+    let cfg = FW.config.text;
+    let instruction = opts.instruction ?? cfg.instruction;
+    let safety = opts.safetyReminder ?? cfg.safetyReminder;
+    if(safety) {
+      if(Array.isArray(instruction)) instruction = [...instruction, "\\n\\n" + safety];
+      else instruction = instruction + "\\n\\n" + safety;
+    }
+    let genOpts = {
+      instruction,
+      startWith: opts.startWith ?? cfg.startWith,
+      stopSequences: opts.stopSequences ?? cfg.stopSequences,
+    };
+    if(opts.hideStartWith !== undefined) genOpts.hideStartWith = opts.hideStartWith;
+    else if(cfg.hideStartWith) genOpts.hideStartWith = cfg.hideStartWith;
+    if(opts.onStart) genOpts.onStart = opts.onStart;
+    if(opts.onChunk) genOpts.onChunk = opts.onChunk;
+    if(opts.onFinish) genOpts.onFinish = opts.onFinish;
+    let attempt = 0, lastErr;
+    let maxRetries = opts.maxRetries ?? cfg.maxRetries;
+    while(attempt <= maxRetries) {
+      try {
+        let job = generateText(genOpts);
+        FW.state.activeGenerators.add(job);
+        if(opts.signal && opts.signal.addEventListener) opts.signal.addEventListener("abort", () => { try{job.stop();}catch(e){} });
+        let timeoutMs = opts.timeoutMs ?? cfg.timeoutMs;
+        let result;
+        if(timeoutMs > 0) {
+          result = await Promise.race([job, new Promise((_,rej)=>setTimeout(()=>{try{job.stop();}catch(e){}rej(new Error("t2t timeout"));}, timeoutMs))]);
+        } else { result = await job; }
+        FW.state.activeGenerators.delete(job);
+        FW.state.lastTextPrompt = genOpts;
+        return { text: result.text, generatedText: result.generatedText, value: String(result), inputs: genOpts, raw: result, stop: ()=>{try{result.stop?.();}catch(e){}} };
+      } catch(e) { lastErr = e; attempt++; if(attempt>maxRetries) break; await new Promise(r=>setTimeout(r,(opts.retryDelayMs??cfg.retryDelayMs)*attempt)); }
+    }
+    throw lastErr;
+  };
+
+  FW.textStream = function(opts) {
+    if(typeof opts === "string") opts = {instruction: opts};
+    return generateText(opts);
+  };
+
+  // ── CHAT ENGINE ──
+  FW.chat = {
+    push(m){ FW.state.history.push(m); },
+    clear(){ FW.state.history=[]; FW.state.summary=""; },
+    history(){ return [...FW.state.history]; },
+    summary(){ return FW.state.summary; },
+    buildPrompt(task){
+      let log = [FW.state.summary && `[Summary of earlier conversation:\\n${FW.state.summary}]`, ...FW.state.history].filter(Boolean);
+      return `Below is a series of messages. Follow the TASK at the end of the messages.\\n<MESSAGES>\\n${log.join("\\n\\n")}\\n</MESSAGES>\\nTASK: ${task}`;
+    },
+    async send(userMsg, o={}){
+      let p = o.persona ?? FW.config.chat.persona;
+      FW.state.history.push(`User: ${userMsg}`);
+      let reply = await FW.text({ instruction: FW.chat.buildPrompt(`Write the next response as '${p}'.`), startWith: o.startWith ?? `${p}:`, stopSequences: o.stopSequences ?? ["\\nUser:"], onChunk: o.onChunk });
+      FW.state.history.push(reply.text.trim());
+      FW.chat._maybeCompact();
+      return reply;
+    },
+    _compacting: false,
+    async _maybeCompact(){
+      let cfg = FW.config.chat;
+      if(FW.chat._compacting || FW.state.history.length <= cfg.keep) return;
+      if(FW.countTokens(FW.chat.buildPrompt("")) < FW.idealMaxContextTokens()*cfg.compactAtRatio) return;
+      FW.chat._compacting = true;
+      try {
+        let n = FW.state.history.length - cfg.keep;
+        let boundary = FW.state.history[n-1].slice(-30);
+        let r = await FW.text(FW.chat.buildPrompt(`Summarize the first ${n} messages, stopping after the message ending "${boundary}". Fold in any prior summary. Terse bullets; preserve names, facts, decisions, unresolved threads. Output ONLY summary text.`));
+        FW.state.summary = r.text.trim();
+        FW.state.history = FW.state.history.slice(n);
+      } finally { FW.chat._compacting = false; }
+    },
+  };
+
+  // ── TEXT-TO-IMAGE ──
+  FW.image = async function(opts) {
+    if(typeof opts === "string") opts = {prompt: opts};
+    let cfg = FW.config.image;
+    let merged = Object.assign({}, cfg, opts);
+    let { variations, ...pluginOpts } = merged;
+    let count = Math.max(1, Number(variations)||1);
+    let results = [];
+    for(let i=0;i<count;i++){
+      let job = generateImage(pluginOpts);
+      FW.state.activeGenerators.add(job);
+      try {
+        let res = await job;
+        results.push({
+          dataUrl: res.dataUrl, canvas: res.canvas, inputs: res.inputs||pluginOpts, raw: res, value: String(res),
+          async checkNsfw(){
+            let url = res.dataUrl;
+            if(typeof url=="string" && url.startsWith("http")){
+              try { let info=await fetch(`https://image-generation.perchance.org/api/imageTags?url=${encodeURIComponent(url)}`).then(r=>r.json()); return {nsfw:!!(info.tags&&info.tags.includes("nsfw")),tags:info.tags||[]}; }
+              catch(e){ return {nsfw:null,tags:[],error:e.message}; }
+            }
+            return {nsfw:null,tags:[],note:"dataUrl: upload first"};
+          },
+          async upload(){ let blob=await(await fetch(res.dataUrl)).blob(); let {url,error}=await uploadPlugin(blob); if(error) throw new Error(error); return url; },
+        });
+      } finally { FW.state.activeGenerators.delete(job); }
+    }
+    FW.state.lastImageResult = results[0];
+    FW.state.lastImagePrompt = pluginOpts;
+    return count>1 ? results : results[0];
+  };
+
+  FW.imageTile = function(opts) {
+    if(typeof opts === "string") opts = {prompt: opts};
+    return generateImage(opts);
+  };
+
+  // ── GALLERY ──
+  FW.gallery = function(opts) {
+    let cfg = FW.config.gallery;
+    let o = Object.assign({}, cfg, opts||{});
+    let g = {gallery:true};
+    for(let k of ["sort","contentFilter","timeRange","hideIfScoreIsBelow","adaptiveHeight","defaultGalleryNames","style","customButton","customButton2","bannedUsers","bannedPromptPhrases","bannedNegativePromptPhrases"]) {
+      if(o[k]!==undefined) g[k]=o[k];
+    }
+    return generateImage(g);
+  };
+
+  // ── UNIFIED STYLE REGISTRY (t2t + t2i) ──
+  // Register any perchance style-list as a pack. type = "t2t" (text rewrite)
+  // or "t2i" (image art). Each list node exposes .prompt / .negative (and for
+  // t2t: .startWith / .hideStartWith / .label) via evaluateItem, reading
+  // window.input = {description, negative}.
+  FW.styles = {
+    _packs: {},
+    register(name, type, list, meta){ this._packs[name] = {name, type, list, meta:meta||{}}; return this; },
+    unregister(name){ delete this._packs[name]; return this; },
+    packs(){ return Object.keys(this._packs); },
+    packsByType(type){ return this.packs().filter(n => this._packs[n].type === type); },
+    packInfo(name){ return this._packs[name] || null; },
+    _find(styleName){
+      for(let pname of this.packs()){
+        let p = this._packs[pname];
+        if(p.list && p.list[styleName]) return {pack:pname, type:p.type, node:p.list[styleName], list:p.list};
+      }
+      return null;
+    },
+    _label(node){
+      try { return node.label ? node.label.evaluateItem : (node.getName||""); } catch(e){ return ""; }
+    },
+    _tags(node){
+      try { return node["meta:tags"] ? node["meta:tags"].evaluateItem : null; } catch(e){ return null; }
+    },
+    _image(node){
+      try { return node["meta:image"] ? node["meta:image"].evaluateItem : ""; } catch(e){ return ""; }
+    },
+    // list all styles (optionally filtered by type). returns [{pack,type,name,label,tags}]
+    list(type){
+      let out = [];
+      for(let pname of this.packs()){
+        let p = this._packs[pname];
+        if(type && p.type !== type) continue;
+        try {
+          if(p.list && p.list.selectAll){
+            for(let item of p.list.selectAll) out.push({pack:pname, type:p.type, name:item.getName, label:this._label(item), tags:this._tags(item)});
+          }
+        } catch(e){}
+      }
+      return out;
+    },
+    listByPack(packName){
+      let p = this._packs[packName]; if(!p) return [];
+      let out = [];
+      try { if(p.list && p.list.selectAll) for(let item of p.list.selectAll) out.push({pack:packName, type:p.type, name:item.getName, label:this._label(item), tags:this._tags(item)}); } catch(e){}
+      return out;
+    },
+    get(styleName){
+      let f = this._find(styleName); if(!f) return null;
+      return {pack:f.pack, type:f.type, name:styleName, label:this._label(f.node), tags:this._tags(f.node), image:this._image(f.node), node:f.node};
+    },
+    // unified apply — works for both t2i and t2t styles
+    apply(styleName, description, negative){
+      let f = this._find(styleName);
+      if(!f) return {prompt:description, negative:negative, startWith:"", hideStartWith:false, type:null, pack:null};
+      let orig = window.input; window.input = {description:description||"", negative:negative||""};
+      let p, n, sw="", hsw=false;
+      try { p = f.node.prompt ? f.node.prompt.evaluateItem : description; } catch(e){ p = description; }
+      try { n = f.node.negative ? f.node.negative.evaluateItem : negative; } catch(e){ n = negative; }
+      if(f.type === "t2t"){
+        try { sw = f.node.startWith ? f.node.startWith.evaluateItem : ""; } catch(e){}
+        try { hsw = f.node.hideStartWith ? f.node.hideStartWith.evaluateItem : false; } catch(e){}
+      }
+      window.input = orig;
+      return {prompt:p, negative:n, startWith:sw, hideStartWith:hsw, type:f.type, pack:f.pack};
+    },
+    // categories derived from meta:tags object keys (weighted), grouped by type
+    categories(type){
+      let cats = {};
+      for(let s of this.list(type)){
+        let tags = s.tags;
+        if(tags && typeof tags === "object"){
+          for(let k of Object.keys(tags)){ if(!cats[k]) cats[k]=[]; cats[k].push(s.name); }
+        }
+      }
+      return cats;
+    },
+    // search by label/name/tag substring
+    search(type, query){
+      let q = String(query||"").toLowerCase().trim();
+      if(!q) return this.list(type);
+      return this.list(type).filter(s => {
+        let blob = (s.name+" "+s.label+" "+(s.tags?JSON.stringify(s.tags):"")).toLowerCase();
+        return blob.indexOf(q) !== -1;
+      });
+    },
+  };
+
+  // ── TEXT REWRITE via t2t style presets ──
+  // High-level: pick a t2t style, wrap the text, generate, strip startWith if hidden.
+  FW.rewrite = async function(text, styleName, opts) {
+    if(!opts) opts = {};
+    if(text && typeof text === "object"){ opts = text; text = opts.text; styleName = opts.style; }
+    text = text ?? FW._lastTextOutput;
+    if(!text) throw new Error("No text to rewrite");
+    let s = FW.styles.get(styleName);
+    if(!s) throw new Error("Unknown style: "+styleName);
+    if(s.type !== "t2t") throw new Error("Style '"+styleName+"' is a "+s.type+" style, not a t2t rewrite style");
+    let applied = FW.styles.apply(styleName, text, opts.negative || "");
+    let genOpts = { instruction: applied.prompt };
+    if(applied.startWith) genOpts.startWith = applied.startWith;
+    if(applied.hideStartWith) genOpts.hideStartWith = true;
+    if(opts.stopSequences) genOpts.stopSequences = opts.stopSequences;
+    if(opts.onChunk) genOpts.onChunk = opts.onChunk;
+    if(opts.onStart) genOpts.onStart = opts.onStart;
+    if(opts.safetyReminder !== undefined) genOpts.safetyReminder = opts.safetyReminder;
+    if(opts.timeoutMs) genOpts.timeoutMs = opts.timeoutMs;
+    let result = await FW.text(genOpts);
+    let out = result.text;
+    if(applied.hideStartWith && applied.startWith && out.startsWith(applied.startWith)) out = out.slice(applied.startWith.length);
+    FW._lastTextOutput = out;
+    FW.history.push({kind:"rewrite:"+styleName, text:out, at:Date.now()});
+    return { text: out, raw: result, style: styleName, applied: applied };
+  };
+
+  // ── VISION ──
+  FW.vision = async function(img, question, opts={}) {
+    let blob = img;
+    if(typeof img === "string") blob = await fetch(img).then(r=>r.blob());
+    return FW.text({ instruction:[question||"Describe this image in detail.", blob], ...opts });
+  };
+
+  // ── IMAGE-TO-IMAGE ──
+  FW.imageToImage = async function(img, instruction, imageOpts={}) {
+    let desc = await FW.vision(img, instruction||"Describe this image as a vivid text-to-image prompt to recreate a variation.");
+    let promptText = desc.generatedText || desc.text;
+    let image = await FW.image({prompt:promptText, ...imageOpts});
+    return {description:desc, image};
+  };
+
+  // ── UI HELPERS ──
+  FW.ui = {
+    loading(target, text){
+      let el=document.createElement("div");
+      el.className="__fw-loading";
+      el.innerHTML=`<span style="display:inline-block;animation:rotate 1.5s linear infinite;">⏳</span> ${text||"loading..."}`;
+      el.style.cssText="padding:1rem;text-align:center;opacity:0.8;";
+      if(target){target.innerHTML="";target.appendChild(el);}
+      return {el, delete(){el.remove();}};
+    },
+    toast(msg, ms){
+      let t=document.createElement("div"); t.textContent=msg;
+      t.style.cssText="position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:#222;color:#eee;padding:0.6rem 1rem;border-radius:6px;z-index:999999;box-shadow:0 2px 12px rgba(0,0,0,0.4);";
+      document.body.append(t); setTimeout(()=>t.remove(),ms||2500);
+    },
+  };
+
+  // ── SHARE LINKS ──
+  FW.shareLink = async function(dataObj){
+    if(!window.CompressionStream) throw new Error("unsupported");
+    let json=JSON.stringify(Object.assign({__format:"ult-fw-v2"},dataObj));
+    let blob=await fetch("data:text/plain;charset=utf-8,"+json.replace(/#/g,"%23")).then(r=>r.blob());
+    let cs=new CompressionStream("gzip");
+    let compressed=await new Response(blob.stream().pipeThrough(cs)).blob();
+    compressed=new Blob([compressed],{type:"application/gzip"});
+    let {url,error}=await uploadPlugin(compressed);
+    if(error) throw new Error(error);
+    return `https://perchance.org/${window.generatorName}#data=`+url.replace("https://user.uploads.dev/file/","uup1:");
+  };
+  FW.loadShareLink = async function(){
+    if(!window.DecompressionStream) return null;
+    let hash=window.location.hash.slice(1);
+    if(!hash.startsWith("data=")) return null;
+    let fileUrl=hash.replace(/^data=/,"").replace(/^uup1:/,"https://user.uploads.dev/file/");
+    let blob=await fetch(fileUrl).then(r=>r.blob());
+    if(fileUrl.endsWith(".gz")){ let ds=new DecompressionStream("gzip"); blob=await new Response(blob.stream().pipeThrough(ds)).blob(); }
+    return JSON.parse(await blob.text());
+  };
+
+  // ── CANCEL / STATS ──
+  FW.cancelAll = function(){ for(let j of FW.state.activeGenerators){try{j.stop?.();}catch(e){}} FW.state.activeGenerators.clear(); };
+  FW.stats = function(){
+    return { version:FW.version, clickCount:FW.state.clickCount, activeJobs:FW.state.activeGenerators.size, historyLength:FW.state.history.length, summaryLength:FW.state.summary.length, idealMaxContextTokens:FW.idealMaxContextTokens(), stylesAvailable:FW.styles.list().length, stylePacks:FW.styles.packs().length, outputHistoryLength: FW.history.list().length, panels: FW._panels.length };
+  };
+  FW.tickClick = function(){ FW.state.clickCount++; localStorage.__ultFw_clickCount=FW.state.clickCount; };
+
+  // ── LAST OUTPUT TRACKING ──
+  FW._lastTextOutput = "";
+  FW._lastTextSelection = "";
+  FW.setLastText = function(t){ FW._lastTextOutput = String(t||""); return FW._lastTextOutput; };
+  FW.getLastText = function(){ return FW._lastTextOutput; };
+
+  // ── ENCHANT PRESETS ──
+  FW.presets = {
+    list: [
+      {id:"dramatic",     label:"🎭 Dramatic",      instruction:"Rewrite the following text with dramatic flair, vivid imagery, and heightened emotional intensity. Preserve the meaning."},
+      {id:"poetic",       label:"🌸 Poetic",        instruction:"Rewrite the following text in a lyrical, poetic style with rich metaphors and rhythm. Preserve the meaning."},
+      {id:"concise",      label:"✂️ Concise",       instruction:"Rewrite the following text to be as concise and tight as possible without losing key information."},
+      {id:"expand",       label:"📈 Expanded",      instruction:"Expand and elaborate the following text with more detail, examples, and depth. Preserve the meaning."},
+      {id:"formal",       label:"🎩 Formal",        instruction:"Rewrite the following text in a polished, formal, professional tone."},
+      {id:"casual",       label:"😎 Casual",        instruction:"Rewrite the following text in a casual, friendly, conversational tone."},
+      {id:"humorous",     label:"🤣 Humorous",      instruction:"Rewrite the following text with humor, wit, and a playful tone while preserving the meaning."},
+      {id:"epic",         label:"⚔️ Epic",          instruction:"Rewrite the following text in an epic, grandiose, mythic style as if narrated by a bard."},
+      {id:"noir",         label:"🕵️ Noir",          instruction:"Rewrite the following text in a hardboiled noir detective style, moody and atmospheric."},
+      {id:"shakespeare",  label:"📜 Shakespearean", instruction:"Rewrite the following text in the style of Shakespearean English."},
+      {id:"scifi",        label:"🚀 Sci-Fi",        instruction:"Rewrite the following text as if describing a far-future science-fiction scenario."},
+      {id:"fairytale",    label:"🧚 Fairytale",     instruction:"Rewrite the following text as a whimsical fairytale."},
+      {id:"cyberpunk",    label:"🌃 Cyberpunk",     instruction:"Rewrite the following text in a neon-drenched cyberpunk aesthetic."},
+      {id:"zen",          label:"🧘 Zen",           instruction:"Rewrite the following text in a calm, minimalist, contemplative Zen style."},
+      {id:"pirate",       label:"🏴‍☠️ Pirate",      instruction:"Rewrite the following text in the style of a swashbuckling pirate."},
+      {id:"academic",     label:"🎓 Academic",      instruction:"Rewrite the following text in formal academic prose with precise terminology."},
+    ],
+    get(id){ return this.list.find(p=>p.id===id) || this.list[0]; },
+    labels(){ return this.list.map(p=>p.label); },
+  };
+
+  // ── TEXT TRANSFORMS ──
+  FW.continue = async function(opts={}) {
+    let ctx = opts.context ?? FW._lastTextOutput;
+    if(!ctx) throw new Error("No prior text to continue from");
+    let prompt = opts.instruction ?? FW.config.text.continuePrompt;
+    let result = await FW.text({
+      instruction: prompt + "\\n\\n<TEXT>\\n" + ctx + "\\n</TEXT>",
+      startWith: opts.startWith ?? "",
+      stopSequences: opts.stopSequences ?? FW.config.text.stopSequences,
+      onChunk: opts.onChunk,
+      safetyReminder: opts.safetyReminder,
+      timeoutMs: opts.timeoutMs ?? FW.config.text.timeoutMs,
+    });
+    let sep = opts.separator ?? FW.config.text.continueSeparator;
+    let combined = ctx + sep + result.text;
+    FW._lastTextOutput = combined;
+    FW.history.push({kind:"continue", text:combined, addition:result.text, at:Date.now()});
+    return { text: combined, addition: result.text, raw: result };
+  };
+
+  FW.improve = async function(opts={}) {
+    let ctx = opts.text ?? FW._lastTextOutput;
+    if(!ctx) throw new Error("No text to improve");
+    let prompt = opts.instruction ?? FW.config.text.improvePrompt;
+    let result = await FW.text({
+      instruction: prompt + "\\n\\n<TEXT>\\n" + ctx + "\\n</TEXT>",
+      onChunk: opts.onChunk,
+      safetyReminder: opts.safetyReminder,
+      timeoutMs: opts.timeoutMs ?? FW.config.text.timeoutMs,
+    });
+    FW._lastTextOutput = result.text;
+    FW.history.push({kind:"improve", text:result.text, at:Date.now()});
+    return { text: result.text, raw: result };
+  };
+
+  FW.enchant = async function(opts={}) {
+    let ctx = opts.text ?? FW._lastTextOutput;
+    if(!ctx) throw new Error("No text to enchant");
+    let preset;
+    if(typeof opts.preset === "string") preset = FW.presets.get(opts.preset);
+    else if(typeof opts.preset === "object" && opts.preset) preset = opts.preset;
+    else preset = FW.presets.get(FW.config.text.enchantPreset);
+    let result = await FW.text({
+      instruction: preset.instruction + "\\n\\n<TEXT>\\n" + ctx + "\\n</TEXT>",
+      onChunk: opts.onChunk,
+      safetyReminder: opts.safetyReminder,
+      timeoutMs: opts.timeoutMs ?? FW.config.text.timeoutMs,
+    });
+    FW._lastTextOutput = result.text;
+    FW.history.push({kind:"enchant:"+preset.id, text:result.text, preset:preset.id, at:Date.now()});
+    return { text: result.text, preset: preset, raw: result };
+  };
+
+  FW.regenerate = async function(opts={}) {
+    let last = FW.state.lastTextPrompt;
+    if(!last) throw new Error("No prior prompt to regenerate");
+    let result = await FW.text({
+      instruction: last.instruction,
+      startWith: last.startWith,
+      stopSequences: last.stopSequences,
+      onChunk: opts.onChunk,
+      safetyReminder: opts.safetyReminder,
+      timeoutMs: opts.timeoutMs ?? FW.config.text.timeoutMs,
+    });
+    FW._lastTextOutput = result.text;
+    FW.history.push({kind:"regenerate", text:result.text, at:Date.now()});
+    return result;
+  };
+
+  FW.translate = async function(text, lang, opts={}) {
+    if(text && typeof text === "object") { opts = text; text = opts.text; lang = opts.lang; }
+    text = text ?? FW._lastTextOutput;
+    lang = lang ?? FW.config.ui.defaultTranslateLang;
+    if(!text) throw new Error("No text to translate");
+    let result = await FW.text({
+      instruction: `Translate the following text into ${lang}. Output only the translation, preserving formatting and meaning.\\n\\n<TEXT>\\n${text}\\n</TEXT>`,
+      onChunk: opts.onChunk,
+      timeoutMs: opts.timeoutMs ?? FW.config.text.timeoutMs,
+    });
+    FW.history.push({kind:"translate:"+lang, text:result.text, at:Date.now()});
+    return result;
+  };
+
+  FW.summarize = async function(text, opts={}) {
+    if(text && typeof text === "object") { opts = text; text = opts.text; }
+    text = text ?? FW._lastTextOutput;
+    if(!text) throw new Error("No text to summarize");
+    let n = opts.sentences ?? 3;
+    let result = await FW.text({
+      instruction: `Summarize the following text in ${n} sentences or fewer. Capture the key points only. Output only the summary.\\n\\n<TEXT>\\n${text}\\n</TEXT>`,
+      onChunk: opts.onChunk,
+      timeoutMs: opts.timeoutMs ?? FW.config.text.timeoutMs,
+    });
+    FW.history.push({kind:"summarize", text:result.text, at:Date.now()});
+    return result;
+  };
+
+  FW.wordCount = function(text) {
+    text = text ?? FW._lastTextOutput ?? "";
+    let words = (text.trim().match(/\\S+/g) || []).length;
+    let chars = text.length;
+    let charsNoSpace = text.replace(/\\s/g,"").length;
+    let sentences = (text.match(/[.!?]+/g) || []).length;
+    let paragraphs = (text.split(/\\n\\s*\\n/).filter(Boolean)).length;
+    let lines = text.split(/\\n/).length;
+    let readMins = Math.max(1, Math.round(words/200));
+    return {words, chars, charsNoSpace, sentences, paragraphs, lines, readMins};
+  };
+
+  FW.copy = async function(text) {
+    text = text ?? FW._lastTextOutput;
+    if(!text) { FW.ui.toast("Nothing to copy"); return false; }
+    try {
+      await navigator.clipboard.writeText(text);
+      FW.ui.toast("📋 Copied to clipboard");
+      return true;
+    } catch(e) {
+      let ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); FW.ui.toast("📋 Copied"); return true; }
+      catch(e2){ FW.ui.toast("Copy failed"); return false; }
+      finally { ta.remove(); }
+    }
+  };
+
+  FW.exportFile = function(text, filename) {
+    text = text ?? FW._lastTextOutput;
+    filename = filename || ("output-"+Date.now()+".txt");
+    let blob = new Blob([text], {type:"text/plain;charset=utf-8"});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    FW.ui.toast("💾 Exported "+filename);
+  };
+
+  // ── OUTPUT HISTORY ──
+  FW.history = {
+    _items: [],
+    push(item){ this._items.push(item); if(this._items.length > 200) this._items.shift(); if(FW.config.ui.persistHistory){ try{ localStorage.__ultFw_outHistory = JSON.stringify(this._items.slice(-50)); }catch(e){} } },
+    list(){ return [...this._items]; },
+    clear(){ this._items = []; try{ delete localStorage.__ultFw_outHistory; }catch(e){} },
+    last(n=1){ return this._items.slice(-n); },
+    get(i){ return this._items[i]; },
+    restore(){ try{ let s = localStorage.__ultFw_outHistory; if(s){ this._items = JSON.parse(s) || []; } }catch(e){} },
+  };
+  FW.history.restore();
+
+  // ── SETTINGS ──
+  FW.settings = {
+    get(path){ let parts = String(path||"").split("."); let o = FW.config; for(let p of parts){ if(o==null) return undefined; o = o[p]; } return o; },
+    set(path, value){ let parts = String(path||"").split("."); let o = FW.config; for(let i=0;i<parts.length-1;i++){ if(o[parts[i]]==null || typeof o[parts[i]]!=="object") o[parts[i]] = {}; o = o[parts[i]]; } o[parts[parts.length-1]] = value; return value; },
+    update(fn){ if(typeof fn==="function") fn(FW.config); return FW.config; },
+    export(){ return JSON.stringify(FW.config, null, 2); },
+    import(json){ let obj = typeof json=="string" ? JSON.parse(json) : json; FW.config = mergeDefaults(obj); return FW.config; },
+    reset(){ FW.config = mergeDefaults({}); return FW.config; },
+    persist(){ if(FW.config.ui.persistConfig){ try{ localStorage.__ultFw_config = FW.settings.export(); }catch(e){} } },
+    restorePersisted(){ if(FW.config.ui.persistConfig){ try{ let s=localStorage.__ultFw_config; if(s) FW.settings.import(s); }catch(e){} } },
+  };
+  FW.settings.restorePersisted();
+
+  // ── END BUTTONS RENDERER ──
+  FW.endButtons = function(container, handlers, opts={}) {
+    if(!container) return null;
+    let existing = container.querySelector(".__fw-endbtns");
+    if(existing) existing.remove();
+    let cfg = FW.config.text;
+    let list = (opts.buttons || cfg.endButtons || "").split(",").map(s=>s.trim()).filter(Boolean);
+    let defs = {
+      continue:    {label:"▶ Continue",    fn:handlers.continue,    title:"Continue generating from current text"},
+      copy:        {label:"📋 Copy",        fn:handlers.copy,        title:"Copy to clipboard"},
+      improve:     {label:"✨ Improve",     fn:handlers.improve,     title:"Improve prose & clarity"},
+      enchant:     {label:"🪄 Enchant",     fn:handlers.enchant,     title:"Apply a style transformation"},
+      regenerate:  {label:"🔄 Regenerate",  fn:handlers.regenerate,  title:"Rerun the last prompt"},
+      translate:   {label:"🌐 Translate",   fn:handlers.translate,   title:"Translate to another language"},
+      summarize:   {label:"📝 Summarize",   fn:handlers.summarize,   title:"Summarize the current text"},
+      count:       {label:"🔢 Count",       fn:handlers.count,       title:"Word / character count"},
+      export:      {label:"💾 Export",      fn:handlers.export,      title:"Download as .txt"},
+      edit:        {label:"✏️ Edit",        fn:handlers.edit,        title:"Edit the output inline"},
+      clear:       {label:"🗑️ Clear",       fn:handlers.clear,       title:"Clear the output"},
+      rewrite:     {label:"🎭 Rewrite",     fn:handlers.rewrite,     title:"Rewrite using a t2t style preset"},
+    };
+    if(!FW.config.ui.showEndButtons) return null;
+    let row = document.createElement("div");
+    row.className = "__fw-endbtns";
+    row.style.cssText = "display:flex;gap:0.3rem;flex-wrap:wrap;margin-top:0.4rem;align-items:center;";
+    list.forEach(id => {
+      let d = defs[id];
+      if(!d || !d.fn) return;
+      let el = document.createElement("button");
+      el.className = "__fw-btn __fw-endbtn secondary";
+      el.textContent = d.label;
+      el.title = d.title || "";
+      el.style.cssText = "padding:0.3rem 0.6rem;font-size:0.82rem;background:#666;";
+      el.onclick = () => { try { d.fn(); } catch(e){ FW.ui.toast("Error: "+e.message); } };
+      row.appendChild(el);
+    });
+    container.appendChild(row);
+    return row;
+  };
+
+  // ── ENCHANT MODAL ──
+  FW.enchantModal = function(opts={}) {
+    return new Promise((resolve) => {
+      let overlay = document.createElement("div");
+      overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999998;display:flex;align-items:center;justify-content:center;padding:1rem;";
+      let box = document.createElement("div");
+      box.style.cssText = "background:var(--box-color,#fff);color:var(--text-color,#000);border-radius:10px;padding:1rem;max-width:520px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,0.4);";
+      box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;"><b style="font-size:1.05rem;">🪄 Enchant — choose a style</b><button class="__fw-btn secondary" style="padding:0.2rem 0.5rem;">✕</button></div><div class="__fw-enchant-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:0.4rem;"></div>';
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      let close = () => { overlay.remove(); };
+      box.querySelector("button").onclick = () => { close(); resolve(null); };
+      overlay.onclick = (e) => { if(e.target===overlay){ close(); resolve(null); } };
+      let grid = box.querySelector(".__fw-enchant-grid");
+      FW.presets.list.forEach(p => {
+        let b = document.createElement("button");
+        b.className = "__fw-btn";
+        b.textContent = p.label;
+        b.style.cssText = "padding:0.5rem;font-size:0.9rem;background:#4a9eff;";
+        b.onclick = () => { close(); resolve(p); };
+        grid.appendChild(b);
+      });
+    });
+  };
+
+  // ── UNIFIED STYLE PICKER MODAL ──
+  // type: "t2t" | "t2i" | null (all). Returns {name, type, pack} or null.
+  FW.stylePicker = function(type) {
+    return new Promise((resolve) => {
+      let overlay = document.createElement("div");
+      overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999998;display:flex;align-items:center;justify-content:center;padding:1rem;";
+      let box = document.createElement("div");
+      box.style.cssText = "background:var(--box-color,#fff);color:var(--text-color,#000);border-radius:10px;padding:1rem;max-width:680px;width:100%;max-height:85vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,0.4);";
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      let close = (v) => { overlay.remove(); resolve(v); };
+      let all = FW.styles.list(type);
+      // group by pack
+      let byPack = {};
+      all.forEach(s => { (byPack[s.pack] = byPack[s.pack]||[]).push(s); });
+      box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;"><b style="font-size:1.05rem;">🎭 Pick a style '+(type?("("+type+")"):"(all)")+'</b><button class="__fw-close __fw-btn secondary" style="padding:0.2rem 0.5rem;">✕</button></div><input class="__fw-sp-search" style="width:100%;box-sizing:border-box;padding:0.4rem;margin-bottom:0.4rem;border:1px solid #ccc;border-radius:6px;" placeholder="search styles..."><div class="__fw-sp-list"></div>';
+      box.querySelector(".__fw-close").onclick = () => close(null);
+      overlay.onclick = (e) => { if(e.target===overlay) close(null); };
+      let listEl = box.querySelector(".__fw-sp-list");
+      let searchEl = box.querySelector(".__fw-sp-search");
+      function render(filter){
+        let f = (filter||"").toLowerCase().trim();
+        listEl.innerHTML = "";
+        for(let pname of Object.keys(byPack)){
+          let items = byPack[pname].filter(s => !f || (s.name+" "+s.label).toLowerCase().indexOf(f)!==-1);
+          if(!items.length) continue;
+          let h = document.createElement("div");
+          h.style.cssText = "font-weight:bold;font-size:0.8rem;opacity:0.6;margin:0.4rem 0 0.2rem;";
+          h.textContent = pname+" · "+items.length;
+          listEl.appendChild(h);
+          let grid = document.createElement("div");
+          grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:0.35rem;";
+          items.forEach(s => {
+            let b = document.createElement("button");
+            b.className = "__fw-btn";
+            b.textContent = s.label || s.name;
+            b.title = s.name+" ("+s.type+")";
+            b.style.cssText = "padding:0.4rem;font-size:0.85rem;background:"+(s.type==="t2t"?"#7b5":"#4a9eff")+";";
+            b.onclick = () => close({name:s.name, type:s.type, pack:s.pack});
+            grid.appendChild(b);
+          });
+          listEl.appendChild(grid);
+        }
+      }
+      render("");
+      searchEl.oninput = () => render(searchEl.value);
+      searchEl.focus();
+    });
+  };
+
+  // ── PROMPT MODAL ──
+  FW.promptModal = function(title, defaultValue, placeholder) {
+    return new Promise((resolve) => {
+      let overlay = document.createElement("div");
+      overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999998;display:flex;align-items:center;justify-content:center;padding:1rem;";
+      let box = document.createElement("div");
+      box.style.cssText = "background:var(--box-color,#fff);color:var(--text-color,#000);border-radius:10px;padding:1rem;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.4);";
+      box.innerHTML = `<div style="margin-bottom:0.6rem;font-weight:bold;">${title||""}</div><input style="width:100%;box-sizing:border-box;padding:0.5rem;font-size:1rem;border:1px solid #ccc;border-radius:6px;margin-bottom:0.6rem;" placeholder="${placeholder||""}"><div style="display:flex;gap:0.5rem;justify-content:flex-end;"><button class="__fw-btn secondary" style="padding:0.4rem 0.8rem;">Cancel</button><button class="__fw-btn" style="padding:0.4rem 0.8rem;">OK</button></div>`;
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      let input = box.querySelector("input");
+      input.value = defaultValue || "";
+      input.focus(); input.select();
+      let close = (val) => { overlay.remove(); resolve(val); };
+      box.querySelectorAll("button")[0].onclick = () => close(null);
+      box.querySelectorAll("button")[1].onclick = () => close(input.value);
+      input.onkeydown = (e) => { if(e.key=="Enter") close(input.value); if(e.key=="Escape") close(null); };
+      overlay.onclick = (e) => { if(e.target===overlay) close(null); };
+    });
+  };
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  MODULAR PANEL SYSTEM
+  //  Generators register panels via FW.panel(id, label, renderFn).
+  //  renderFn(containerEl, ctx) builds the panel's DOM inside containerEl.
+  //  FW.renderPanels(rootEl, layout) lays them out as tabs / accordion / single.
+  // ════════════════════════════════════════════════════════════════════════
+  FW.panel = function(id, label, render, opts) {
+    if(!opts) opts = {};
+    let existing = FW._panels.find(p => p.id === id);
+    let entry = {id, label, render, opts};
+    if(existing){ Object.assign(existing, entry); }
+    else FW._panels.push(entry);
+    return FW;
+  };
+  FW.removePanel = function(id){ FW._panels = FW._panels.filter(p => p.id !== id); return FW; };
+  FW.getPanel = function(id){ return FW._panels.find(p => p.id === id) || null; };
+  FW.panelIds = function(){ return FW._panels.map(p => p.id); };
+
+  FW.renderPanels = function(rootEl, layout, onlyIds) {
+    let panels = onlyIds ? FW._panels.filter(p => onlyIds.indexOf(p.id) !== -1) : FW._panels;
+    // preserve order of onlyIds if given
+    if(onlyIds) panels = onlyIds.map(id => FW._panels.find(p => p.id === id)).filter(Boolean);
+    if(!panels.length){ rootEl.innerHTML = "<div style='opacity:0.6;padding:1rem;'>No panels registered.</div>"; return; }
+    layout = layout || FW.config.ui.layout || "tabs";
+    rootEl.innerHTML = "";
+    rootEl.classList.add("__fw-panels");
+    rootEl.classList.add("__fw-layout-"+layout);
+    if(layout === "single"){
+      let panel = panels[0];
+      let ct = document.createElement("div"); ct.className = "__fw-panel active";
+      rootEl.appendChild(ct);
+      try { panel.render(ct, {FW}); } catch(e){ ct.textContent = "Panel error: "+e.message; }
+      return;
+    }
+    if(layout === "accordion"){
+      panels.forEach((panel, i) => {
+        let wrap = document.createElement("div"); wrap.className = "__fw-acc";
+        let head = document.createElement("div"); head.className = "__fw-acc-head"; head.textContent = panel.label;
+        head.style.cssText = "padding:0.5rem 0.8rem;cursor:pointer;background:var(--box-color,#eee);border-radius:6px;margin-bottom:0.2rem;font-weight:bold;";
+        let body = document.createElement("div"); body.className = "__fw-panel"; body.style.display = i===0 ? "block" : "none";
+        wrap.appendChild(head); wrap.appendChild(body); rootEl.appendChild(wrap);
+        head.onclick = () => { let open = body.style.display !== "none"; body.style.display = open ? "none" : "block"; head.style.opacity = open ? "0.7" : "1"; };
+        try { panel.render(body, {FW}); } catch(e){ body.textContent = "Panel error: "+e.message; }
+      });
+      return;
+    }
+    // tabs (default)
+    let tabs = document.createElement("div"); tabs.className = "__fw-tabs";
+    tabs.style.cssText = "display:flex;flex-wrap:wrap;gap:0.25rem;border-bottom:2px solid var(--box-color,#ddd);margin-bottom:0.75rem;";
+    panels.forEach((panel, i) => {
+      let t = document.createElement("div"); t.className = "__fw-tab" + (i===0 ? " active" : "");
+      t.style.cssText = "padding:0.4rem 0.8rem;cursor:pointer;border:2px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;background:transparent;font-size:0.95rem;";
+      t.textContent = panel.label;
+      t.dataset.i = i;
+      tabs.appendChild(t);
+    });
+    rootEl.appendChild(tabs);
+    let panelCts = panels.map(p => { let c = document.createElement("div"); c.className = "__fw-panel" ; c.style.display = "none"; rootEl.appendChild(c); return c; });
+    panelCts[0].style.display = "block";
+    tabs.querySelectorAll(".__fw-tab").forEach(t => {
+      t.onclick = function(){
+        tabs.querySelectorAll(".__fw-tab").forEach(x => x.classList.remove("active"));
+        panelCts.forEach(c => c.style.display = "none");
+        t.classList.add("active");
+        let i = Number(t.dataset.i);
+        panelCts[i].style.display = "block";
+      };
+    });
+    panels.forEach((panel, i) => {
+      try { panel.render(panelCts[i], {FW}); } catch(e){ panelCts[i].textContent = "Panel error: "+e.message; }
+    });
+  };
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  GENERATOR FACTORY
+  //  FW.generator(config) returns {mount(sel)}.
+  //  config: { title, subtitle, panels:[ids], stylePacks:[{name,type,list}],
+  //            defaults:{...}, customPanels:[{id,label,render}], maxWidth }
+  //  Registers custom style packs + panels, applies defaults, renders layout.
+  // ════════════════════════════════════════════════════════════════════════
+  FW.generator = function(config) {
+    if(!config) config = {};
+    if(config.stylePacks) config.stylePacks.forEach(p => FW.styles.register(p.name, p.type, p.list, p.meta||{}));
+    if(config.defaults) FW.settings.update(c => Object.assign(c, mergeDefaults(Object.assign({}, c, config.defaults))));
+    if(config.customPanels) config.customPanels.forEach(p => FW.panel(p.id, p.label, p.render, p.opts||{}));
+    return {
+      mount(sel){
+        let el = typeof sel === "string" ? document.querySelector(sel) : sel;
+        if(!el) return;
+        if(config.maxWidth) el.style.maxWidth = config.maxWidth;
+        let header = "";
+        if(config.title) header += "<h2 style='text-align:center;'>"+config.title+"</h2>";
+        if(config.subtitle) header += "<p style='text-align:center;opacity:0.7;font-size:0.85rem;'>"+config.subtitle+"</p>";
+        el.innerHTML = header + "<div class='__fw-panels-root'></div>";
+        let root = el.querySelector(".__fw-panels-root");
+        let ids = config.panels && config.panels.length ? config.panels : FW.panelIds();
+        FW.renderPanels(root, config.layout || FW.config.ui.layout || "tabs", ids);
+      }
+    };
+  };
+
+  return FW;

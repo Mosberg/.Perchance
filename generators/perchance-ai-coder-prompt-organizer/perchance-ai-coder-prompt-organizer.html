@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>perchance-ai-coder-prompt-organizer — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <button id="menuBtn" class="btn icon" onclick="toggleSidebar()" aria-label="Toggle projects">☰</button>
+    <h1>Perchance Prompt Builder</h1>
+    <button id="helpBtn" class="btn icon" onclick="toggleHelp()" aria-label="Help">?</button>
+  </header>
+
+  <div id="layout">
+    <div id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
+    <aside id="sidebar">
+      <div class="sidebar-title">Projects</div>
+      <button id="newProjectBtn" class="btn" onclick="newProject()">+ New Project</button>
+      <div id="projectListCtn" class="project-list"></div>
+    </aside>
+
+    <main id="main">
+      <section id="helpCtn" class="card" hidden>
+        <div class="card-head">
+          <strong>How to use</strong>
+          <button class="btn icon" onclick="toggleHelp(false)" aria-label="Close">&times;</button>
+        </div>
+        <ol class="help-list">
+          <li>Describe what you want to build in <b>Main Goal</b>.</li>
+          <li>Click <b>Auto-Generate Features</b> to let AI break it into parts, or add features manually.</li>
+          <li>Nest details under each feature using <b>+ Subfeature</b>.</li>
+          <li>Use <b>Diagnose Goal</b> to spot missing details and answer clarifying questions.</li>
+          <li>Click <b>Generate Optimized Prompt</b> to produce a clean prompt for the Perchance AI Coder.</li>
+          <li>Review with <b>Diagnose Output</b>, refine with <b>Less/More Detail</b>, then copy.</li>
+        </ol>
+      </section>
+
+      <section>
+        <label class="lbl" for="projectNameInput">Project Name</label>
+        <input id="projectNameInput" class="field" placeholder="My Generator">
+      </section>
+
+      <section class="card">
+        <label class="lbl" for="goalInput">Main Goal</label>
+        <textarea id="goalInput" class="field" rows="3" placeholder="What do you want to build? E.g., A fantasy character generator with class-based stats and rarity colors..."></textarea>
+        <div class="btn-row">
+          <button id="autoGenerateBtn" class="btn btn-accent" onclick="autoGenerateFeatures()">⚡ Auto-Generate Features</button>
+          <button id="diagnoseBtn" class="btn btn-info" onclick="diagnoseGoal(this)">🔍 Diagnose Goal</button>
+          <button id="advToggleBtn" class="btn ghost" onclick="toggleAdvanced()">⚙ Advanced</button>
+        </div>
+
+        <div id="advancedCtn" class="advanced" hidden>
+          <div class="grid-2">
+            <div>
+              <label class="lbl" for="featureScopeInput">Feature Scope</label>
+              <select id="featureScopeInput" class="field" onchange="updateProjectOption('featureScope', this.value)">
+                <option value="balanced">Balanced</option>
+                <option value="broad">Broad (fewer)</option>
+                <option value="specific">Specific (more)</option>
+              </select>
+            </div>
+            <div>
+              <label class="lbl" for="elabStyleInput">Elaboration Style</label>
+              <select id="elabStyleInput" class="field" onchange="updateProjectOption('elabStyle', this.value)">
+                <option value="technical">Technical</option>
+                <option value="descriptive">Descriptive</option>
+                <option value="balanced">Balanced</option>
+              </select>
+            </div>
+            <div>
+              <label class="lbl" for="expansionStyleInput">Output Style</label>
+              <select id="expansionStyleInput" class="field" onchange="updateProjectOption('expansionStyle', this.value)">
+                <option value="technical">Technical</option>
+                <option value="descriptive">Descriptive</option>
+                <option value="balanced">Balanced</option>
+              </select>
+            </div>
+            <div class="check-row">
+              <label class="check-lbl">
+                <input type="checkbox" id="complementFeaturesInput" onchange="updateProjectOption('complementFeatures', this.checked)">
+                Suggest complementary features
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div id="diagnosisCtn" class="card" hidden></div>
+
+      <section>
+        <div class="section-head">
+          <label class="lbl" style="margin:0;">Features / Mechanics</label>
+          <button id="addFeatureBtn" class="btn btn-primary" onclick="addFeature()">+ Add Feature</button>
+        </div>
+        <div id="featuresCtn" class="features-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <strong>Prompt Assembly Preview</strong>
+          <button class="btn ghost" onclick="copyAssembly(this)">Copy Goal & Features</button>
+        </div>
+        <div id="assemblyPreviewCtn" class="assembly"></div>
+      </section>
+
+      <section class="btn-row">
+        <button id="saveProjectBtn" class="btn btn-success" onclick="saveProject()">Save Project</button>
+        <button id="deleteProjectBtn" class="btn btn-danger" onclick="deleteCurrentProject()">Delete</button>
+        <button id="generateBtn" class="btn btn-primary grow" onclick="generatePrompt()">✨ Generate Optimized Prompt</button>
+      </section>
+
+      <div id="loadingEl" class="loading" hidden>
+        <span class="spinner"></span>
+        <span id="loadingTextEl">Working... please wait.</span>
+      </div>
+
+      <section>
+        <div class="section-head">
+          <label class="lbl" style="margin:0;">Optimized Output</label>
+          <div class="btn-row tight">
+            <button id="lessDetailBtn" class="btn ghost sm" onclick="rewriteDetail('less')" hidden>Less Detail</button>
+            <button id="moreDetailBtn" class="btn ghost sm" onclick="rewriteDetail('more')" hidden>More Detail</button>
+            <button id="diagnoseOutputBtn" class="btn ghost sm" onclick="diagnoseOutput(this)" hidden>Diagnose Output</button>
+            <button id="copyBtn" class="btn ghost sm" onclick="copyOutput()">Copy</button>
+          </div>
+        </div>
+        <div id="outputAreaEl" class="output-area"></div>
+        <div id="outputDiagnosisCtn" class="card" hidden style="margin-top:10px;"></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; text-align:left; background:#0f0f0f; color:#eee; -webkit-text-size-adjust:100%; }
+  #app { display:flex; flex-direction:column; height:100vh; height:100dvh; }
+
+  header { display:flex; align-items:center; gap:10px; padding:10px 12px; background:#161616; border-bottom:1px solid #333; flex-shrink:0; }
+  header h1 { margin:0; font-size:17px; flex:1; }
+  #menuBtn { display:none; }
+
+  #layout { flex:1; display:flex; overflow:hidden; min-height:0; }
+  #sidebar { width:230px; flex-shrink:0; background:#161616; border-right:1px solid #333; padding:12px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; }
+  .sidebar-title { font-weight:bold; font-size:15px; color:#3b82f6; }
+  .project-list { display:flex; flex-direction:column; gap:6px; overflow-y:auto; flex:1; }
+  .project-list button { text-align:left; padding:10px; border-radius:8px; border:1px solid #333; cursor:pointer; background:#1a1a1a; color:#eee; font-weight:normal; min-height:42px; }
+  .project-list button.active { border-color:#3b82f6; background:#222; font-weight:bold; }
+
+  #main { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:14px; min-width:0; }
+
+  .btn { padding:10px 14px; border-radius:8px; border:1px solid #444; background:#222; color:#eee; cursor:pointer; font-weight:600; font-size:14px; min-height:42px; line-height:1.1; }
+  .btn.icon { padding:6px 10px; min-height:36px; min-width:36px; font-size:18px; }
+  .btn.sm { padding:7px 11px; min-height:34px; font-size:13px; }
+  .btn.ghost { background:#2a2a2a; }
+  .btn.grow { flex:1; min-width:160px; }
+  .btn-primary { background:#3b82f6; border:none; color:#fff; }
+  .btn-accent { background:#7c3aed; border:none; color:#fff; }
+  .btn-info { background:#0ea5e9; border:none; color:#fff; }
+  .btn-success { background:#15803d; border:none; color:#fff; }
+  .btn-danger { background:#b91c1c; border:none; color:#fff; }
+  .btn:disabled { opacity:0.6; cursor:default; }
+  button:hover:not(:disabled) { opacity:0.9; }
+
+  .field { width:100%; padding:11px; background:#1a1a1a; color:#eee; border:1px solid #444; border-radius:8px; font-size:15px; }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:#3b82f6; }
+  .lbl { display:block; font-size:13px; color:#aaa; margin-bottom:5px; font-weight:600; }
+
+  .card { background:#161616; border:1px solid #333; border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .card-head { display:flex; justify-content:space-between; align-items:center; }
+  .section-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  .btn-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .btn-row.tight { gap:6px; }
+
+  .help-list { margin:6px 0 0; padding-left:18px; color:#ccc; line-height:1.7; font-size:14px; }
+  .help-list b { color:#fff; }
+
+  .advanced { border-top:1px solid #333; padding-top:12px; }
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .check-row { display:flex; align-items:flex-end; }
+  .check-lbl { display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#ccc; }
+  .check-lbl input { accent-color:#7c3aed; width:18px; height:18px; }
+
+  .features-list { display:flex; flex-direction:column; gap:12px; }
+  .feature-card { background:#161616; border:1px solid #333; border-left:5px solid #3b82f6; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:8px; }
+  .feature-actions { display:flex; gap:6px; flex-wrap:wrap; }
+  .feature-actions .btn { padding:7px 11px; min-height:36px; font-size:13px; }
+  .subfeature-list { display:flex; flex-direction:column; gap:6px; padding-left:10px; border-left:2px solid #333; margin-left:2px; }
+  .subfeature { display:flex; flex-direction:column; gap:5px; }
+  .subfeature-actions { display:flex; gap:6px; }
+
+  .assembly { display:flex; flex-direction:column; gap:8px; line-height:1.55; }
+  .assembly .asm-goal { padding:10px; background:#1f1f1f; border-radius:6px; border:1px solid #444; }
+  .assembly .asm-feat { padding:10px; border-radius:6px; border:1px solid; }
+  .assembly .asm-sub { padding-left:12px; border-left:2px solid; margin-top:6px; }
+
+  .loading { display:flex; align-items:center; gap:10px; color:#60a5fa; font-weight:bold; padding:6px 2px; }
+  .spinner { width:18px; height:18px; border:3px solid #3b82f6; border-top-color:transparent; border-radius:50%; display:inline-block; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .output-area { white-space:pre-wrap; background:#161616; border:1px solid #333; border-radius:10px; padding:14px; min-height:140px; line-height:1.6; color:#ddd; }
+
+  @media (max-width: 839px) {
+    #menuBtn { display:inline-flex; }
+    #sidebar { position:fixed; top:0; left:0; bottom:0; width:260px; z-index:50; transform:translateX(-100%); transition:transform .22s ease; }
+    #sidebar.open { transform:translateX(0); }
+    #sidebarBackdrop { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:40; display:none; }
+    #sidebarBackdrop.open { display:block; }
+    #main { padding:12px; }
+    .grid-2 { grid-template-columns:1fr; }
+    header h1 { font-size:16px; }
+  }
+  @media (min-width: 840px) {
+    #sidebarBackdrop { display:none !important; }
+  }
+</style>
+
+<script>
+  let colors = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#a855f7','#ec4899','#14b8a6','#f43f5e','#8b5cf6','#06b6d4','#84cc16','#d946ef','#f59e0b','#6366f1','#10b981','#f87171','#fb923c','#fbbf24','#34d399','#60a5fa','#c084fc','#f472b6','#2dd4bf','#a3e635','#e879f9','#38bdf8'];
+  let projects = [];
+  let currentProject = null;
+  let lastOutputDiagnosis = [];
+
+  try { projects = JSON.parse(localStorage.perchanceProjects || '[]'); } catch(e) { projects = []; }
+  if(!projects.length) newProject(); else loadProject(projects[0].id);
+  renderProjects();
+
+  function uid() { return Date.now().toString(36)+Math.random().toString(36).slice(2); }
+
+  function toggleSidebar(force) {
+    let open = force === undefined ? !sidebar.classList.contains('open') : force;
+    sidebar.classList.toggle('open', open);
+    sidebarBackdrop.classList.toggle('open', open);
+  }
+  function toggleHelp(force) { helpCtn.hidden = !(force === undefined ? helpCtn.hidden : force); }
+  function toggleAdvanced() { advancedCtn.hidden = !advancedCtn.hidden; }
+
+  function newProject() {
+    currentProject = { id: uid(), name: 'New Project', goal: '', features: [], featureScope: 'balanced', elabStyle: 'technical', expansionStyle: 'technical', complementFeatures: false };
+    syncInputs(); renderFeatures(); renderAssembly();
+    clearDiagnosis(); clearOutputDiagnosis();
+    toggleSidebar(false);
+  }
+
+  function loadProject(id) {
+    let p = projects.find(x => x.id === id);
+    if(!p) return;
+    currentProject = JSON.parse(JSON.stringify(p));
+    if(!currentProject.featureScope) currentProject.featureScope = 'balanced';
+    if(!currentProject.elabStyle) currentProject.elabStyle = 'technical';
+    if(!currentProject.expansionStyle) currentProject.expansionStyle = 'technical';
+    if(!currentProject.complementFeatures) currentProject.complementFeatures = false;
+    syncInputs(); renderFeatures(); renderAssembly(); renderProjects();
+    clearDiagnosis(); clearOutputDiagnosis();
+    toggleSidebar(false);
+  }
+
+  function syncInputs() {
+    projectNameInput.value = currentProject.name;
+    goalInput.value = currentProject.goal;
+    featureScopeInput.value = currentProject.featureScope || 'balanced';
+    elabStyleInput.value = currentProject.elabStyle || 'technical';
+    expansionStyleInput.value = currentProject.expansionStyle || 'technical';
+    complementFeaturesInput.checked = !!currentProject.complementFeatures;
+  }
+
+  function updateProjectOption(key, val) { if(currentProject) currentProject[key] = val; }
+
+  function saveProject() {
+    if(!currentProject) return;
+    currentProject.name = projectNameInput.value.trim() || 'Untitled';
+    currentProject.goal = goalInput.value.trim();
+    let idx = projects.findIndex(x => x.id === currentProject.id);
+    if(idx >= 0) projects[idx] = JSON.parse(JSON.stringify(currentProject));
+    else projects.push(JSON.parse(JSON.stringify(currentProject)));
+    localStorage.perchanceProjects = JSON.stringify(projects);
+    renderProjects();
+    saveProjectBtn.textContent = 'Saved!';
+    setTimeout(() => saveProjectBtn.textContent = 'Save Project', 900);
+  }
+
+  function deleteCurrentProject() {
+    if(!currentProject) return;
+    if(!confirm('Delete this project forever?')) return;
+    projects = projects.filter(x => x.id !== currentProject.id);
+    localStorage.perchanceProjects = JSON.stringify(projects);
+    if(projects.length) loadProject(projects[0].id); else newProject();
+    renderProjects();
+  }
+
+  function renderProjects() {
+    projectListCtn.innerHTML = '';
+    for(let p of projects) {
+      let b = document.createElement('button');
+      b.textContent = p.name;
+      if(currentProject && p.id === currentProject.id) b.classList.add('active');
+      b.onclick = () => loadProject(p.id);
+      projectListCtn.appendChild(b);
+    }
+  }
+
+  function addFeature() {
+    if(!currentProject) newProject();
+    let c = colors[currentProject.features.length % colors.length];
+    currentProject.features.push({ id: uid(), name: '', description: '', color: c, subfeatures: [] });
+    renderFeatures(); renderAssembly();
+  }
+
+  function removeFeature(fid) {
+    currentProject.features = currentProject.features.filter(f => f.id !== fid);
+    renderFeatures(); renderAssembly();
+  }
+
+  function updateFeature(fid, key, val) {
+    let f = currentProject.features.find(x => x.id === fid);
+    if(f) { f[key] = val; renderAssembly(); }
+  }
+
+  function addSubfeature(fid) {
+    let f = currentProject.features.find(x => x.id === fid);
+    if(!f) return;
+    if(!f.subfeatures) f.subfeatures = [];
+    f.subfeatures.push({ id: uid(), name: '', description: '' });
+    renderFeatures(); renderAssembly();
+  }
+
+  function removeSubfeature(fid, sid) {
+    let f = currentProject.features.find(x => x.id === fid);
+    if(!f || !f.subfeatures) return;
+    f.subfeatures = f.subfeatures.filter(s => s.id !== sid);
+    renderFeatures(); renderAssembly();
+  }
+
+  function updateSubfeature(fid, sid, key, val) {
+    let f = currentProject.features.find(x => x.id === fid);
+    if(!f || !f.subfeatures) return;
+    let s = f.subfeatures.find(x => x.id === sid);
+    if(s) { s[key] = val; renderAssembly(); }
+  }
+
+  function copyToClipboard(text, btn, successMsg) {
+    let done = () => { if(btn) { let o = btn.textContent; btn.textContent = successMsg; setTimeout(() => btn.textContent = o, 1200); } };
+    if(navigator.clipboard) navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+    else fallbackCopy(text, done);
+  }
+  function fallbackCopy(text, done) {
+    let ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta); done();
+  }
+
+  function copyFeature(fid, btn) {
+    let f = currentProject.features.find(x => x.id === fid);
+    if(!f) return;
+    let text = `Feature: ${f.name || 'Unnamed'}\nDescription: ${f.description || 'No description'}`;
+    if(f.subfeatures && f.subfeatures.length) {
+      text += '\n\nSubfeatures:';
+      f.subfeatures.forEach((s, i) => { text += `\n${i+1}. ${s.name || 'Unnamed'}: ${s.description || 'No description'}`; });
+    }
+    copyToClipboard(text, btn, 'Copied!');
+  }
+
+  function copySubfeature(fid, sid, btn) {
+    let f = currentProject.features.find(x => x.id === fid);
+    if(!f || !f.subfeatures) return;
+    let s = f.subfeatures.find(x => x.id === sid);
+    if(!s) return;
+    copyToClipboard(`Subfeature: ${s.name || 'Unnamed'}\nDescription: ${s.description || 'No description'}`, btn, 'Copied!');
+  }
+
+  function copyAssembly(btn) {
+    if(!currentProject) return;
+    let text = `Main Goal:\n${currentProject.goal || 'N/A'}\n\nFeatures:`;
+    if(!currentProject.features.length) text += '\nNone';
+    else {
+      for(let f of currentProject.features) {
+        text += `\n\n- ${f.name || 'Unnamed'}:\n  ${f.description || 'No description'}`;
+        if(f.subfeatures && f.subfeatures.length) for(let s of f.subfeatures) text += `\n  • ${s.name || 'Unnamed'}: ${s.description || 'No description'}`;
+      }
+    }
+    copyToClipboard(text, btn, 'Copied!');
+  }
+
+  function renderFeatures() {
+    featuresCtn.innerHTML = '';
+    if(!currentProject) return;
+    currentProject.features.forEach(f => {
+      let subs = f.subfeatures || [];
+      let subsHtml = '';
+      if(subs.length) {
+        subsHtml = `<div class="subfeature-list" style="border-color:${f.color}55;">`;
+        subs.forEach(s => {
+          subsHtml += `<div class="subfeature">
+            <input value="${escapeHtml(s.name)}" oninput="updateSubfeature('${f.id}','${s.id}','name',this.value)" placeholder="Subfeature name" class="field" style="font-weight:bold; font-size:13px; padding:7px;">
+            <textarea oninput="updateSubfeature('${f.id}','${s.id}','description',this.value)" placeholder="Subfeature description..." class="field" style="min-height:48px; resize:vertical; font-size:13px; padding:7px;">${escapeHtml(s.description)}</textarea>
+            <div class="subfeature-actions">
+              <button onclick="copySubfeature('${f.id}','${s.id}', this)" class="btn ghost sm">Copy</button>
+              <button onclick="removeSubfeature('${f.id}','${s.id}')" class="btn ghost sm">Remove</button>
+            </div>
+          </div>`;
+        });
+        subsHtml += `</div>`;
+      }
+      let d = document.createElement('div');
+      d.className = 'feature-card';
+      d.style.borderLeftColor = f.color;
+      d.innerHTML = `
+        <input value="${escapeHtml(f.name)}" oninput="updateFeature('${f.id}','name',this.value)" placeholder="Feature name (e.g., Rarity System)" class="field" style="font-weight:bold;">
+        <textarea data-fid="${f.id}" oninput="updateFeature('${f.id}','description',this.value)" placeholder="Describe how this mechanic should work..." class="field" style="min-height:64px; resize:vertical;">${escapeHtml(f.description)}</textarea>
+        ${subsHtml}
+        <div class="feature-actions">
+          <button onclick="addSubfeature('${f.id}')" class="btn ghost">+ Subfeature</button>
+          <button data-autosub="${f.id}" onclick="autoGenerateSubfeatures('${f.id}')" class="btn btn-accent">⚡ AI Subfeatures</button>
+          <button data-elab="${f.id}" onclick="elaborateFeature('${f.id}')" class="btn btn-primary">Elaborate</button>
+          <button onclick="copyFeature('${f.id}', this)" class="btn ghost">Copy</button>
+          <button onclick="removeFeature('${f.id}')" class="btn ghost">Remove</button>
+        </div>`;
+      featuresCtn.appendChild(d);
+    });
+  }
+
+  function renderAssembly() {
+    if(!currentProject) { assemblyPreviewCtn.innerHTML = ''; return; }
+    let h = `<div class="asm-goal"><strong style="color:#fff;">Main Goal:</strong> <span style="color:#ccc;">${escapeHtml(currentProject.goal) || '<i style="color:#666;">none</i>'}</span></div>`;
+    if(!currentProject.features.length) h += `<div style="color:#666; padding:8px;">No features yet. Click "+ Add Feature" to start.</div>`;
+    for(let f of currentProject.features) {
+      h += `<div class="asm-feat" style="background:${f.color}15; border-color:${f.color}66;">
+        <div style="font-weight:bold; color:${f.color}; margin-bottom:4px;">## ${escapeHtml(f.name) || 'Unnamed Feature'}</div>
+        <div style="color:#ccc;">${escapeHtml(f.description) || '<i style="color:#666;">no description</i>'}</div>`;
+      if(f.subfeatures && f.subfeatures.length) {
+        h += `<div class="asm-sub" style="border-color:${f.color}66;">`;
+        for(let s of f.subfeatures) h += `<div style="margin-bottom:4px; color:#aaa; font-size:14px;"><span style="color:${f.color}; font-weight:bold;">› ${escapeHtml(s.name) || 'Unnamed'}</span>: ${escapeHtml(s.description) || '<i style="color:#555;">no description</i>'}</div>`;
+        h += `</div>`;
+      }
+      h += `</div>`;
+    }
+    assemblyPreviewCtn.innerHTML = h;
+  }
+
+  function clearDiagnosis() { diagnosisCtn.hidden = true; diagnosisCtn.innerHTML = ''; }
+  function clearOutputDiagnosis() {
+    outputDiagnosisCtn.hidden = true; outputDiagnosisCtn.innerHTML = '';
+    lastOutputDiagnosis = []; diagnoseOutputBtn.hidden = true;
+    lessDetailBtn.hidden = true; moreDetailBtn.hidden = true;
+  }
+
+  function setLoading(text) { loadingEl.hidden = false; loadingTextEl.textContent = text; }
+  function clearLoading() { loadingEl.hidden = true; }
+
+  async function autoGenerateFeatures() {
+    if(!currentProject) return;
+    let goal = goalInput.value.trim();
+    if(!goal) { alert('Enter a main goal first.'); return; }
+    autoGenerateBtn.disabled = true; autoGenerateBtn.textContent = 'Generating...';
+    setLoading('Generating features... please wait.');
+    outputAreaEl.textContent = ''; clearOutputDiagnosis();
+
+    let scope = currentProject.featureScope || 'balanced';
+    let complement = !!currentProject.complementFeatures;
+    let scopeInstruction = scope === 'broad'
+      ? 'Generate a small number (3-6) of broad, high-level features. Each feature should be comprehensive and cover multiple aspects of the goal.'
+      : scope === 'specific'
+      ? 'Generate a larger number (6-12) of specific, granular features that break down the goal into detailed individual mechanics.'
+      : 'Generate a balanced list of around 5-8 features at a moderate level of detail.';
+    let compInstruction = complement ? ' Also suggest 1-3 additional complementary features that go beyond the stated goal but would enhance the project. Include these in the same JSON array.' : '';
+
+    let inst = `Based on the following project goal, generate a list of key features or mechanics needed to build this project. ${scopeInstruction}${compInstruction} Return ONLY a JSON array of objects. Each object must have exactly two keys: "name" (short feature name) and "description" (1-2 sentences describing how it works). Do not include markdown code blocks, explanations, or any text outside the JSON array.\n\nGoal: ${goal}`;
+
+    try {
+      let res = await root.generateText(inst);
+      let jsonMatch = res.match(/\[[\s\S]*\]/);
+      let arr = JSON.parse(jsonMatch ? jsonMatch[0] : res);
+      if(!Array.isArray(arr)) throw new Error('Invalid format');
+      currentProject.features = arr.map((item, i) => ({ id: uid(), name: String(item.name||''), description: String(item.description||''), color: colors[i % colors.length], subfeatures: [] }));
+      renderFeatures(); renderAssembly(); saveProject();
+      outputAreaEl.textContent = 'Features generated! Review them above, then click "Generate Optimized Prompt".';
+    } catch(e) {
+      outputAreaEl.textContent = 'Error auto-generating features: ' + e.message;
+    } finally {
+      autoGenerateBtn.disabled = false; autoGenerateBtn.textContent = '⚡ Auto-Generate Features';
+      clearLoading();
+    }
+  }
+
+  async function autoGenerateSubfeatures(fid) {
+    let f = currentProject.features.find(x => x.id === fid);
+    if(!f) return;
+    let btn = featuresCtn.querySelector(`button[data-autosub="${fid}"]`);
+    if(btn) { btn.disabled = true; btn.textContent = '...'; }
+    let inst = `Based on the following feature, generate a list of sub-features that break down its parts into more detail. These sub-features should not add new complexity or expand the scope; they should only detail how this specific feature is implemented. Return ONLY a JSON array of objects. Each object must have exactly two keys: "name" (short sub-feature name) and "description" (1-2 sentences). Do not include markdown code blocks, explanations, or any text outside the JSON array.\n\nFeature Name: ${f.name || 'Unnamed'}\nFeature Description: ${f.description || 'None'}`;
+    try {
+      let res = await root.generateText(inst);
+      let jsonMatch = res.match(/\[[\s\S]*\]/);
+      let arr = JSON.parse(jsonMatch ? jsonMatch[0] : res);
+      if(!Array.isArray(arr)) throw new Error('Invalid format');
+      if(!f.subfeatures) f.subfeatures = [];
+      for(let item of arr) f.subfeatures.push({ id: uid(), name: String(item.name||''), description: String(item.description||'') });
+      renderFeatures(); renderAssembly(); saveProject();
+    } catch(e) {
+      alert('Error generating subfeatures: ' + e.message);
+    } finally {
+      if(btn) { btn.disabled = false; btn.textContent = '⚡ AI Subfeatures'; }
+    }
+  }
+
+  async function elaborateFeature(fid) {
+    let f = currentProject.features.find(x => x.id === fid);
+    if(!f) return;
+    let btn = featuresCtn.querySelector(`button[data-elab="${fid}"]`);
+    if(btn) { btn.disabled = true; btn.textContent = '...'; }
+    let style = currentProject.elabStyle || 'technical';
+    let styleText = style === 'technical'
+      ? 'Rewrite the description to be highly technical and specific. Explain exact logic, variables, data structures, list formats, and edge cases. Use precise terminology.'
+      : style === 'descriptive'
+      ? 'Rewrite the description to be highly descriptive and conceptual. Explain the user experience, visual output, and overall behavior in plain language without heavy implementation details.'
+      : 'Rewrite the description to be detailed and thorough, mixing technical specifics with clear conceptual explanations.';
+    let inst = `You are helping design a feature for a Perchance generator.\nFeature Name: ${f.name || 'Unnamed'}\nCurrent Description: ${f.description || 'None'}\n\n${styleText} Output only the new description text, with no extra commentary.`;
+    try {
+      let res = await root.generateText(inst);
+      f.description = res.trim();
+      let ta = featuresCtn.querySelector(`textarea[data-fid="${fid}"]`);
+      if(ta) ta.value = f.description;
+      renderAssembly(); saveProject();
+    } catch(e) {
+      alert('Error elaborating feature: ' + e.message);
+    } finally {
+      if(btn) { btn.disabled = false; btn.textContent = 'Elaborate'; }
+    }
+  }
+
+  async function generatePrompt() {
+    if(!currentProject) return;
+    saveProject();
+    if(!currentProject.goal.trim() && !currentProject.features.length) { alert('Enter a main goal or add at least one feature.'); return; }
+    generateBtn.disabled = true; generateBtn.textContent = 'Generating...';
+    setLoading('Generating optimized prompt... please wait.');
+    outputAreaEl.textContent = ''; clearOutputDiagnosis();
+
+    let style = currentProject.expansionStyle || 'technical';
+    let styleText = style === 'technical'
+      ? 'The prompt should be highly technical, specifying exact variables, data structures, list syntax, functions, and edge cases suitable for the Perchance AI Coder.'
+      : style === 'descriptive'
+      ? 'The prompt should be descriptive and behavior-focused, explaining what the generator should do, how it should look, and how users interact with it, using clear conceptual language rather than raw code specifics.'
+      : 'The prompt should be detailed and balanced, mixing clear conceptual explanations with necessary technical specifics.';
+
+    let inst = `You are an expert at writing prompts for the Perchance AI Coder, which generates JavaScript and HTML for Perchance generators. Rewrite the following user request into ONE detailed, structured, and highly specific prompt that the Perchance AI Coder will understand perfectly. ${styleText} Include all logic, variables, and UI requirements. Do not omit any feature.\n\nMain Goal: ${currentProject.goal.trim() || 'N/A'}\n\nFeatures:\n`;
+    for(let f of currentProject.features) {
+      inst += `- ${f.name || 'Feature'}: ${f.description || 'No description provided.'}\n`;
+      if(f.subfeatures && f.subfeatures.length) for(let s of f.subfeatures) inst += `  • ${s.name || 'Sub-feature'}: ${s.description || 'No description provided.'}\n`;
+    }
+    inst += `\nOutput only the rewritten prompt. Make it concise but complete.`;
+
+    try {
+      let res = await root.generateText(inst);
+      outputAreaEl.textContent = res;
+      lessDetailBtn.hidden = false; moreDetailBtn.hidden = false; diagnoseOutputBtn.hidden = false;
+    } catch(e) {
+      outputAreaEl.textContent = 'Error generating prompt: ' + e.message;
+    } finally {
+      generateBtn.disabled = false; generateBtn.textContent = '✨ Generate Optimized Prompt';
+      clearLoading();
+    }
+  }
+
+  async function rewriteDetail(mode) {
+    let text = outputAreaEl.textContent;
+    if(!text) { alert('Generate a prompt first.'); return; }
+    let btn = mode === 'less' ? lessDetailBtn : moreDetailBtn;
+    let originalText = btn.textContent;
+    btn.disabled = true; btn.textContent = '...';
+    setLoading(mode === 'less' ? 'Reducing detail...' : 'Expanding detail...');
+    let inst = `Rewrite the following prompt to be ${mode === 'less' ? 'shorter, more concise, and less detailed while preserving all core requirements and features' : 'more detailed, thorough, and expansive with additional implementation specifics, edge cases, and clarifications'}. Do not omit any features or mechanics. Output only the rewritten prompt.\n\n${text}`;
+    try {
+      let res = await root.generateText(inst);
+      outputAreaEl.textContent = res;
+    } catch(e) {
+      outputAreaEl.textContent += '\n\nError rewriting detail: ' + e.message;
+    } finally {
+      btn.disabled = false; btn.textContent = originalText;
+      clearLoading();
+    }
+  }
+
+  async function diagnoseGoal(btn) {
+    if(!currentProject) return;
+    let goal = goalInput.value.trim();
+    if(!goal) { alert('Enter a main goal first.'); return; }
+    btn.disabled = true; btn.textContent = 'Diagnosing...';
+    setLoading('Diagnosing goal... please wait.');
+    outputAreaEl.textContent = ''; clearOutputDiagnosis();
+    let inst = `Analyze the following project goal for a Perchance generator. Identify ambiguities, missing details, and areas that need clarification. Then generate 3-5 specific questions that, if answered, would make the goal much clearer for an AI coder. Return ONLY a JSON object with two keys: "diagnosis" (a brief paragraph summarizing issues) and "questions" (an array of strings, each a question). Do not include markdown code blocks or any text outside the JSON.\n\nGoal: ${goal}`;
+    try {
+      let res = await root.generateText(inst);
+      let jsonMatch = res.match(/\{[\s\S]*\}/);
+      let obj = JSON.parse(jsonMatch ? jsonMatch[0] : res);
+      let h = `<div style="color:#0ea5e9; font-weight:bold; margin-bottom:6px;">Diagnosis:</div>
+        <div style="color:#ccc; margin-bottom:12px; line-height:1.5;">${escapeHtml(obj.diagnosis) || 'No diagnosis provided.'}</div>
+        <div style="color:#0ea5e9; font-weight:bold; margin-bottom:6px;">Clarifying Questions:</div>
+        <div style="display:flex; flex-direction:column; gap:8px;">`;
+      if(obj.questions && obj.questions.length) {
+        obj.questions.forEach((q, i) => {
+          h += `<div style="display:flex; flex-direction:column; gap:4px;">
+            <label style="color:#aaa; font-size:13px;">Q${i+1}: ${escapeHtml(q)}</label>
+            <textarea id="diagAnswer${i}" data-question="${escapeHtml(q)}" placeholder="Your answer..." class="field" style="min-height:50px; resize:vertical; font-size:13px; padding:7px;"></textarea>
+          </div>`;
+        });
+        h += `</div><button onclick="incorporateDiagnosis()" class="btn btn-success" style="margin-top:10px;">Incorporate Answers into Goal</button>`;
+      } else {
+        h += `<div style="color:#666;">No questions generated.</div></div>`;
+      }
+      diagnosisCtn.innerHTML = h; diagnosisCtn.hidden = false;
+      outputAreaEl.textContent = 'Goal diagnosis complete. Answer the questions above and click "Incorporate Answers into Goal".';
+    } catch(e) {
+      outputAreaEl.textContent = 'Error diagnosing goal: ' + e.message;
+    } finally {
+      btn.disabled = false; btn.textContent = '🔍 Diagnose Goal';
+      clearLoading();
+    }
+  }
+
+  function incorporateDiagnosis() {
+    if(!currentProject) return;
+    let answers = [];
+    diagnosisCtn.querySelectorAll('textarea[data-question]').forEach(ta => {
+      let a = ta.value.trim();
+      if(a) answers.push(`Q: ${ta.dataset.question}\nA: ${a}`);
+    });
+    if(!answers.length) { alert('Answer at least one question first.'); return; }
+    goalInput.value = goalInput.value.trim() + '\n\n[Clarified Details]\n' + answers.join('\n\n');
+    currentProject.goal = goalInput.value;
+    saveProject(); renderAssembly();
+    outputAreaEl.textContent = 'Answers incorporated into goal. You can now auto-generate features or generate the prompt.';
+    clearOutputDiagnosis();
+  }
+
+  async function diagnoseOutput(btn) {
+    let text = outputAreaEl.textContent;
+    if(!text) { alert('Generate a prompt first.'); return; }
+    btn.disabled = true; btn.textContent = 'Diagnosing...';
+    setLoading('Diagnosing output... please wait.');
+    let featuresText = '';
+    for(let f of currentProject.features) {
+      featuresText += `\n- ${f.name || 'Feature'}: ${f.description || 'No description'}`;
+      if(f.subfeatures && f.subfeatures.length) for(let s of f.subfeatures) featuresText += `\n  • ${s.name || 'Sub'}: ${s.description || 'No description'}`;
+    }
+    let inst = `Analyze the following generated prompt for a Perchance generator. Compare it against the user's original goal and features. Identify any errors, missing requirements, contradictions, incongruities, or unclear logic. Return ONLY a JSON object with two keys: "summary" (a brief string summary) and "categories" (an array of category objects). Each category object must have "name" (one of: "error", "incongruity", "ambiguity", or "other") and "points" (an array of strings, each describing an issue in that category and how to fix it). Group similar or related points into the same category so they do not overlap. If there are no issues, return {"summary":"No issues found","categories":[]}.\n\nOriginal Goal: ${currentProject.goal || 'N/A'}\nOriginal Features:${featuresText}\n\nGenerated Prompt:\n${text}`;
+    try {
+      let res = await root.generateText(inst);
+      let jsonMatch = res.match(/\{[\s\S]*\}/);
+      let obj = JSON.parse(jsonMatch ? jsonMatch[0] : res);
+      lastOutputDiagnosis = obj.categories || [];
+      let h = `<div style="color:#f59e0b; font-weight:bold; margin-bottom:6px;">Output Diagnosis:</div>
+        <div style="color:#ccc; margin-bottom:10px; line-height:1.5;">${escapeHtml(obj.summary) || 'No summary.'}</div>`;
+      let hasPoints = false;
+      if(lastOutputDiagnosis.length) {
+        h += `<div style="display:flex; flex-direction:column; gap:12px; margin-bottom:12px;">`;
+        lastOutputDiagnosis.forEach(cat => {
+          if(!cat.points || !cat.points.length) return;
+          hasPoints = true;
+          let color = cat.name === 'error' ? '#ef4444' : cat.name === 'incongruity' ? '#f97316' : cat.name === 'ambiguity' ? '#eab308' : '#8b5cf6';
+          h += `<div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="font-weight:bold; color:${color}; font-size:14px; text-transform:capitalize;">${escapeHtml(cat.name)}</div>
+            <div style="display:flex; flex-direction:column; gap:6px;">`;
+          cat.points.forEach((pt, i) => { h += `<div style="color:#aaa; font-size:13px; padding:6px; background:#1f1f1f; border-radius:4px; border-left:3px solid ${color};">${i+1}. ${escapeHtml(pt)}</div>`; });
+          h += `</div></div>`;
+        });
+        h += `</div>`;
+      }
+      h += hasPoints
+        ? `<button onclick="autoCorrectOutput()" class="btn btn-success">Auto-Correct Prompt from Diagnosis</button>`
+        : `<div style="color:#22c55e; font-size:13px;">No issues detected.</div>`;
+      outputDiagnosisCtn.innerHTML = h; outputDiagnosisCtn.hidden = false;
+    } catch(e) {
+      outputDiagnosisCtn.innerHTML = `<div style="color:#ef4444; font-size:13px;">Error diagnosing output: ${escapeHtml(e.message)}</div>`;
+      outputDiagnosisCtn.hidden = false;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Diagnose Output';
+      clearLoading();
+    }
+  }
+
+  async function autoCorrectOutput() {
+    let text = outputAreaEl.textContent;
+    if(!text) { alert('No diagnosis available.'); return; }
+    let flatIssues = [];
+    lastOutputDiagnosis.forEach(cat => { if(cat.points && cat.points.length) flatIssues.push(...cat.points); });
+    if(!flatIssues.length) { alert('No diagnosis available.'); return; }
+    setLoading('Auto-correcting prompt... please wait.');
+    let featuresText = '';
+    for(let f of currentProject.features) {
+      featuresText += `\n- ${f.name || 'Feature'}: ${f.description || 'No description'}`;
+      if(f.subfeatures && f.subfeatures.length) for(let s of f.subfeatures) featuresText += `\n  • ${s.name || 'Sub'}: ${s.description || 'No description'}`;
+    }
+    let issuesText = flatIssues.map((iss, i) => `${i+1}. ${iss}`).join('\n');
+    let inst = `The following prompt was generated for a Perchance AI Coder but has been diagnosed with these issues:\n\n${issuesText}\n\nRewrite the prompt to fix ALL identified issues while strictly preserving every requirement from the original goal and features. Do not remove any features. Do not add new features that are not in the original requirements. Output ONLY the corrected prompt text.\n\nOriginal Goal: ${currentProject.goal || 'N/A'}\nOriginal Features:${featuresText}\n\nCurrent Prompt:\n${text}`;
+    try {
+      let res = await root.generateText(inst);
+      outputAreaEl.textContent = res;
+      outputDiagnosisCtn.hidden = true; outputDiagnosisCtn.innerHTML = ''; lastOutputDiagnosis = [];
+    } catch(e) {
+      outputAreaEl.textContent += '\n\nError auto-correcting: ' + e.message;
+    } finally {
+      clearLoading();
+    }
+  }
+
+  function copyOutput() {
+    let text = outputAreaEl.textContent;
+    if(!text) { alert('Nothing to copy. Generate a prompt first.'); return; }
+    copyToClipboard(text, copyBtn, 'Copied!');
+  }
+
+  function escapeHtml(s) {
+    if(s == null) return '';
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+
+</body>
+</html>

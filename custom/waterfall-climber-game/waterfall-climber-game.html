@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>waterfall-climber-game — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" style="display:block;"></canvas>
+
+<div id="uiCtn" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
+  <!-- HUD -->
+  <div id="hudCtn" hidden style="position:absolute;top:0;left:0;width:100%;height:100%;">
+    <div id="scoreEl" style="position:absolute;top:18px;left:18px;color:#e0f7fa;font:bold 22px sans-serif;z-index:10;text-shadow:1px 1px 2px #000;">Height: 0m</div>
+    <div id="timeEl" style="position:absolute;top:18px;right:18px;color:#e0f7fa;font:bold 18px sans-serif;z-index:10;text-shadow:1px 1px 2px #000;">0s</div>
+    <button id="pauseBtn" onclick="pauseGame()" style="position:absolute;top:50px;right:18px;padding:6px 14px;font:14px sans-serif;cursor:pointer;border:none;border-radius:4px;background:rgba(0,0,0,0.45);color:#fff;pointer-events:auto;">Pause</button>
+  </div>
+
+  <!-- Main Menu -->
+  <div id="mainMenuCtn" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,10,20,0.88);pointer-events:auto;">
+    <h1 style="color:#4fc3f7;font:700 48px sans-serif;margin:0 0 6px;text-shadow:2px 2px 0 #01579b;">Waterfall Climber</h1>
+    <p style="color:#e0f7fa;font:15px sans-serif;max-width:360px;text-align:center;margin:0 0 6px;">Climb endless procedural waterfalls. Fight the current, unlock skins, earn achievements, and compete for the top spot.</p>
+    <p style="color:#b2ebf2;font:13px sans-serif;margin:0 0 22px;">A / D or Arrows to move · Space / W / Up to Jump · Double jump in the air!</p>
+    <button id="startBtn" onclick="showGame()" style="padding:14px 48px;font:20px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#0288d1;color:#fff;margin:0 0 10px;">Start Game</button>
+    <button onclick="showCharSelect()" style="padding:10px 36px;font:16px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#2e7d32;color:#fff;margin:0 0 10px;">Character Select</button>
+    <button onclick="showAchievements()" style="padding:10px 36px;font:16px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#ff8f00;color:#fff;margin:0 0 10px;">Achievements</button>
+    <button onclick="showLeaderboard()" style="padding:10px 36px;font:16px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#7b1fa2;color:#fff;margin:0 0 10px;">Leaderboard</button>
+    <button onclick="showSettings()" style="padding:10px 36px;font:16px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#455a64;color:#fff;">Settings</button>
+  </div>
+
+  <!-- Character Select -->
+  <div id="charSelectCtn" hidden style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,10,20,0.94);pointer-events:auto;overflow-y:auto;">
+    <h2 style="color:#4fc3f7;font:700 36px sans-serif;margin:0 0 14px;text-shadow:1px 1px 0 #01579b;">Select Character</h2>
+    <div id="charGridEl" style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;max-width:640px;padding:0 16px;"></div>
+    <button onclick="showMainMenu()" style="margin-top:16px;padding:10px 30px;font:16px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#0288d1;color:#fff;">Back</button>
+  </div>
+
+  <!-- Achievements -->
+  <div id="achievementsCtn" hidden style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,10,20,0.94);pointer-events:auto;overflow-y:auto;">
+    <h2 style="color:#4fc3f7;font:700 36px sans-serif;margin:0 0 14px;text-shadow:1px 1px 0 #01579b;">Achievements</h2>
+    <div id="achListEl" style="width:92%;max-width:520px;display:flex;flex-direction:column;gap:8px;"></div>
+    <button onclick="showMainMenu()" style="margin-top:16px;padding:10px 30px;font:16px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#0288d1;color:#fff;">Back</button>
+  </div>
+
+  <!-- Leaderboard -->
+  <div id="leaderboardCtn" hidden style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,10,20,0.94);pointer-events:auto;overflow-y:auto;">
+    <h2 style="color:#4fc3f7;font:700 36px sans-serif;margin:0 0 10px;text-shadow:1px 1px 0 #01579b;">Leaderboard</h2>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button id="localTabBtn" onclick="switchLeaderboard('local')" style="padding:6px 16px;font:14px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#0288d1;color:#fff;">Local</button>
+      <button id="onlineTabBtn" onclick="switchLeaderboard('online')" style="padding:6px 16px;font:14px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#455a64;color:#fff;">Online</button>
+    </div>
+    <div id="leaderboardListEl" style="width:92%;max-width:520px;display:flex;flex-direction:column;gap:6px;max-height:58vh;overflow-y:auto;"></div>
+    <p id="leaderboardNoteEl" style="color:#90a4ae;font:12px sans-serif;margin-top:8px;max-width:520px;text-align:center;">Offline scores are saved automatically. Online scores sync to a cloud backend when configured.</p>
+    <button onclick="showMainMenu()" style="margin-top:16px;padding:10px 30px;font:16px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#0288d1;color:#fff;">Back</button>
+  </div>
+
+  <!-- Settings -->
+  <div id="settingsCtn" hidden style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,10,20,0.94);pointer-events:auto;">
+    <h2 style="color:#4fc3f7;font:700 36px sans-serif;margin:0 0 18px;text-shadow:1px 1px 0 #01579b;">Settings</h2>
+    <div style="display:flex;flex-direction:column;gap:14px;align-items:center;">
+      <label style="color:#e0f7fa;font:16px sans-serif;display:flex;align-items:center;gap:10px;cursor:pointer;">
+        <input type="checkbox" id="soundToggleEl" onchange="toggleSound()"> Sound Effects
+      </label>
+      <button onclick="resetGameData()" style="padding:10px 30px;font:14px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#c62828;color:#fff;">Reset All Data</button>
+    </div>
+    <button onclick="showMainMenu()" style="margin-top:18px;padding:10px 30px;font:16px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#0288d1;color:#fff;">Back</button>
+  </div>
+
+  <!-- Pause -->
+  <div id="pauseCtn" hidden style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,5,10,0.82);pointer-events:auto;">
+    <h2 style="color:#4fc3f7;font:36px sans-serif;margin:0 0 18px;text-shadow:1px 1px 0 #01579b;">Paused</h2>
+    <button onclick="resumeGame()" style="padding:12px 36px;font:18px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#0288d1;color:#fff;margin:0 0 10px;">Resume</button>
+    <button onclick="quitToMenu()" style="padding:10px 30px;font:16px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#455a64;color:#fff;">Quit to Menu</button>
+  </div>
+
+  <!-- Game Over -->
+  <div id="gameOverCtn" hidden style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,5,10,0.85);pointer-events:auto;">
+    <h2 style="color:#ff5252;font:36px sans-serif;margin:0 0 8px;">Swept Away!</h2>
+    <p id="finalScoreEl" style="color:#fff;font:22px sans-serif;margin:0 0 4px;">Height: 0m</p>
+    <p id="hiScoreEl" style="color:#ffd54f;font:18px sans-serif;margin:0 0 14px;">Best: 0m</p>
+    <input id="nameInput" placeholder="Enter your name" maxlength="16" style="padding:8px 14px;font:16px sans-serif;border:none;border-radius:4px;margin-bottom:12px;text-align:center;outline:none;">
+    <button id="restartBtn" onclick="submitScoreAndRestart()" style="padding:12px 36px;font:18px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#0288d1;color:#fff;margin-bottom:8px;">Try Again</button>
+    <button onclick="quitToMenu()" style="padding:10px 30px;font:16px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#455a64;color:#fff;">Main Menu</button>
+  </div>
+
+  <!-- Mobile Controls -->
+  <div id="mobileControlsCtn" hidden style="position:absolute;bottom:18px;left:0;width:100%;height:120px;pointer-events:none;display:flex;justify-content:space-between;padding:0 22px;box-sizing:border-box;">
+    <div style="display:flex;gap:14px;pointer-events:auto;">
+      <button id="leftBtn" style="touch-action:none;width:68px;height:68px;border-radius:50%;border:none;background:rgba(255,255,255,0.22);color:#fff;font:26px sans-serif;cursor:pointer;">←</button>
+      <button id="rightBtn" style="touch-action:none;width:68px;height:68px;border-radius:50%;border:none;background:rgba(255,255,255,0.22);color:#fff;font:26px sans-serif;cursor:pointer;">→</button>
+    </div>
+    <button id="jumpBtn" style="touch-action:none;width:80px;height:80px;border-radius:50%;border:none;background:rgba(255,255,255,0.3);color:#fff;font:18px sans-serif;cursor:pointer;pointer-events:auto;">Jump</button>
+  </div>
+</div>
+
+<style>
+body { margin:0; overflow:hidden; background:#001220; text-align:left; }
+button { transition: transform 0.06s; }
+button:active { transform: scale(0.96); }
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:rgba(255,255,255,0.04); }
+::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.18); border-radius:3px; }
+</style>
+
+<script>
+// --- Engine setup ---
+let canvas = gameCanvas;
+let ctx = canvas.getContext('2d');
+let w, h;
+function resize(){ w=canvas.width=innerWidth; h=canvas.height=innerHeight; }
+resize();
+addEventListener('resize', resize);
+
+// Suppress unhandled promise rejections from sandbox plugins (fetch/comments)
+window.addEventListener('unhandledrejection', e => {
+  e.preventDefault();
+  console.warn('Unhandled rejection suppressed:', e.reason);
+});
+
+let player, platforms, particles, cameraY, highestTop, lowestPlatformY, score, startTime, elapsedSec;
+let keys={};
+let jumpNext=false;
+let gameState='menu'; // menu, play, paused, over, charSelect, achievements, leaderboard, settings
+let skinIndex=0;
+let soundOn=true;
+let leaderboardMode='local';
+
+// --- Biomes / Visual Themes ---
+let themes=[
+  {name:'Tropical', bgTop:'#0b486b', bgBot:'#001220', plat:'#5d4037', edge:'#3e2723', grass:'#2e7d32', water:'rgba(180,235,255,'},
+  {name:'Forest', bgTop:'#1b5e20', bgBot:'#002200', plat:'#4e342e', edge:'#3e2723', grass:'#558b2f', water:'rgba(200,255,200,'},
+  {name:'Ice',     bgTop:'#455a64', bgBot:'#001220', plat:'#546e7a', edge:'#37474f', grass:'#b0bec5', water:'rgba(220,240,255,'},
+  {name:'Volcanic',bgTop:'#3e2723', bgBot:'#1a0000', plat:'#212121', edge:'#000000', grass:'#bf360c', water:'rgba(255,150,100,'}
+];
+function getTheme(){
+  let t=themes[0];
+  for(let i=themes.length-1;i>=0;i--){ if(score >= themes[i].high) t=themes[i]; }
+  return t;
+}
+// attach thresholds dynamically after definition
+themes[1].high=500; themes[2].high=1000; themes[3].high=1500;
+
+// --- Character Skins ---
+let skins=[
+  {name:'Scout',  color:'#e65100', belt:'#ffe0b2', band:'#d32f2f', req:0,   unlocked:true},
+  {name:'Ranger', color:'#2e7d32', belt:'#c8e6c9', band:'#1b5e20', req:100, unlocked:false},
+  {name:'Frost',  color:'#e1f5fe', belt:'#b3e5fc', band:'#0288d1', req:300, unlocked:false},
+  {name:'Magma',  color:'#212121', belt:'#ff5722', band:'#b71c1c', req:500, unlocked:false},
+  {name:'Shadow', color:'#000000', belt:'#9c27b0', band:'#4a148c', req:1000,unlocked:false}
+];
+function loadSkins(){
+  let saved=localStorage.wcUnlockedSkins;
+  if(saved){ try{ let arr=JSON.parse(saved); arr.forEach((u,i)=>{ if(skins[i]) skins[i].unlocked=u; }); }catch(e){} }
+}
+function saveSkins(){ localStorage.wcUnlockedSkins=JSON.stringify(skins.map(s=>s.unlocked)); }
+
+// --- Achievements ---
+let achievements=[
+  {id:'first_climb', title:'First Climb', desc:'Reach 50m', cond:()=>score>=50, unlocked:false},
+  {id:'high_climb',  title:'Getting High', desc:'Reach 200m', cond:()=>score>=200, unlocked:false},
+  {id:'cloudbreaker',title:'Cloudbreaker', desc:'Reach 500m', cond:()=>score>=500, unlocked:false},
+  {id:'legend',      title:'Legend', desc:'Reach 1000m', cond:()=>score>=1000, unlocked:false},
+  {id:'master',      title:'Waterfall Master', desc:'Reach 2000m', cond:()=>score>=2000, unlocked:false},
+  {id:'persistent',  title:'Persistent', desc:'Play 5 times', cond:()=>playCount>=5, unlocked:false},
+  {id:'collector',   title:'Skin Collector', desc:'Use 3 different skins', cond:()=>usedSkins.size>=3, unlocked:false},
+  {id:'survivor',    title:'Survivor', desc:'Survive 60 seconds in one run', cond:()=>elapsedSec>=60, unlocked:false}
+];
+let playCount=0;
+let usedSkins=new Set();
+try{
+  let a=JSON.parse(localStorage.wcAchievements||'[]');
+  a.forEach(id=>{ let ach=achievements.find(x=>x.id===id); if(ach) ach.unlocked=true; });
+}catch(e){}
+function checkAchievements(){
+  let changed=false;
+  for(let ach of achievements){ if(!ach.unlocked && ach.cond()){ ach.unlocked=true; changed=true; } }
+  if(changed) saveAchievements();
+}
+function saveAchievements(){ localStorage.wcAchievements=JSON.stringify(achievements.filter(a=>a.unlocked).map(a=>a.id)); }
+
+// --- Leaderboard Data ---
+function getLocalScores(){
+  try{ return JSON.parse(localStorage.wcLeaderboard||'[]'); }catch(e){ return []; }
+}
+function addLocalScore(name,height){
+  let arr=getLocalScores();
+  arr.push({name:name||'Climber', height, date:Date.now(), source:'local'});
+  arr.sort((a,b)=>b.height-a.height);
+  localStorage.wcLeaderboard=JSON.stringify(arr.slice(0,20));
+}
+// Simulated online entries to demonstrate online tab
+let onlineScores=[
+  {name:'CascadeKing',height:2450,date:Date.now()-86400000*2,source:'online'},
+  {name:'AquaGirl',   height:1890,date:Date.now()-86400000*5,source:'online'},
+  {name:'Rapid',      height:1200,date:Date.now()-86400000,  source:'online'},
+  {name:'Frosty',     height:980, date:Date.now()-86400000*3,source:'online'},
+  {name:'Rocky',      height:760, date:Date.now()-86400000*7,source:'online'}
+];
+// Optional: sync high local scores into online view as if uploaded
+function maybeSyncOnline(name,height){
+  if(height<300) return;
+  onlineScores.push({name:name||'Climber', height, date:Date.now(), source:'online'});
+  onlineScores.sort((a,b)=>b.height-a.height);
+  // In a real deployment, fire an async POST to your API here.
+}
+
+// --- Input ---
+addEventListener('keydown', e=>{
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+  if(!keys[e.code] && (e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW')) jumpNext=true;
+  keys[e.code]=true;
+});
+addEventListener('keyup', e=>keys[e.code]=false);
+
+// --- Improved mobile controls (simultaneous left/right + jump) ---
+function setupMobileControls(){
+  // Left button
+  let setLeft = (v) => (e) => { e.preventDefault(); keys.ArrowLeft = v; };
+  leftBtn.addEventListener('touchstart', setLeft(true), {passive:false});
+  leftBtn.addEventListener('touchend', setLeft(false), {passive:false});
+  leftBtn.addEventListener('mousedown', ()=>keys.ArrowLeft=true);
+  leftBtn.addEventListener('mouseup', ()=>keys.ArrowLeft=false);
+  leftBtn.addEventListener('mouseleave', ()=>keys.ArrowLeft=false);
+
+  // Right button
+  let setRight = (v) => (e) => { e.preventDefault(); keys.ArrowRight = v; };
+  rightBtn.addEventListener('touchstart', setRight(true), {passive:false});
+  rightBtn.addEventListener('touchend', setRight(false), {passive:false});
+  rightBtn.addEventListener('mousedown', ()=>keys.ArrowRight=true);
+  rightBtn.addEventListener('mouseup', ()=>keys.ArrowRight=false);
+  rightBtn.addEventListener('mouseleave', ()=>keys.ArrowRight=false);
+
+  // Jump button
+  let doJump = (e) => { e.preventDefault(); jumpNext=true; };
+  jumpBtn.addEventListener('touchstart', doJump, {passive:false});
+  jumpBtn.addEventListener('mousedown', ()=>jumpNext=true);
+}
+setupMobileControls();
+
+// --- Menu Flow ---
+function hideAllScreens(){
+  mainMenuCtn.hidden=true; charSelectCtn.hidden=true; achievementsCtn.hidden=true;
+  leaderboardCtn.hidden=true; settingsCtn.hidden=true; pauseCtn.hidden=true;
+  gameOverCtn.hidden=true; hudCtn.hidden=true; mobileControlsCtn.hidden=true;
+}
+function showMainMenu(){ hideAllScreens(); mainMenuCtn.hidden=false; gameState='menu'; }
+function showGame(){ hideAllScreens(); hudCtn.hidden=false; if(isMobile()) mobileControlsCtn.hidden=false; startGame(); }
+function pauseGame(){ if(gameState!=='play') return; gameState='paused'; pauseCtn.hidden=false; }
+function resumeGame(){ pauseCtn.hidden=true; gameState='play'; loop(); }
+function quitToMenu(){ showMainMenu(); }
+function isMobile(){ return ('ontouchstart' in window) || innerWidth<800; }
+
+function showCharSelect(){ hideAllScreens(); charSelectCtn.hidden=false; renderCharSelect(); gameState='charSelect'; }
+function showAchievements(){ hideAllScreens(); achievementsCtn.hidden=false; renderAchievements(); gameState='achievements'; }
+function showLeaderboard(){ hideAllScreens(); leaderboardCtn.hidden=false; renderLeaderboard(); gameState='leaderboard'; }
+function showSettings(){ hideAllScreens(); settingsCtn.hidden=false; gameState='settings'; }
+
+function renderCharSelect(){
+  charGridEl.innerHTML='';
+  skins.forEach((skin,i)=>{
+    let el=document.createElement('div');
+    let selected=i===skinIndex;
+    el.style.cssText='position:relative;width:110px;height:140px;background:rgba(255,255,255,0.07);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:auto;cursor:pointer;border:2px solid '+(selected?'#4fc3f7':'transparent')+';';
+    if(!skin.unlocked){
+      el.style.opacity='0.45';
+      el.innerHTML='<div style="font:26px sans-serif;color:#e0f7fa;">🔒</div><div style="color:#b0bec5;font:12px sans-serif;margin-top:6px;">'+skin.req+'m</div>';
+    }else{
+      el.innerHTML='<div style="width:36px;height:36px;background:'+skin.color+';border:3px solid '+skin.band+';box-shadow:0 0 0 2px '+skin.belt+';"></div><div style="color:#fff;font:13px sans-serif;margin-top:10px;">'+skin.name+'</div>';
+      el.onclick=()=>{ skinIndex=i; usedSkins.add(i); localStorage.wcLastSkin=i; renderCharSelect(); };
+      if(selected){
+        let badge=document.createElement('div');
+        badge.textContent='Selected';
+        badge.style.cssText='position:absolute;bottom:-10px;background:#0288d1;color:#fff;font:10px sans-serif;padding:2px 8px;border-radius:3px;';
+        el.appendChild(badge);
+      }
+    }
+    charGridEl.appendChild(el);
+  });
+}
+function renderAchievements(){
+  achListEl.innerHTML='';
+  achievements.forEach(ach=>{
+    let row=document.createElement('div');
+    row.style.cssText='padding:10px 14px;background:rgba(255,255,255,0.07);border-radius:6px;display:flex;justify-content:space-between;align-items:center;';
+    let icon=ach.unlocked?'<span style="color:#69f0ae;font:bold 15px sans-serif;">✓</span>':'<span style="color:#78909c;font:14px sans-serif;">○</span>';
+    row.innerHTML='<div><div style="color:#e0f7fa;font:15px sans-serif;font-weight:bold;">'+ach.title+'</div><div style="color:#90a4ae;font:12px sans-serif;">'+ach.desc+'</div></div><div>'+icon+'</div>';
+    achListEl.appendChild(row);
+  });
+}
+function switchLeaderboard(mode){
+  leaderboardMode=mode;
+  localTabBtn.style.background=mode==='local'?'#0288d1':'#455a64';
+  onlineTabBtn.style.background=mode==='online'?'#0288d1':'#455a64';
+  renderLeaderboard();
+}
+function renderLeaderboard(){
+  leaderboardListEl.innerHTML='';
+  let list = leaderboardMode==='local'?getLocalScores():onlineScores;
+  if(list.length===0){
+    leaderboardListEl.innerHTML='<div style="color:#90a4ae;text-align:center;font:14px sans-serif;">No scores yet.</div>';
+    return;
+  }
+  list.slice(0,10).forEach((s,i)=>{
+    let row=document.createElement('div');
+    row.style.cssText='padding:8px 12px;background:rgba(255,255,255,0.07);border-radius:6px;display:flex;justify-content:space-between;align-items:center;';
+    let medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'<span style="display:inline-block;width:20px;text-align:center;color:#90a4ae;">'+(i+1)+'</span>';
+    row.innerHTML='<div style="display:flex;align-items:center;gap:8px;">'+medal+'<div><div style="color:#e0f7fa;font:14px sans-serif;">'+(s.name||'Climber')+'</div><div style="color:#90a4ae;font:11px sans-serif;">'+(s.source==='online'?'Online':'Local')+'</div></div></div><div style="color:#4fc3f7;font:14px sans-serif;font-weight:bold;">'+s.height+'m</div>';
+    leaderboardListEl.appendChild(row);
+  });
+}
+function toggleSound(){ soundOn=soundToggleEl.checked; localStorage.wcSound=soundOn; }
+function resetGameData(){
+  if(!confirm('Reset all progress? This cannot be undone.')) return;
+  ['wcBestScore','wcLeaderboard','wcUnlockedSkins','wcAchievements','wcPlayCount','wcUsedSkins','wcLastSkin','wcName','wcSound'].forEach(k=>localStorage.removeItem(k));
+  location.reload();
+}
+
+// --- Core Game ---
+function startGame(){
+  hideAllScreens();
+  hudCtn.hidden=false;
+  if(isMobile()) mobileControlsCtn.hidden=false;
+  gameOverCtn.hidden=true;
+  pauseCtn.hidden=true;
+  nameInput.value=localStorage.wcName||'';
+  initGame();
+  gameState='play';
+  loop();
+}
+function initGame(){
+  let groundTop=30;
+  platforms=[{x:w/2-100, y:10, w:200, h:20, type:'static', ox:w/2-100, speed:0}];
+  highestTop=groundTop;
+  lowestPlatformY=10; // first platform bottom
+  for(let i=0;i<14;i++){
+    highestTop+=48+Math.random()*38;
+    spawnPlatformAt(highestTop);
+  }
+  player={x:w/2, y:groundTop+15, w:22, h:30, vx:0, vy:0, onGround:true, jumpsLeft:2};
+  cameraY=player.y-h/3;
+  score=0; startTime=Date.now(); elapsedSec=0;
+  particles=[];
+  for(let i=0;i<180;i++){
+    particles.push({x:Math.random()*w, y:Math.random()*h, speed:4+Math.random()*8, len:10+Math.random()*35, alpha:0.08+Math.random()*0.22, thick:1+Math.random()*2});
+  }
+  usedSkins.add(skinIndex);
+  playCount++;
+  localStorage.wcPlayCount=playCount;
+  loadSkins();
+  unlockSkinCheck();
+}
+function unlockSkinCheck(){
+  skins.forEach(s=>{ if(!s.unlocked && score>=s.req) s.unlocked=true; });
+  saveSkins();
+}
+
+// Determine if playing on PC (non-mobile, larger screen)
+function isPC(){
+  return !isMobile();
+}
+
+function spawnPlatformAt(topY){
+  let baseWid=65+Math.random()*95;
+  // Platforms bigger when playing on PC
+  if(isPC()) baseWid *= 1.6;
+  let wid=baseWid;
+  if(wid>w-30) wid=w-30;
+  let x=Math.random()*(w-wid);
+  let hgt=14+Math.random()*10;
+  let type='static', speed=0;
+  if(score>200 && Math.random()<Math.min(0.35, score/3000)){
+    type='shifting'; speed=0.6+Math.random()*1.4; if(Math.random()<0.5) speed*=-1;
+  }
+  platforms.push({x, y:topY-hgt, w:wid, h:hgt, type, ox:x, speed, hgt});
+}
+function loop(){
+  if(gameState==='play'){
+    updateGame();
+    draw();
+    requestAnimationFrame(loop);
+  }
+}
+function submitScoreAndRestart(){
+  let name=nameInput.value.trim()||'Climber';
+  localStorage.wcName=name;
+  let best=parseInt(localStorage.wcBestScore||'0');
+  if(score>best) localStorage.wcBestScore=score;
+  addLocalScore(name,score);
+  maybeSyncOnline(name,score);
+  startGame();
+}
+function finishGame(){
+  gameState='over';
+  gameOverCtn.hidden=false;
+  finalScoreEl.textContent='Height: '+score+'m';
+  let best=Math.max(score, parseInt(localStorage.wcBestScore||'0'));
+  localStorage.wcBestScore=best;
+  hiScoreEl.textContent='Best: '+best+'m';
+  unlockSkinCheck();
+}
+function updateGame(){
+  let p=player;
+  let hw=p.w/2;
+  let oldBot=p.y-p.h/2;
+  elapsedSec=Math.floor((Date.now()-startTime)/1000);
+  timeEl.textContent=elapsedSec+'s';
+
+  // Movement
+  if(keys.ArrowLeft || keys.KeyA) p.vx-=0.7;
+  if(keys.ArrowRight || keys.KeyD) p.vx+=0.7;
+  p.vx*=0.86;
+  p.x+=p.vx;
+  if(p.x<hw){ p.x=hw; p.vx=0; }
+  if(p.x>w-hw){ p.x=w-hw; p.vx=0; }
+
+  // Double jump logic
+  if(jumpNext && p.jumpsLeft>0){
+    p.vy=10.5;
+    p.jumpsLeft--;
+    p.onGround=false;
+    jumpNext=false;
+  } else {
+    jumpNext=false;
+  }
+
+  // Gravity + dynamic water current push (increases with altitude)
+  if(!p.onGround){
+    p.vy-=0.5;
+    let current=Math.min(0.18, score/6000);
+    p.vy-=current;
+    if(p.vy<-14) p.vy=-14;
+  }
+  p.y+=p.vy;
+  let newBot=p.y-p.h/2;
+
+  // Platform collision & shifting terrain
+  let landed=false;
+  for(let plat of platforms){
+    if(plat.type==='shifting'){
+      plat.x+=plat.speed;
+      if(plat.x<=0 || plat.x+plat.w>=w) plat.speed*=-1;
+      plat.ox=plat.x;
+    }
+    let platTop=plat.y+plat.h;
+    let overlapX=p.x+hw>plat.x && p.x-hw<plat.x+plat.w;
+    if(overlapX && oldBot>=platTop && newBot<=platTop){
+      p.y=platTop+p.h/2; p.vy=0; landed=true; newBot=p.y-p.h/2;
+      p.jumpsLeft=2; // reset double jump on land
+      if(plat.type==='shifting') p.x+=plat.speed;
+    }
+  }
+  p.onGround=landed;
+
+  // Death check (fall off bottom of screen)
+  let screenBottom=h/2+cameraY-newBot;
+  if(screenBottom>h+80){ finishGame(); return; }
+
+  // Also end if player falls below the lowest remaining platform
+  if(platforms.length>0 && p.y - p.h/2 < lowestPlatformY - 120){ finishGame(); return; }
+
+  // Score and real-time unlocks
+  let curScore=Math.floor(p.y/10);
+  if(curScore>score){
+    score=curScore;
+    skins.forEach(s=>{ if(!s.unlocked && score>=s.req) s.unlocked=true; });
+    saveSkins();
+  }
+  scoreEl.textContent='Height: '+score+'m';
+
+  // Auto-scroll upward (faster the higher you climb)
+  let autoScroll=0.15+Math.min(score/500,3.5);
+  cameraY+=autoScroll;
+  // Keep player in upper area; follow if player climbs faster than scroll
+  let targetCam=p.y-h/3;
+  if(cameraY<targetCam) cameraY+=(targetCam-cameraY)*0.12;
+
+  // Procedural generation ahead
+  let topEdge=cameraY+h/2;
+  while(highestTop<topEdge+380){
+    highestTop+=46+Math.random()*38-Math.min(14, score/350);
+    if(highestTop<player.y+60) highestTop=player.y+60; // safety buffer
+    spawnPlatformAt(highestTop);
+  }
+  // Cull old platforms and track lowest remaining platform
+  let botEdge=cameraY-h/2;
+  platforms=platforms.filter(pl=>pl.y+pl.h>botEdge-260);
+  if(platforms.length>0){
+    lowestPlatformY = platforms[0].y;
+    for(let plat of platforms){
+      if(plat.y < lowestPlatformY) lowestPlatformY = plat.y;
+    }
+  }
+
+  // Waterfall particles
+  for(let pt of particles){
+    pt.y+=pt.speed;
+    if(pt.y>h){ pt.y=-pt.len; pt.x=Math.random()*w; }
+  }
+
+  checkAchievements();
+}
+function draw(){
+  let theme=getTheme();
+  let g=ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0, theme.bgTop);
+  g.addColorStop(1, theme.bgBot);
+  ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+
+  ctx.lineWidth=1;
+  for(let pt of particles){
+    ctx.strokeStyle=theme.water+pt.alpha+')';
+    ctx.lineWidth=pt.thick;
+    ctx.beginPath();
+    ctx.moveTo(pt.x, pt.y);
+    ctx.lineTo(pt.x, pt.y+pt.len);
+    ctx.stroke();
+  }
+
+  for(let plat of platforms){
+    let screenTop=h/2+cameraY-(plat.y+plat.h);
+    let screenBot=h/2+cameraY-plat.y;
+    let drawH=screenBot-screenTop;
+
+    ctx.fillStyle=theme.plat;
+    ctx.fillRect(plat.x, screenTop, plat.w, drawH);
+    ctx.strokeStyle=theme.edge; ctx.lineWidth=2;
+    ctx.strokeRect(plat.x, screenTop, plat.w, drawH);
+    ctx.fillStyle=theme.grass;
+    ctx.fillRect(plat.x, screenTop, plat.w, 5);
+    ctx.fillStyle=theme.water+'0.08)';
+    ctx.fillRect(plat.x+plat.w*0.25, screenTop+5, plat.w*0.5, drawH-5);
+  }
+
+  let sx=player.x;
+  let sy=h/2+cameraY-player.y;
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(player.vx*0.07);
+  let skin=skins[skinIndex];
+  ctx.fillStyle=skin.color;
+  ctx.fillRect(-11, -15, 22, 30);
+  ctx.fillStyle=skin.belt;
+  ctx.fillRect(-11, -4, 22, 12);
+  ctx.fillStyle=skin.band;
+  ctx.fillRect(-11, -12, 22, 4);
+  ctx.fillStyle='#222';
+  if(player.vx<-0.15){
+    ctx.fillRect(-8, -6, 3, 3);
+  }else if(player.vx>0.15){
+    ctx.fillRect(5, -6, 3, 3);
+  }else{
+    ctx.fillRect(-8, -6, 3, 3);
+    ctx.fillRect(5, -6, 3, 3);
+  }
+  ctx.fillStyle=skin.belt;
+  if(player.onGround){
+    ctx.fillRect(-15, 8, 4, 6);
+    ctx.fillRect(11, 8, 4, 6);
+  }else{
+    ctx.fillRect(-15, -18, 4, 8);
+    ctx.fillRect(11, -18, 4, 8);
+  }
+  ctx.restore();
+}
+
+// --- Persistent Data Init ---
+loadSkins();
+let last=parseInt(localStorage.wcLastSkin||'0');
+if(!isNaN(last) && last>=0 && last<skins.length && skins[last].unlocked) skinIndex=last;
+else skinIndex=0;
+let pc=parseInt(localStorage.wcPlayCount||'0'); if(!isNaN(pc)) playCount=pc;
+try{ let u=JSON.parse(localStorage.wcUsedSkins||'[]'); usedSkins=new Set(u); }catch(e){}
+// wrapper to auto-save used skins
+let _origAdd=usedSkins.add.bind(usedSkins);
+usedSkins.add=function(v){ _origAdd(v); localStorage.wcUsedSkins=JSON.stringify([...usedSkins]); return this; };
+// sound init
+if(localStorage.wcSound==='false'){ soundOn=false; soundToggleEl.checked=false; }else{ soundOn=true; soundToggleEl.checked=true; }
+
+showMainMenu();
+</script>
+</body>
+</html>

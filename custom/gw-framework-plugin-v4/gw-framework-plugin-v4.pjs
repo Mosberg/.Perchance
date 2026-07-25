@@ -1,0 +1,359 @@
+// GW Framework Plugin v4 — Unified superset of t2i v1/v2/moss + advanced AI text features
+// Features:
+//  - Full UI rendering from userInputs (paragraph/select/checkbox/text)
+//  - Robust registry and event-bus (register/on/emit)
+//  - Compression-safe share links, upload fallback
+//  - Helpers: makeImageGridHtml, scrubPII, showModal, confirmAsync, getUserInput
+//  - Advanced AI text features: aiSuggest, aiRandomize, aiEnchant (prompt expansion/enrichment)
+//  - Randomize utilities and enchantment chains (apply modifiers, templates, synonyms)
+
+textToImagePlugin = {import:text-to-image-plugin}
+commentsPlugin = {import:comments-plugin}
+selectLeaf = {import:select-leaf-plugin}
+fullscreenButton = {import:fullscreen-button-plugin}
+aiText = {import:ai-text-plugin}
+upload = {import:upload-plugin}
+prompt2 = {import:prompt2-plugin}
+prompt2moss = {import:prompt2-plugin-moss}
+t2iStyles = {import:t2i-styles}
+t2iStylesMossDefault = {import:t2i-styles-mosberg-default}
+t2iStylesNsfw = {import:t2i-styles-mosberg-nsfw}
+tabbedCommentsPlugin = {import:tabbed-comments-plugin-v1}
+createMediaGalleryPlugin = {import:create-media-gallery-plugin}
+kv = {import:kv-plugin}
+superFetch = {import:super-fetch-plugin}
+dynamicImport = {import:dynamic-import-plugin}
+remember = {import:remember-plugin}
+seeder = {import:seeder-plugin}
+
+$output(settings) =>
+  // lightweight namespaces
+  if(!window.___gw_v4) window.___gw_v4 = {};
+  if(!window.input) window.input = {};
+
+  // ensure registry & events
+  window.___gw_v4.registry = window.___gw_v4.registry || {};
+  if(typeof window.___gw_v4.register !== 'function') window.___gw_v4.register = function(name,obj){ this.registry[name]=obj; };
+  window.___gw_v4._events = window.___gw_v4._events || {};
+  if(typeof window.___gw_v4.on !== 'function') window.___gw_v4.on = function(name,cb){ if(!this._events[name]) this._events[name]=[]; this._events[name].push(cb); return ()=>{ this._events[name]=this._events[name].filter(f=>f!==cb); }; };
+  if(typeof window.___gw_v4.emit !== 'function') window.___gw_v4.emit = function(name,...args){ (this._events[name]||[]).forEach(cb=>{ try{ cb(...args); }catch(e){ console.error(e); } }); };
+
+  // export imported plugins for generator authors
+  window.___gw_v4.textToImage = textToImagePlugin;
+  window.___gw_v4.comments = commentsPlugin;
+  window.___gw_v4.kv = kv;
+  window.___gw_v4.upload = upload;
+  window.___gw_v4.aiText = aiText;
+  window.___gw_v4.superFetch = superFetch;
+  window.___gw_v4.createMediaGallery = createMediaGalleryPlugin;
+
+  // defaults and config merge
+  window.___gw_v4.config = Object.assign({
+    lazyLoadIframes: true,
+    autoCompressShareLinks: true,
+    scrubShareData: true,
+    enableProxiedFetch: false,
+    maxConcurrentGenerations: 3,
+    defaultNumImages: 6,
+    gallery: true,
+    galleryCols: 3,
+    socialFeatures: 'enabled',
+    rememberInputsPrefix: 'gw_v4_remembered',
+    allowClipboardShare: true,
+  }, settings.frameworkConfig || {});
+
+  const esc = s => s===undefined||s===null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // PII scrubber
+  window.___gw_v4.scrubPII = function(text){ if(!text) return text; text=String(text).replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig,'[redacted_email]'); text = text.replace(/\+?\d[\d\-() ]{6,}\d/g,'[redacted_phone]'); return text; };
+
+  // Compression helpers
+  async function compressBlobWithGzip(blob){ if(!window.CompressionStream) return blob; try{ const cs=new CompressionStream('gzip'); const compressed = blob.stream().pipeThrough(cs); return await new Response(compressed).blob(); }catch(e){ console.warn('gzip failed',e); return blob; } }
+  async function decompressBlobWithGzip(blob){ if(!window.DecompressionStream) return blob; try{ const ds=new DecompressionStream('gzip'); const decompressed = blob.stream().pipeThrough(ds); return await new Response(decompressed).blob(); }catch(e){ console.warn('gunzip failed',e); return blob; } }
+
+  // Collect userInputs as array
+  function getUserInputsArray(){ const ui = settings.userInputs || {}; if(Array.isArray(ui.selectAll)) return ui.selectAll; if(Array.isArray(ui.getChildNames)) return ui.getChildNames.map(n=>{ const o=ui[n]||{}; o._name=n; return o; }); return Object.keys(ui).filter(k=>k!=='selectAll'&&k!=='getChildNames').map(k=>{ const o=ui[k]||{}; o._name=k; return o; }); }
+
+  // Build options html (simple)
+  function buildSelectOptionsHtml(options){ if(!options) return ''; if(Array.isArray(options)) return options.map(o=>`<option value="${esc(o.value||o)}">${esc(o.label||o)}</option>`).join(''); if(typeof options==='object'){ const keys = options.getChildNames || Object.keys(options); return keys.map(k=>{ const o = options[k]||{}; return `<option value="${esc(o.value||k)}">${esc(o.label||o.getName||k)}</option>`; }).join(''); } return ''; }
+
+  // parse variables from textarea lines like: VAR = [a|b|c]
+  window.___gw_v4.variables = window.___gw_v4.variables || {};
+  function parseVariablesFromTextArea(text){ const vars={}; if(!text) return vars; const lines=String(text).split(/\r?\n/); for(const line of lines){ const m=line.match(/^\s*([A-Za-z0-9_\-]+)\s*=\s*\[(.*)\]\s*$/) || line.match(/^\s*([A-Za-z0-9_\-]+)\s*=\s*\{(.*)\}\s*$/); if(m){ const k=m[1]; const items = m[2].split(/\|/).map(s=>s.trim()).filter(Boolean); if(items.length) vars[k]=items; } } Object.assign(window.___gw_v4.variables, vars); return vars; }
+
+  window.___gw_v4.expandVariables = function(text){ if(!text) return text; return text.replace(/\[([A-Za-z0-9_\-]+)\]/g,(m,k)=>{ const list = window.___gw_v4.variables[k]; if(Array.isArray(list)&&list.length) return list[Math.floor(Math.random()*list.length)]; return m; }); };
+
+  // Helpers: image grid
+  window.___gw_v4.helpers = window.___gw_v4.helpers || {};
+  window.___gw_v4.helpers.makeImageGridHtml = function(items=[],opts={}){ const cols = opts.cols||window.___gw_v4.config.galleryCols||3; let html=`<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:0.6rem;">`; for(const it of items) html+=`<div style="position:relative;">${it.html||it}</div>`; html+=`</div>`; return html; };
+
+  // small utility: evaluate possibly-wrapped values (list .evaluateItem pattern)
+  function evaluateItem(v) { try { if(v && typeof v.evaluateItem !== 'undefined') return v.evaluateItem; } catch(e) {} return v; }
+
+  // Minimal modal selector used by several frameworks
+  window.___gw_v4.createSelectorModal = async function(optionsOrGroups) {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);z-index:99999;';
+      const modal = document.createElement('div');
+      modal.style.cssText = 'max-width:900px;width:95%;max-height:95%;background:var(--box-color);padding:0.5rem;border-radius:8px;overflow:auto;';
+      overlay.appendChild(modal);
+
+      const list = document.createElement('div');
+      modal.appendChild(list);
+
+      const flat = Array.isArray(optionsOrGroups) && optionsOrGroups[0] && optionsOrGroups[0].options ? optionsOrGroups.flatMap(g=>g.options.map(o=>({group:g.label, html:o.html||o.label, value:o.value||o.value}))) : (Array.isArray(optionsOrGroups) ? optionsOrGroups : []);
+      flat.forEach(item => {
+        const el = document.createElement('button');
+        el.style.cssText = 'display:block;width:100%;text-align:left;padding:0.5rem;border:0;background:transparent;cursor:pointer;';
+        el.innerHTML = item.html || item.label || String(item.value);
+        el.onclick = () => { overlay.remove(); resolve(item.value||item); };
+        list.appendChild(el);
+      });
+
+      modal.addEventListener('click', e => e.stopPropagation());
+      overlay.addEventListener('click', () => { overlay.remove(); resolve(null); });
+      document.body.appendChild(overlay);
+    });
+  };
+
+  // remember helpers (localStorage fallback)
+  function saveRememberedInput(inputName, inputValue) {
+    try{ localStorage.setItem(window.___gw_v4.config.rememberInputsPrefix + '_' + inputName, typeof inputValue === 'string' ? inputValue : JSON.stringify(inputValue)); }catch(e){}
+  }
+  function getRememberedInput(inputName) {
+    try{ const v = localStorage.getItem(window.___gw_v4.config.rememberInputsPrefix + '_' + inputName); if(v===null) return undefined; try{ return JSON.parse(v); }catch(e){ return v; } }catch(e){ return undefined; }
+  }
+
+  // parse variables across all textareas marked parseVariables
+  function parseAllVariables() {
+    const arr = getUserInputsArray();
+    for(const spec of arr) {
+      if(spec.parseVariables && spec._element && spec._element.tagName.toLowerCase() === 'textarea') {
+        parseVariablesFromTextArea(spec._element.value);
+      }
+    }
+  }
+
+  // update visibility for inputs that declare `visible` functions/values
+  function updateInputVisibilities() {
+    const arr = getUserInputsArray();
+    for(const spec of arr) {
+      try {
+        const el = spec._element;
+        if(!el) continue;
+        let visible = true;
+        if(typeof spec.visible !== 'undefined') {
+          visible = Boolean(evaluateItem(spec.visible));
+        }
+        const row = el.closest('.gw-v4-row') || el.parentElement;
+        if(row) row.style.display = visible ? '' : 'none';
+      }catch(e){ console.error(e); }
+    }
+  }
+
+  // common input event handler used for initialization and live updates
+  function onInputEvent(elOrEvent, isInitCall) {
+    const el = elOrEvent.target ? elOrEvent.target : elOrEvent;
+    const name = el.dataset && el.dataset.name;
+    if(!name) return;
+    const arr = getUserInputsArray();
+    const spec = arr.find(s => (s._name||s.name||s.label) === name);
+    if(!spec) return;
+    let value;
+    if(el.type === 'checkbox') value = el.checked;
+    else value = el.value;
+    if(value === '' && spec.defaultValue !== undefined) value = spec.defaultValue;
+    spec.value = value;
+    try { window.input[name] = value; } catch(e) {}
+    if(spec.remember) saveRememberedInput(name, value);
+    if(spec.parseVariables && el.tagName.toLowerCase() === 'textarea') parseVariablesFromTextArea(el.value);
+    updateInputVisibilities();
+    if(!isInitCall) window.___gw_v4.emit('input:' + name, value);
+  }
+
+  // simple loading modal helper
+  window.___gw_v4.createLoadingModal = function(initialContent){ const overlay = document.createElement('div'); overlay.style.cssText='position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);z-index:99999;'; const modal=document.createElement('div'); modal.style.cssText='background:var(--box-color);padding:1rem;border-radius:8px;min-width:200px;'; modal.innerHTML = initialContent || '<div style="display:flex;gap:0.5rem;align-items:center;"><span style="display:inline-block; animation:rotate 1.2s linear infinite;">⏳</span><span>Loading...</span></div>'; overlay.appendChild(modal); document.body.appendChild(overlay); return { close: ()=>overlay.remove(), el: overlay } };
+
+  // animate image into target (simple)
+  function animateImageIntoTarget({imgEl, sourceEl, targetEl, durationMs=600, wiggle=false}={}){
+    try{
+      const srcRect = sourceEl.getBoundingClientRect();
+      const tgtRect = targetEl.getBoundingClientRect();
+      imgEl.style.cssText = `position:fixed;top:${srcRect.top}px;left:${srcRect.left}px;width:${srcRect.width}px;height:${srcRect.height}px;margin:0;pointer-events:none;z-index:9999;transition:all ${durationMs}ms ease;`;
+      if(!imgEl.parentNode) document.body.appendChild(imgEl);
+      imgEl.getBoundingClientRect();
+      imgEl.style.top = (tgtRect.top + tgtRect.height/2) + 'px';
+      imgEl.style.left = (tgtRect.left + tgtRect.width/2) + 'px';
+      imgEl.style.width = imgEl.style.height = '0px';
+      imgEl.addEventListener('transitionend', ()=>{ try{ imgEl.remove(); }catch(e){} }, { once:true });
+    }catch(e){ console.error(e); }
+  }
+
+  // private gallery integration (minimal)
+  if(settings.imageButtons && settings.imageButtons.privateSave) {
+    try{ window.___gw_v4.privateGallery = createMediaGalleryPlugin(); }catch(e){ console.warn('private gallery init failed', e); }
+    window.___gw_v4.privateGallerySave = async function(btn, imageCtn){ try{ const g = window.___gw_v4.privateGallery; if(g && typeof g.addItem === 'function'){ g.addItem({ html: imageCtn.innerHTML }); } }catch(e){ console.error(e); } };
+  }
+
+  // AI Text features: aiSuggest, aiRandomize, aiEnchant
+  // aiSuggest: ask aiText plugin for a completion based on a prompt template
+  window.___gw_v4.aiSuggest = async function(promptTemplate, opts){ opts = opts||{}; if(!window.___gw_v4.aiText) throw new Error('aiText plugin not available'); const prompt = window.___gw_v4.expandVariables(promptTemplate); try{ const api = window.___gw_v4.aiText; if(api && api.completion) { return await api.completion({ prompt, ...opts }); } // fallback to iframe usage
+    const res = await api({ prompt, ...opts }); return res; } catch(e){ console.error(e); throw e; } };
+
+  // aiRandomize: given a prompt template and a set of variations, produce N variants
+  window.___gw_v4.aiRandomize = async function(promptTemplate, count=3, opts){ const out=[]; for(let i=0;i<count;i++){ const p = window.___gw_v4.expandVariables(promptTemplate); out.push(await window.___gw_v4.aiSuggest(p, opts)); } return out; };
+
+  // aiEnchant: iterative prompt enrichment — call aiSuggest repeatedly to expand adjectives, modifiers
+  window.___gw_v4.aiEnchant = async function(basePrompt, depth=2, opts){ let current = basePrompt; for(let i=0;i<depth;i++){ const suggestion = await window.___gw_v4.aiSuggest(current, opts); if(!suggestion) break; // simple heuristic: append suggestion
+    current = `${current} — ${suggestion}`; } return current; };
+
+  // Randomize utilities: shuffle, pickWeighted
+  window.___gw_v4.utils = window.___gw_v4.utils || {};
+  window.___gw_v4.utils.shuffle = function(arr){ const a = arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+  window.___gw_v4.utils.pickWeighted = function(items, weights){ if(!Array.isArray(items)) return null; if(!weights) return items[Math.floor(Math.random()*items.length)]; const total = weights.reduce((s,w)=>s+(w||0),0); let r=Math.random()*total; for(let i=0;i<items.length;i++){ r -= (weights[i]||0); if(r<=0) return items[i]; } return items[items.length-1]; };
+
+  // Generate share link
+  window.___gw_v4.generateShareLink = async function(opts){ opts = opts||{}; let data = window.___gw_v4.getAllUserInputValues ? window.___gw_v4.getAllUserInputValues() : {}; if(Object.keys(data).length===0){ const arr=getUserInputsArray(); for(const s of arr){ const n=s._name||s.name||s.label; data[n] = (s._element && s._element.value !== undefined) ? s._element.value : s.value; } } let json = JSON.stringify(data); if(window.___gw_v4.config.scrubShareData||opts.scrub) json = window.___gw_v4.scrubPII(json); let blob = new Blob([json],{ type:'application/json;charset=utf-8' }); blob = await compressBlobWithGzip(blob); if(window.___gw_v4.upload) return await window.___gw_v4.upload(blob); const arr = new Uint8Array(await blob.arrayBuffer()); const b64 = btoa(String.fromCharCode(...arr)); return `data:application/gzip;base64,${b64}`; };
+
+  // getAllUserInputValues
+  window.___gw_v4.getAllUserInputValues = function(){ const out={}; const arr = getUserInputsArray(); for(const s of arr){ const n = s._name||s.name||s.label; if(s && s.excludeFromShareLink) continue; out[n] = (s._element && s._element.value !== undefined) ? s._element.value : s.value; } out.___format='gw-framework-v4'; return out; };
+
+  // import user input values (from share links or saved objects)
+  window.___gw_v4.importUserInputValues = function(data){ try{
+    if(!data) return;
+    const arr = getUserInputsArray();
+    for(const spec of arr){ const n = spec._name||spec.name||spec.label; if(typeof data[n] === 'undefined') continue; const el = spec._element; if(!el) { spec.value = data[n]; continue; } try{ if(el.type === 'checkbox') el.checked = (data[n] === true || data[n] === 'true'); else el.value = data[n]; el.dispatchEvent(new Event('input',{ bubbles:true })); }catch(e){} }
+  }catch(e){ console.error(e); } };
+
+  // try to load from url hash on startup (data:gzip base64 or plain json/hash)
+  (async function(){ try{ const h=(location.hash||'').replace(/^#/,''); if(!h) return; let raw = null; if(h.startsWith('data:')){ const parts = h.split(','); const b64 = parts[1]||''; const bin = atob(b64); const arr = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i); const blob = new Blob([arr]); const maybe = await decompressBlobWithGzip(blob); const text = await new Response(maybe).text(); raw = JSON.parse(text); } else { try{ raw = JSON.parse(decodeURIComponent(h)); }catch(e){ raw = null; } } if(raw) window.___gw_v4.importUserInputValues && window.___gw_v4.importUserInputValues(raw); }catch(e){} })();
+
+  // generation pipeline with concurrency
+  window.___gw_v4._pending = window.___gw_v4._pending||0;
+  window.___gw_v4.generate = async function(opts){ opts = opts||{}; while(window.___gw_v4._pending >= window.___gw_v4.config.maxConcurrentGenerations) await new Promise(r=>setTimeout(r,200)); window.___gw_v4._pending++; try{ let imageOptions = typeof settings.imageOptions === 'function' ? settings.imageOptions() : settings.imageOptions || {}; if(opts.override) Object.assign(imageOptions, opts.override); const out = window.___gw_v4.textToImage ? window.___gw_v4.textToImage(imageOptions) : null; window.___gw_v4.emit('generated', out); return out; }catch(e){ console.error(e); throw e; } finally { window.___gw_v4._pending--; } };
+
+  // UI renderer (simple, merges v2/v3 ideas)
+  const inputsArr = getUserInputsArray();
+  const inputsHtml = inputsArr.map(spec=>{
+    const name = spec._name || spec.name || spec.label || 'input';
+    const label = spec.label || name;
+    const id = `gw_v4_input_${name}`;
+    const type = spec.type || 'text';
+    let inner='';
+    if(type==='paragraph') inner = `<textarea id="${id}" data-name="${name}" class="gw-v4-input" style="width:100%;min-height:6rem;">${esc(spec.defaultValue||spec.value||'')}</textarea>`;
+    else if(type==='select') inner = `<select id="${id}" data-name="${name}" class="gw-v4-input">${buildSelectOptionsHtml(spec.options)}</select>`;
+    else if(type==='checkbox') inner = `<input id="${id}" type="checkbox" data-name="${name}" class="gw-v4-input" ${spec.value?'checked':''}/>`;
+    else inner = `<input id="${id}" data-name="${name}" value="${esc(spec.defaultValue||spec.value||'')}" class="gw-v4-input" style="width:100%;"/>`;
+    return `<div class="gw-v4-row" style="margin-bottom:0.6rem;\"><label style="font-weight:600;display:block;margin-bottom:0.25rem;">${esc(label)}</label>${inner}</div>`;
+  }).join('\n');
+
+  const generateButtonId = 'gw_v4_generate_btn_main';
+  const shareButtonId = 'gw_v4_share_btn_main';
+  const inputsCtnId = 'gw_v4_inputs_ctn';
+  const outputCtnId = 'gw_v4_output_ctn';
+  const galleryCtnId = 'gw_v4_gallery_ctn';
+
+  // build AI target options from inputs
+  const aiTargetOptions = inputsArr.map(spec => { const n = spec._name || spec.name || spec.label || 'input'; const label = spec.label || n; return `<option value="${esc(n)}">${esc(label)}</option>`; }).join('\n');
+  const aiControlsHtml = `<span style="margin-left:1rem;display:flex;gap:0.4rem;align-items:center;">` +
+    `<select id="gw_v4_ai_target_select" style="min-width:160px;">${aiTargetOptions}</select>` +
+    `<button id="gw_v4_ai_suggest_btn" type="button">Suggest</button>` +
+    `<button id="gw_v4_ai_randomize_btn" type="button">Randomize</button>` +
+    `<input id="gw_v4_ai_randomize_count" type="number" value="3" min="1" style="width:3.5rem"/>` +
+    `<button id="gw_v4_ai_enchant_btn" type="button">Enchant</button>` +
+    `<input id="gw_v4_ai_enchant_depth" type="number" value="2" min="1" style="width:2.5rem"/>` +
+    `</span>`;
+
+  const controlsHtml = `<div style="display:flex;gap:0.6rem;align-items:center;margin-bottom:0.6rem;">` +
+    `<button id="${generateButtonId}">Generate (${window.___gw_v4.config.defaultNumImages})</button>` +
+    `<button id="${shareButtonId}">Share</button>` +
+    `${aiControlsHtml}` +
+    `<span style="margin-left:1rem;color:#888;">${esc(settings.pageTitle||'GW Framework v4')}</span></div>`;
+
+  const contentHtml = `<div class="gw-v4-ctn"><div style="max-width:1200px;margin:0 auto;display:grid;grid-template-columns: 1fr 420px;gap:1rem;">`+
+    `<div style="min-width:300px;">${controlsHtml}<div id="${inputsCtnId}">${inputsHtml}</div></div>`+
+    `<div style="min-width:320px;"><div id="${outputCtnId}"></div><div id="${galleryCtnId}" style="margin-top:0.8rem;"></div><div id="gw_v4_comments_ctn" style="margin-top:0.8rem;"></div></div>`+
+    `</div></div>`;
+
+  const escaped = contentHtml.replaceAll('{','\\{').replaceAll('}','\\}');
+
+  // Post-render wiring
+  setTimeout(()=>{
+    try{
+      // attach elements and wire input handlers
+      const arr = getUserInputsArray();
+      for(const spec of arr){
+        const n = spec._name||spec.name||spec.label;
+        const el = document.querySelector(`[data-name="${n}"]`);
+        if(!el) continue;
+        spec._element = el;
+        // restore remembered value if present
+        if(spec.remember){ const mem = getRememberedInput(n); if(typeof mem !== 'undefined'){ try{ if(el.type === 'checkbox') el.checked = (mem === true || mem === 'true'); else el.value = (typeof mem === 'object' ? (mem.value || JSON.stringify(mem)) : mem); }catch(e){} } }
+        const evName = (el.tagName.toLowerCase() === 'select' || el.type === 'checkbox') ? 'change' : 'input';
+        el.addEventListener(evName, (e)=> onInputEvent(e, false));
+        // initial populate
+        onInputEvent(el, true);
+        if(spec.parseVariables && el.tagName.toLowerCase()==='textarea') parseVariablesFromTextArea(el.value);
+      }
+      // run global variable parsing and visibility updates after init
+      try{ parseAllVariables(); updateInputVisibilities(); }catch(e){}
+      document.getElementById(generateButtonId).addEventListener('click', async ()=>{ try{ const out = await window.___gw_v4.generate(); const el = document.getElementById(outputCtnId); if(el) el.innerHTML = out && out.html ? out.html : (out || String(out)); }catch(e){ console.error(e); } });
+      document.getElementById(shareButtonId).addEventListener('click', async ()=>{ try{ const link = await window.___gw_v4.generateShareLink(); if(window.___gw_v4.config.allowClipboardShare && navigator.clipboard) await navigator.clipboard.writeText(link); alert('Share link created and copied to clipboard'); }catch(e){ console.error(e); alert('Share failed'); } });
+
+      // AI Controls wiring
+      const aiTargetSelect = document.getElementById('gw_v4_ai_target_select');
+      const aiSuggestBtn = document.getElementById('gw_v4_ai_suggest_btn');
+      const aiRandomizeBtn = document.getElementById('gw_v4_ai_randomize_btn');
+      const aiRandomizeCount = document.getElementById('gw_v4_ai_randomize_count');
+      const aiEnchantBtn = document.getElementById('gw_v4_ai_enchant_btn');
+      const aiEnchantDepth = document.getElementById('gw_v4_ai_enchant_depth');
+      if(aiSuggestBtn){
+        aiSuggestBtn.addEventListener('click', async ()=>{
+          try{
+            const targetName = aiTargetSelect?.value; if(!targetName) return;
+            const spec = arr.find(s=> (s._name||s.name||s.label) === targetName); if(!spec || !spec._element) return;
+            const el = spec._element;
+            const template = spec.aiPrompt || spec.promptTemplate || spec.prompt || spec.label || el.value || '';
+            const suggestion = await window.___gw_v4.aiSuggest(template, {});
+            const text = (typeof suggestion === 'object' && suggestion.text) ? suggestion.text : suggestion;
+            el.value = text || '';
+            el.dispatchEvent(new Event('input',{ bubbles:true }));
+          }catch(e){ console.error(e); alert('AI Suggest failed'); }
+        });
+      }
+      if(aiRandomizeBtn){
+        aiRandomizeBtn.addEventListener('click', async ()=>{
+          try{
+            const count = parseInt(aiRandomizeCount?.value||3,10);
+            const targetName = aiTargetSelect?.value; if(!targetName) return;
+            const spec = arr.find(s=> (s._name||s.name||s.label) === targetName); if(!spec || !spec._element) return;
+            const template = spec.aiPrompt || spec.promptTemplate || spec.prompt || spec.label || spec.defaultValue || '';
+            const variants = await window.___gw_v4.aiRandomize(template, count, {});
+            const pick = Array.isArray(variants) ? variants[Math.floor(Math.random()*variants.length)] : variants;
+            const text = (typeof pick === 'object' && pick.text) ? pick.text : pick;
+            spec._element.value = text || '';
+            spec._element.dispatchEvent(new Event('input',{ bubbles:true }));
+          }catch(e){ console.error(e); alert('AI Randomize failed'); }
+        });
+      }
+      if(aiEnchantBtn){
+        aiEnchantBtn.addEventListener('click', async ()=>{
+          try{
+            const depth = parseInt(aiEnchantDepth?.value||2,10);
+            const targetName = aiTargetSelect?.value; if(!targetName) return;
+            const spec = arr.find(s=> (s._name||s.name||s.label) === targetName); if(!spec || !spec._element) return;
+            const base = spec._element.value || spec.defaultValue || spec.label || '';
+            const enchanted = await window.___gw_v4.aiEnchant(base, depth, {});
+            const text = (typeof enchanted === 'object' && enchanted.text) ? enchanted.text : enchanted;
+            spec._element.value = text || '';
+            spec._element.dispatchEvent(new Event('input',{ bubbles:true }));
+          }catch(e){ console.error(e); alert('AI Enchant failed'); }
+        });
+      }
+    }catch(e){ console.error(e); }
+  }, 250);
+
+  window.___gw_v4.register('gw-framework-plugin-v4',{ title:'GW Framework Plugin v4', version:'4.0' });
+
+  return escaped;

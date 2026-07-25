@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>solitare — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="gameContainer" style="text-align:left; padding:20px; font-family:Arial, sans-serif;">
+  <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+    <div style="display:flex; gap:10px;">
+      <div id="stockCtn" class="pile" style="width:80px; height:120px; border:2px dashed #ccc; position:relative; cursor:pointer;" onclick="drawCard()">
+        <div class="card back" style="position:absolute; top:0; left:0;"></div>
+      </div>
+      <div id="wasteCtn" class="pile" style="width:80px; height:120px; border:2px dashed #ccc; position:relative;">
+        <!-- Waste card will appear here -->
+      </div>
+    </div>
+    
+    <div style="display:flex; gap:10px;">
+      <div class="foundation-pile" data-suit="hearts" style="width:80px; height:120px; border:2px dashed #ccc; position:relative;"></div>
+      <div class="foundation-pile" data-suit="diamonds" style="width:80px; height:120px; border:2px dashed #ccc; position:relative;"></div>
+      <div class="foundation-pile" data-suit="clubs" style="width:80px; height:120px; border:2px dashed #ccc; position:relative;"></div>
+      <div class="foundation-pile" data-suit="spades" style="width:80px; height:120px; border:2px dashed #ccc; position:relative;"></div>
+    </div>
+  </div>
+  
+  <div id="tableauCtn" style="display:flex; gap:10px; justify-content:space-between;">
+    <!-- Tableau piles will be generated here -->
+  </div>
+  
+  <div style="margin-top:20px; display:flex; gap:10px;">
+    <button id="newGameBtn" onclick="initGame()" style="padding:10px 20px; background:#4CAF50; color:white; border:none; border-radius:4px; cursor:pointer;">New Game</button>
+    <button id="hintBtn" onclick="showHint()" style="padding:10px 20px; background:#2196F3; color:white; border:none; border-radius:4px; cursor:pointer;">AI Hint</button>
+    <div id="hintTextEl" style="padding:10px; background:#e3f2fd; border-radius:4px; display:none;"></div>
+  </div>
+</div>
+
+<style>
+  .card {
+    width:80px; 
+    height:120px; 
+    border:1px solid #333; 
+    border-radius:8px; 
+    position:absolute; 
+    display:flex; 
+    align-items:center; 
+    justify-content:center; 
+    font-weight:bold; 
+    font-size:18px;
+    background:white;
+    cursor:pointer;
+    transition:transform 0.2s;
+  }
+  
+  .card:hover {
+    transform: translateY(-5px);
+  }
+  
+  .card.hearts, .card.diamonds {
+    color:red;
+  }
+  
+  .card.clubs, .card.spades {
+    color:black;
+  }
+  
+  .card.back {
+    background:linear-gradient(45deg, #1a237e 25%, #3949ab 25%, #3949ab 50%, #1a237e 50%, #1a237e 75%, #3949ab 75%, #3949ab);
+    background-size: 20px 20px;
+  }
+  
+  .pile {
+    position:relative;
+  }
+  
+  .tableau-pile {
+    width:80px; 
+    min-height:120px; 
+    border:2px dashed #ccc; 
+    position:relative;
+  }
+  
+  .highlight {
+    box-shadow: 0 0 10px 3px #ffeb3b;
+  }
+</style>
+
+<script>
+  // Game state
+  let deck = [];
+  let stock = [];
+  let waste = [];
+  let foundations = [[], [], [], []]; // hearts, diamonds, clubs, spades
+  let tableau = [[], [], [], [], [], [], []];
+  let selectedCard = null;
+  
+  // Card suits and ranks
+  const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
+  const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+  
+  // Initialize game
+  function initGame() {
+    // Reset game state
+    deck = [];
+    stock = [];
+    waste = [];
+    foundations = [[], [], [], []];
+    tableau = [[], [], [], [], [], [], []];
+    selectedCard = null;
+    
+    // Create deck
+    for (let suit of suits) {
+      for (let rank of ranks) {
+        deck.push({ suit, rank, faceUp: false });
+      }
+    }
+    
+    // Shuffle deck
+    shuffleDeck(deck);
+    
+    // Deal cards to tableau
+    for (let i = 0; i < 7; i++) {
+      for (let j = 0; j <= i; j++) {
+        let card = deck.pop();
+        if (j === i) {
+          card.faceUp = true; // Top card is face up
+        }
+        tableau[i].push(card);
+      }
+    }
+    
+    // Remaining cards go to stock
+    stock = deck;
+    
+    // Render game
+    renderGame();
+  }
+  
+  // Shuffle deck using Fisher-Yates algorithm
+  function shuffleDeck(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+  }
+  
+  // Draw card from stock to waste
+  function drawCard() {
+    if (stock.length === 0) {
+      // Reset waste back to stock if stock is empty
+      stock = waste.reverse();
+      waste = [];
+      // Flip all cards face down
+      stock.forEach(card => card.faceUp = false);
+    } else {
+      // Draw top card from stock
+      let card = stock.pop();
+      card.faceUp = true;
+      waste.push(card);
+    }
+    renderGame();
+  }
+  
+  // Render game state
+  function renderGame() {
+    // Clear all containers
+    wasteCtn.innerHTML = '';
+    document.querySelectorAll('.foundation-pile').forEach(pile => pile.innerHTML = '');
+    tableauCtn.innerHTML = '';
+    
+    // Render waste
+    if (waste.length > 0) {
+      let card = waste[waste.length - 1];
+      wasteCtn.appendChild(createCardElement(card, 'waste'));
+    }
+    
+    // Render foundations
+    foundations.forEach((pile, suitIndex) => {
+      const pileEl = document.querySelector(`.foundation-pile[data-suit="${suits[suitIndex]}"]`);
+      if (pile.length > 0) {
+        let card = pile[pile.length - 1];
+        pileEl.appendChild(createCardElement(card, 'foundation', suitIndex));
+      }
+    });
+    
+    // Render tableau
+    tableau.forEach((pile, pileIndex) => {
+      const pileEl = document.createElement('div');
+      pileEl.className = 'tableau-pile';
+      pileEl.dataset.pile = pileIndex;
+      pileEl.onclick = () => onTableauClick(pileIndex);
+      
+      pile.forEach((card, cardIndex) => {
+        const cardEl = createCardElement(card, 'tableau', pileIndex, cardIndex);
+        cardEl.style.top = `${cardIndex * 20}px`; // Stack cards with offset
+        pileEl.appendChild(cardEl);
+      });
+      
+      tableauCtn.appendChild(pileEl);
+    });
+  }
+  
+  // Create card element
+  function createCardElement(card, source, pileIndex = null, cardIndex = null) {
+    const cardEl = document.createElement('div');
+    cardEl.className = `card ${card.suit}`;
+    cardEl.textContent = card.faceUp ? `${card.rank}${getSuitSymbol(card.suit)}` : '';
+    
+    if (!card.faceUp) {
+      cardEl.classList.add('back');
+    }
+    
+    cardEl.onclick = (e) => {
+      e.stopPropagation();
+      onCardClick(card, source, pileIndex, cardIndex);
+    };
+    
+    return cardEl;
+  }
+  
+  // Get suit symbol
+  function getSuitSymbol(suit) {
+    const symbols = {
+      'hearts': '♥',
+      'diamonds': '♦',
+      'clubs': '♣',
+      'spades': '♠'
+    };
+    return symbols[suit];
+  }
+  
+  // Handle card click
+  function onCardClick(card, source, pileIndex, cardIndex) {
+    // Deselect if same card is clicked again
+    if (selectedCard && 
+        selectedCard.card === card && 
+        selectedCard.source === source && 
+        selectedCard.pileIndex === pileIndex) {
+      selectedCard = null;
+      clearHighlights();
+      return;
+    }
+    
+    // Select card
+    selectedCard = { card, source, pileIndex, cardIndex };
+    clearHighlights();
+    
+    // Highlight selected card
+    const cardElements = document.querySelectorAll('.card');
+    cardElements.forEach(el => {
+      if (el.textContent === `${card.rank}${getSuitSymbol(card.suit)}`) {
+        el.classList.add('highlight');
+      }
+    });
+  }
+  
+  // Handle tableau pile click
+  function onTableauClick(pileIndex) {
+    if (!selectedCard) return;
+    
+    const { card, source, pileIndex: sourcePileIndex, cardIndex } = selectedCard;
+    
+    // Try to move card to this tableau pile
+    if (isValidTableauMove(card, tableau[pileIndex])) {
+      moveCard(card, source, sourcePileIndex, 'tableau', pileIndex, cardIndex);
+    }
+  }
+  
+  // Handle foundation pile click
+  document.querySelectorAll('.foundation-pile').forEach((pile, index) => {
+    pile.onclick = () => {
+      if (!selectedCard) return;
+      
+      const { card, source, pileIndex: sourcePileIndex, cardIndex } = selectedCard;
+      
+      // Try to move card to this foundation pile
+      if (isValidFoundationMove(card, index)) {
+        moveCard(card, source, sourcePileIndex, 'foundation', index, cardIndex);
+      }
+    };
+  });
+  
+  // Check if card can be moved to tableau
+  function isValidTableauMove(card, targetPile) {
+    // If pile is empty, only Kings can be placed
+    if (targetPile.length === 0) {
+      return card.rank === 'K';
+    }
+    
+    // Get top card of target pile
+    const topCard = targetPile[targetPile.length - 1];
+    
+    // Check if colors are opposite
+    const isOppositeColor = 
+      (card.suit === 'hearts' || card.suit === 'diamonds') !== 
+      (topCard.suit === 'hearts' || topCard.suit === 'diamonds');
+    
+    // Check if rank is one less
+    const rankOrder = ranks.indexOf(card.rank);
+    const topRankOrder = ranks.indexOf(topCard.rank);
+    
+    return isOppositeColor && rankOrder === topRankOrder - 1;
+  }
+  
+  // Check if card can be moved to foundation
+  function isValidFoundationMove(card, foundationIndex) {
+    const foundationPile = foundations[foundationIndex];
+    
+    // If pile is empty, only Aces can be placed
+    if (foundationPile.length === 0) {
+      return card.rank === 'A';
+    }
+    
+    // Get top card of foundation pile
+    const topCard = foundationPile[foundationPile.length - 1];
+    
+    // Check if suit matches
+    if (card.suit !== suits[foundationIndex]) {
+      return false;
+    }
+    
+    // Check if rank is one more
+    const rankOrder = ranks.indexOf(card.rank);
+    const topRankOrder = ranks.indexOf(topCard.rank);
+    
+    return rankOrder === topRankOrder + 1;
+  }
+  
+  // Move card between piles
+  function moveCard(card, fromSource, fromPileIndex, toSource, toPileIndex, cardIndex) {
+    // Remove card from source
+    if (fromSource === 'waste') {
+      waste.pop();
+    } else if (fromSource === 'tableau') {
+      tableau[fromPileIndex].splice(cardIndex, 1);
+      // Flip next card if it exists and is face down
+      if (tableau[fromPileIndex].length > 0) {
+        const nextCard = tableau[fromPileIndex][tableau[fromPileIndex].length - 1];
+        if (!nextCard.faceUp) {
+          nextCard.faceUp = true;
+        }
+      }
+    } else if (fromSource === 'foundation') {
+      foundations[fromPileIndex].pop();
+    }
+    
+    // Add card to destination
+    if (toSource === 'tableau') {
+      tableau[toPileIndex].push(card);
+    } else if (toSource === 'foundation') {
+      foundations[toPileIndex].push(card);
+    }
+    
+    // Reset selection
+    selectedCard = null;
+    clearHighlights();
+    
+    // Re-render game
+    renderGame();
+    
+    // Check for win
+    checkWin();
+  }
+  
+  // Clear all highlights
+  function clearHighlights() {
+    document.querySelectorAll('.highlight').forEach(el => {
+      el.classList.remove('highlight');
+    });
+  }
+  
+  // Show AI hint
+  function showHint() {
+    const hint = getHintMove();
+    const hintText = hintTextEl;
+    
+    if (hint) {
+      hintText.textContent = `Hint: Move ${hint.card.rank} of ${hint.card.suit} to ${hint.destination}`;
+      hintText.style.display = 'block';
+      
+      // Hide hint after 3 seconds
+      setTimeout(() => {
+        hintText.style.display = 'none';
+      }, 3000);
+    } else {
+      hintText.textContent = 'No moves available. Try drawing from stock.';
+      hintText.style.display = 'block';
+      
+      setTimeout(() => {
+        hintText.style.display = 'none';
+      }, 3000);
+    }
+  }
+  
+  // Get hint move from AI
+  function getHintMove() {
+    // Check waste card moves
+    if (waste.length > 0) {
+      const wasteCard = waste[waste.length - 1];
+      
+      // Check foundation moves
+      for (let i = 0; i < 4; i++) {
+        if (isValidFoundationMove(wasteCard, i)) {
+          return {
+            card: wasteCard,
+            destination: `${suits[i]} foundation`
+          };
+        }
+      }
+      
+      // Check tableau moves
+      for (let i = 0; i < 7; i++) {
+        if (isValidTableauMove(wasteCard, tableau[i])) {
+          return {
+            card: wasteCard,
+            destination: `tableau pile ${i + 1}`
+          };
+        }
+      }
+    }
+    
+    // Check tableau card moves
+    for (let i = 0; i < 7; i++) {
+      if (tableau[i].length > 0) {
+        const card = tableau[i][tableau[i].length - 1];
+        
+        // Check foundation moves
+        for (let j = 0; j < 4; j++) {
+          if (isValidFoundationMove(card, j)) {
+            return {
+              card: card,
+              destination: `${suits[j]} foundation`
+            };
+          }
+        }
+        
+        // Check tableau moves
+        for (let j = 0; j < 7; j++) {
+          if (i !== j && isValidTableauMove(card, tableau[j])) {
+            return {
+              card: card,
+              destination: `tableau pile ${j + 1}`
+            };
+          }
+        }
+      }
+    }
+    
+    return null; // No moves available
+  }
+  
+  // Check for win condition
+  function checkWin() {
+    const totalFoundationCards = foundations.reduce((sum, pile) => sum + pile.length, 0);
+    
+    if (totalFoundationCards === 52) {
+      setTimeout(() => {
+        alert('Congratulations! You won!');
+      }, 300);
+    }
+  }
+  
+  // Initialize game on load
+  initGame();
+</script>
+</body>
+</html>

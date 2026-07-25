@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>runescape-3 — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+  RS3 Prototype features:
+  [x] Click-to-move with A* pathfinding
+  [x] 10 skills with OSRS/RS3 xp curve
+  [x] Woodcutting, Mining, Fishing nodes
+  [x] Melee combat vs chickens, cows, goblins
+  [x] RS3-style Action Bar with 12 abilities / keybinds
+  [x] Inventory (28 slots) with drops/food
+  [x] Floating XP drops, hit splats, death & respawn
+  [x] Minimap, Chat box, Skill overlay, HP/Prayer orbs
+  [x] Procedural overworld: Lumbridge castle, river, forests
+-->
+
+<style>
+  body { margin:0; overflow:hidden; background:#000; text-align:left; font-family:Arial, sans-serif; user-select:none; }
+  .panel { position:absolute; background:rgba(8,8,18,0.92); border:1px solid #444; color:#fff; pointer-events:auto; }
+  .slot { width:36px; height:36px; background:rgba(0,0,0,0.35); border:1px solid #666; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; position:relative; font-size:18px; }
+  .barSlot { width:42px; height:42px; background:rgba(15,15,35,0.95); border:1px solid #333; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; margin:0 2px; position:relative; border-radius:3px; box-shadow:inset 0 0 5px #000; font-size:20px; }
+  .cdOverlay { position:absolute; inset:0; background:rgba(0,0,0,0.65); display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:bold; }
+  .splat { position:absolute; font-weight:bold; font-size:15px; text-shadow:1px 1px #000; pointer-events:none; transition:opacity 1s, transform 1s; }
+  .xpDrop { position:absolute; color:#0f0; font-weight:bold; font-size:13px; text-shadow:1px 1px #000; pointer-events:none; animation:floatUp 1.5s forwards; }
+  @keyframes floatUp { to { transform:translateY(-35px); opacity:0; } }
+  .orb { width:28px; height:28px; border-radius:50%; display:inline-block; margin-right:4px; border:2px solid #222; }
+</style>
+
+<div id="lobbyCtn" style="position:fixed; inset:0; background:radial-gradient(circle at 50% 40%, #0a2e0a 0%, #000 100%); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; color:#daa520;">
+  <h1 style="font-size:64px; text-shadow:0 0 12px #000; margin:0;">RuneScape 3</h1>
+  <p id="lobbyStatusEl" style="color:#fff; font-size:16px;">Welcome back to Gielinor</p>
+  <button id="playBtn" onclick="enterGame()" style="margin-top:24px; padding:12px 48px; font-size:20px; cursor:pointer; border:2px solid #640; background:#111; color:#daa520;">Play Now</button>
+</div>
+
+<canvas id="gameCanvas" style="position:absolute; top:0; left:0;"></canvas>
+
+<!-- Orbs top left -->
+<div id="statsCtn" class="panel" style="top:8px; left:8px; padding:6px 10px; display:flex; align-items:center;" hidden>
+  <span class="orb" style="background:#a00;"></span><span id="hpEl">100</span>/<span id="maxHpEl">100</span>
+  <span class="orb" style="background:#22a;"></span><span id="prayEl">100</span>
+  <span style="margin-left:10px; font-size:11px; color:#aaa; cursor:pointer;" onclick="skillsCtn.hidden=false">Skills ▾</span>
+</div>
+
+<!-- Minimap -->
+<div id="minimapCtn" class="panel" style="top:8px; right:8px; width:156px; height:156px; padding:2px;" hidden>
+  <canvas id="minimapCanvas" width="150" height="150" style="width:150px; height:150px;"></canvas>
+</div>
+
+<!-- Chat -->
+<div id="chatCtn" class="panel" style="bottom:8px; left:8px; width:400px; height:170px; display:flex; flex-direction:column;" hidden>
+  <div style="background:#111; padding:2px 6px; font-size:11px;">
+    <span style="color:#fff; cursor:pointer;" onclick="switchChat('all')">All</span> <span style="color:#888;">|</span>
+    <span style="cursor:pointer;" onclick="switchChat('game')">Game</span>
+  </div>
+  <div id="chatOutputEl" style="flex:1; overflow-y:auto; padding:4px; font-size:12px;"></div>
+  <input id="chatInputEl" style="border:0; background:#222; color:#fff; padding:4px; outline:none;" placeholder="Press Enter to chat..." onkeydown="if(event.key==='Enter') sendChat()">
+</div>
+
+<!-- Action Bar -->
+<div id="actionBarCtn" style="position:absolute; bottom:8px; left:50%; transform:translateX(-50%); white-space:nowrap; background:rgba(0,0,0,0.65); padding:4px; border-radius:4px; pointer-events:auto;" hidden></div>
+
+<!-- XP Tracker -->
+<div id="xpTrackerCtn" class="panel" style="top:172px; right:8px; width:170px; padding:6px;" hidden>
+  <div style="font-weight:bold; border-bottom:1px solid #444; margin-bottom:4px; font-size:12px;">XP Tracker</div>
+  <div id="xpTrackerListEl"></div>
+</div>
+
+<!-- Inventory -->
+<div id="inventoryCtn" class="panel" style="top:8px; right:172px; width:160px; padding:4px;" hidden>
+  <div style="text-align:center; border-bottom:1px solid #444; padding-bottom:2px; margin-bottom:3px; font-size:12px;">Backpack</div>
+  <div id="inventoryGridEl" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:2px;"></div>
+</div>
+
+<!-- Skills Overlay -->
+<div id="skillsCtn" class="panel" style="top:50%; left:50%; transform:translate(-50%,-50%); width:280px; max-height:420px; overflow-y:auto; padding:8px;" hidden>
+  <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #555; margin-bottom:6px;">
+    <b>Skills</b><span onclick="skillsCtn.hidden=true" style="cursor:pointer;">✕</span>
+  </div>
+  <div id="skillsListEl"></div>
+</div>
+
+<!-- Floating hits / xp -->
+<div id="effectsCtn" style="position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:30;"></div>
+
+<script>
+  let W=50, H=50, TILE=40, TICK=600;
+  let map=[], entities=[], path=[], targetEnt=null, tickCount=0;
+  let player, camera={x:0,y:0};
+  let skills={}, inventory=Array(28).fill(null), abilities=[];
+  let chatTarget='all', lastTick=0, ctx, mCtx;
+  let xpTable=[], xpGain={};
+
+  for(let i=0;i<120;i++) xpTable[i]=0;
+  let sum=0; xpTable[0]=0;
+  for(let i=1;i<120;i++){ sum+=Math.floor((i+Math.floor(300*Math.pow(2,i/7.0)))/4); xpTable[i]=sum; }
+  let lvlFrom=x=>{
+    for(let i=119;i>=0;i--) if(x>=xpTable[i]) return i+1;
+    return 1;
+  };
+
+  let skillNames=['Attack','Strength','Defence','Ranged','Magic','Constitution','Prayer','Woodcutting','Mining','Fishing'];
+  skillNames.forEach(s=>skills[s.toLowerCase()]={xp:0,lvl:1});
+
+  abilities=[
+    {n:'Slice',k:'1',cd:3,mul:1.0,st:'melee',ic:'🗡️'},
+    {n:'Sever',k:'2',cd:5,mul:1.2,st:'melee',ic:'⚔️'},
+    {n:'Piercing',k:'3',cd:3,mul:1.0,st:'range',ic:'🏹'},
+    {n:'Wrack',k:'4',cd:4,mul:1.1,st:'magic',ic:'🔥'},
+    {n:'Sacrifice',k:'5',cd:5,mul:0.8,st:'melee',ic:'🩸',heal:true},
+    {n:'Asphyxiate',k:'6',cd:6,mul:1.3,st:'magic',ic:'💀'},
+    {n:'Snipe',k:'7',cd:5,mul:1.2,st:'range',ic:'🎯'},
+    {n:'Freedom',k:'8',cd:10,mul:0,st:'none',ic:'🔓'},
+    {n:'Anticipation',k:'9',cd:10,mul:0,st:'none',ic:'🛡️'},
+    {n:'Surge',k:'0',cd:5,mul:0,st:'none',ic:'⚡'},
+    {n:'Eat',k:'-',cd:2,mul:0,st:'item',ic:'🍖'},
+    {n:'Drink',k:'=',cd:2,mul:0,st:'item',ic:'🍺'}
+  ];
+
+  function genWorld(){
+    for(let y=0;y<H;y++){ map[y]=[]; for(let x=0;x<W;x++) map[y][x]={t:'grass',w:true}; }
+    for(let x=0;x<W;x++){ let ry=28+Math.sin(x*0.35)*4|0; for(let dy=0;dy<3;dy++) if(ry+dy>=0&&ry+dy<H){ let c=map[ry+dy][x]; c.t='water'; c.w=false; } }
+    for(let y=2;y<10;y++)for(let x=22;x<34;x++) map[y][x]={t:'wall',w:false};
+    let placed=0; while(placed<35){ let x=rng(W),y=rng(H); if(map[y][x].w){ entities.push({t:'tree',x,y,sk:'woodcutting',n:'Tree'}); placed++;} }
+    placed=0; while(placed<12){ let x=rng(W),y=rng(H); if(map[y][x].w){ entities.push({t:'rock',x,y,sk:'mining',n:'Rock'}); placed++;} }
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(map[y][x].t==='water'&&Math.random()<0.06)entities.push({t:'fish',x,y,sk:'fishing',n:'Fishing spot'});
+    let mobs=[
+      {t:'chicken',n:'Chicken',hp:3,mhp:3,a:1,s:1,d:1,ag:false,x:8,y:20},{t:'chicken',n:'Chicken',hp:3,mhp:3,a:1,s:1,d:1,ag:false,x:11,y:22},
+      {t:'cow',n:'Cow',hp:10,mhp:10,a:2,s:2,d:2,ag:false,x:40,y:22},{t:'cow',n:'Cow',hp:10,mhp:10,a:2,s:2,d:2,ag:false,x:43,y:24},
+      {t:'goblin',n:'Goblin',hp:12,mhp:12,a:3,s:3,d:2,ag:true,x:44,y:40},{t:'goblin',n:'Goblin',hp:12,mhp:12,a:3,s:3,d:2,ag:true,x:46,y:42}
+    ];
+    mobs.forEach(m=>entities.push({...m,target:null,atkT:0,dead:false}));
+  }
+  let rng=n=>Math.floor(Math.random()*n);
+
+  function resetPlayer(){
+    player={x:28,y:18,hp:100,mhp:100,pray:100,renderX:28*TILE,renderY:18*TILE,target:null,atkT:0,abCd:Array(12).fill(0)};
+  }
+
+  function pathfind(sx,sy,ex,ey){
+    let open=[[sx,sy]], closed=new Set(), from={}, g={}, f={};
+    g[`${sx},${sy}`]=0; f[`${sx},${sy}`]=Math.abs(ex-sx)+Math.abs(ey-sy);
+    while(open.length){
+      let ci=0; for(let i=1;i<open.length;i++) if(f[key(open[i])]<f[key(open[ci])]) ci=i;
+      let [cx,cy]=open[ci]; open.splice(ci,1);
+      if(cx===ex&&cy===ey){ let p=[],k=`${cx},${cy}`; while(k!==`${sx},${sy}`){ let [kx,ky]=k.split(',').map(Number); p.push([kx,ky]); k=from[k]; } return p.reverse(); }
+      closed.add(`${cx},${cy}`);
+      for(let [dx,dy] of [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,-1],[1,-1],[-1,1]]){
+        let nx=cx+dx, ny=cy+dy;
+        if(nx<0||nx>=W||ny<0||ny>=H) continue; if(!map[ny][nx].w) continue;
+        let nk=`${nx},${ny}`; if(closed.has(nk)) continue;
+        let ng=g[`${cx},${cy}`]+1;
+        if(!(nk in g)||ng<g[nk]){ from[nk]=`${cx},${cy}`; g[nk]=ng; f[nk]=ng+Math.abs(ex-nx)+Math.abs(ey-ny); if(!open.some(([x,y])=>x===nx&&y===ny)) open.push([nx,ny]); }
+      }
+    }
+    return [];
+  }
+  let key=([x,y])=>`${x},${y}`;
+
+  function gameTick(){
+    tickCount++;
+    if(path.length){ let [nx,ny]=path.shift(); player.x=nx; player.y=ny; }
+    if(targetEnt){
+      let d=Math.max(Math.abs(player.x-targetEnt.x),Math.abs(player.y-targetEnt.y));
+      if(targetEnt.mhp && !targetEnt.dead){
+        if(d<=1){
+          path=[]; if(--player.atkT<=0){
+            let dmg=Math.max(0,Math.floor(Math.random()*((lvlFrom(skills.attack.xp)+lvlFrom(skills.strength.xp))*1.5)));
+            hit(targetEnt,dmg); addXp('attack',dmg*0.3); addXp('strength',dmg*0.15);
+            player.atkT=1; if(targetEnt.hp<=0) killEnt(targetEnt);
+          }
+        }
+      } else if(targetEnt.sk && !targetEnt.dead){
+        if(d<=1){
+          path=[]; if(tickCount%5===0){
+            if(Math.random()<0.7){
+              let xpAmt=targetEnt.sk==='woodcutting'?25:targetEnt.sk==='mining'?35:40;
+              addXp(targetEnt.sk,xpAmt);
+              let itn=targetEnt.sk==='woodcutting'?'Logs':targetEnt.sk==='mining'?'Copper ore':'Raw shrimps';
+              addItem(itn); chat(`You get some ${itn.toLowerCase()}.`,'game');
+              if(Math.random()<0.12){ targetEnt.dead=true; chat(`The ${targetEnt.n} is depleted.`,'game'); }
+            } else chat('You swing and miss.','game');
+          }
+        }
+      }
+      if(targetEnt && targetEnt.dead) targetEnt=null;
+    }
+    entities.forEach(e=>{
+      if(e.mhp && !e.dead){
+        if(e.target && !e.dead){
+          let d=Math.max(Math.abs(e.x-e.target.x),Math.abs(e.y-e.target.y));
+          if(d>1){
+            let p=pathfind(e.x,e.y,e.target.x,e.target.y); if(p.length){ e.x=p[0][0]; e.y=p[0][1]; }
+          } else if(--e.atkT<=0){
+            let dmg=Math.max(0,Math.floor(Math.random()*(e.s*2+1))); player.hp-=dmg; showHitAt(player,dmg,'#fff');
+            if(player.hp<=0) respawn(); e.atkT=2;
+          }
+        } else if(e.ag && !e.target){
+          if(Math.max(Math.abs(e.x-player.x),Math.abs(e.y-player.y))<=8){ e.target=player; chat(`A ${e.n} attacks you!`,'game'); }
+        }
+      }
+    });
+    for(let i=0;i<player.abCd.length;i++) if(player.abCd[i]>0) player.abCd[i]--;
+    updateUI();
+  }
+
+  function hit(ent,dmg){ ent.hp-=dmg; showHitAt(ent,dmg,'#f30'); }
+  function killEnt(e){
+    e.dead=true; e.target=null; if(targetEnt===e) targetEnt=null;
+    chat(`You kill the ${e.n}.`,'game');
+    let drops={chicken:[['Bones',1],['Raw chicken',1]],cow:[['Bones',1],['Raw beef',1],['Cowhide',1]],goblin:[['Bones',1],['Bronze helm',1]]};
+    (drops[e.t]||[]).forEach(([it,q])=>addItem(it,q));
+  }
+  function respawn(){
+    player.hp=player.mhp; player.x=28; player.y=18; player.renderX=28*TILE; player.renderY=18*TILE; path=[]; targetEnt=null;
+    entities.forEach(e=>{ if(e.mhp){ e.target=null; }});
+    chat('Oh dear, you are dead!','game');
+  }
+
+  function draw(){
+    let w=gameCanvas.width=innerWidth, h=gameCanvas.height=innerHeight;
+    player.renderX+=(player.x*TILE-player.renderX)*0.25; player.renderY+=(player.y*TILE-player.renderY)*0.25;
+    let cx=player.renderX - w/2 + TILE/2, cy=player.renderY - h/2 + TILE/2;
+    let sx=Math.max(0,Math.floor(cx/TILE)), sy=Math.max(0,Math.floor(cy/TILE)), ex=Math.min(W,Math.ceil((w+cx)/TILE)), ey=Math.min(H,Math.ceil((h+cy)/TILE));
+    for(let y=sy;y<ey;y++) for(let x=sx;x<ex;x++){
+      let t=map[y][x].t; ctx.fillStyle=t==='water'?'#147':t==='wall'?'#444':'#3a5';
+      ctx.fillRect(x*TILE-cx, y*TILE-cy, TILE, TILE);
+    }
+    for(let e of entities){
+      if(e.dead) continue; let px=e.x*TILE-cx, py=e.y*TILE-cy;
+      if(e.t==='tree'){ ctx.fillStyle='#431'; ctx.fillRect(px+14,py+18,12,22); ctx.fillStyle='#162'; ctx.beginPath(); ctx.arc(px+20,py+14,16,0,Math.PI*2); ctx.fill(); }
+      else if(e.t==='rock'){ ctx.fillStyle='#777'; ctx.beginPath(); ctx.moveTo(px+20,py+10); ctx.lineTo(px+32,py+24); ctx.lineTo(px+24,py+34); ctx.lineTo(px+10,py+28); ctx.fill(); }
+      else if(e.t==='fish'){ ctx.fillStyle='#0ff'; ctx.beginPath(); ctx.arc(px+20,py+20,5,0,Math.PI*2); ctx.fill(); }
+      else if(e.t==='chicken'){ ctx.fillStyle='#eee'; ctx.beginPath(); ctx.arc(px+20,py+20,9,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fa0'; ctx.fillRect(px+18,py+14,4,4); }
+      else if(e.t==='cow'){ ctx.fillStyle='#fff'; ctx.fillRect(px+6,py+12,28,16); ctx.fillStyle='#222'; ctx.fillRect(px+10,py+14,5,5); ctx.fillRect(px+25,py+14,5,5); }
+      else if(e.t==='goblin'){ ctx.fillStyle='#080'; ctx.fillRect(px+10,py+10,20,20); ctx.fillStyle='#f00'; ctx.fillRect(px+14,py+18,12,4); }
+    }
+    let px=player.renderX-cx, py=player.renderY-cy;
+    ctx.fillStyle='#00f'; ctx.beginPath(); ctx.arc(px+20,py+20,14,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fd0'; ctx.fillRect(px+14,py+10,12,4);
+    if(targetEnt && !targetEnt.dead){ ctx.strokeStyle='#f0f'; ctx.lineWidth=3; ctx.strokeRect(targetEnt.x*TILE-cx+2,targetEnt.y*TILE-cy+2,TILE-4,TILE-4); }
+    let mmS=150/W; mCtx.clearRect(0,0,150,150);
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){ mCtx.fillStyle=map[y][x].t==='water'?'#38c':map[y][x].t==='wall'?'#555':'#294'; mCtx.fillRect(x*mmS,y*mmS,mmS,mmS); }
+    for(let e of entities){ if(e.dead) continue; mCtx.fillStyle=e.t==='tree'?'#0f0':e.t==='rock'?'#888':e.t==='fish'?'#0ff':e.t==='chicken'?'#fff':e.t==='cow'?'#ddd':'#f00'; mCtx.fillRect(e.x*mmS,e.y*mmS,Math.max(2,mmS),Math.max(2,mmS)); }
+    mCtx.fillStyle='#fff'; mCtx.fillRect(player.x*mmS,player.y*mmS,Math.max(3,mmS),Math.max(3,mmS));
+  }
+
+  let itemIcons={'Logs':'🌲','Copper ore':'⛏️','Raw shrimps':'🦐','Bones':'🦴','Raw chicken':'🍗','Raw beef':'🥩','Cowhide':'🟫','Bronze helm':'⛑️'};
+  function addItem(name,qty){ let i=inventory.findIndex(it=>it&&it.n===name); if(i>=0){ inventory[i].q+=qty; return; } let e=inventory.indexOf(null); if(e>=0) inventory[e]={n:name,q:qty,ic:itemIcons[name]||'📦'}; else chat('Your inventory is full.','game'); }
+  function clickInv(i){ let it=inventory[i]; if(!it) return; if(it.n==='Raw chicken'||it.n==='Raw beef'){ player.hp=Math.min(player.mhp,player.hp+5); inventory[i]=null; chat('You eat the '+it.n.toLowerCase()+'.','game'); addXp('constitution',8); } else { inventory[i]=null; chat('You drop the '+it.n+'.','game'); } updateUI(); }
+  function addXp(sk,am){ let s=skills[sk]; if(!s) return; let ol=s.lvl; s.xp+=am; s.lvl=lvlFrom(s.xp); if(s.lvl>ol) chat(`Congratulations, you just advanced a ${cap(sk)} level! You are now level ${s.lvl}.`,'game'); xpGain[sk]=(xpGain[sk]||0)+am; showXp(sk,am); }
+  function cap(s){ return s[0].toUpperCase()+s.slice(1); }
+  function showXp(sk,am){ let d=document.createElement('div'); d.className='xpDrop'; d.textContent='+'+Math.floor(am)+' '+cap(sk); d.style.left=(innerWidth/2+24)+'px'; d.style.top=(innerHeight/2-30)+'px'; effectsCtn.appendChild(d); setTimeout(()=>d.remove(),1500); }
+  function showHitAt(ent,dmg,col){ if(dmg<=0)return; let dx=(ent.x-player.x)*TILE, dy=(ent.y-player.y)*TILE; let d=document.createElement('div'); d.className='splat'; d.style.color=col; d.textContent=dmg; d.style.left=(innerWidth/2+dx)+'px'; d.style.top=(innerHeight/2+dy-14)+'px'; effectsCtn.appendChild(d); setTimeout(()=>{d.style.opacity=0; d.style.transform='translateY(-25px)'; setTimeout(()=>d.remove(),900);},400); }
+  function chat(msg,type){ let ln=document.createElement('div'); ln.textContent=msg; ln.style.color=type==='game'?'#fc0':'#ccc'; chatOutputEl.appendChild(ln); chatOutputEl.scrollTop=chatOutputEl.scrollHeight; }
+  function sendChat(){ let t=chatInputEl.value.trim(); if(!t) return; chat('Player: '+t,'all'); chatInputEl.value=''; }
+  function switchChat(t){ chatTarget=t; }
+
+  function initUI(){
+    let ab=''; abilities.forEach((a,i)=>{ ab+=`<div class="barSlot" onclick="useAbility(${i})" title="${a.n} (${a.k})"><div style="font-size:18px;">${a.ic}</div><div style="position:absolute; top:1px; left:2px; font-size:9px; color:#aaa;">${a.k}</div><div id="abCd${i}El" class="cdOverlay" hidden></div></div>`; });
+    actionBarCtn.innerHTML=ab;
+    let g=''; for(let i=0;i<28;i++) g+=`<div class="slot" id="inv${i}El" onclick="clickInv(${i})"></div>`; inventoryGridEl.innerHTML=g;
+    let s=''; skillNames.forEach(n=>{ let sn=n.toLowerCase(); s+=`<div style="display:flex; justify-content:space-between; padding:2px; border-bottom:1px solid #333;"><span>${n}</span><span id="skillLvl${sn}El">${skills[sn].lvl}</span></div>`; }); skillsListEl.innerHTML=s;
+    updateUI();
+  }
+  function updateUI(){
+    hpEl.textContent=player.hp; maxHpEl.textContent=player.mhp;
+    for(let i=0;i<28;i++){ let it=inventory[i], el=window['inv'+i+'El']; if(it){ el.innerHTML=`<div>${it.ic}</div><div style="position:absolute; bottom:1px; right:2px; font-size:10px;">${it.q}</div>`; el.title=it.n; } else if(el) el.innerHTML=''; }
+    for(let i=0;i<abilities.length;i++){ let el=window['abCd'+i+'El']; if(!el) continue; if(player.abCd[i]>0){ el.hidden=false; el.textContent=player.abCd[i]; } else el.hidden=true; }
+    let xps=''; for(let n of skillNames){ let sn=n.toLowerCase(); if(xpGain[sn]) xps+=`<div style="font-size:11px;">${n}: ${skills[sn].lvl} (+${Math.floor(xpGain[sn])})</div>`; else xps+=`<div style="font-size:11px;">${n}: ${skills[sn].lvl}</div>`; } xpTrackerListEl.innerHTML=xps;
+    skillNames.forEach(n=>{ let el=window['skillLvl'+n.toLowerCase()+'El']; if(el) el.textContent=skills[n.toLowerCase()].lvl; });
+  }
+
+  gameCanvas.addEventListener('mousedown',e=>{
+    let r=gameCanvas.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+    let wx=Math.floor((mx - innerWidth/2 + player.renderX)/TILE), wy=Math.floor((my - innerHeight/2 + player.renderY)/TILE);
+    let hitEnt=null, bd=999;
+    for(let ent of entities){ if(ent.dead) continue; let d=Math.hypot(ent.x-wx,ent.y-wy); if(d<1.4 && d<bd){ bd=d; hitEnt=ent; } }
+    if(hitEnt){ targetEnt=hitEnt; if(hitEnt.mhp && !hitEnt.dead) hitEnt.target=player; let p=pathfind(player.x,player.y,hitEnt.x,hitEnt.y); path=p.length>1?p.slice(0,-1):[]; }
+    else { targetEnt=null; if(wx>=0&&wx<W&&wy>=0&&wy<H&&map[wy][wx].w) path=pathfind(player.x,player.y,wx,wy); }
+  });
+  window.addEventListener('keydown',e=>{ let i=['1','2','3','4','5','6','7','8','9','0','-','='].indexOf(e.key); if(i>=0) useAbility(i); });
+
+  function useAbility(i){
+    let a=abilities[i]; if(!a || player.abCd[i]>0) return;
+    player.abCd[i]=a.cd;
+    if(a.heal){ player.hp=Math.min(player.mhp,player.hp+12); addXp('constitution',15); }
+    else if(a.st!=='none' && targetEnt && targetEnt.mhp && !targetEnt.dead){
+      let sk=a.st==='melee'?'attack':a.st==='range'?'ranged':'magic';
+      let dmg=Math.floor((lvlFrom(skills[sk].xp)+3)*a.mul+Math.random()*4); hit(targetEnt,dmg); addXp(sk,dmg*0.25); if(targetEnt.hp<=0) killEnt(targetEnt);
+    }
+  }
+
+  function loop(now){
+    while(now-lastTick>=TICK){ gameTick(); lastTick+=TICK; }
+    draw(); requestAnimationFrame(loop);
+  }
+
+  function enterGame(){
+    lobbyCtn.hidden=true;
+    statsCtn.hidden=false; minimapCtn.hidden=false; chatCtn.hidden=false; actionBarCtn.hidden=false; inventoryCtn.hidden=false; xpTrackerCtn.hidden=false;
+    ctx=gameCanvas.getContext('2d'); mCtx=minimapCanvas.getContext('2d');
+    genWorld(); resetPlayer(); initUI();
+    lastTick=performance.now(); requestAnimationFrame(loop);
+    chat('Welcome to RuneScape 3.','game'); chat('You are standing in Lumbridge.','game');
+  }
+</script>
+</body>
+</html>

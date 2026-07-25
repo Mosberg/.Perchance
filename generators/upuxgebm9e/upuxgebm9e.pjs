@@ -1,0 +1,214 @@
+generateImage = {import:text-to-image-plugin}
+generateText = {import:ai-text-plugin}
+
+$meta
+  title = Gerador de Personagens Consistentes
+  description = Crie um personagem e gere imagens dele em diferentes poses e cenários mantendo a consistência visual.
+  tags = character, image, consistent, rpg, portrait
+
+// --- listas de sugestão para o formulário (valores em inglês pro prompt) ---
+artStyles
+  anime
+  Studio Ghibli style
+  pixel art
+  realistic digital painting
+  fantasy concept art
+  Cartoon Network style
+  watercolor
+  Marvel comics style
+  stylized 3D render
+  children's book illustration
+
+genders
+  male
+  female
+  androgynous
+
+hairColors
+  black
+  brown
+  light brown
+  blonde
+  redhead
+  white
+  gray
+  blue
+  pink
+  purple
+  green
+  red
+
+hairStyles
+  short
+  long straight
+  long wavy
+  curly
+  braided
+  ponytail
+  mohawk
+  bald
+  medium bob
+  bun
+
+eyeColors
+  brown
+  blue
+  green
+  gray
+  amber
+  violet
+  heterochromia (one blue eye, one green)
+  golden
+  red
+
+skinTones
+  fair skin
+  fair skin with freckles
+  light tan skin
+  tan skin
+  dark skin
+  very dark skin
+  pale skin
+  olive skin
+
+bodyTypes
+  slim
+  athletic
+  muscular
+  stocky
+  slender
+  average
+  tall and imposing
+  short and stout
+
+clothingStyles
+  knight's armor
+  wizard robe
+  adventurer's outfit
+  elegant dress
+  casual modern clothes
+  military uniform
+  ninja outfit
+  cyberpunk outfit
+  royal garments
+  explorer's gear
+
+distinctiveFeatures
+  facial scar
+  tribal tattoo on arm
+  glasses
+  face paint
+  golden earrings
+  bandana
+  worn cape
+  amulet necklace
+  well-groomed beard
+  heterochromia
+  none
+
+poses
+  standing confidently, facing forward
+  sitting in a chair, legs crossed
+  in profile, looking at the horizon
+  in combat stance, weapon drawn
+  running toward the camera
+  kneeling, contemplative
+  from behind, turning slightly
+  arms crossed, smiling
+  leaping mid-air, dynamic
+  leaning back relaxed
+
+scenarios
+  enchanted forest with golden light filtering through the trees
+  bustling medieval city at dawn
+  snowy mountain peak at sunset
+  cozy tavern lit by candles
+  tropical beach with blue sky
+  dark castle with storm in the background
+  endless desert under scorching sun
+  ancient library full of books
+  cyberpunk city with neon lights at night
+  battlefield after the war, smoke in the air
+
+moods
+  epic and heroic
+  dark and mysterious
+  cheerful and vibrant
+  melancholic
+  tense and dramatic
+  serene and peaceful
+  romantic
+
+timesOfDay
+  dawn
+  noon
+  sunset
+  starry night
+  dusk
+
+// --- função que monta o prompt detalhado do personagem ---
+// Este é o coração da consistência: a descrição física fica idêntica em todas as gerações.
+buildCharacterPrompt(char) =>
+  let parts = [];
+  parts.push(`a ${char.age||"adult"} year old ${char.gender||""} character`);
+  if (char.race) parts.push(`(${char.race})`);
+  let body = [];
+  if (char.bodyType) body.push(char.bodyType);
+  if (char.height) body.push(char.height);
+  if (body.length) parts.push(body.join(", ") + " build");
+  if (char.skinTone) parts.push(char.skinTone);
+  let hair = [];
+  if (char.hairColor) hair.push(char.hairColor);
+  if (char.hairStyle) hair.push(char.hairStyle + " hair");
+  if (hair.length) parts.push(hair.join(" "));
+  if (char.eyeColor) parts.push(char.eyeColor + " eyes");
+  if (char.faceShape) parts.push(char.faceShape + " face");
+  if (char.clothing) parts.push("wearing " + char.clothing);
+  if (char.accessories) parts.push("with " + char.accessories);
+  if (char.distinctiveFeature && char.distinctiveFeature !== "nenhum") parts.push("distinctive " + char.distinctiveFeature);
+  if (char.personality) parts.push("expressing a " + char.personality + " demeanor");
+  return parts.join(", ");
+
+// --- função que monta o prompt completo da cena ---
+buildScenePrompt(char, scene) =>
+  let charDesc = root.buildCharacterPrompt(char);
+  let sceneParts = [];
+  sceneParts.push(charDesc);
+  if (scene.pose) sceneParts.push(scene.pose);
+  let env = [];
+  if (scene.scenario) env.push(scene.scenario);
+  if (scene.timeOfDay) env.push("during " + scene.timeOfDay);
+  if (scene.mood) env.push(scene.mood + " atmosphere");
+  if (env.length) sceneParts.push(env.join(", "));
+  if (scene.extra) sceneParts.push(scene.extra);
+  let style = char.artStyle || "digital painting";
+  let full = `${sceneParts.join(", ")}. Style: ${style}, highly detailed, masterpiece, trending on artstation, sharp focus, professional illustration`;
+  return full;
+
+// --- traduz texto livre do jogador para inglês ---
+async translateToEnglish(text) =>
+  if (!text || !text.trim()) return text;
+  let instruction = "Translate the following text to English. Keep it concise and suitable for an image generation prompt. Output ONLY the translation, nothing else. Do NOT use square brackets.\n\nText: " + text;
+  let translated = await root.generateText({ instruction: instruction });
+  let cleaned = translated.trim();
+  cleaned = cleaned.replace(/\[/g, "(").replace(/\]/g, ")");
+  return cleaned;
+
+// --- analisa a pose e otimiza o prompt removendo detalhes invisíveis ---
+async optimizePromptByPose(fullPrompt, pose) =>
+  let instruction = "You are an image prompt optimizer. Given a full image prompt and a pose, remove ONLY physical character details that would NOT be visible in that pose/angle. For example, if the character is seen from behind, remove eye color, face shape, facial features, facial expressions. If sitting, leg details may be hidden. IMPORTANT: Keep ALL scene, background, environment, lighting, mood, time of day, and style keywords COMPLETELY intact. Do NOT remove or change any scene/background details. Do NOT use square brackets in your output. Output ONLY the optimized prompt, nothing else.\n\nFull prompt: " + fullPrompt + "\nPose: " + pose + "\n\nOptimized prompt:";
+  let result = await root.generateText({ instruction: instruction });
+  let cleaned = result.trim();
+  cleaned = cleaned.replace(/\[/g, "(").replace(/\]/g, ")");
+  return cleaned;
+
+// --- derivar um seed estável a partir do personagem ---
+// Mesmo personagem => mesmo seed => maior consistência visual entre gerações.
+seedFromCharacter(char) =>
+  let s = JSON.stringify(char);
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h) + s.charCodeAt(i);
+    h = h & 0x7fffffff;
+  }
+  return h % 1000000;

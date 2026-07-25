@@ -1,0 +1,279 @@
+ensureModuleRegistryStore() =>
+  if(!window.__moduleRegistryKitV1) {
+    window.__moduleRegistryKitV1 = {};
+  }
+  return window.__moduleRegistryKitV1;
+
+normalizeModuleName(name) =>
+  const raw = name === undefined || name === null ? "" : String(name).trim();
+  return raw;
+
+deepClone(value) =>
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch(error) {
+    return value;
+  }
+
+normalizePath(pathText) =>
+  return String(pathText || "").split(".").map(part => part.trim()).filter(Boolean);
+
+safeParseJson(jsonText, fallback) =>
+  try {
+    return JSON.parse(String(jsonText));
+  } catch(error) {
+    return fallback;
+  }
+
+register(name, value, mode) =>
+  const moduleName = normalizeModuleName(name);
+  if(moduleName === "") return "";
+
+  const store = ensureModuleRegistryStore();
+  store[moduleName] = mode === "clone" ? deepClone(value) : value;
+  return store[moduleName];
+
+registerJson(name, jsonText, mode) =>
+  const parsed = safeParseJson(jsonText, undefined);
+  if(parsed === undefined) {
+    return "error: invalid json";
+  }
+  return register(name, parsed, mode);
+
+use(name, fallback) =>
+  const moduleName = normalizeModuleName(name);
+  if(moduleName === "") return fallback === undefined ? "" : fallback;
+
+  const store = ensureModuleRegistryStore();
+  if(store.hasOwnProperty(moduleName)) {
+    return store[moduleName];
+  }
+
+  return fallback === undefined ? "" : fallback;
+
+useClone(name, fallback) =>
+  const value = use(name, undefined);
+  if(value === undefined) {
+    return fallback === undefined ? "" : fallback;
+  }
+  return deepClone(value);
+
+pathGet(name, pathText, fallback) =>
+  const value = use(name, undefined);
+  if(value === undefined || value === null) {
+    return fallback === undefined ? "" : fallback;
+  }
+
+  const path = normalizePath(pathText);
+  if(path.length === 0) {
+    return value;
+  }
+
+  let current = value;
+  for(let i = 0; i < path.length; i += 1) {
+    if(current === null || current === undefined || typeof current !== "object") {
+      return fallback === undefined ? "" : fallback;
+    }
+    if(!current.hasOwnProperty(path[i])) {
+      return fallback === undefined ? "" : fallback;
+    }
+    current = current[path[i]];
+  }
+
+  return current;
+
+pathSet(name, pathText, nextValue, mode) =>
+  const moduleName = normalizeModuleName(name);
+  if(moduleName === "") return "error: empty module name";
+
+  const store = ensureModuleRegistryStore();
+  let root = store.hasOwnProperty(moduleName) ? store[moduleName] : {};
+
+  if(!root || typeof root !== "object" || Array.isArray(root)) {
+    return "error: target module is not an object";
+  }
+
+  if(mode === "clone") {
+    root = deepClone(root);
+  }
+
+  const path = normalizePath(pathText);
+  if(path.length === 0) {
+    return "error: empty path";
+  }
+
+  let current = root;
+  for(let i = 0; i < path.length - 1; i += 1) {
+    const keyName = path[i];
+    if(!current[keyName] || typeof current[keyName] !== "object" || Array.isArray(current[keyName])) {
+      current[keyName] = {};
+    }
+    current = current[keyName];
+  }
+
+  current[path[path.length - 1]] = nextValue;
+  store[moduleName] = root;
+  return root;
+
+has(name) =>
+  const moduleName = normalizeModuleName(name);
+  if(moduleName === "") return false;
+
+  const store = ensureModuleRegistryStore();
+  return store.hasOwnProperty(moduleName);
+
+remove(name) =>
+  const moduleName = normalizeModuleName(name);
+  if(moduleName === "") return false;
+
+  const store = ensureModuleRegistryStore();
+  if(!store.hasOwnProperty(moduleName)) {
+    return false;
+  }
+
+  delete store[moduleName];
+  return true;
+
+list(separator) =>
+  const sep = separator === undefined ? "," : String(separator);
+  return Object.keys(ensureModuleRegistryStore()).join(sep);
+
+listByPrefix(prefix, separator) =>
+  const pre = String(prefix || "");
+  const sep = separator === undefined ? "," : String(separator);
+  return Object.keys(ensureModuleRegistryStore()).filter(name => name.startsWith(pre)).join(sep);
+
+clear() =>
+  const store = ensureModuleRegistryStore();
+  const removed = Object.keys(store).length;
+  window.__moduleRegistryKitV1 = {};
+  return removed;
+
+append(name, item, mode) =>
+  const moduleName = normalizeModuleName(name);
+  if(moduleName === "") return "error: empty module name";
+
+  const store = ensureModuleRegistryStore();
+  let value = store.hasOwnProperty(moduleName) ? store[moduleName] : [];
+  if(!Array.isArray(value)) {
+    return "error: target module is not an array";
+  }
+
+  if(mode === "clone") {
+    value = deepClone(value);
+  }
+
+  value.push(item);
+  store[moduleName] = value;
+  return value;
+
+merge(name, patchData, mode) =>
+  const moduleName = normalizeModuleName(name);
+  if(moduleName === "") return "error: empty module name";
+
+  let patch = patchData;
+  if(typeof patchData === "string") {
+    try {
+      patch = JSON.parse(patchData);
+    } catch(error) {
+      return "error: invalid json patch";
+    }
+  }
+
+  if(!patch || typeof patch !== "object" || Array.isArray(patch)) {
+    return "error: patch must be an object";
+  }
+
+  const store = ensureModuleRegistryStore();
+  const current = store.hasOwnProperty(moduleName) ? store[moduleName] : {};
+
+  if(!current || typeof current !== "object" || Array.isArray(current)) {
+    return "error: target module is not an object";
+  }
+
+  const nextObject = mode === "clone" ? deepClone(current) : current;
+  for(const keyName of Object.keys(patch)) {
+    nextObject[keyName] = patch[keyName];
+  }
+
+  store[moduleName] = nextObject;
+  return nextObject;
+
+describe(name) =>
+  const moduleName = normalizeModuleName(name);
+  const store = ensureModuleRegistryStore();
+  const exists = moduleName !== "" && store.hasOwnProperty(moduleName);
+
+  if(!exists) {
+    return {
+      name: moduleName,
+      exists: false,
+      type: "missing",
+      keys: [],
+      size: 0
+    };
+  }
+
+  const value = store[moduleName];
+  let keys = [];
+  if(value && typeof value === "object" && !Array.isArray(value)) {
+    keys = Object.keys(value);
+  }
+
+  let size = 0;
+  try {
+    size = JSON.stringify(value).length;
+  } catch(error) {
+    size = -1;
+  }
+
+  return {
+    name: moduleName,
+    exists: true,
+    type: Array.isArray(value) ? "array" : typeof value,
+    keys: keys,
+    size: size
+  };
+
+exportJson(name) =>
+  const moduleName = normalizeModuleName(name);
+  if(moduleName === "") return "{}";
+
+  const store = ensureModuleRegistryStore();
+  if(!store.hasOwnProperty(moduleName)) {
+    return "{}";
+  }
+
+  try {
+    return JSON.stringify(store[moduleName]);
+  } catch(error) {
+    return "{}";
+  }
+
+freeze(name) =>
+  const moduleName = normalizeModuleName(name);
+  if(moduleName === "") return false;
+
+  const store = ensureModuleRegistryStore();
+  if(!store.hasOwnProperty(moduleName)) return false;
+
+  const value = store[moduleName];
+  if(!value || typeof value !== "object") return false;
+
+  Object.freeze(value);
+  return true;
+
+isFrozen(name) =>
+  const moduleName = normalizeModuleName(name);
+  if(moduleName === "") return false;
+
+  const store = ensureModuleRegistryStore();
+  if(!store.hasOwnProperty(moduleName)) return false;
+
+  const value = store[moduleName];
+  if(!value || typeof value !== "object") return false;
+  return Object.isFrozen(value);
+
+$meta
+  title = Module Registry Kit
+  description = Register, reuse, merge, and inspect shared modules for larger Perchance architectures.

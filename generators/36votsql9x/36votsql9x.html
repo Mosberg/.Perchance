@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>36votsql9x — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  body { text-align: left; font-family: system-ui, sans-serif; background: #111; color: #eee; margin: 0; padding: 16px; }
+  h1 { font-size: 1.3em; margin: 0 0 8px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  input[type=text] { flex: 1; min-width: 200px; padding: 8px; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; }
+  input[type=number] { width: 70px; padding: 6px; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; }
+  button { padding: 8px 14px; background: #2a6; color: #fff; border: 0; border-radius: 4px; cursor: pointer; font-size: 0.95em; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.secondary { background: #444; }
+  .panel { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px; margin: 10px 0; }
+  #refsCtn { display: flex; flex-wrap: wrap; gap: 4px; }
+  #refsCtn img { width: 56px; height: 56px; object-fit: cover; border-radius: 3px; }
+  #refsCtn img.detail { outline: 2px solid #2a6; }
+  #paletteCtn { display: flex; gap: 2px; height: 24px; }
+  #paletteCtn div { flex: 1; }
+  #canvasWrap { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  canvas { image-rendering: pixelated; background: #000; border: 1px solid #333; }
+  #mainCanvas { width: 384px; height: 384px; }
+  #bestCanvas { width: 192px; height: 192px; }
+  #log { font-family: monospace; font-size: 0.8em; white-space: pre-wrap; max-height: 220px; overflow: auto; background: #0a0a0a; padding: 8px; border-radius: 4px; }
+  .label { color: #888; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .status { font-weight: bold; }
+  .ok { color: #4f4; } .bad { color: #f44; } .wait { color: #fc4; }
+  small { color: #888; }
+  #detailCtn { color: #8d8; font-style: italic; }
+</style>
+
+<h1>AI Pixel Evolver</h1>
+<div class="row">
+  <input id="themeInput" type="text" value="a misty forest landscape" placeholder="target context, e.g. a sunset over the ocean">
+  <label>fetch <input id="fetchCountInput" type="number" value="36" min="4" max="200"></label>
+  <button id="startBtn">Start</button>
+  <button id="stopBtn" class="secondary" disabled>Stop</button>
+  <label><input type="checkbox" id="loopChk" checked> run forever</label>
+</div>
+<div class="row">
+  <small>Fetched: <span id="fetchCountEl">0</span> | Keywords: <span id="kwEl">0</span> | Workers: <span id="workerCountEl">-</span> | Iter: <span id="iterEl">0</span> | Best: <span id="bestEl">-</span></small>
+</div>
+
+<div id="statusLine" class="status wait">Idle.</div>
+
+<div class="panel">
+  <div class="label">Reference images (keyword-fetched)</div>
+  <div id="refsCtn"></div>
+</div>
+
+<div class="panel">
+  <div class="label">AI search keywords</div>
+  <div id="detailCtn">(none yet)</div>
+</div>
+
+<div class="panel">
+  <div class="label">Extracted palette</div>
+  <div id="paletteCtn"></div>
+</div>
+
+<div id="canvasWrap">
+  <div>
+    <div class="label">Current candidate</div>
+    <canvas id="mainCanvas" width="48" height="48"></canvas>
+  </div>
+  <div>
+    <div class="label">Best so far</div>
+    <canvas id="bestCanvas" width="48" height="48"></canvas>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="label">Log</div>
+  <div id="log"></div>
+</div>
+
+<script>
+const superFetch = root.superFetch;
+const generateText = root.generateText;
+const CFG = { W: 48, H: 48, paletteSize: 28, maxIter: 200, fetchConcurrency: 12, keywordsPerTheme: 6, perKeyword: 6 };
+let running = false, palette = [], refMean = null, avoidNotes = [], bestScore = -1, bestData = null, currentData = null, iter = 0;
+
+const $ = id => document.getElementById(id);
+function log(msg, cls) {
+  const el = $("log");
+  const span = document.createElement("div");
+  if (cls) span.className = cls;
+  span.textContent = msg;
+  el.appendChild(span);
+}
+function setStatus(msg, cls) { const el = $("statusLine"); el.textContent = msg; el.className = "status " + (cls||""); }
+
+// ---- concurrency helper (multithreading-ish for async tasks) ----
+async function mapLimited(items, limit, fn, onDone) {
+  let i = 0, done = 0;
+  const out = new Array(items.length);
+  async function worker() {
+    while (i < items.length) {
+      const idx = i++;
+      try { out[idx] = await fn(items[idx], idx); }
+      catch (e) { out[idx] = { __error: e.message }; }
+      done++;
+      if (onDone) onDone(done, idx);
+    }
+  }
+  await Promise.all(Array.from({length: Math.min(limit, items.length||1)}, worker));
+  return out;
+}
+
+function canvasToBlob(canvas) { return new Promise(res => canvas.toBlob(b => res(b), "image/png")); }
+// upscale small pixel canvas so the vision model can parse it as a scene
+function canvasToUpscaledBlob(canvas, size=256) {
+  const off = document.createElement("canvas");
+  off.width = size; off.height = size;
+  const ctx = off.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(canvas, 0, 0, size, size);
+  return new Promise(res => off.toBlob(b => res(b), "image/png"));
+}
+function blobToImage(blob) {
+  return new Promise(res => { const img = new Image(); img.onload = () => res(img); img.src = URL.createObjectURL(blob); });
+}
+
+// ---- Web Worker pool for palette extraction (real multithreading) ----
+const WORKER_SRC = `
+self.onmessage = async (e) => {
+  const { bitmaps, W, H } = e.data;
+  const counts = {};
+  const acc = new Float32Array(W * H * 3);
+  let n = 0;
+  for (const bmp of bitmaps) {
+    const off = new OffscreenCanvas(W, H);
+    const ctx = off.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0, W, H);
+    const d = ctx.getImageData(0, 0, W, H).data;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i+1], b = d[i+2];
+      const qr = r & 0xf0, qg = g & 0xf0, qb = b & 0xf0;
+      const key = (qr<<16)|(qg<<8)|qb;
+      counts[key] = (counts[key]||0) + 1;
+      const pi = (i >> 2) * 3;
+      acc[pi] += r; acc[pi+1] += g; acc[pi+2] += b;
+    }
+    n++;
+    bmp.close();
+  }
+  self.postMessage({ counts, acc: acc.buffer, n }, [acc.buffer]);
+};
+`;
+let workerBlobUrl = null, workerPool = [];
+const NUM_WORKERS = Math.min(8, Math.max(2, navigator.hardwareConcurrency || 4));
+function initWorkers() {
+  if (workerPool.length) return;
+  workerBlobUrl = URL.createObjectURL(new Blob([WORKER_SRC], {type:"application/javascript"}));
+  for (let i = 0; i < NUM_WORKERS; i++) workerPool.push(new Worker(workerBlobUrl));
+  $("workerCountEl").textContent = NUM_WORKERS;
+}
+function workerRun(worker, bitmaps, W, H) {
+  return new Promise(res => {
+    const h = (e) => { worker.removeEventListener("message", h); res(e.data); };
+    worker.addEventListener("message", h);
+    worker.postMessage({ bitmaps, W, H }, bitmaps);
+  });
+}
+
+// ---- fetch images by keyword from LoremFlickr (keyword-biased, no AI filter needed) ----
+async function blobHash(blob) {
+  const buf = await blob.arrayBuffer();
+  const h = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2,"0")).join("");
+}
+function fetchOneLoremflickr(kw) {
+  // LoremFlickr: try full combo, then each word, then singularized variants
+  const tags = kw.split(/\s+/).filter(Boolean);
+  const singular = (w) => w.endsWith("s") && w.length > 3 ? w.slice(0, -1) : w;
+  const singles = tags.map(singular);
+  const attempts = [tags.join(","), ...tags, ...singles.filter(s => !tags.includes(s))].filter(Boolean);
+  return (async () => {
+    for (const attempt of attempts) {
+      for (let retry = 0; retry < 2; retry++) {
+        try {
+          const lock = Math.floor(Math.random() * 10000000);
+          const r = await superFetch(`https://loremflickr.com/256/256/${attempt}?lock=${lock}`);
+          const blob = await r.blob();
+          if (blob.type && blob.type.startsWith("image/") && blob.size > 1000) return { blob, kw };
+        } catch (e) {}
+        await new Promise(rs => setTimeout(rs, 150));
+      }
+    }
+    return { __error: "no image", kw };
+  })();
+}
+
+async function fetchByKeywords(keywords, total) {
+  const jobs = [];
+  for (let i = 0; i < total; i++) jobs.push(keywords[i % keywords.length]);
+  setStatus(`Fetching ${jobs.length} keyword images (concurrency 6)...`, "wait");
+  let done = 0;
+  const results = await mapLimited(jobs, 6, async (kw) => fetchOneLoremflickr(kw), (d) => { $("fetchCountEl").textContent = `${d}/${jobs.length}`; });
+  let ok = results.filter(r => r && !r.__error);
+  // DEDUPE by content hash so no duplicate reference images
+  const seen = new Set();
+  const deduped = [];
+  for (const r of ok) {
+    const h = await blobHash(r.blob);
+    if (!seen.has(h)) { seen.add(h); deduped.push(r); }
+  }
+  if (deduped.length < ok.length) log(`Deduped ${ok.length} → ${deduped.length} unique images.`, "ok");
+  if (!deduped.length) log("all fetches failed; keywords: " + keywords.join(", "), "bad");
+  return deduped;
+}
+
+// ---- one-pass AI relevance filter: drops clearly-wrong images, does NOT loop ----
+async function filterRelevant(fetched, theme) {
+  setStatus(`Checking ${fetched.length} images for relevance...`, "wait");
+  const results = await mapLimited(fetched, 6, async (f) => {
+    try {
+      const out = await generateText({ instruction: [`Is this clearly a photo of ${theme}? Reply YES or NO only.`, f.blob] });
+      return /^yes\b/i.test(String(out).trim()) ? f : null;
+    } catch (e) { return f; } // keep on error
+  }, (d) => { $("fetchCountEl").textContent = `check ${d}/${fetched.length}`; });
+  const kept = results.filter(Boolean);
+  const dropped = fetched.length - kept.length;
+  if (dropped) log(`Dropped ${dropped} irrelevant image(s) (e.g. mismatches).`, "ok");
+  return kept.length ? kept : fetched; // never empty out — proceed with what we have
+}
+
+// ---- AI keyword extractor: turn theme into image-search keywords ----
+async function keywordsForTheme(theme) {
+  setStatus("AI generating search keywords from theme...", "wait");
+  try {
+    const out = await generateText({ instruction:
+      `Someone wants to generate pixel art of: "${theme}". Give ${CFG.keywordsPerTheme} short comma-separated image-search keywords/phrases (1-2 words each, SINGULAR form) that would return photos matching this scene's subject, mood, and key objects. Vary them widely. Examples: "forest, fog, moss, sunlight, river, pine". Reply with ONLY the comma-separated keywords.`
+    });
+    const kws = String(out).split(/[,\n]/).map(s => s.trim().toLowerCase().replace(/[^a-z0-9 ]/g,"").trim()).filter(s => s && s.length < 40 && !/^(yes|no|sure|okay|here|keywords?)$/.test(s));
+    // always include the theme itself (simplified) as a keyword
+    const themeKw = theme.toLowerCase().replace(/[^a-z0-9 ]/g,"").trim().replace(/\s+/g,",").split(",").filter(Boolean).slice(0,3).join(" ");
+    const unique = [...new Set([themeKw, ...kws])].filter(Boolean);
+    return unique.slice(0, CFG.keywordsPerTheme + 1);
+  } catch (e) {
+    log("keyword err: " + e.message, "bad");
+    return [theme.toLowerCase().replace(/[^a-z0-9 ]/g,"").trim() || "nature"];
+  }
+}
+
+// ---- palette + per-pixel mean via WORKERS ----
+async function extractPaletteAndMean(blobs) {
+  if (!blobs.length) return { palette: [], mean: null };
+  initWorkers();
+  setStatus(`Extracting palette via ${NUM_WORKERS} workers...`, "wait");
+  const bitmaps = await Promise.all(blobs.map(b => createImageBitmap(b).catch(() => null)));
+  const valid = bitmaps.filter(Boolean);
+  if (!valid.length) return { palette: [], mean: null };
+  // distribute round-robin into NUM_WORKERS batches
+  const batches = Array.from({length: NUM_WORKERS}, () => []);
+  valid.forEach((bmp, i) => batches[i % NUM_WORKERS].push(bmp));
+  const results = await Promise.all(batches.map((batch, i) => batch.length ? workerRun(workerPool[i], batch, CFG.W, CFG.H) : null));
+  // merge
+  const counts = {};
+  const acc = new Float32Array(CFG.W * CFG.H * 3);
+  let n = 0;
+  for (const r of results) if (r) {
+    for (const k in r.counts) counts[k] = (counts[k]||0) + r.counts[k];
+    const a = new Float32Array(r.acc);
+    for (let i = 0; i < acc.length; i++) acc[i] += a[i];
+    n += r.n;
+  }
+  const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  // dedupe: skip near-identical colors (within threshold) so all slots are distinct
+  const pal = [];
+  const thresh = 30;
+  for (const [k] of sorted) {
+    const c = [(k>>16)&255, (k>>8)&255, k&255];
+    let dup = false;
+    for (const p of pal) { if (Math.hypot(c[0]-p[0], c[1]-p[1], c[2]-p[2]) < thresh) { dup = true; break; } }
+    if (!dup) pal.push(c);
+    if (pal.length >= CFG.paletteSize) break;
+  }
+  const mean = new Uint8ClampedArray(CFG.W * CFG.H * 3);
+  for (let i = 0; i < CFG.W*CFG.H; i++) {
+    mean[i*3] = acc[i*3]/n; mean[i*3+1] = acc[i*3+1]/n; mean[i*3+2] = acc[i*3+2]/n;
+  }
+  return { palette: pal, mean };
+}
+
+function renderPalette(pal) {
+  $("paletteCtn").innerHTML = "";
+  pal.forEach(c => { const d = document.createElement("div"); d.style.background = `rgb(${c[0]},${c[1]},${c[2]})`; $("paletteCtn").appendChild(d); });
+}
+
+function addRefThumb(blob) {
+  const img = new Image();
+  img.src = URL.createObjectURL(blob);
+  $("refsCtn").appendChild(img);
+}
+
+// ---- candidate generation (bias toward palette + mean, with avoid weights) ----
+function nearestPalette(c, pal) {
+  let best = pal[0], bd = 1e9;
+  for (const p of pal) { const dr=c[0]-p[0],dg=c[1]-p[1],db=c[2]-p[2]; const d=dr*dr+dg*dg+db*db; if (d<bd){bd=d;best=p;} }
+  return best;
+}
+function paletteWeights(pal, notes) {
+  const w = pal.map(() => 1);
+  const nameMap = { red:[200,50,50], green:[50,200,50], blue:[50,50,200], yellow:[220,220,50],
+    orange:[230,140,30], purple:[160,50,200], brown:[120,80,40], black:[20,20,20], white:[240,240,240], gray:[128,128,128], pink:[240,150,180] };
+  notes.forEach(n => n.toLowerCase().replace(/[^a-z ]/g,"").split(/\s+/).forEach(word => {
+    const tgt = nameMap[word]; if (!tgt) return;
+    pal.forEach((p, i) => { if (Math.hypot(p[0]-tgt[0],p[1]-tgt[1],p[2]-tgt[2]) < 120) w[i] *= 0.2; });
+  }));
+  return w;
+}
+// ---- candidate generation ----
+// If baseData given, mutate from it (convergence). strength = fraction of pixels perturbed.
+// If no baseData, generate fresh from mean+palette.
+function clamp255(v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
+function smoothPass(data, blend) {
+  const src = new Uint8ClampedArray(data);
+  for (let y = 0; y < CFG.H; y++) for (let x = 0; x < CFG.W; x++) {
+    let r=0,g=0,b=0,cnt=0;
+    for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++) {
+      const nx=x+dx, ny=y+dy; if (nx<0||ny<0||nx>=CFG.W||ny>=CFG.H) continue;
+      const si=(ny*CFG.W+nx)*4; r+=src[si]; g+=src[si+1]; b+=src[si+2]; cnt++;
+    }
+    const ii=(y*CFG.W+x)*4;
+    data[ii] = r/cnt*blend + src[ii]*(1-blend);
+    data[ii+1] = g/cnt*blend + src[ii+1]*(1-blend);
+    data[ii+2] = b/cnt*blend + src[ii+2]*(1-blend);
+  }
+}
+function generateCandidate(mean, pal, notes, baseData, strength) {
+  const canvas = $("mainCanvas");
+  const ctx = canvas.getContext("2d");
+  const img = ctx.createImageData(CFG.W, CFG.H);
+  const w = paletteWeights(pal, notes);
+  const wsum = w.reduce((a,b)=>a+b, 0);
+  function pickPalette() { let r = Math.random()*wsum; for (let i=0;i<pal.length;i++){r-=w[i]; if(r<=0) return pal[i];} return pal[pal.length-1]; }
+
+  if (baseData && baseData.data) {
+    // MUTATE from base: keep structure, perturb a fraction of pixels
+    img.data.set(baseData.data);
+    const frac = strength;
+    for (let i = 0; i < CFG.W*CFG.H; i++) {
+      if (Math.random() < frac) {
+        const idx = i * 4;
+        let base;
+        if (mean && Math.random() < 0.5) base = [mean[i*3], mean[i*3+1], mean[i*3+2]].map(v => v + (Math.random()-0.5)*50);
+        else base = pickPalette().map(v => v + (Math.random()-0.5)*25);
+        if (Math.random() < 0.5) base = nearestPalette(base, pal);
+        img.data[idx] = clamp255(base[0]);
+        img.data[idx+1] = clamp255(base[1]);
+        img.data[idx+2] = clamp255(base[2]);
+      }
+    }
+    // light single smoothing pass to keep coherence without destroying structure
+    smoothPass(img.data, 0.3);
+  } else {
+    // FRESH generation
+    for (let y = 0; y < CFG.H; y++) for (let x = 0; x < CFG.W; x++) {
+      const i = y * CFG.W + x;
+      let base;
+      if (mean && Math.random() < 0.6) base = [mean[i*3], mean[i*3+1], mean[i*3+2]].map(v => v + (Math.random()-0.5)*60);
+      else base = pickPalette().map(v => v + (Math.random()-0.5)*40);
+      if (Math.random() < 0.5) base = nearestPalette(base, pal);
+      const idx = i * 4;
+      img.data[idx] = clamp255(base[0]);
+      img.data[idx+1] = clamp255(base[1]);
+      img.data[idx+2] = clamp255(base[2]);
+      img.data[idx+3] = 255;
+    }
+    smoothPass(img.data, 0.6);
+    smoothPass(img.data, 0.6);
+  }
+  // ensure alpha
+  for (let i = 3; i < img.data.length; i += 4) img.data[i] = 255;
+  ctx.putImageData(img, 0, 0);
+}
+function copyToBest() {
+  const src = $("mainCanvas").getContext("2d").getImageData(0,0,CFG.W,CFG.H);
+  $("bestCanvas").getContext("2d").putImageData(src, 0, 0);
+  bestData = src;
+}
+
+// ---- AI judge: returns numeric score 1-10 (>=9 = success) + detailed critique every iteration ----
+async function judgeCandidate(theme, notes) {
+  const blob = await canvasToUpscaledBlob($("mainCanvas"), 256);
+  const avoidStr = notes.length ? ` Recent problems to fix: ${notes.slice(-2).join("; ")}.` : "";
+  const prompt = `Rate this 48x48 pixel art (upscaled) for how it depicts "${theme}". Score on a pixel-art scale: 1=just noise, 4=rough blob shapes, 5=recognizable basic subject, 6=clear subject with minor issues, 7=good, 8=very good, 9=excellent, 10=perfect. Be encouraging — abstract/stylized rendering is fine. Reply ONE line: "<number> - <short reason, under 10 words>".${avoidStr}`;
+  const out = await generateText({ instruction: [prompt, blob] });
+  const s = String(out).trim();
+  const m = s.match(/([0-9]+)\s*(?:[-.:]|\s)\s*(.+)/i);
+  let score = 1, detail = s;
+  if (m) { score = Math.max(1, Math.min(10, parseInt(m[1]))); detail = m[2] || s; }
+  else { const m2 = s.match(/(\d+)/); if (m2) score = Math.max(1, Math.min(10, parseInt(m2[1]))); }
+  return { ok: score >= 9, score, feedback: detail };
+}
+
+function downloadCanvasPng(canvas, filename) {
+  const off = document.createElement("canvas");
+  off.width = 384; off.height = 384;
+  const ctx = off.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(canvas, 0, 0, off.width, off.height);
+  off.toBlob(b => {
+    const url = URL.createObjectURL(b);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }, "image/png");
+}
+
+// ---- main loop ----
+async function runOnce() {
+  const theme = $("themeInput").value.trim() || "a landscape";
+  const fetchCount = Math.max(4, Math.min(20000, parseInt($("fetchCountInput").value)||36)); //dont change max iter back to 200
+  $("refsCtn").innerHTML = "";
+  $("detailCtn").textContent = "(generating...)";
+  $("fetchCountEl").textContent = 0; $("kwEl").textContent = 0;
+  $("iterEl").textContent = 0; $("bestEl").textContent = "-";
+  bestScore = -1; bestData = null; currentData = null; iter = 0; avoidNotes = [];
+  log(`=== New run: ${theme} (fetch ${fetchCount}) ===`);
+
+  // 1. AI turns theme into search keywords
+  const keywords = await keywordsForTheme(theme);
+  $("detailCtn").textContent = keywords.join(", ");
+  $("kwEl").textContent = keywords.length;
+  log(`Keywords: ${keywords.join(", ")}`, "ok");
+
+  // 2. fetch by keyword
+  let fetched = await fetchByKeywords(keywords, fetchCount);
+  if (!running) return;
+  log(`Fetched ${fetched.length} unique images.`, "ok");
+  if (!fetched.length) { log("All fetches failed. Retrying run.", "bad"); return false; }
+
+  // 2b. one-pass relevance check (drops ghosts/mismatches, no looping)
+  fetched = await filterRelevant(fetched, theme);
+  const blobs = fetched.map(f => f.blob);
+  blobs.forEach(b => addRefThumb(b));
+  log(`Fetched ${blobs.length} on-topic images.`, "ok");
+  if (!blobs.length) { log("All fetches failed. Retrying run.", "bad"); return false; }
+
+  // 3. palette extraction (workers)
+  const { palette: pal, mean } = await extractPaletteAndMean(blobs);
+  palette = pal; refMean = mean;
+  renderPalette(pal);
+  log(`Palette: ${pal.length} colors from ${blobs.length} images.`, "ok");
+
+  // 4. evolve loop (mutation-based convergence + reward bias)
+  let prevScore = -1, lastImproved = false, mutationStrength = 0.5;
+  bestScore = -1; bestData = null; currentData = null;
+  // single mutable status line that updates in place (no append, no autoscroll)
+  const curLine = document.createElement("div");
+  $("log").appendChild(curLine);
+  function updateCur(msg, cls) {
+    curLine.textContent = msg;
+    curLine.className = cls || "";
+  }
+  while (running) {
+    iter++;
+    $("iterEl").textContent = iter;
+    setStatus(`Iter ${iter}: generating (mut ${mutationStrength.toFixed(2)})...`, "wait");
+    // choose base: ride the current improving candidate, else mutate from best
+    let base = null;
+    if (lastImproved && currentData) base = currentData;
+    else if (bestData) base = bestData;
+    // stuck very low → occasional fresh regen
+    if (prevScore >= 0 && prevScore <= 2 && Math.random() < 0.25) base = null;
+    generateCandidate(mean, pal, avoidNotes, base, base ? mutationStrength : 1);
+    currentData = $("mainCanvas").getContext("2d").getImageData(0,0,CFG.W,CFG.H);
+
+    setStatus(`Iter ${iter}: AI judging...`, "wait");
+    $("mainCanvas").style.opacity = "0.5";
+    let res;
+    try { res = await judgeCandidate(theme, avoidNotes); }
+    catch (e) { updateCur(`Iter ${iter}: judge err: ${e.message}`, "bad"); $("mainCanvas").style.opacity = "1"; await new Promise(r=>setTimeout(r,800)); continue; }
+    $("mainCanvas").style.opacity = "1";
+
+    if (res.ok) {
+      updateCur(`Iter ${iter}: score ${res.score}/10 — YES! ${res.feedback}`, "ok");
+      copyToBest(); $("bestEl").textContent = res.score;
+      setStatus("Success! AI approved. Downloading...", "ok");
+      const safeTheme = (theme.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40)) || "pixelart";
+      downloadCanvasPng($("mainCanvas"), `${safeTheme}-score${res.score}-iter${iter}.png`);
+      return true;
+    } else {
+      updateCur(`Iter ${iter}: score ${res.score}/10 — ${res.feedback}`, res.score >= 7 ? "wait" : "bad");
+      avoidNotes.push(res.feedback);
+      if (avoidNotes.length > 6) avoidNotes.shift();
+      // REWARD BIAS: beat previous score → keep riding, reduce mutation
+      if (res.score > prevScore) {
+        lastImproved = true;
+        mutationStrength = Math.max(0.05, mutationStrength * 0.6);
+        if (res.score > bestScore) { bestScore = res.score; bestData = currentData; copyToBest(); $("bestEl").textContent = bestScore; }
+      } else {
+        // didn't improve → increase mutation, fall back to best next time
+        lastImproved = false;
+        mutationStrength = Math.min(0.7, mutationStrength * 1.5);
+      }
+      prevScore = res.score;
+    }
+  }
+  log("Max iterations reached.", "bad");
+  return false;
+}
+
+async function start() {
+  running = true;
+  $("startBtn").disabled = true; $("stopBtn").disabled = false;
+  do {
+    await runOnce();
+    if (!$("loopChk").checked) break;
+    if (running) { log("Looping next run...", "wait"); await new Promise(r=>setTimeout(r, 1500)); }
+  } while (running);
+  running = false;
+  $("startBtn").disabled = false; $("stopBtn").disabled = true;
+  if (!/Success/.test($("statusLine").textContent)) setStatus("Stopped.", "wait");
+}
+function stop() { running = false; setStatus("Stopping...", "wait"); }
+
+$("startBtn").onclick = start;
+$("stopBtn").onclick = stop;
+</script>
+
+<style> html { color-scheme: dark; } </style>
+
+</body>
+</html>

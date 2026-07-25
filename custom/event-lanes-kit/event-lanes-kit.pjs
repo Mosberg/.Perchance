@@ -1,0 +1,246 @@
+ensureEventLanesStore() =>
+  if(!window.__eventLanesKitV1) {
+    window.__eventLanesKitV1 = {};
+  }
+  if(!window.__eventLanesKitSeqV1) {
+    window.__eventLanesKitSeqV1 = 0;
+  }
+  return window.__eventLanesKitV1;
+
+normalizeLane(lane) =>
+  const raw = lane === undefined || lane === null ? "default" : String(lane).trim();
+  return raw === "" ? "default" : raw;
+
+normalizeType(typeName) =>
+  const raw = typeName === undefined || typeName === null ? "event" : String(typeName).trim();
+  return raw === "" ? "event" : raw;
+
+ensureLane(lane) =>
+  const laneName = normalizeLane(lane);
+  const store = ensureEventLanesStore();
+  if(!store[laneName]) {
+    store[laneName] = [];
+  }
+  return store[laneName];
+
+isTypeMatch(eventType, requestedType) =>
+  if(requestedType === undefined || requestedType === null || String(requestedType).trim() === "") {
+    return true;
+  }
+  return String(eventType) === String(requestedType);
+
+safeStringify(value) =>
+  try {
+    return JSON.stringify(value);
+  } catch(error) {
+    return "";
+  }
+
+emit(lane, typeName, payload, source) =>
+  const queue = ensureLane(lane);
+  window.__eventLanesKitSeqV1 += 1;
+
+  const entry = {
+    id: window.__eventLanesKitSeqV1,
+    lane: normalizeLane(lane),
+    type: normalizeType(typeName),
+    payload: payload,
+    source: source === undefined || source === null ? "" : String(source),
+    at: Date.now()
+  };
+
+  queue.push(entry);
+  return entry.id;
+
+emitUnique(lane, typeName, payload, source) =>
+  const queue = ensureLane(lane);
+  const thisType = normalizeType(typeName);
+  const thisPayload = safeStringify(payload);
+  const thisSource = source === undefined || source === null ? "" : String(source);
+
+  for(let i = queue.length - 1; i >= 0; i -= 1) {
+    const eventObj = queue[i];
+    if(eventObj.type !== thisType) continue;
+    if(String(eventObj.source || "") !== thisSource) continue;
+    if(safeStringify(eventObj.payload) === thisPayload) {
+      return eventObj.id;
+    }
+  }
+
+  return emit(lane, thisType, payload, thisSource);
+
+emitBatch(lane, typeName, payloadList, source) =>
+  let list = payloadList;
+  if(typeof list === "string") {
+    try {
+      list = JSON.parse(list);
+    } catch(error) {
+      list = [payloadList];
+    }
+  }
+  if(!Array.isArray(list)) {
+    list = [list];
+  }
+
+  const ids = [];
+  for(let i = 0; i < list.length; i += 1) {
+    ids.push(emit(lane, typeName, list[i], source));
+  }
+  return ids;
+
+peek(lane, typeName) =>
+  const queue = ensureLane(lane);
+  for(let i = 0; i < queue.length; i += 1) {
+    if(isTypeMatch(queue[i].type, typeName)) {
+      return queue[i];
+    }
+  }
+  return "";
+
+pull(lane, typeName) =>
+  const queue = ensureLane(lane);
+  for(let i = 0; i < queue.length; i += 1) {
+    if(isTypeMatch(queue[i].type, typeName)) {
+      const match = queue[i];
+      queue.splice(i, 1);
+      return match;
+    }
+  }
+  return "";
+
+pullAll(lane, typeName) =>
+  return drain(lane, typeName, Number.MAX_SAFE_INTEGER);
+
+drain(lane, typeName, maxItems) =>
+  const queue = ensureLane(lane);
+  const laneName = normalizeLane(lane);
+  const store = ensureEventLanesStore();
+
+  let limit = Number(maxItems);
+  if(!Number.isFinite(limit) || limit <= 0) {
+    limit = Number.MAX_SAFE_INTEGER;
+  }
+
+  const kept = [];
+  const out = [];
+
+  for(let i = 0; i < queue.length; i += 1) {
+    const eventObj = queue[i];
+    if(isTypeMatch(eventObj.type, typeName) && out.length < limit) {
+      out.push(eventObj);
+    } else {
+      kept.push(eventObj);
+    }
+  }
+
+  store[laneName] = kept;
+  return out;
+
+count(lane, typeName) =>
+  const queue = ensureLane(lane);
+  let total = 0;
+
+  for(let i = 0; i < queue.length; i += 1) {
+    if(isTypeMatch(queue[i].type, typeName)) {
+      total += 1;
+    }
+  }
+
+  return total;
+
+summary(lane) =>
+  const queue = ensureLane(lane);
+  const byType = {};
+
+  for(let i = 0; i < queue.length; i += 1) {
+    const eventType = String(queue[i].type || "event");
+    if(!byType[eventType]) {
+      byType[eventType] = 0;
+    }
+    byType[eventType] += 1;
+  }
+
+  return {
+    lane: normalizeLane(lane),
+    total: queue.length,
+    byType: byType
+  };
+
+trim(lane, maxItems) =>
+  let limit = Number(maxItems);
+  if(!Number.isFinite(limit) || limit < 0) {
+    return 0;
+  }
+
+  const laneName = normalizeLane(lane);
+  const store = ensureEventLanesStore();
+  const queue = ensureLane(lane);
+
+  if(queue.length <= limit) {
+    return 0;
+  }
+
+  const removed = queue.length - limit;
+  store[laneName] = queue.slice(queue.length - limit);
+  return removed;
+
+latest(lane, typeName) =>
+  const queue = ensureLane(lane);
+  for(let i = queue.length - 1; i >= 0; i -= 1) {
+    if(isTypeMatch(queue[i].type, typeName)) {
+      return queue[i];
+    }
+  }
+  return "";
+
+clear(lane, typeName) =>
+  const laneName = normalizeLane(lane);
+  const store = ensureEventLanesStore();
+  const queue = ensureLane(lane);
+
+  if(typeName === undefined || typeName === null || String(typeName).trim() === "") {
+    const removed = queue.length;
+    store[laneName] = [];
+    return removed;
+  }
+
+  let removed = 0;
+  store[laneName] = queue.filter((eventObj) => {
+    if(isTypeMatch(eventObj.type, typeName)) {
+      removed += 1;
+      return false;
+    }
+    return true;
+  });
+
+  return removed;
+
+asJson(value) =>
+  try {
+    return JSON.stringify(value);
+  } catch(error) {
+    return "{}";
+  }
+
+laneJson(lane, typeName, maxItems) =>
+  const queue = ensureLane(lane);
+  let limit = Number(maxItems);
+  if(!Number.isFinite(limit) || limit <= 0) {
+    limit = Number.MAX_SAFE_INTEGER;
+  }
+
+  const out = [];
+  for(let i = 0; i < queue.length; i += 1) {
+    if(isTypeMatch(queue[i].type, typeName)) {
+      out.push(queue[i]);
+      if(out.length >= limit) {
+        break;
+      }
+    }
+  }
+
+  return asJson(out);
+
+$meta
+  title = Event Lanes Kit
+  description = Lightweight event queue system for decoupled Perchance workflows and UI logic.

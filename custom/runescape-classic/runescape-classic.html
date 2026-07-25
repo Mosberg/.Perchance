@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>runescape-classic — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="gameCtn" style="width:100vw;height:100vh;background:#000;display:flex;flex-direction:column;overflow:hidden;font-family:'Courier New',monospace;color:#fff;">
+  <div style="display:flex;flex:1;overflow:hidden;">
+    <div style="flex:1;position:relative;background:#0f0e0b;display:flex;justify-content:center;align-items:center;overflow:hidden;">
+      <canvas id="gameCanvas" style="image-rendering:pixelated;"></canvas>
+    </div>
+    <div id="sidePanelEl" style="width:220px;background:#3e3220;border-left:3px solid #211a12;display:flex;flex-direction:column;font-size:12px;">
+      <div style="display:flex;background:#2d2418;border-bottom:2px solid #211a12;">
+        <div class="tabBtn" onclick="showTab('combat')" style="flex:1;padding:6px;text-align:center;cursor:pointer;border-right:1px solid #211a12;">⚔️</div>
+        <div class="tabBtn" onclick="showTab('stats')" style="flex:1;padding:6px;text-align:center;cursor:pointer;border-right:1px solid #211a12;">📊</div>
+        <div class="tabBtn" onclick="showTab('inv')" style="flex:1;padding:6px;text-align:center;cursor:pointer;">🎒</div>
+      </div>
+      <div id="tabContentEl" style="flex:1;padding:8px;overflow-y:auto;"></div>
+    </div>
+  </div>
+  <div id="chatCtn" style="height:110px;background:#111;border-top:3px solid #3e3220;padding:4px;overflow-y:auto;font-size:12px;color:#0f0;text-align:left;"></div>
+</div>
+
+<style>
+  body { margin:0; overflow:hidden; text-align:left; }
+  .tabBtn:hover { background:#4a3c2a; }
+  .itemSlot { width:36px; height:36px; background:#2a2115; border:1px solid #5c4d35; display:inline-flex; justify-content:center; align-items:center; cursor:pointer; margin:1px; font-size:18px; position:relative; }
+  .itemSlot:hover { border-color:#aaffaa; }
+  .itemQty { position:absolute; bottom:1px; right:2px; font-size:9px; color:#ff0; text-shadow:1px 1px 0 #000; pointer-events:none; }
+  hr { border:none; border-top:1px solid #5c4d35; margin:6px 0; }
+</style>
+
+<script>
+  // Canvas setup
+  let canvas = gameCanvas, ctx = canvas.getContext('2d');
+  function resize(){ let p=canvas.parentElement; canvas.width=p.clientWidth; canvas.height=p.clientHeight; }
+  window.addEventListener('resize', resize); resize();
+
+  // Game constants
+  let TILE = 32, MAP_W = 60, MAP_H = 60;
+  let map = [], entities = [], groundItems = [], hitsplats = [], msgs = [];
+  let camX = 0, camY = 0, currentTab = 'inv', gameState = 'normal', bankItems = [];
+  let lastTime = 0;
+
+  // Item definitions
+  let ITEMS = {
+    logs:{name:'Logs', icon:'🪵'}, rawShrimp:{name:'Raw shrimp', icon:'🦐'},
+    shrimp:{name:'Cooked shrimp', icon:'🍤', edible:true, heal:3},
+    bronzeAxe:{name:'Bronze axe', icon:'🪓'}, bronzePick:{name:'Bronze pickaxe', icon:'⛏️'},
+    fishingRod:{name:'Fishing rod', icon:'🎣'}, copperOre:{name:'Copper ore', icon:'🟤'},
+    tinOre:{name:'Tin ore', icon:'⚪'}, coins:{name:'Coins', icon:'🪙', stack:true},
+    bones:{name:'Bones', icon:'🦴'}
+  };
+
+  // Player
+  let player = {
+    x:41.5, y:41.5, path:[], target:null, nextAttack:0, actionTimer:0,
+    stats:{hits:10, attack:1, strength:1, defence:1, woodcutting:1, mining:1, fishing:1},
+    xp:{hits:0, attack:0, strength:0, defence:0, woodcutting:0, mining:0, fishing:0},
+    hp:10, maxHp:10,
+    inventory:[{id:'bronzeAxe',qty:1},{id:'bronzePick',qty:1},{id:'fishingRod',qty:1},{id:'logs',qty:3},{id:'coins',qty:50}]
+  };
+
+  // Helpers
+  let valid = (x,y) => x>=0 && y>=0 && x<MAP_W && y<MAP_H;
+  let isSolid = (x,y) => {
+    if(!valid(x,y)) return true;
+    let t = map[y][x];
+    if(t.type==='water') return true;
+    if(t.obj==='tree' || t.obj==='rock' || t.obj==='bank') return true;
+    return false;
+  };
+  function hasItem(id){ return player.inventory.some(i=>i.id===id); }
+  function addItem(id,qty){
+    let def = ITEMS[id];
+    let slot = def?.stack ? player.inventory.find(i=>i.id===id) : null;
+    if(slot){ slot.qty += qty; }
+    else if(player.inventory.length < 30){ player.inventory.push({id,qty}); }
+    else { groundItems.push({x:Math.floor(player.x), y:Math.floor(player.y), id,qty}); gameLog("Your inventory is full."); }
+  }
+  function removeItem(id,qty){
+    let idx = player.inventory.findIndex(i=>i.id===id);
+    if(idx<0) return;
+    player.inventory[idx].qty -= qty;
+    if(player.inventory[idx].qty<=0) player.inventory.splice(idx,1);
+  }
+  function gameLog(m){
+    msgs.unshift(m);
+    if(msgs.length>40) msgs.pop();
+    chatCtn.innerHTML = msgs.map(s=>`<div style="margin-bottom:2px;">${s}</div>`).join('');
+  }
+
+  // Pathfinding (BFS)
+  function findPath(sx,sy,tx,ty){
+    if(sx===tx && sy===ty) return [];
+    let q = [{x:sx,y:sy,p:[]}];
+    let seen = new Set();
+    let loops=0;
+    while(q.length && loops++<1200){
+      let c = q.shift();
+      let k=c.x+','+c.y;
+      if(seen.has(k)) continue;
+      seen.add(k);
+      if(c.x===tx && c.y===ty) return c.p;
+      for(let [dx,dy] of [[0,1],[0,-1],[1,0],[-1,0]]){
+        let nx=c.x+dx, ny=c.y+dy;
+        if(!valid(nx,ny) || isSolid(nx,ny)) continue;
+        if(seen.has(nx+','+ny)) continue;
+        q.push({x:nx,y:ny,p:[...c.p,{x:nx,y:ny}]});
+      }
+    }
+    return null;
+  }
+  function pathToAdjacent(tx,ty){
+    let best=null, bestLen=Infinity;
+    for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){
+      if(dx===0 && dy===0) continue;
+      let nx=tx+dx, ny=ty+dy;
+      if(valid(nx,ny) && !isSolid(nx,ny)){
+        let p = findPath(Math.floor(player.x+0.5), Math.floor(player.y+0.5), nx, ny);
+        if(p && p.length < bestLen){ best=p; bestLen=p.length; }
+      }
+    }
+    player.path = best || [];
+  }
+
+  // Map generation
+  function generateMap(){
+    map=[]; entities=[]; groundItems=[];
+    for(let y=0;y<MAP_H;y++){
+      let row=[];
+      for(let x=0;x<MAP_W;x++){
+        let t='grass';
+        let river = Math.round(30 + Math.sin(x/7)*6);
+        if(y>river && y<river+4) t='water';
+        else if(y===river || y===river+4) t='dirt';
+        let inVillage = x>=38 && x<=48 && y>=38 && y<=48;
+        if(inVillage) t='grass';
+        let obj=null;
+        if(!inVillage && t==='grass' && Math.random()<0.08) obj='tree';
+        if(!inVillage && t==='grass' && !obj && Math.random()<0.04) obj='rock';
+        row.push({type:t, obj:obj, timer:0});
+      }
+      map.push(row);
+    }
+    // village features
+    map[40][40].obj='bank';
+    map[42][43].obj='campfire';
+    // fishing spots on water near land
+    for(let i=0;i<12;i++){
+      let x=Math.floor(Math.random()*MAP_W), y=Math.floor(Math.random()*MAP_H);
+      if(map[y][x].type==='water'){
+        let near=false;
+        for(let [dx,dy] of [[0,1],[0,-1],[1,0],[-1,0]])
+          if(valid(x+dx,y+dy) && map[y+dy][x+dx].type!=='water') near=true;
+        if(near) map[y][x].obj='fishing';
+      }
+    }
+    // NPCs
+    function ent(type,x,y,opts={}){ return {type,x,y,spawnX:x,spawnY:y,dead:false,...opts,nextAttack:0,respawnTime:0,path:[]}; }
+    for(let i=0;i<3;i++) entities.push(ent('man', 40+i, 45, {name:'Man',hp:7,maxHp:7,atk:1,str:1,def:1,color:'#d2b48c',friendly:true,size:0.9}));
+    for(let i=0;i<5;i++) entities.push(ent('goblin', 50+Math.floor(Math.random()*8), 40+Math.floor(Math.random()*8), {name:'Goblin',hp:5,maxHp:5,atk:1,str:1,def:1,color:'#2d5a27',xp:20,size:0.85}));
+    for(let i=0;i<6;i++) entities.push(ent('rat', 10+Math.floor(Math.random()*15), 20+Math.floor(Math.random()*20), {name:'Rat',hp:2,maxHp:2,atk:1,str:1,def:1,color:'#777',xp:8,size:0.55}));
+  }
+
+  // Inputs
+  canvas.addEventListener('mousedown', e=>{
+    let rect = canvas.getBoundingClientRect();
+    let mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    let wx = (mx - canvas.width/2 + camX);
+    let wy = (my - canvas.height/2 + camY);
+    let tx = Math.floor(wx/TILE), ty = Math.floor(wy/TILE);
+    if(!valid(tx,ty)) return;
+    // check entity click
+    let clicked = entities.find(ent => Math.abs(ent.x - (tx+0.5))<0.8 && Math.abs(ent.y - (ty+0.5))<0.8 && !ent.dead);
+    if(clicked){
+      if(clicked.friendly){ gameLog(clicked.name+": Hello there."); return; }
+      player.target = {type:'entity', ref:clicked};
+      pathToAdjacent(tx,ty);
+      return;
+    }
+    // check object
+    let tile = map[ty][tx];
+    if(tile.obj==='tree' || tile.obj==='rock' || tile.obj==='fishing' || tile.obj==='bank' || tile.obj==='campfire'){
+      player.target = {type:'obj', x:tx, y:ty, obj:tile.obj};
+      pathToAdjacent(tx,ty);
+      return;
+    }
+    // walk
+    player.target = null;
+    let p = findPath(Math.floor(player.x+0.5), Math.floor(player.y+0.5), tx, ty);
+    if(p) player.path = p;
+  });
+
+  // XP / Skills
+  function getLevel(xp){ return Math.min(99, 1 + Math.floor(Math.sqrt((xp||0)/50))); }
+  function gainXp(skill, amt){
+    let before = player.stats[skill];
+    player.xp[skill] = (player.xp[skill]||0) + amt;
+    let lvl = getLevel(player.xp[skill]);
+    if(lvl > before){
+      player.stats[skill] = lvl;
+      gameLog("Congratulations, you just advanced a "+skill+" level!");
+      if(skill==='hits'){ player.maxHp = lvl; player.hp = Math.min(player.hp+1, player.maxHp); }
+      renderPanels();
+    }
+  }
+
+  // Combat
+  function combatRound(attacker, defender, ts, isPlayer){
+    let maxHit = Math.floor((attacker.str||1) / 5) + 1;
+    if(isPlayer && hasItem('bronzeAxe')) maxHit += 1;
+    let chance = (attacker.atk||1) / ((defender.def||1)*2 + 1);
+    if(Math.random() < Math.min(0.95, chance)){
+      let dmg = Math.floor(Math.random() * (maxHit+1));
+      defender.hp -= dmg;
+      addHitSplat(defender.x, defender.y, dmg, 'red');
+      if(defender.hp <= 0){
+        defender.hp = 0; defender.dead = true; defender.respawnTime = ts + 15000;
+        gameLog(defender.name + " dies!");
+        if(defender !== player){
+          if(defender.type==='goblin'){ groundItems.push({x:Math.floor(defender.x), y:Math.floor(defender.y), id:'coins', qty:5+Math.floor(Math.random()*10)}); groundItems.push({x:Math.floor(defender.x), y:Math.floor(defender.y), id:'bones', qty:1}); }
+          if(defender.type==='rat') groundItems.push({x:Math.floor(defender.x), y:Math.floor(defender.y), id:'bones', qty:1});
+          gainXp('attack', defender.xp||4);
+          gainXp('strength', Math.floor((defender.xp||4)/3));
+          gainXp('hits', Math.floor((defender.xp||4)/3));
+        } else {
+          gameLog("Oh dear, you are dead!");
+          player.hp = player.maxHp; player.x=41.5; player.y=41.5; player.path=[]; player.target=null;
+        }
+      } else {
+        if(isPlayer){ gainXp('attack', dmg*4); gainXp('strength', Math.floor(dmg*1.33)); gainXp('hits', Math.floor(dmg*1.33)); }
+        else { gainXp('defence', Math.floor(dmg*1.33)); gainXp('hits', Math.floor(dmg*1.33)); }
+      }
+    } else {
+      addHitSplat(defender.x, defender.y, 0, 'blue');
+    }
+    attacker.nextAttack = ts + (isPlayer?2400:3000);
+  }
+
+  // Hitsplats
+  function addHitSplat(ox,oy,dmg,color){
+    hitsplats.push({x:Math.floor(ox), y:Math.floor(oy), dmg, c:color, t:performance.now()+1500});
+  }
+
+  // Skill actions
+  function chopTree(x,y,ts){
+    if(!hasItem('bronzeAxe')){ gameLog("You need an axe to chop trees."); player.target=null; return; }
+    if(map[y][x].obj!=='tree'){ player.target=null; return; }
+    if(ts < player.actionTimer) return;
+    player.actionTimer = ts + 2500;
+    if(Math.random() < 0.5 + player.stats.woodcutting*0.03){
+      map[y][x].obj = 'tree_stump'; map[y][x].timer = ts + 60000;
+      addItem('logs', 1); gainXp('woodcutting', 25); gameLog("You get some logs.");
+    } else { gameLog("You swing your axe at the tree."); }
+  }
+  function mineRock(x,y,ts){
+    if(!hasItem('bronzePick')){ gameLog("You need a pickaxe to mine."); player.target=null; return; }
+    if(map[y][x].obj!=='rock'){ player.target=null; return; }
+    if(ts < player.actionTimer) return;
+    player.actionTimer = ts + 2500;
+    if(Math.random() < 0.5 + player.stats.mining*0.03){
+      addItem(Math.random()<0.5?'copperOre':'tinOre', 1); gainXp('mining', 35); gameLog("You mine some ore.");
+      if(Math.random()<0.25){ map[y][x].obj=null; map[y][x].timer=ts+60000; gameLog("The rock is depleted."); }
+    } else { gameLog("You swing your pick at the rock."); }
+  }
+  function fishSpot(x,y,ts){
+    if(!hasItem('fishingRod')){ gameLog("You need a fishing rod."); player.target=null; return; }
+    if(map[y][x].obj!=='fishing'){ player.target=null; return; }
+    if(ts < player.actionTimer) return;
+    player.actionTimer = ts + 3000;
+    if(Math.random() < 0.5 + player.stats.fishing*0.03){
+      addItem('rawShrimp', 1); gainXp('fishing', 10); gameLog("You catch some shrimp.");
+    } else { gameLog("You attempt to catch a fish..."); }
+  }
+  function cookHere(){
+    if(!hasItem('rawShrimp')){ gameLog("You have nothing to cook."); return; }
+    removeItem('rawShrimp',1);
+    if(Math.random()<0.75){ addItem('shrimp',1); gameLog("You cook the shrimp."); }
+    else { gameLog("You burn the shrimp."); }
+  }
+
+  // Bank UI
+  window.openBank = function(){ gameState='bank'; renderPanels(); };
+  window.closeBank = function(){ gameState='normal'; renderPanels(); };
+  window.withdraw = function(idx){
+    let it = bankItems[idx]; if(!it) return;
+    addItem(it.id, it.qty); bankItems.splice(idx,1); renderPanels();
+  };
+  window.deposit = function(idx){
+    let it = player.inventory[idx]; if(!it) return;
+    let slot = bankItems.find(b=>b.id===it.id && ITEMS[it.id]?.stack);
+    if(slot) slot.qty += it.qty; else bankItems.push({id:it.id, qty:it.qty});
+    player.inventory.splice(idx,1); renderPanels();
+  };
+  window.clickInvItem = function(idx){
+    let it = player.inventory[idx]; if(!it) return;
+    let def = ITEMS[it.id];
+    if(def && def.edible && gameState!=='bank'){
+      player.hp = Math.min(player.maxHp, player.hp + def.heal);
+      removeItem(it.id, 1); gameLog("You eat the "+def.name+"."); renderPanels();
+    }
+  };
+  window.showTab = function(t){ currentTab=t; renderPanels(); };
+
+  // UI Rendering
+  function combatLevel(){
+    let base = 0.25*(player.stats.defence + player.stats.hits);
+    let melee = 0.325*(player.stats.attack + player.stats.strength);
+    return Math.floor(base + melee);
+  }
+  function renderPanels(){
+    if(gameState==='bank'){
+      let b = bankItems.map((it,i)=>`<div class="itemSlot" onclick="withdraw(${i})" title="${ITEMS[it.id].name}">${ITEMS[it.id].icon}<span class="itemQty">${it.qty>1?it.qty:''}</span></div>`).join('');
+      let inv = player.inventory.map((it,i)=>`<div class="itemSlot" onclick="deposit(${i})" title="${ITEMS[it.id].name}">${ITEMS[it.id].icon}<span class="itemQty">${it.qty>1?it.qty:''}</span></div>`).join('');
+      tabContentEl.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b>Bank</b><button onclick="closeBank()" style="background:#7a1a1a;color:#fff;border:none;padding:2px 6px;cursor:pointer;">X</button></div><div style="margin-bottom:4px;">Click to withdraw</div><div>${b}</div><hr><div style="margin-bottom:4px;">Inventory (click to deposit)</div><div>${inv}</div>`;
+    } else if(currentTab==='inv'){
+      let inv = player.inventory.map((it,i)=>`<div class="itemSlot" onclick="clickInvItem(${i})" title="${ITEMS[it.id].name}">${ITEMS[it.id].icon}<span class="itemQty">${it.qty>1?it.qty:''}</span></div>`).join('');
+      tabContentEl.innerHTML = `<div style="color:#aaa;margin-bottom:6px;">Inventory</div><div>${inv}</div>`;
+    } else if(currentTab==='stats'){
+      let s = Object.keys(player.stats).map(k=>`<div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="color:#d2b48c;">${k.charAt(0).toUpperCase()+k.slice(1)}</span><span>Lv ${player.stats[k]} (${player.xp[k]||0} xp)</span></div>`).join('');
+      tabContentEl.innerHTML = `<div style="color:#aaa;margin-bottom:6px;">Skills</div>${s}`;
+    } else if(currentTab==='combat'){
+      tabContentEl.innerHTML = `<div style="background:#2d2418;padding:6px;border:1px solid #5c4d35;margin-bottom:6px;"><b>Combat Level: ${combatLevel()}</b></div><div style="font-size:11px;color:#ccc;">Weapon: Bronze Axe<br>Style: Accurate<br>HP: ${player.hp} / ${player.maxHp}</div>`;
+    }
+  }
+
+  // Drawing
+  function drawTile(x,y,t){
+    let px=x*TILE, py=y*TILE;
+    if(t.type==='water'){ ctx.fillStyle='#2b64a9'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#3a7bc4'; ctx.fillRect(px+((x+y)%5)*6, py+12, 4, 2); }
+    else if(t.type==='dirt'){ ctx.fillStyle='#8b7355'; ctx.fillRect(px,py,TILE,TILE); }
+    else {
+      ctx.fillStyle='#3e7a28'; ctx.fillRect(px,py,TILE,TILE);
+      ctx.fillStyle='#4a8f29'; ctx.fillRect(px+4+(x*y)%20, py+6, 2, 2);
+      ctx.fillRect(px+18, py+20, 2, 2);
+    }
+    if(t.obj==='tree'){
+      ctx.fillStyle='#5c3a1e'; ctx.fillRect(px+12, py+14, 8, 18);
+      ctx.fillStyle='#1a5c1a'; ctx.beginPath(); ctx.arc(px+16, py+12, 12, 0, Math.PI*2); ctx.fill();
+    } else if(t.obj==='tree_stump'){
+      ctx.fillStyle='#5c3a1e'; ctx.fillRect(px+10, py+22, 12, 6);
+    } else if(t.obj==='rock'){
+      ctx.fillStyle='#666'; ctx.beginPath(); ctx.arc(px+10, py+22, 7, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#888'; ctx.beginPath(); ctx.arc(px+18, py+18, 9, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#555'; ctx.beginPath(); ctx.arc(px+20, py+26, 5, 0, Math.PI*2); ctx.fill();
+    } else if(t.obj==='bank'){
+      ctx.fillStyle='#6b5b45'; ctx.fillRect(px+2, py+2, TILE-4, TILE-4); ctx.strokeStyle='#211a12'; ctx.strokeRect(px+6, py+6, TILE-12, TILE-12);
+      ctx.fillStyle='#333'; ctx.fillRect(px+10, py+12, 4, 4); ctx.fillRect(px+18, py+12, 4, 4);
+    } else if(t.obj==='campfire'){
+      ctx.fillStyle='#553311'; ctx.beginPath(); ctx.arc(px+16, py+22, 8, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#ff4500'; ctx.beginPath(); ctx.moveTo(px+12, py+22); ctx.lineTo(px+16, py+8); ctx.lineTo(px+20, py+22); ctx.fill();
+      ctx.fillStyle='#ffaa00'; ctx.beginPath(); ctx.arc(px+16, py+16, 3, 0, Math.PI*2); ctx.fill();
+    } else if(t.obj==='fishing'){
+      ctx.fillStyle='#fff'; ctx.fillRect(px+8, py+8, 2, 2); ctx.fillRect(px+22, py+16, 2, 2);
+    }
+  }
+  function drawEntity(e){
+    let px=e.x*TILE, py=e.y*TILE, size=(e.size||1)*0.85;
+    let w=TILE*size, h=TILE*size*1.3, cx=px+TILE/2, cy=py+TILE/2+2;
+    ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(cx, cy+14, w/2.2, 4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle=e.color; ctx.fillRect(cx-w/4, cy-h/2+8, w/2, h*0.6);
+    ctx.fillStyle='#eec'; ctx.beginPath(); ctx.arc(cx, cy-h/2+6, w/3.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font='10px monospace'; ctx.textAlign='center';
+    ctx.fillText(e.name, cx, cy-h/2-6);
+    if(e.maxHp){
+      ctx.fillStyle='#300'; ctx.fillRect(cx-12, cy-h/2-14, 24, 4);
+      ctx.fillStyle='#0b0'; ctx.fillRect(cx-12, cy-h/2-14, 24*(e.hp/e.maxHp), 4);
+    }
+  }
+
+  function draw(ts){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.save();
+    ctx.translate(Math.floor(canvas.width/2 - camX), Math.floor(canvas.height/2 - camY));
+    let sx = Math.floor((camX - canvas.width/2)/TILE)-1, sy = Math.floor((camY - canvas.height/2)/TILE)-1;
+    let ex = sx + Math.ceil(canvas.width/TILE)+3, ey = sy + Math.ceil(canvas.height/TILE)+3;
+    for(let y=sy; y<=ey; y++) for(let x=sx; x<=ex; x++) if(valid(x,y)) drawTile(x,y,map[y][x]);
+    // ground items
+    for(let it of groundItems){
+      ctx.font='20px serif'; ctx.textAlign='center';
+      ctx.fillText(ITEMS[it.id].icon, it.x*TILE+16, it.y*TILE+24);
+    }
+    for(let e of entities) if(!e.dead) drawEntity(e);
+    drawEntity({...player, name:'You', color:'#36b', size:0.9});
+    // hitsplats
+    let now = performance.now();
+    hitsplats = hitsplats.filter(h=>now<h.t);
+    for(let h of hitsplats){
+      let age = now - (h.t-1500), yOff = -age/12;
+      ctx.fillStyle = h.c==='red'?'#ff0000':'#00aaff'; ctx.strokeStyle='#000'; ctx.lineWidth=3; ctx.font='bold 14px monospace'; ctx.textAlign='center';
+      ctx.strokeText(h.dmg, h.x*TILE+16, h.y*TILE+16+yOff); ctx.fillText(h.dmg, h.x*TILE+16, h.y*TILE+16+yOff);
+    }
+    // target box
+    if(player.target && player.target.type==='obj'){
+      ctx.strokeStyle='#ff0'; ctx.lineWidth=2; ctx.strokeRect(player.target.x*TILE, player.target.y*TILE, TILE, TILE);
+    } else if(player.target && player.target.type==='entity'){
+      let r=player.target.ref; if(r && !r.dead){ ctx.strokeStyle='#ff0'; ctx.lineWidth=2; ctx.strokeRect(Math.floor(r.x)*TILE, Math.floor(r.y)*TILE, TILE, TILE); }
+    }
+    ctx.restore();
+  }
+
+  // Game Loop
+  function update(ts, dt){
+    // player movement
+    if(player.path.length>0){
+      let n = player.path[0];
+      let dx = n.x+0.5 - player.x, dy = n.y+0.5 - player.y, dist = Math.sqrt(dx*dx+dy*dy);
+      let move = 60*dt; // px per sec
+      if(dist <= move/TILE){ player.x = n.x+0.5; player.y = n.y+0.5; player.path.shift(); }
+      else { player.x += (dx/dist)*move/TILE; player.y += (dy/dist)*move/TILE; }
+    }
+    // interactions
+    if(player.target){
+      if(player.target.type==='entity'){
+        let e = player.target.ref;
+        if(!e || e.dead){ player.target=null; }
+        else if(Math.abs(player.x-e.x)+Math.abs(player.y-e.y) < 1.6){
+          player.path=[];
+          if(ts > player.nextAttack) combatRound(player, e, ts, true);
+        } else if(player.path.length===0){
+          pathToAdjacent(Math.floor(e.x), Math.floor(e.y));
+        }
+      } else if(player.target.type==='obj'){
+        let tx=player.target.x, ty=player.target.y;
+        if(Math.abs(player.x-tx)+Math.abs(player.y-ty) < 1.6){
+          if(player.target.obj==='tree'){ chopTree(tx,ty,ts); if(map[ty][tx].obj!=='tree') player.target=null; }
+          else if(player.target.obj==='rock'){ mineRock(tx,ty,ts); if(!map[ty][tx].obj) player.target=null; }
+          else if(player.target.obj==='fishing'){ fishSpot(tx,ty,ts); }
+          else if(player.target.obj==='bank'){ openBank(); player.target=null; }
+          else if(player.target.obj==='campfire'){ cookHere(); player.target=null; }
+        }
+      }
+    }
+    // entity AI
+    for(let e of entities){
+      if(e.dead){
+        if(ts>e.respawnTime){ e.dead=false; e.hp=e.maxHp; e.x=e.spawnX; e.y=e.spawnY; e.path=[]; e.target=null; }
+        continue;
+      }
+      if(e.friendly){
+        // random wander
+        if(Math.random()<0.01){
+          let rx=Math.floor(e.x+Math.round(Math.random()*2-1)), ry=Math.floor(e.y+Math.round(Math.random()*2-1));
+          if(valid(rx,ry) && !isSolid(rx,ry)) e.x += Math.sign(rx-e.x)*dt*0.5;
+        }
+        continue;
+      }
+      let d = Math.abs(player.x-e.x)+Math.abs(player.y-e.y);
+      if(!e.target && d<=6) e.target = player;
+      if(e.target && !e.target.dead){
+        if(d < 1.6){
+          if(ts > e.nextAttack) combatRound(e, player, ts, false);
+        } else {
+          // simple chase
+          let adx = player.x - e.x, ady = player.y - e.y;
+          let mv = 1.8*dt;
+          if(Math.abs(adx)>Math.abs(ady)){
+            let nx = e.x + Math.sign(adx)*mv;
+            if(!isSolid(Math.floor(nx), Math.floor(e.y))) e.x = nx;
+            else if(!isSolid(Math.floor(e.x), Math.floor(e.y+Math.sign(ady)*mv))) e.y += Math.sign(ady)*mv;
+          } else {
+            let ny = e.y + Math.sign(ady)*mv;
+            if(!isSolid(Math.floor(e.x), Math.floor(ny))) e.y = ny;
+            else if(!isSolid(Math.floor(e.x+Math.sign(adx)*mv), Math.floor(e.y))) e.x += Math.sign(adx)*mv;
+          }
+        }
+      }
+    }
+    // map object respawn
+    for(let y=0;y<MAP_H;y++) for(let x=0;x<MAP_W;x++){
+      let t=map[y][x]; if(t.timer && ts>t.timer){ t.timer=0; if(t.obj==='tree_stump') t.obj='tree'; }
+    }
+    // ground item pickup
+    for(let i=groundItems.length-1;i>=0;i--){
+      let it=groundItems[i];
+      if(Math.abs(player.x-(it.x+0.5))<0.6 && Math.abs(player.y-(it.y+0.5))<0.6){
+        addItem(it.id, it.qty); gameLog("You pick up "+ITEMS[it.id].name+"."); groundItems.splice(i,1); renderPanels();
+      }
+    }
+    camX = player.x*TILE; camY = player.y*TILE;
+  }
+
+  function loop(ts){
+    if(!lastTime) lastTime=ts;
+    let dt = Math.min((ts-lastTime)/1000, 0.1);
+    lastTime=ts;
+    update(ts, dt);
+    draw(ts);
+    requestAnimationFrame(loop);
+  }
+
+  generateMap();
+  gameLog("Welcome to RuneScape Classic!");
+  gameLog("Click to walk, chop trees, mine rocks, fish water, and fight monsters.");
+  renderPanels();
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>

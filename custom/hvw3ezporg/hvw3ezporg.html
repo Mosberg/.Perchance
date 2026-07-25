@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>hvw3ezporg — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; max-width: 850px; margin: 2rem auto; padding: 0 1rem; color: #333;">
+  
+  <!-- Header & Controls -->
+  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; padding-bottom: 1rem; margin-bottom: 1rem;">
+    <div>
+      <h1 style="margin: 0; font-size: 1.5rem;">Structure Blueprint Generator</h1>
+      <div style="font-size: 0.85rem; color: #666; margin-top: 4px;">Minecraft 1.21.11 • Fabric Modding Data</div>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      <button id="generateBtn" style="background-color: #333; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: inherit; font-weight: bold;">Generate Plan</button>
+      <button id="copyBtn" style="background-color: white; color: #333; border: 1px solid #333; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: inherit;">Copy to Clipboard</button>
+    </div>
+  </div>
+
+  <!-- Status Indicator -->
+  <div id="statusEl" style="margin-bottom: 0.5rem; color: #666; font-size: 0.9rem;">Ready.</div>
+
+  <!-- Main Output Area -->
+  <pre id="outputEl" style="background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 1.5rem; overflow-x: auto; white-space: pre; font-size: 0.9rem; line-height: 1.5; min-height: 300px;"></pre>
+
+  <script>
+    // --- Configuration Data ---
+    const config = {
+      baseBlocks: [
+        { id: "minecraft:stone", weight: 3 },
+        { id: "minecraft:cobblestone", weight: 2 },
+        { id: "minecraft:deepslate", weight: 2 },
+        { id: "minecraft:oak_planks", weight: 2 },
+        { id: "minecraft:spruce_planks", weight: 2 }
+      ],
+      accentBlocks: [
+        { id: "minecraft:polished_andesite", weight: 2 },
+        { id: "minecraft:polished_deepslate", weight: 2 },
+        { id: "minecraft:bricks", weight: 1 },
+        { id: "minecraft:chiseled_stone_bricks", weight: 1 },
+        { id: "minecraft:stripped_oak_log", weight: 2 }
+      ],
+      lightBlocks: [
+        { id: "minecraft:torch", weight: 1 },
+        { id: "minecraft:lantern", weight: 1 },
+        { id: "minecraft:glowstone", weight: 1 }
+      ],
+      authors: ["Mosberg", "You", "Team", "CI"],
+      sizes: [5, 7, 9],
+      heights: [4, 5, 6]
+    };
+
+    // --- Seeded Random Logic (SFC32) ---
+    // This allows the Seed: line to actually represent the generation state
+    let rand;
+    
+    function cyrb128(str) {
+      let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
+      for (let i = 0, k; i < str.length; i++) {
+        k = str.charCodeAt(i);
+        h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+        h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+        h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+        h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+      }
+      h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+      h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+      h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+      h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+      return [(h1^h2^h3^h4)>>>0, (h2^h1)>>>0, (h3^h1)>>>0, (h4^h1)>>>0];
+    }
+
+    function sfc32(a, b, c, d) {
+      return function() {
+        a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0; 
+        var t = (a + b) | 0;
+        a = b ^ b >>> 9;
+        b = c + (c << 3) | 0;
+        c = (c << 21 | c >>> 11);
+        d = d + 1 | 0;
+        t = t + d | 0;
+        c = c + t | 0;
+        return (t >>> 0) / 4294967296;
+      }
+    }
+
+    function setSeed(seedStr) {
+      let seed = cyrb128(seedStr);
+      rand = sfc32(seed[0], seed[1], seed[2], seed[3]);
+    }
+
+    // --- Utility Functions ---
+    function pickOne(arr) {
+      return arr[Math.floor(rand() * arr.length)];
+    }
+
+    function pickWeighted(list) {
+      let totalWeight = list.reduce((sum, item) => sum + item.weight, 0);
+      let randomVal = rand() * totalWeight;
+      let currentWeight = 0;
+      for (let item of list) {
+        currentWeight += item.weight;
+        if (randomVal <= currentWeight) return item.id;
+      }
+      return list[list.length - 1].id;
+    }
+
+    function generateSeedString() {
+      const chars = "abcdef0123456789";
+      let result = "";
+      for (let i = 0; i < 16; i++) result += chars[Math.floor(Math.random() * chars.length)];
+      return result;
+    }
+
+    // --- Generator Logic ---
+    function generateStructure() {
+      // 1. Seed
+      let seed = generateSeedString();
+      setSeed(seed);
+
+      // 2. Dimensions
+      let sx = pickOne(config.sizes);
+      let sy = pickOne(config.heights);
+      let sz = pickOne(config.sizes);
+
+      // 3. Palette Selection
+      let p0 = "minecraft:air";
+      let p1 = pickWeighted(config.baseBlocks);
+      let p2 = pickWeighted(config.accentBlocks);
+      let p3 = pickWeighted(config.lightBlocks);
+
+      // 4. Calculate Blocks
+      let blocks = [];
+
+      // Floor Ring (y=0, state=1)
+      for (let x = 0; x < sx; x++) {
+        for (let z = 0; z < sz; z++) {
+          if (x === 0 || x === sx - 1 || z === 0 || z === sz - 1) {
+            blocks.push({ x, y: 0, z, state: 1 });
+          }
+        }
+      }
+
+      // Ceiling Ring (y=sy-1, state=2)
+      for (let x = 0; x < sx; x++) {
+        for (let z = 0; z < sz; z++) {
+          if (x === 0 || x === sx - 1 || z === 0 || z === sz - 1) {
+            blocks.push({ x, y: sy - 1, z, state: 2 });
+          }
+        }
+      }
+
+      // Pillars (Corners, y=1 to y=sy-2, state=2)
+      const corners = [
+        {x: 0, z: 0}, {x: sx-1, z: 0}, 
+        {x: 0, z: sz-1}, {x: sx-1, z: sz-1}
+      ];
+      for (let c of corners) {
+        for (let y = 1; y < sy - 1; y++) {
+          blocks.push({ x: c.x, y: y, z: c.z, state: 2 });
+        }
+      }
+
+      // Lights (state=3)
+      // Positions: (2,1,2), (sx-3,1,2), (2,1,sz-3), (sx-3,1,sz-3)
+      const lightPos = [
+        {x: 2, z: 2}, {x: sx-3, z: 2}, 
+        {x: 2, z: sz-3}, {x: sx-3, z: sz-3}
+      ];
+      for (let l of lightPos) {
+        // Check bounds to ensure they fit inside the structure
+        if(l.x >= 0 && l.x < sx && l.z >= 0 && l.z < sz) {
+           blocks.push({ x: l.x, y: 1, z: l.z, state: 3 });
+        }
+      }
+
+      // 5. Build Output String (The "Blueprint")
+      let author = pickOne(config.authors);
+      
+      let output = `Seed: ${seed}
+META:
+- size: ${sx} ${sy} ${sz}
+- author: ${author}
+- notes: Generated by Perchance; convert to .nbt in your Fabric toolchain.
+
+PALETTE (index -> blockstate):
+- 0: ${p0}
+- 1: ${p1}
+- 2: ${p2}
+- 3: ${p3}
+
+BLOCKS:
+`;
+
+      blocks.forEach(b => {
+        // Template literals avoid the syntax error by cleanly embedding variables
+        output += `- pos: ${b.x} ${b.y} ${b.z}\n  state: ${b.state}\n`;
+      });
+
+      return output;
+    }
+
+    // --- UI Interaction ---
+    function updateUI() {
+      statusEl.textContent = "Generating structure plan...";
+      outputEl.style.opacity = "0.5";
+      
+      // Small delay to allow UI to render the "Generating..." status
+      setTimeout(() => {
+        let result = generateStructure();
+        outputEl.textContent = result;
+        statusEl.textContent = "Generation complete.";
+        outputEl.style.opacity = "1";
+      }, 50);
+    }
+
+    generateBtn.onclick = updateUI;
+
+    copyBtn.onclick = () => {
+      if(!outputEl.textContent) return;
+      navigator.clipboard.writeText(outputEl.textContent).then(() => {
+        let originalText = copyBtn.textContent;
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => copyBtn.textContent = originalText, 1500);
+      });
+    };
+
+    // Generate on load
+    updateUI();
+
+  </script>
+</div>
+
+</body>
+</html>

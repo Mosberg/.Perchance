@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>osrs — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="gameContainerEl" style="position:relative; width:100%; height:100vh; background:#2C1810; overflow:hidden;">
+  <!-- Game Canvas -->
+  <canvas id="gameCanvasEl" style="position:absolute; top:0; left:0; image-rendering:pixelated;"></canvas>
+  
+  <!-- Mobile Controls -->
+  <div id="mobileControlsEl" style="position:absolute; bottom:80px; left:10px; width:150px; height:150px; background:rgba(0,0,0,0.5); border-radius:50%; display:none;">
+    <div id="joystickEl" style="position:absolute; width:50px; height:50px; background:rgba(255,215,0,0.7); border-radius:50%; top:50px; left:50px;"></div>
+  </div>
+  
+  <div id="actionButtonsEl" style="position:absolute; bottom:80px; right:10px; display:none; gap:10px;">
+    <button class="mobileActionBtn" data-action="attack">⚔️</button>
+    <button class="mobileActionBtn" data-action="interact">💬</button>
+    <button class="mobileActionBtn" data-action="inventory">🎒</button>
+  </div>
+  
+  <!-- Minimap -->
+  <div id="minimapCtn" style="position:absolute; top:10px; right:220px; width:150px; height:150px; background:rgba(0,0,0,0.7); border:2px solid gold; overflow:hidden;">
+    <canvas id="minimapCanvasEl" width="150" height="150"></canvas>
+  </div>
+  
+  <!-- UI Overlay -->
+  <div style="position:absolute; top:10px; left:10px; color:gold; font-family:monospace; text-shadow:1px 1px 2px black;">
+    <div>Health: <span id="healthEl">100</span>/100</div>
+    <div>Level: <span id="levelEl">1</span></div>
+    <div>Gold: <span id="goldEl">0</span></div>
+  </div>
+  
+  <!-- Skills Panel -->
+  <div id="skillsCtn" style="position:absolute; top:10px; left:10px; width:200px; background:rgba(0,0,0,0.7); border:2px solid gold; padding:10px; color:white; font-family:monospace; display:none;">
+    <h3 style="margin-top:0;">Skills</h3>
+    <div id="skillsListEl"></div>
+    <button onclick="toggleSkills()" style="margin-top:10px; width:100%;">Close</button>
+  </div>
+  
+  <!-- Equipment Panel -->
+  <div id="equipmentCtn" style="position:absolute; top:10px; right:10px; width:220px; background:rgba(0,0,0,0.7); border:2px solid gold; padding:10px; color:white; font-family:monospace; display:none;">
+    <h3 style="margin-top:0;">Equipment</h3>
+    <div id="equipmentSlotsEl"></div>
+    <button onclick="toggleEquipment()" style="margin-top:10px; width:100%;">Close</button>
+  </div>
+  
+  <!-- Inventory Panel -->
+  <div id="inventoryCtn" style="position:absolute; top:10px; right:10px; width:200px; background:rgba(0,0,0,0.7); border:2px solid gold; padding:10px; color:white; font-family:monospace; display:none;">
+    <h3 style="margin-top:0;">Inventory</h3>
+    <div id="inventoryItemsEl"></div>
+    <button onclick="toggleInventory()" style="margin-top:10px; width:100%;">Close</button>
+  </div>
+  
+  <!-- Quest Panel -->
+  <div id="questCtn" style="position:absolute; bottom:10px; right:10px; width:300px; background:rgba(0,0,0,0.7); border:2px solid gold; padding:10px; color:white; font-family:monospace; display:none;">
+    <h3 style="margin-top:0;">Current Quest</h3>
+    <div id="questTextEl"></div>
+    <div id="questProgressEl"></div>
+    <button onclick="toggleQuests()" style="margin-top:10px; width:100%;">Close</button>
+  </div>
+  
+  <!-- Chat Panel -->
+  <div id="chatCtn" style="position:absolute; bottom:10px; left:10px; width:300px; background:rgba(0,0,0,0.7); border:2px solid gold; padding:10px; color:white; font-family:monospace;">
+    <h3 style="margin-top:0;">Chat</h3>
+    <div id="chatMessagesEl" style="height:150px; overflow-y:auto; margin-bottom:10px;"></div>
+    <input id="chatInputEl" type="text" placeholder="Type message..." style="width:100%; padding:5px;">
+  </div>
+  
+  <!-- Settings Panel -->
+  <div id="settingsCtn" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:400px; background:rgba(0,0,0,0.9); border:2px solid gold; padding:20px; color:white; font-family:monospace; display:none;">
+    <h3 style="margin-top:0; text-align:center;">Game Settings</h3>
+    <div style="margin:15px 0;">
+      <label>Sound Volume: <input id="volumeSliderEl" type="range" min="0" max="100" value="50"></label>
+    </div>
+    <div style="margin:15px 0;">
+      <label>Graphics Quality: 
+        <select id="graphicsSelectEl">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+      </label>
+    </div>
+    <div style="margin:15px 0;">
+      <label>Mobile Controls: 
+        <select id="mobileControlsSelectEl">
+          <option value="off">Off</option>
+          <option value="on" selected>On</option>
+        </select>
+      </label>
+    </div>
+    <div style="margin:15px 0;">
+      <button onclick="toggleSettings()" style="width:100%;">Close</button>
+    </div>
+  </div>
+  
+  <!-- Plugin Manager -->
+  <div id="pluginsCtn" style="position:absolute; top:10px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); border:1px solid gold; padding:5px 10px; color:white; font-family:monospace; display:flex; gap:10px;">
+    <button onclick="togglePlugin('autoFight')" id="autoFightBtn" style="background:transparent; border:1px solid gold; color:gold;">AutoFight: OFF</button>
+    <button onclick="togglePlugin('autoExplore')" id="autoExploreBtn" style="background:transparent; border:1px solid gold; color:gold;">AutoExplore: OFF</button>
+    <button onclick="togglePlugin('aiCompanion')" id="aiCompanionBtn" style="background:transparent; border:1px solid gold; color:gold;">AI Companion: OFF</button>
+    <button onclick="togglePlugin('autoLoot')" id="autoLootBtn" style="background:transparent; border:1px solid gold; color:gold;">AutoLoot: OFF</button>
+    <button onclick="togglePlugin('autoWalk')" id="autoWalkBtn" style="background:transparent; border:1px solid gold; color:gold;">AutoWalk: OFF</button>
+  </div>
+  
+  <!-- Game Controls -->
+  <div style="position:absolute; bottom:10px; left:50%; transform:translateX(-50%); display:flex; gap:10px;">
+    <button onclick="toggleInventory()" style="background:rgba(0,0,0,0.7); border:1px solid gold; color:gold; padding:5px 10px;">Inventory (I)</button>
+    <button onclick="toggleSkills()" style="background:rgba(0,0,0,0.7); border:1px solid gold; color:gold; padding:5px 10px;">Skills (K)</button>
+    <button onclick="toggleEquipment()" style="background:rgba(0,0,0,0.7); border:1px solid gold; color:gold; padding:5px 10px;">Equipment (E)</button>
+    <button onclick="toggleQuests()" style="background:rgba(0,0,0,0.7); border:1px solid gold; color:gold; padding:5px 10px;">Quests (Q)</button>
+    <button onclick="toggleSettings()" style="background:rgba(0,0,0,0.7); border:1px solid gold; color:gold; padding:5px 10px;">Settings (S)</button>
+  </div>
+</div>
+
+<script type="module">
+  // Define root for module context
+  let root = window;
+  
+  // Game state
+  let gameState = {
+    player: { 
+      x: 400, 
+      y: 300, 
+      health: 100, 
+      maxHealth: 100,
+      level: 1, 
+      gold: 0, 
+      inventory: [],
+      equipment: {
+        head: null,
+        body: null,
+        legs: null,
+        weapon: null,
+        shield: null
+      },
+      skills: {
+        attack: { level: 1, exp: 0 },
+        strength: { level: 1, exp: 0 },
+        defense: { level: 1, exp: 0 },
+        hitpoints: { level: 1, exp: 0 },
+        ranged: { level: 1, exp: 0 },
+        magic: { level: 1, exp: 0 },
+        prayer: { level: 1, exp: 0 }
+      },
+      combat: {
+        style: 'melee',
+        target: null
+      }
+    },
+    world: { width: 2000, height: 2000 },
+    npcs: [],
+    items: [],
+    currentQuest: null,
+    questProgress: {},
+    plugins: { 
+      autoFight: false, 
+      autoExplore: false, 
+      aiCompanion: false,
+      autoLoot: false,
+      autoWalk: false
+    },
+    camera: { x: 0, y: 0 },
+    settings: {
+      mobileControls: true,
+      volume: 50,
+      graphics: 'medium'
+    },
+    mobile: {
+      joystickActive: false,
+      joystickPos: { x: 0, y: 0 }
+    }
+  };
+
+  // Canvas setup
+  const canvas = document.getElementById('gameCanvasEl');
+  const ctx = canvas.getContext('2d');
+  const minimapCanvas = document.getElementById('minimapCanvasEl');
+  const minimapCtx = minimapCanvas.getContext('2d');
+  
+  // Set canvas dimensions
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  // Initialize game
+  async function initGame() {
+    try {
+      // Generate world with simplex noise
+      const { createNoise2D } = await import('https://esm.sh/simplex-noise@4.0.3');
+      const noise2D = createNoise2D();
+      
+      // Generate terrain
+      for (let x = 0; x < gameState.world.width; x += 50) {
+        for (let y = 0; y < gameState.world.height; y += 50) {
+          const elevation = noise2D(x * 0.01, y * 0.01);
+          if (elevation > 0.3) {
+            gameState.items.push({ type: 'tree', x, y });
+          } else if (elevation > -0.2) {
+            gameState.items.push({ type: 'grass', x, y });
+          } else {
+            gameState.items.push({ type: 'water', x, y });
+          }
+        }
+      }
+      
+      // Generate NPCs
+      for (let i = 0; i < 15; i++) {
+        let npcDialog = "Greetings, traveler!";
+        let npcQuest = null;
+        
+        try {
+          // Safe AI generation with fallback
+          if (root.generateText) {
+            npcDialog = await root.generateText(`Generate a medieval fantasy dialog for NPC${i}`);
+            if (i < 5) {
+              npcQuest = await root.generateText(`Generate a simple quest description for a fantasy game`);
+            }
+          }
+        } catch (e) {
+          console.error("AI generation failed, using fallback:", e);
+        }
+        
+        gameState.npcs.push({
+          id: i,
+          name: `NPC${i}`,
+          type: i % 3 === 0 ? 'enemy' : 'friendly',
+          x: Math.random() * gameState.world.width,
+          y: Math.random() * gameState.world.height,
+          health: 50,
+          maxHealth: 50,
+          dialog: npcDialog,
+          quest: npcQuest,
+          level: Math.floor(Math.random() * 5) + 1,
+          drops: i % 3 === 0 ? ['gold', 'bones'] : []
+        });
+      }
+      
+      // Generate initial quest
+      if (!gameState.currentQuest) {
+        try {
+          if (root.generateText) {
+            gameState.currentQuest = await root.generateText('Generate a simple starting quest for a fantasy RPG game');
+          } else {
+            gameState.currentQuest = "Defeat 5 goblins in the forest.";
+          }
+        } catch (e) {
+          console.error("Quest generation failed:", e);
+          gameState.currentQuest = "Defeat 5 goblins in the forest.";
+        }
+        questTextEl.innerHTML = gameState.currentQuest;
+        gameState.questProgress = { goblinsDefeated: 0 };
+        updateQuestProgress();
+      }
+      
+      // Initialize mobile controls if enabled
+      if (gameState.settings.mobileControls) {
+        initMobileControls();
+      }
+      
+      // Start game loop
+      gameLoop();
+    } catch (e) {
+      console.error("Game initialization failed:", e);
+      addChatMessage("Game initialization failed. Please refresh the page.");
+    }
+  }
+
+  // Mobile controls initialization
+  function initMobileControls() {
+    const joystickContainer = document.getElementById('mobileControlsEl');
+    const joystick = document.getElementById('joystickEl');
+    const actionButtons = document.getElementById('actionButtonsEl');
+    
+    // Show mobile controls
+    joystickContainer.style.display = 'block';
+    actionButtons.style.display = 'flex';
+    
+    // Joystick touch events
+    joystickContainer.addEventListener('touchstart', handleJoystickStart, { passive: false });
+    joystickContainer.addEventListener('touchmove', handleJoystickMove, { passive: false });
+    joystickContainer.addEventListener('touchend', handleJoystickEnd, { passive: false });
+    
+    // Action button events
+    actionButtons.querySelectorAll('.mobileActionBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        handleMobileAction(action);
+      });
+    });
+  }
+
+  function handleJoystickStart(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = e.target.getBoundingClientRect();
+    const joystick = document.getElementById('joystickEl');
+    
+    gameState.mobile.joystickActive = true;
+    gameState.mobile.joystickPos = {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top
+    };
+    
+    joystick.style.left = `${gameState.mobile.joystickPos.x - 25}px`;
+    joystick.style.top = `${gameState.mobile.joystickPos.y - 25}px`;
+  }
+
+  function handleJoystickMove(e) {
+    e.preventDefault();
+    if (!gameState.mobile.joystickActive) return;
+    
+    const touch = e.touches[0];
+    const rect = e.target.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    
+    let dx = touch.clientX - rect.left - centerX;
+    let dy = touch.clientY - rect.top - centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const maxDistance = 50;
+    
+    if (distance > maxDistance) {
+      dx = (dx / distance) * maxDistance;
+      dy = (dy / distance) * maxDistance;
+    }
+    
+    gameState.mobile.joystickPos = {
+      x: centerX + dx,
+      y: centerY + dy
+    };
+    
+    const joystick = document.getElementById('joystickEl');
+    joystick.style.left = `${gameState.mobile.joystickPos.x - 25}px`;
+    joystick.style.top = `${gameState.mobile.joystickPos.y - 25}px`;
+    
+    // Update player movement
+    const moveSpeed = 5;
+    gameState.player.x += (dx / maxDistance) * moveSpeed;
+    gameState.player.y += (dy / maxDistance) * moveSpeed;
+    
+    // Keep player in world bounds
+    gameState.player.x = Math.max(0, Math.min(gameState.world.width, gameState.player.x));
+    gameState.player.y = Math.max(0, Math.min(gameState.world.height, gameState.player.y));
+  }
+
+  function handleJoystickEnd(e) {
+    e.preventDefault();
+    gameState.mobile.joystickActive = false;
+    
+    const joystick = document.getElementById('joystickEl');
+    joystick.style.left = '50px';
+    joystick.style.top = '50px';
+  }
+
+  function handleMobileAction(action) {
+    switch(action) {
+      case 'attack':
+        // Attack nearest enemy
+        const nearestEnemy = gameState.npcs.find(npc => 
+          npc.type === 'enemy' && 
+          npc.health > 0 &&
+          Math.sqrt(Math.pow(npc.x - gameState.player.x, 2) + Math.pow(npc.y - gameState.player.y, 2)) < 100
+        );
+        
+        if (nearestEnemy) {
+          gameState.player.combat.target = nearestEnemy;
+          if (!gameState.plugins.autoFight) {
+            togglePlugin('autoFight');
+          }
+        }
+        break;
+        
+      case 'interact':
+        // Interact with nearest NPC
+        const nearestNPC = gameState.npcs.find(npc => 
+          Math.sqrt(Math.pow(npc.x - gameState.player.x, 2) + Math.pow(npc.y - gameState.player.y, 2)) < 100
+        );
+        
+        if (nearestNPC) {
+          addChatMessage(`${nearestNPC.name}: ${nearestNPC.dialog}`);
+          if (nearestNPC.quest && !gameState.currentQuest) {
+            gameState.currentQuest = nearestNPC.quest;
+            questTextEl.innerHTML = gameState.currentQuest;
+            toggleQuests();
+          }
+        }
+        break;
+        
+      case 'inventory':
+        toggleInventory();
+        break;
+    }
+  }
+
+  // Game loop
+  function gameLoop() {
+    // Clear canvas
+    ctx.fillStyle = '#87CEEB';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Update camera to follow player
+    gameState.camera.x = gameState.player.x - canvas.width / 2;
+    gameState.camera.y = gameState.player.y - canvas.height / 2;
+    
+    // Draw terrain items
+    gameState.items.forEach(item => {
+      drawItem(item);
+    });
+    
+    // Draw NPCs
+    gameState.npcs.forEach(npc => {
+      drawNPC(npc);
+    });
+    
+    // Draw player
+    drawPlayer();
+    
+    // Update minimap
+    updateMinimap();
+    
+    // Apply plugins
+    if (gameState.plugins.autoFight) autoFightPlugin();
+    if (gameState.plugins.autoExplore) autoExplorePlugin();
+    if (gameState.plugins.aiCompanion) aiCompanionPlugin();
+    if (gameState.plugins.autoLoot) autoLootPlugin();
+    if (gameState.plugins.autoWalk) autoWalkPlugin();
+    
+    requestAnimationFrame(gameLoop);
+  }
+
+  // Draw functions
+  function drawPlayer() {
+    // Draw player body
+    ctx.fillStyle = 'blue';
+    ctx.fillRect(
+      gameState.player.x - gameState.camera.x - 15,
+      gameState.player.y - gameState.camera.y - 15,
+      30, 30
+    );
+    
+    // Draw player equipment
+    if (gameState.player.equipment.weapon) {
+      ctx.fillStyle = 'silver';
+      ctx.fillRect(
+        gameState.player.x - gameState.camera.x + 20,
+        gameState.player.y - gameState.camera.y - 5,
+        15, 5
+      );
+    }
+    
+    // Draw player name
+    ctx.fillStyle = 'white';
+    ctx.font = '12px monospace';
+    ctx.fillText('You', 
+      gameState.player.x - gameState.camera.x - 10, 
+      gameState.player.y - gameState.camera.y - 20
+    );
+  }
+
+  function drawNPC(npc) {
+    // Draw NPC based on type
+    if (npc.type === 'enemy') {
+      ctx.fillStyle = npc.health > 0 ? 'red' : 'gray';
+    } else {
+      ctx.fillStyle = 'green';
+    }
+    
+    ctx.fillRect(
+      npc.x - gameState.camera.x - 12,
+      npc.y - gameState.camera.y - 12,
+      24, 24
+    );
+    
+    // Draw NPC name
+    ctx.fillStyle = 'white';
+    ctx.font = '12px monospace';
+    ctx.fillText(npc.name, 
+      npc.x - gameState.camera.x - 15, 
+      npc.y - gameState.camera.y - 15
+    );
+    
+    // Draw health bar for enemies
+    if (npc.type === 'enemy' && npc.health > 0) {
+      const healthPercent = npc.health / npc.maxHealth;
+      ctx.fillStyle = 'red';
+      ctx.fillRect(
+        npc.x - gameState.camera.x - 15,
+        npc.y - gameState.camera.y - 25,
+        30, 4
+      );
+      ctx.fillStyle = 'green';
+      ctx.fillRect(
+        npc.x - gameState.camera.x - 15,
+        npc.y - gameState.camera.y - 25,
+        30 * healthPercent, 4
+      );
+    }
+  }
+
+  function drawItem(item) {
+    const screenX = item.x - gameState.camera.x;
+    const screenY = item.y - gameState.camera.y;
+    
+    if (item.type === 'tree') {
+      ctx.fillStyle = 'green';
+      ctx.fillRect(screenX - 10, screenY - 20, 20, 40);
+    } else if (item.type === 'grass') {
+      ctx.fillStyle = 'lightgreen';
+      ctx.fillRect(screenX - 15, screenY - 5, 30, 10);
+    } else if (item.type === 'water') {
+      ctx.fillStyle = 'blue';
+      ctx.fillRect(screenX - 20, screenY - 10, 40, 20);
+    }
+  }
+
+  // Minimap update
+  function updateMinimap() {
+    const scale = 0.05;
+    minimapCtx.fillStyle = '#000';
+    minimapCtx.fillRect(0, 0, 150, 150);
+    
+    // Draw player on minimap
+    minimapCtx.fillStyle = 'blue';
+    minimapCtx.beginPath();
+    minimapCtx.arc(
+      gameState.player.x * scale,
+      gameState.player.y * scale,
+      3, 0, Math.PI * 2
+    );
+    minimapCtx.fill();
+    
+    // Draw NPCs on minimap
+    gameState.npcs.forEach(npc => {
+      minimapCtx.fillStyle = npc.type === 'enemy' ? 'red' : 'green';
+      minimapCtx.beginPath();
+      minimapCtx.arc(
+        npc.x * scale,
+        npc.y * scale,
+        2, 0, Math.PI * 2
+      );
+      minimapCtx.fill();
+    });
+    
+    // Draw viewport area
+    minimapCtx.strokeStyle = 'white';
+    minimapCtx.strokeRect(
+      gameState.camera.x * scale,
+      gameState.camera.y * scale,
+      canvas.width * scale,
+      canvas.height * scale
+    );
+  }
+
+  // Plugin functions
+  function autoFightPlugin() {
+    if (!gameState.player.combat.target || gameState.player.combat.target.health <= 0) {
+      // Find nearest enemy NPC
+      const nearestNPC = gameState.npcs.find(npc => {
+        const dist = Math.sqrt(
+          Math.pow(npc.x - gameState.player.x, 2) + 
+          Math.pow(npc.y - gameState.player.y, 2)
+        );
+        return npc.type === 'enemy' && npc.health > 0 && dist < 200;
+      });
+      
+      if (nearestNPC) {
+        gameState.player.combat.target = nearestNPC;
+      } else {
+        return; // No enemies nearby
+      }
+    }
+    
+    const target = gameState.player.combat.target;
+    
+    // Move toward target if too far
+    const dx = target.x - gameState.player.x;
+    const dy = target.y - gameState.player.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    if (dist > 50) {
+      gameState.player.x += (dx / dist) * 3;
+      gameState.player.y += (dy / dist) * 3;
+    } else if (dist < 30) {
+      // Attack if in range
+      target.health -= 1;
+      
+      // Add combat experience
+      addExperience('attack', 10);
+      addExperience('strength', 10);
+      
+      if (target.health <= 0) {
+        gameState.player.gold += 10;
+        gameState.player.inventory.push('gold');
+        addChatMessage(`You defeated ${target.name} and gained 10 gold!`);
+        
+        // Update quest progress
+        if (gameState.questProgress.goblinsDefeated !== undefined) {
+          gameState.questProgress.goblinsDefeated++;
+          updateQuestProgress();
+        }
+        
+        gameState.player.combat.target = null;
+      }
+    }
+  }
+
+  function autoExplorePlugin() {
+    // Random movement
+    if (Math.random() > 0.7) {
+      gameState.player.x += (Math.random() - 0.5) * 20;
+      gameState.player.y += (Math.random() - 0.5) * 20;
+    }
+  }
+
+  function aiCompanionPlugin() {
+    // Add companion following player
+    if (!gameState.companion) {
+      gameState.companion = {
+        x: gameState.player.x + 50,
+        y: gameState.player.y + 50,
+        type: 'companion',
+        health: 50,
+        maxHealth: 50
+      };
+    }
+    
+    // Draw companion
+    ctx.fillStyle = 'purple';
+    ctx.fillRect(
+      gameState.companion.x - gameState.camera.x - 10,
+      gameState.companion.y - gameState.camera.y - 10,
+      20, 20
+    );
+    
+    // Draw companion name
+    ctx.fillStyle = 'white';
+    ctx.font = '12px monospace';
+    ctx.fillText('Companion', 
+      gameState.companion.x - gameState.camera.x - 20, 
+      gameState.companion.y - gameState.camera.y - 15
+    );
+    
+    // Move companion toward player
+    const dx = gameState.player.x - gameState.companion.x;
+    const dy = gameState.player.y - gameState.companion.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    if (dist > 30) {
+      gameState.companion.x += dx * 0.05;
+      gameState.companion.y += dy * 0.05;
+    }
+    
+    // Companion auto-attacks enemies
+    if (gameState.plugins.autoFight && gameState.player.combat.target) {
+      const target = gameState.player.combat.target;
+      const dx = target.x - gameState.companion.x;
+      const dy = target.y - gameState.companion.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist < 50) {
+        target.health -= 0.5;
+      }
+    }
+  }
+
+  function autoLootPlugin() {
+    // Find nearby loot items
+    const lootItems = gameState.items.filter(item => {
+      const dist = Math.sqrt(
+        Math.pow(item.x - gameState.player.x, 2) + 
+        Math.pow(item.y - gameState.player.y, 2)
+      );
+      return dist < 50 && (item.type === 'gold' || item.type === 'bones');
+    });
+    
+    lootItems.forEach(item => {
+      gameState.player.inventory.push(item.type);
+      addChatMessage(`You looted ${item.type}.`);
+      
+      // Remove item from world
+      const index = gameState.items.indexOf(item);
+      if (index > -1) {
+        gameState.items.splice(index, 1);
+      }
+    });
+  }
+
+  function autoWalkPlugin() {
+    // Simple random walk for now
+    if (Math.random() > 0.8) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * 100 + 50;
+      
+      gameState.player.x += Math.cos(angle) * distance;
+      gameState.player.y += Math.sin(angle) * distance;
+    }
+  }
+
+  // Experience and leveling system
+  function addExperience(skillName, amount) {
+    const skill = gameState.player.skills[skillName];
+    skill.exp += amount;
+    
+    // Check for level up
+    const expForLevel = skill.level * 100;
+    if (skill.exp >= expForLevel) {
+      skill.level++;
+      skill.exp = skill.exp - expForLevel;
+      addChatMessage(`Your ${skillName} level is now ${skill.level}!`);
+      
+      // Update player stats based on skill
+      if (skillName === 'hitpoints') {
+        gameState.player.maxHealth += 10;
+        gameState.player.health = gameState.player.maxHealth;
+      }
+    }
+  }
+
+  // UI Functions
+  function toggleInventory() {
+    inventoryCtn.style.display = inventoryCtn.style.display === 'none' ? 'block' : 'none';
+    updateInventoryDisplay();
+  }
+
+  function toggleSkills() {
+    skillsCtn.style.display = skillsCtn.style.display === 'none' ? 'block' : 'none';
+    updateSkillsDisplay();
+  }
+
+  function toggleEquipment() {
+    equipmentCtn.style.display = equipmentCtn.style.display === 'none' ? 'block' : 'none';
+    updateEquipmentDisplay();
+  }
+
+  function toggleQuests() {
+    questCtn.style.display = questCtn.style.display === 'none' ? 'block' : 'none';
+  }
+
+  function toggleSettings() {
+    settingsCtn.style.display = settingsCtn.style.display === 'none' ? 'block' : 'none';
+  }
+
+  function togglePlugin(pluginName) {
+    gameState.plugins[pluginName] = !gameState.plugins[pluginName];
+    const btn = document.getElementById(`${pluginName}Btn`);
+    btn.textContent = `${pluginName}: ${gameState.plugins[pluginName] ? 'ON' : 'OFF'}`;
+    btn.style.background = gameState.plugins[pluginName] ? 'rgba(0,100,0,0.5)' : 'transparent';
+  }
+
+  function updateInventoryDisplay() {
+    inventoryItemsEl.innerHTML = '';
+    
+    // Group items by type
+    const itemCounts = {};
+    gameState.player.inventory.forEach(item => {
+      itemCounts[item] = (itemCounts[item] || 0) + 1;
+    });
+    
+    // Display items
+    Object.entries(itemCounts).forEach(([item, count]) => {
+      const itemEl = document.createElement('div');
+      itemEl.textContent = `${count}x ${item}`;
+      inventoryItemsEl.appendChild(itemEl);
+    });
+    
+    if (Object.keys(itemCounts).length === 0) {
+      inventoryItemsEl.innerHTML = '<div>Your inventory is empty</div>';
+    }
+  }
+
+  function updateSkillsDisplay() {
+    skillsListEl.innerHTML = '';
+    
+    Object.entries(gameState.player.skills).forEach(([skillName, skillData]) => {
+      const skillEl = document.createElement('div');
+      skillEl.innerHTML = `
+        <div style="display:flex; justify-content:space-between;">
+          <span>${skillName.charAt(0).toUpperCase() + skillName.slice(1)}</span>
+          <span>Level: ${skillData.level}</span>
+        </div>
+        <div style="width:100%; height:10px; background:#333; margin:5px 0;">
+          <div style="width:${(skillData.exp / (skillData.level * 100)) * 100}%; height:100%; background:gold;"></div>
+        </div>
+      `;
+      skillsListEl.appendChild(skillEl);
+    });
+  }
+
+  function updateEquipmentDisplay() {
+    equipmentSlotsEl.innerHTML = '';
+    
+    const slotNames = {
+      head: 'Head',
+      body: 'Body',
+      legs: 'Legs',
+      weapon: 'Weapon',
+      shield: 'Shield'
+    };
+    
+    Object.entries(gameState.player.equipment).forEach(([slot, item]) => {
+      const slotEl = document.createElement('div');
+      slotEl.innerHTML = `
+        <div style="display:flex; justify-content:space-between; margin:5px 0;">
+          <span>${slotNames[slot]}:</span>
+          <span>${item || 'Empty'}</span>
+        </div>
+      `;
+      equipmentSlotsEl.appendChild(slotEl);
+    });
+  }
+
+  function updateQuestProgress() {
+    if (gameState.questProgress.goblinsDefeated !== undefined) {
+      questProgressEl.innerHTML = `Goblins defeated: ${gameState.questProgress.goblinsDefeated}/5`;
+      
+      if (gameState.questProgress.goblinsDefeated >= 5) {
+        questProgressEl.innerHTML += '<br><span style="color:gold;">Quest completed!</span>';
+        gameState.player.gold += 100;
+        addChatMessage('Quest completed! You received 100 gold.');
+      }
+    }
+  }
+
+  function addChatMessage(message) {
+    const messageEl = document.createElement('div');
+    messageEl.textContent = message;
+    chatMessagesEl.appendChild(messageEl);
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  }
+
+  // Event Listeners
+  window.addEventListener('keydown', (e) => {
+    const moveSpeed = 10;
+    
+    switch(e.key.toLowerCase()) {
+      case 'w': gameState.player.y -= moveSpeed; break;
+      case 'a': gameState.player.x -= moveSpeed; break;
+      case 's': gameState.player.y += moveSpeed; break;
+      case 'd': gameState.player.x += moveSpeed; break;
+      case 'i': toggleInventory(); break;
+      case 'k': toggleSkills(); break;
+      case 'e': toggleEquipment(); break;
+      case 'q': toggleQuests(); break;
+      case 's': toggleSettings(); break;
+    }
+    
+    // Keep player in world bounds
+    gameState.player.x = Math.max(0, Math.min(gameState.world.width, gameState.player.x));
+    gameState.player.y = Math.max(0, Math.min(gameState.world.height, gameState.player.y));
+  });
+
+  chatInputEl.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && chatInputEl.value.trim()) {
+      addChatMessage(`You: ${chatInputEl.value}`);
+      chatInputEl.value = '';
+    }
+  });
+
+  // Settings listeners
+  volumeSliderEl.addEventListener('input', (e) => {
+    gameState.settings.volume = e.target.value;
+  });
+
+  graphicsSelectEl.addEventListener('change', (e) => {
+    gameState.settings.graphics = e.target.value;
+  });
+
+  mobileControlsSelectEl.addEventListener('change', (e) => {
+    gameState.settings.mobileControls = e.target.value === 'on';
+    
+    if (gameState.settings.mobileControls) {
+      initMobileControls();
+    } else {
+      document.getElementById('mobileControlsEl').style.display = 'none';
+      document.getElementById('actionButtonsEl').style.display = 'none';
+    }
+  });
+
+  // Health regeneration
+  setInterval(() => {
+    if (gameState.player.health < gameState.player.maxHealth) {
+      gameState.player.health = Math.min(gameState.player.maxHealth, gameState.player.health + 1);
+      healthEl.textContent = gameState.player.health;
+    }
+  }, 5000);
+
+  // Update UI elements
+  setInterval(() => {
+    healthEl.textContent = gameState.player.health;
+    levelEl.textContent = gameState.player.skills.hitpoints.level;
+    goldEl.textContent = gameState.player.gold;
+  }, 1000);
+
+  // Initialize game
+  initGame();
+  
+  // Add initial chat message
+  addChatMessage('Welcome to RuneScape AI! Use WASD to move, I for inventory, K for skills, E for equipment, Q for quests.');
+</script>
+
+<style>
+  /* Retro pixelated font style */
+  body {
+    margin:0;
+    padding:0;
+    overflow:hidden;
+    font-family: 'Courier New', monospace;
+  }
+  
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.3);
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: gold;
+    border-radius: 4px;
+  }
+  
+  /* Button hover effects */
+  button:hover {
+    background-color: rgba(255, 215, 0, 0.3) !important;
+    cursor: pointer;
+  }
+  
+  /* Mobile action buttons */
+  .mobileActionBtn {
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+    background: rgba(0,0,0,0.7);
+    border: 1px solid gold;
+    color: gold;
+    border-radius: 50%;
+  }
+  
+  /* Mobile controls */
+  #mobileControlsEl {
+    touch-action: none;
+  }
+</style>
+</body>
+</html>

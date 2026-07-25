@@ -1,0 +1,2082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>tree-hustler-3d — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+@treeTypes - Oak - Pine - Birch - Maple - Spruce @treeQualities - normal - tough
+- rich - cursed - ancient @equipmentUpgrades - Stone Axe|+10% chop speed|50 -
+Iron Axe|+25% chop speed|150 - Steel Axe|+50% chop speed|400 - Titanium Axe|+90%
+chop speed|900 - Mythic Axe|+150% chop speed|2000 @structureTypes - Log
+Cabin|+5% passive income|50 - Storage Shed|+25% log capacity|50 - Lumber
+Mill|Doubles sell price|200 - Watch Tower|+20% move speed|150 - Shrine of
+Growth|Trees regrow faster|250 @aiHelperTypes - Rookie Lumberjack|Slow, cheap
+helper - Skilled Forester|Balanced helper - Spirit of the Woods|Fast, expensive
+helper @weatherPatterns - Clear - Cloudy - Rainy - Foggy - Windy @timeOfDay -
+Dawn - Morning - Noon - Evening - Night
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tree Hustler 3D</title>
+
+    <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
+
+    <style>
+      :root {
+        --bg: #02030a;
+        --bg-alt: #050b18;
+        --accent: #4caf50;
+        --accent-soft: #2e7d32;
+        --accent-alt: #ffb300;
+        --accent-alt-soft: #ff6f00;
+        --danger: #ff5252;
+        --panel: rgba(8, 12, 20, 0.96);
+        --panel-soft: rgba(12, 18, 30, 0.9);
+        --text: #f5f5f5;
+        --muted: #9e9e9e;
+        --border: rgba(255, 255, 255, 0.08);
+        --shadow-soft: 0 0 25px rgba(0, 0, 0, 0.7);
+        --good: #66bb6a;
+        --info: #29b6f6;
+        --warn: #ffca28;
+      }
+
+      * {
+        box-sizing: border-box;
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: radial-gradient(circle at top, #1b2838 0, #02030a 55%);
+        color: var(--text);
+        height: 100%;
+        overflow: hidden;
+      }
+
+      #game-root {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr);
+      }
+
+      #game-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: radial-gradient(
+          circle at center,
+          #1b5e20 0,
+          #0b1a0b 60%,
+          #020403 100%
+        );
+      }
+
+      /* HUD base */
+      #hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .hud-panel {
+        pointer-events: auto;
+        background: linear-gradient(145deg, var(--panel), var(--bg-alt));
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-soft);
+        backdrop-filter: blur(12px);
+      }
+
+      #top-bar {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        min-width: 360px;
+        max-width: 840px;
+        padding: 8px 14px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      #top-bar-left {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      #game-title {
+        font-size: 14px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      #game-subtitle {
+        font-size: 11px;
+        color: var(--accent-alt);
+      }
+
+      #top-bar-stats {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .stat-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: radial-gradient(
+          circle at top left,
+          rgba(255, 255, 255, 0.08),
+          rgba(0, 0, 0, 0.4)
+        );
+        font-size: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .stat-label {
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 10px;
+      }
+
+      .stat-value {
+        font-weight: 600;
+      }
+
+      .stat-icon {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        background: radial-gradient(circle at 30% 20%, #fff, #ccc);
+        display: inline-block;
+      }
+
+      .stat-icon.money {
+        background: radial-gradient(circle at 30% 20%, #cddc39, #827717);
+      }
+      .stat-icon.logs {
+        background: radial-gradient(circle at 30% 20%, #8d6e63, #4e342e);
+      }
+      .stat-icon.energy {
+        background: radial-gradient(circle at 30% 20%, #ff9800, #e65100);
+      }
+      .stat-icon.level {
+        background: radial-gradient(circle at 30% 20%, #03a9f4, #01579b);
+      }
+
+      #xp-bar-container {
+        margin-top: 4px;
+        width: 220px;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+      }
+
+      #xp-bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #00e5ff, #7c4dff);
+      }
+
+      #right-panel {
+        position: absolute;
+        top: 70px;
+        right: 10px;
+        width: 280px;
+        max-height: calc(100% - 80px);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      #left-panel {
+        position: absolute;
+        top: 70px;
+        left: 10px;
+        width: 280px;
+        max-height: calc(100% - 80px);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 10px 4px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .panel-title {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+      }
+
+      .panel-sub {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .panel-badge {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--accent-alt);
+      }
+
+      .tab-row {
+        display: flex;
+        gap: 4px;
+        margin: 4px 8px;
+        flex-wrap: wrap;
+      }
+
+      .tab-btn {
+        flex: 1;
+        min-width: 0;
+        padding: 4px 6px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--muted);
+        font-size: 11px;
+        cursor: pointer;
+        transition: 0.15s;
+      }
+
+      .tab-btn.active {
+        background: linear-gradient(135deg, var(--accent), var(--accent-soft));
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .tab-btn:hover {
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .panel-body {
+        font-size: 12px;
+        max-height: 260px;
+        overflow: auto;
+        padding: 4px 8px 8px;
+      }
+
+      .list-item {
+        padding: 6px 6px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: radial-gradient(
+          circle at top left,
+          rgba(255, 255, 255, 0.04),
+          rgba(0, 0, 0, 0.5)
+        );
+        margin-bottom: 5px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 4px 6px;
+        align-items: center;
+      }
+
+      .list-item-main {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .item-title {
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .item-desc {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .item-meta {
+        font-size: 11px;
+        color: var(--accent-alt);
+      }
+
+      .btn {
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--text);
+        font-size: 11px;
+        cursor: pointer;
+        transition: 0.15s;
+        white-space: nowrap;
+      }
+
+      .btn.primary {
+        background: linear-gradient(135deg, var(--accent), var(--accent-soft));
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .btn.danger {
+        background: linear-gradient(135deg, var(--danger), #b71c1c);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .btn.ghost {
+        background: transparent;
+      }
+
+      .btn:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+      .btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      }
+
+      #bottom-bar {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        min-width: 360px;
+        max-width: 840px;
+        padding: 6px 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      #mode-buttons {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .mode-btn {
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--muted);
+        font-size: 11px;
+        cursor: pointer;
+        transition: 0.15s;
+      }
+
+      .mode-btn.active {
+        background: linear-gradient(135deg, var(--accent-alt), #ff6f00);
+        color: #000;
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .mode-btn:hover {
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      #hint-text {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      #crosshair {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 14px;
+        height: 14px;
+        transform: translate(-50%, -50%);
+        border-radius: 999px;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+        pointer-events: none;
+      }
+
+      #crosshair.highlight {
+        border-color: var(--accent-alt);
+        box-shadow: 0 0 12px rgba(255, 193, 7, 0.9);
+      }
+
+      #settings-panel {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 240px;
+        padding: 6px 8px;
+      }
+
+      .settings-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-bottom: 4px;
+        font-size: 11px;
+      }
+
+      .settings-row input[type="range"] {
+        flex: 1;
+      }
+
+      .settings-row input[type="checkbox"] {
+        transform: scale(0.9);
+      }
+
+      #log-panel {
+        position: absolute;
+        left: 50%;
+        bottom: 60px;
+        transform: translateX(-50%);
+        width: 380px;
+        max-height: 130px;
+        padding: 6px 8px;
+        font-size: 11px;
+        overflow: auto;
+      }
+
+      .log-entry {
+        color: var(--muted);
+        margin-bottom: 2px;
+      }
+
+      .log-entry span {
+        color: var(--accent-alt);
+      }
+
+      #mini-map {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        width: 120px;
+        height: 120px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: radial-gradient(circle at center, #1b5e20 0, #020403 80%);
+        box-shadow: var(--shadow-soft);
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      #mini-map-inner {
+        position: absolute;
+        inset: 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      #mini-map-player {
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--info);
+      }
+
+      #mini-map-trees {
+        position: absolute;
+        inset: 0;
+      }
+
+      .mini-tree {
+        position: absolute;
+        width: 3px;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--good);
+      }
+
+      @media (max-width: 768px) {
+        #right-panel,
+        #left-panel {
+          width: 46%;
+        }
+        #top-bar,
+        #bottom-bar {
+          width: 96%;
+          max-width: none;
+        }
+        #log-panel {
+          width: 96%;
+        }
+        #mini-map {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-root">
+      <canvas id="game-canvas"></canvas>
+      <div id="hud">
+        <div id="top-bar" class="hud-panel">
+          <div id="top-bar-left">
+            <div id="game-title">TREE HUSTLER</div>
+            <div id="game-subtitle">Chop · Build · Automate · Thrive</div>
+            <div id="xp-bar-container"><div id="xp-bar"></div></div>
+          </div>
+          <div id="top-bar-stats">
+            <div class="stat-pill">
+              <span class="stat-icon money"></span>
+              <span class="stat-label">Money</span>
+              <span class="stat-value" id="stat-money">$0</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-icon logs"></span>
+              <span class="stat-label">Logs</span>
+              <span class="stat-value" id="stat-logs">0 / 50</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-icon energy"></span>
+              <span class="stat-label">Energy</span>
+              <span class="stat-value" id="stat-energy">100%</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-icon level"></span>
+              <span class="stat-label">Level</span>
+              <span class="stat-value" id="stat-level">1</span>
+            </div>
+            <button class="btn ghost" id="btn-save">Save</button>
+            <button class="btn ghost" id="btn-load">Load</button>
+          </div>
+        </div>
+
+        <div id="left-panel">
+          <div class="hud-panel" id="shop-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title">Equipment & Upgrades</div>
+                <div class="panel-sub" id="current-axe-label">
+                  Starter Axe · 1x chop
+                </div>
+              </div>
+              <div class="panel-badge" id="badge-econ">Eco: Stable</div>
+            </div>
+            <div class="tab-row">
+              <button class="tab-btn active" data-shop-tab="upgrades">
+                Upgrades
+              </button>
+              <button class="tab-btn" data-shop-tab="structures">
+                Structures
+              </button>
+              <button class="tab-btn" data-shop-tab="helpers">
+                AI Helpers
+              </button>
+            </div>
+            <div class="panel-body" id="shop-body"></div>
+          </div>
+
+          <div class="hud-panel" id="stats-panel">
+            <div class="panel-header">
+              <div class="panel-title">World & Player</div>
+              <div class="panel-badge" id="badge-world">Day 1</div>
+            </div>
+            <div class="panel-body" id="stats-body">
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Biome</div>
+                  <div class="item-desc" id="stat-biome">Emerald Grove</div>
+                </div>
+                <div class="item-meta" id="stat-weather">Clear · Morning</div>
+              </div>
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Trees Alive</div>
+                  <div class="item-desc">
+                    Dynamic regrowth based on your structures.
+                  </div>
+                </div>
+                <div class="item-meta" id="stat-trees">0</div>
+              </div>
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Passive Income</div>
+                  <div class="item-desc">Money earned every few seconds.</div>
+                </div>
+                <div class="item-meta" id="stat-passive">$0 / tick</div>
+              </div>
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">AI Helpers</div>
+                  <div class="item-desc">They chop trees for you.</div>
+                </div>
+                <div class="item-meta" id="stat-helpers">0</div>
+              </div>
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Difficulty</div>
+                  <div class="item-desc">Affects regrowth and prices.</div>
+                </div>
+                <div class="item-meta" id="stat-difficulty">Normal</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="right-panel">
+          <div class="hud-panel" id="build-panel">
+            <div class="panel-header">
+              <div class="panel-title">Build & Manage</div>
+              <div class="panel-badge" id="badge-build">Mode: Chop</div>
+            </div>
+            <div class="panel-body" id="build-body">
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Build Mode</div>
+                  <div class="item-desc">
+                    Use <b>B</b> or the button to toggle build mode.
+                  </div>
+                </div>
+                <button class="btn primary" id="btn-toggle-build">
+                  Build: Off
+                </button>
+              </div>
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Sell Logs</div>
+                  <div class="item-desc">
+                    Convert logs into money. Price can be boosted by structures.
+                  </div>
+                </div>
+                <button class="btn" id="btn-sell-logs">Sell All</button>
+              </div>
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Regrow Trees</div>
+                  <div class="item-desc">
+                    Force a wave of new trees (costs money).
+                  </div>
+                </div>
+                <button class="btn" id="btn-regrow">Regrow ($25)</button>
+              </div>
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Auto-Regrow</div>
+                  <div class="item-desc">
+                    Automatically regrow when forest is thin.
+                  </div>
+                </div>
+                <button class="btn" id="btn-toggle-auto-regrow">
+                  Auto: On
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="hud-panel" id="controls-panel">
+            <div class="panel-header">
+              <div class="panel-title">Controls & Tips</div>
+            </div>
+            <div class="panel-body">
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Movement</div>
+                  <div class="item-desc">
+                    WASD / Arrow keys to move, mouse to look.
+                  </div>
+                </div>
+              </div>
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Chop</div>
+                  <div class="item-desc">
+                    Left click while aiming at a tree.
+                  </div>
+                </div>
+              </div>
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Modes</div>
+                  <div class="item-desc">1: Chop · 2: Build · 3: Inspect.</div>
+                </div>
+              </div>
+              <div class="list-item">
+                <div class="list-item-main">
+                  <div class="item-title">Strategy</div>
+                  <div class="item-desc">
+                    Upgrade axe → Storage Shed → Lumber Mill → Helpers.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="bottom-bar" class="hud-panel">
+          <div id="mode-buttons">
+            <button class="mode-btn active" data-mode="chop">Chop</button>
+            <button class="mode-btn" data-mode="build">Build</button>
+            <button class="mode-btn" data-mode="inspect">Inspect</button>
+          </div>
+          <div id="hint-text">
+            Aim at a tree and left-click to chop. Build mode uses logs to place
+            structures.
+          </div>
+        </div>
+
+        <div id="settings-panel" class="hud-panel">
+          <div class="panel-header">
+            <div class="panel-title">Settings</div>
+          </div>
+          <div class="panel-body">
+            <div class="settings-row">
+              <span>Master Volume</span>
+              <input
+                type="range"
+                id="setting-volume"
+                min="0"
+                max="1"
+                step="0.05"
+                value="0.6"
+              />
+            </div>
+            <div class="settings-row">
+              <span>Tree Density</span>
+              <input
+                type="range"
+                id="setting-density"
+                min="20"
+                max="140"
+                step="10"
+                value="60"
+              />
+            </div>
+            <div class="settings-row">
+              <span>High Quality</span>
+              <input type="checkbox" id="setting-hq" checked />
+            </div>
+            <div class="settings-row">
+              <span>Invert Mouse Y</span>
+              <input type="checkbox" id="setting-invert" />
+            </div>
+            <div class="settings-row">
+              <span>FOV</span>
+              <input
+                type="range"
+                id="setting-fov"
+                min="60"
+                max="95"
+                step="1"
+                value="70"
+              />
+            </div>
+            <div class="settings-row">
+              <span>Mouse Sens</span>
+              <input
+                type="range"
+                id="setting-sens"
+                min="0.5"
+                max="2"
+                step="0.05"
+                value="1"
+              />
+            </div>
+            <div class="settings-row">
+              <span>Difficulty</span>
+              <select
+                id="setting-difficulty"
+                style="
+                  font-size: 11px;
+                  background: rgba(0, 0, 0, 0.4);
+                  color: var(--text);
+                  border-radius: 999px;
+                  border: 1px solid var(--border);
+                  padding: 2px 6px;
+                "
+              >
+                <option value="easy">Easy</option>
+                <option value="normal" selected>Normal</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div id="log-panel" class="hud-panel">
+          <div class="panel-header">
+            <div class="panel-title">Event Log</div>
+          </div>
+          <div class="panel-body" id="log-body"></div>
+        </div>
+
+        <div id="crosshair"></div>
+
+        <div id="mini-map">
+          <div id="mini-map-inner">
+            <div id="mini-map-trees"></div>
+            <div id="mini-map-player"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /* -------------------------------------------------------
+   Perchance-style helpers (lists, random, save, config)
+------------------------------------------------------- */
+
+      const perchanceLists = {
+        treeTypes: ["Oak", "Pine", "Birch", "Maple", "Spruce"],
+        treeQualities: ["normal", "tough", "rich", "cursed", "ancient"],
+        equipmentUpgrades: [
+          { name: "Stone Axe", desc: "+10% chop speed", cost: 50, mult: 1.1 },
+          { name: "Iron Axe", desc: "+25% chop speed", cost: 150, mult: 1.25 },
+          { name: "Steel Axe", desc: "+50% chop speed", cost: 400, mult: 1.5 },
+          {
+            name: "Titanium Axe",
+            desc: "+90% chop speed",
+            cost: 900,
+            mult: 1.9,
+          },
+          {
+            name: "Mythic Axe",
+            desc: "+150% chop speed",
+            cost: 2000,
+            mult: 2.5,
+          },
+        ],
+        structureTypes: [
+          {
+            name: "Log Cabin",
+            desc: "+5% passive income",
+            logCost: 50,
+            effect: "passiveIncome",
+            value: 0.05,
+          },
+          {
+            name: "Storage Shed",
+            desc: "+25% log capacity",
+            logCost: 50,
+            effect: "capacity",
+            value: 25,
+          },
+          {
+            name: "Lumber Mill",
+            desc: "Doubles sell price",
+            logCost: 200,
+            effect: "sellMultiplier",
+            value: 2,
+          },
+          {
+            name: "Watch Tower",
+            desc: "+20% move speed",
+            logCost: 150,
+            effect: "moveSpeed",
+            value: 0.2,
+          },
+          {
+            name: "Shrine of Growth",
+            desc: "Trees regrow faster",
+            logCost: 250,
+            effect: "regrowSpeed",
+            value: 0.4,
+          },
+        ],
+        aiHelperTypes: [
+          {
+            name: "Rookie Lumberjack",
+            desc: "Slow, cheap helper",
+            cost: 120,
+            rate: 0.4,
+            color: 0x90caf9,
+          },
+          {
+            name: "Skilled Forester",
+            desc: "Balanced helper",
+            cost: 320,
+            rate: 0.9,
+            color: 0x81c784,
+          },
+          {
+            name: "Spirit of the Woods",
+            desc: "Fast, expensive helper",
+            cost: 900,
+            rate: 1.8,
+            color: 0xffb74d,
+          },
+        ],
+        weatherPatterns: ["Clear", "Cloudy", "Rainy", "Foggy", "Windy"],
+        timeOfDay: ["Dawn", "Morning", "Noon", "Evening", "Night"],
+      };
+
+      function pcRandom(listName) {
+        const list = perchanceLists[listName];
+        if (!list || !list.length) return null;
+        return list[Math.floor(Math.random() * list.length)];
+      }
+
+      function pcSave(key, data) {
+        try {
+          localStorage.setItem("treeHustler_" + key, JSON.stringify(data));
+        } catch (e) {}
+      }
+
+      function pcLoad(key, fallback) {
+        try {
+          const raw = localStorage.getItem("treeHustler_" + key);
+          if (!raw) return fallback;
+          return JSON.parse(raw);
+        } catch (e) {
+          return fallback;
+        }
+      }
+
+      /* -------------------------------------------------------
+   Core game state & config
+------------------------------------------------------- */
+
+      const state = {
+        money: 0,
+        logs: 0,
+        maxLogs: 50,
+        energy: 1,
+        level: 1,
+        xp: 0,
+        xpToNext: 100,
+        axeMultiplier: 1,
+        axeName: "Starter Axe",
+        sellPricePerLog: 2,
+        passiveIncomeBase: 0,
+        passiveIncomeMultiplier: 1,
+        moveSpeedBase: 6,
+        moveSpeedMultiplier: 1,
+        regrowSpeedMultiplier: 1,
+        structures: [],
+        helpers: [],
+        helperModels: [],
+        mode: "chop",
+        buildMode: false,
+        selectedShopTab: "upgrades",
+        autoRegrow: true,
+        world: {
+          biome: "Emerald Grove",
+          weather: pcRandom("weatherPatterns"),
+          timeOfDay: pcRandom("timeOfDay"),
+          treeCount: 0,
+          day: 1,
+          timeAccumulator: 0,
+        },
+        settings: {
+          volume: 0.6,
+          density: 60,
+          highQuality: true,
+          invertY: false,
+          fov: 70,
+          sens: 1,
+          difficulty: "normal",
+        },
+      };
+
+      const gameConfig = {
+        baseChopDamage: 1,
+        baseTreeHealth: 3,
+        maxTrees: 160,
+        worldRadius: 40,
+        helperTickInterval: 2000,
+        passiveTickInterval: 4000,
+        regrowInterval: 8000,
+      };
+
+      let scene, camera, renderer;
+      let raycaster;
+      let player = {
+        x: 0,
+        y: 1.6,
+        z: 6,
+        yaw: 0,
+        pitch: 0,
+      };
+      let keys = {};
+      let trees = [];
+      let structures3D = [];
+      let lastTime = performance.now();
+      let helperTimer = 0;
+      let passiveTimer = 0;
+      let regrowTimer = 0;
+
+      /* -------------------------------------------------------
+   Logging & UI helpers
+------------------------------------------------------- */
+
+      const elMoney = document.getElementById("stat-money");
+      const elLogs = document.getElementById("stat-logs");
+      const elEnergy = document.getElementById("stat-energy");
+      const elLevel = document.getElementById("stat-level");
+      const elBiome = document.getElementById("stat-biome");
+      const elWeather = document.getElementById("stat-weather");
+      const elTrees = document.getElementById("stat-trees");
+      const elPassive = document.getElementById("stat-passive");
+      const elHelpers = document.getElementById("stat-helpers");
+      const elShopBody = document.getElementById("shop-body");
+      const elShopTabs = document.querySelectorAll("[data-shop-tab]");
+      const elCurrentAxeLabel = document.getElementById("current-axe-label");
+      const elBuildToggle = document.getElementById("btn-toggle-build");
+      const elSellLogs = document.getElementById("btn-sell-logs");
+      const elRegrow = document.getElementById("btn-regrow");
+      const elModeButtons = document.querySelectorAll(".mode-btn");
+      const elHint = document.getElementById("hint-text");
+      const elLogBody = document.getElementById("log-body");
+      const elCrosshair = document.getElementById("crosshair");
+      const elSave = document.getElementById("btn-save");
+      const elLoad = document.getElementById("btn-load");
+      const elSettingVolume = document.getElementById("setting-volume");
+      const elSettingDensity = document.getElementById("setting-density");
+      const elSettingHQ = document.getElementById("setting-hq");
+      const elSettingInvert = document.getElementById("setting-invert");
+      const elSettingFov = document.getElementById("setting-fov");
+      const elSettingSens = document.getElementById("setting-sens");
+      const elSettingDifficulty = document.getElementById("setting-difficulty");
+      const elXpBar = document.getElementById("xp-bar");
+      const elBadgeWorld = document.getElementById("badge-world");
+      const elBadgeBuild = document.getElementById("badge-build");
+      const elBadgeEcon = document.getElementById("badge-econ");
+      const elStatDifficulty = document.getElementById("stat-difficulty");
+      const elAutoRegrow = document.getElementById("btn-toggle-auto-regrow");
+      const elMiniMapTrees = document.getElementById("mini-map-trees");
+      const elMiniMapPlayer = document.getElementById("mini-map-player");
+
+      function logEvent(text, highlight) {
+        const div = document.createElement("div");
+        div.className = "log-entry";
+        if (highlight) {
+          div.innerHTML = `<span>${highlight}</span> ${text}`;
+        } else {
+          div.textContent = text;
+        }
+        elLogBody.appendChild(div);
+        elLogBody.scrollTop = elLogBody.scrollHeight;
+      }
+
+      function updateHUD() {
+        elMoney.textContent = "$" + Math.floor(state.money);
+        elLogs.textContent = `${state.logs} / ${state.maxLogs}`;
+        elEnergy.textContent = Math.round(state.energy * 100) + "%";
+        elLevel.textContent = state.level;
+        elBiome.textContent = state.world.biome;
+        elWeather.textContent = `${state.world.weather} · ${state.world.timeOfDay}`;
+        elTrees.textContent = state.world.treeCount;
+        const passive = state.passiveIncomeBase * state.passiveIncomeMultiplier;
+        elPassive.textContent = "$" + passive.toFixed(1) + " / tick";
+        elHelpers.textContent = state.helpers.length;
+        elCurrentAxeLabel.textContent = `${state.axeName} · ${state.axeMultiplier.toFixed(2)}x chop`;
+        elBuildToggle.textContent =
+          "Build: " + (state.buildMode ? "On" : "Off");
+        elModeButtons.forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.mode === state.mode);
+        });
+        elBadgeBuild.textContent =
+          "Mode: " + state.mode.charAt(0).toUpperCase() + state.mode.slice(1);
+        elAutoRegrow.textContent = "Auto: " + (state.autoRegrow ? "On" : "Off");
+        elStatDifficulty.textContent =
+          state.settings.difficulty.charAt(0).toUpperCase() +
+          state.settings.difficulty.slice(1);
+
+        const xpRatio = state.xp / state.xpToNext;
+        elXpBar.style.width = Math.min(1, xpRatio) * 100 + "%";
+
+        const econ = state.sellPricePerLog;
+        elBadgeEcon.textContent =
+          econ >= 4 ? "Eco: Hot" : econ >= 2.5 ? "Eco: Good" : "Eco: Stable";
+      }
+
+      /* -------------------------------------------------------
+   Shop & build UI
+------------------------------------------------------- */
+
+      function renderShop() {
+        elShopBody.innerHTML = "";
+        if (state.selectedShopTab === "upgrades") {
+          perchanceLists.equipmentUpgrades.forEach((upg) => {
+            const item = document.createElement("div");
+            item.className = "list-item";
+            item.innerHTML = `
+        <div class="list-item-main">
+          <div class="item-title">${upg.name}</div>
+          <div class="item-desc">${upg.desc}</div>
+          <div class="item-meta">$${upg.cost}</div>
+        </div>
+        <button class="btn primary">Buy</button>
+      `;
+            const btn = item.querySelector("button");
+            btn.disabled =
+              state.money < upg.cost || upg.mult <= state.axeMultiplier;
+            btn.addEventListener("click", () => {
+              if (state.money >= upg.cost && upg.mult > state.axeMultiplier) {
+                state.money -= upg.cost;
+                state.axeMultiplier = upg.mult;
+                state.axeName = upg.name;
+                logEvent(`Upgraded to ${upg.name}!`, "Upgrade:");
+                updateHUD();
+                renderShop();
+              }
+            });
+            elShopBody.appendChild(item);
+          });
+        } else if (state.selectedShopTab === "structures") {
+          perchanceLists.structureTypes.forEach((s) => {
+            const item = document.createElement("div");
+            item.className = "list-item";
+            item.innerHTML = `
+        <div class="list-item-main">
+          <div class="item-title">${s.name}</div>
+          <div class="item-desc">${s.desc}</div>
+          <div class="item-meta">${s.logCost} logs</div>
+        </div>
+        <button class="btn primary">Queue</button>
+      `;
+            const btn = item.querySelector("button");
+            btn.disabled = state.logs < s.logCost;
+            btn.addEventListener("click", () => {
+              if (state.logs >= s.logCost) {
+                state.logs -= s.logCost;
+                queueStructureBuild(s);
+                logEvent(
+                  `Queued ${s.name} for building. Place it in Build mode.`,
+                  "Build:",
+                );
+                updateHUD();
+                renderShop();
+              }
+            });
+            elShopBody.appendChild(item);
+          });
+        } else if (state.selectedShopTab === "helpers") {
+          perchanceLists.aiHelperTypes.forEach((h) => {
+            const item = document.createElement("div");
+            item.className = "list-item";
+            item.innerHTML = `
+        <div class="list-item-main">
+          <div class="item-title">${h.name}</div>
+          <div class="item-desc">${h.desc}</div>
+          <div class="item-meta">$${h.cost}</div>
+        </div>
+        <button class="btn primary">Hire</button>
+      `;
+            const btn = item.querySelector("button");
+            btn.disabled = state.money < h.cost;
+            btn.addEventListener("click", () => {
+              if (state.money >= h.cost) {
+                state.money -= h.cost;
+                addHelper(h);
+                logEvent(
+                  `Hired ${h.name}. They will chop trees for you.`,
+                  "Helper:",
+                );
+                updateHUD();
+                renderShop();
+              }
+            });
+            elShopBody.appendChild(item);
+          });
+        }
+      }
+
+      document.querySelectorAll("[data-shop-tab]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.selectedShopTab = btn.dataset.shopTab;
+          document
+            .querySelectorAll("[data-shop-tab]")
+            .forEach((b) => b.classList.toggle("active", b === btn));
+          renderShop();
+        });
+      });
+
+      function queueStructureBuild(structType) {
+        state.structures.push({
+          type: structType.name,
+          effect: structType.effect,
+          value: structType.value,
+          placed: false,
+        });
+      }
+
+      function applyStructureEffects() {
+        state.passiveIncomeBase = 0;
+        state.maxLogs = 50;
+        state.sellPricePerLog = 2;
+        state.moveSpeedMultiplier = 1;
+        state.regrowSpeedMultiplier = 1;
+
+        state.structures.forEach((s) => {
+          if (!s.placed) return;
+          if (s.effect === "passiveIncome") {
+            state.passiveIncomeBase += 1 * s.value * 10;
+          } else if (s.effect === "capacity") {
+            state.maxLogs += s.value;
+          } else if (s.effect === "sellMultiplier") {
+            state.sellPricePerLog *= s.value;
+          } else if (s.effect === "moveSpeed") {
+            state.moveSpeedMultiplier += s.value;
+          } else if (s.effect === "regrowSpeed") {
+            state.regrowSpeedMultiplier += s.value;
+          }
+        });
+      }
+
+      /* -------------------------------------------------------
+   AI helpers (with 3D models)
+------------------------------------------------------- */
+
+      function createHelperMesh(color) {
+        const group = new THREE.Group();
+
+        const bodyGeo = new THREE.BoxGeometry(0.4, 0.6, 0.3);
+        const bodyMat = new THREE.MeshStandardMaterial({
+          color,
+          roughness: 0.6,
+        });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.6;
+        group.add(body);
+
+        const headGeo = new THREE.SphereGeometry(0.18, 12, 12);
+        const headMat = new THREE.MeshStandardMaterial({
+          color: 0xfff9c4,
+          roughness: 0.7,
+        });
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.position.y = 1.1;
+        group.add(head);
+
+        const hatGeo = new THREE.ConeGeometry(0.22, 0.25, 8);
+        const hatMat = new THREE.MeshStandardMaterial({
+          color: 0x5d4037,
+          roughness: 0.8,
+        });
+        const hat = new THREE.Mesh(hatGeo, hatMat);
+        hat.position.y = 1.3;
+        group.add(hat);
+
+        return group;
+      }
+
+      function addHelper(helperType) {
+        const helper = {
+          name: helperType.name,
+          rate: helperType.rate,
+          cooldown: 0,
+          targetTree: null,
+          speed: 3 + helperType.rate,
+          mesh: null,
+        };
+        const mesh = createHelperMesh(helperType.color);
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 3 + Math.random() * 4;
+        mesh.position.set(
+          Math.cos(angle) * radius,
+          0,
+          Math.sin(angle) * radius,
+        );
+        scene.add(mesh);
+        helper.mesh = mesh;
+        state.helpers.push(helper);
+        state.helperModels.push(helper);
+      }
+
+      /* -------------------------------------------------------
+   3D world setup
+------------------------------------------------------- */
+
+      function init3D() {
+        const canvas = document.getElementById("game-canvas");
+        renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x020408, 1);
+
+        scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x0b1a0b, 0.03);
+
+        camera = new THREE.PerspectiveCamera(
+          state.settings.fov,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          200,
+        );
+        camera.position.set(player.x, player.y, player.z);
+
+        const hemi = new THREE.HemisphereLight(0xcfd8dc, 0x263238, 0.9);
+        scene.add(hemi);
+
+        const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+        dir.position.set(10, 20, 10);
+        scene.add(dir);
+
+        const groundGeo = new THREE.CircleGeometry(gameConfig.worldRadius, 64);
+        const groundMat = new THREE.MeshStandardMaterial({
+          color: 0x1b5e20,
+          roughness: 0.9,
+          metalness: 0.0,
+        });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        const skyGeo = new THREE.SphereGeometry(120, 32, 32);
+        const skyMat = new THREE.MeshBasicMaterial({
+          color: 0x0d47a1,
+          side: THREE.BackSide,
+        });
+        const sky = new THREE.Mesh(skyGeo, skyMat);
+        scene.add(sky);
+
+        raycaster = new THREE.Raycaster();
+
+        spawnInitialTrees();
+        rebuildMiniMap();
+
+        window.addEventListener("resize", onWindowResize);
+        document.addEventListener("keydown", onKeyDown);
+        document.addEventListener("keyup", onKeyUp);
+        document.addEventListener("mousedown", onMouseDown);
+        document.addEventListener("mousemove", onMouseMove);
+
+        canvas.addEventListener("click", () => {
+          canvas.requestPointerLock?.();
+        });
+
+        logEvent(
+          "Welcome to Tree Hustler. Chop trees, sell logs, and build your forest empire!",
+          "Welcome:",
+        );
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      /* -------------------------------------------------------
+   Trees & regrowth
+------------------------------------------------------- */
+
+      function createTreeMesh(type, quality) {
+        const group = new THREE.Group();
+
+        const trunkHeight = 1.4 + Math.random() * 0.6;
+        const trunkGeo = new THREE.CylinderGeometry(0.15, 0.25, trunkHeight, 6);
+        const trunkMat = new THREE.MeshStandardMaterial({
+          color: 0x5d4037,
+          roughness: 0.9,
+        });
+        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+        trunk.position.y = trunkHeight / 2;
+        group.add(trunk);
+
+        const foliageGeo = new THREE.ConeGeometry(0.9, 1.6, 8);
+        const foliageMat = new THREE.MeshStandardMaterial({
+          color: 0x2e7d32,
+          roughness: 0.7,
+        });
+        const foliage = new THREE.Mesh(foliageGeo, foliageMat);
+        foliage.position.y = trunkHeight + 0.8;
+        group.add(foliage);
+
+        if (quality === "ancient" || quality === "cursed") {
+          foliageMat.color.setHex(quality === "ancient" ? 0x558b2f : 0x4a148c);
+          trunkMat.color.setHex(quality === "ancient" ? 0x4e342e : 0x311b92);
+        } else if (quality === "rich") {
+          foliageMat.color.setHex(0x43a047);
+        }
+
+        return group;
+      }
+
+      function spawnTree() {
+        if (trees.length >= gameConfig.maxTrees) return;
+
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 4 + Math.random() * (gameConfig.worldRadius - 6);
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+
+        const type = pcRandom("treeTypes");
+        const quality = pcRandom("treeQualities");
+
+        const healthMult =
+          quality === "tough"
+            ? 1.8
+            : quality === "rich"
+              ? 1.2
+              : quality === "ancient"
+                ? 2.2
+                : 1;
+        const logYieldMult =
+          quality === "rich" ? 1.8 : quality === "ancient" ? 2.5 : 1;
+
+        const mesh = createTreeMesh(type, quality);
+        mesh.position.set(x, 0, z);
+        scene.add(mesh);
+
+        const tree = {
+          mesh,
+          type,
+          quality,
+          health: gameConfig.baseTreeHealth * healthMult,
+          maxHealth: gameConfig.baseTreeHealth * healthMult,
+          logYield: Math.round(3 * logYieldMult),
+          alive: true,
+        };
+        trees.push(tree);
+        state.world.treeCount = trees.filter((t) => t.alive).length;
+      }
+
+      function spawnInitialTrees() {
+        const count = state.settings.density;
+        for (let i = 0; i < count; i++) {
+          spawnTree();
+        }
+      }
+
+      function regrowTrees(force) {
+        const target = state.settings.density;
+        const alive = trees.filter((t) => t.alive).length;
+        const missing = target - alive;
+        if (missing <= 0) return;
+
+        const difficultyFactor =
+          state.settings.difficulty === "easy"
+            ? 1.3
+            : state.settings.difficulty === "hard"
+              ? 0.7
+              : 1;
+
+        const factor =
+          (force ? 1.5 : state.regrowSpeedMultiplier) * difficultyFactor;
+        const toSpawn = Math.max(0, Math.round(missing * factor));
+        for (let i = 0; i < toSpawn; i++) spawnTree();
+        logEvent(`Regrew ${toSpawn} trees.`, "World:");
+        rebuildMiniMap();
+      }
+
+      /* -------------------------------------------------------
+   Input & camera
+------------------------------------------------------- */
+
+      function onKeyDown(e) {
+        keys[e.code] = true;
+        if (e.code === "Digit1") setMode("chop");
+        if (e.code === "Digit2") setMode("build");
+        if (e.code === "Digit3") setMode("inspect");
+        if (e.code === "KeyB") toggleBuildMode();
+      }
+
+      function onKeyUp(e) {
+        keys[e.code] = false;
+      }
+
+      function onMouseMove(e) {
+        if (document.pointerLockElement === renderer.domElement) {
+          const baseSensitivity = 0.002 * state.settings.sens;
+          player.yaw -= e.movementX * baseSensitivity;
+          player.pitch -=
+            (state.settings.invertY ? -1 : 1) * e.movementY * baseSensitivity;
+          const limit = Math.PI / 2 - 0.1;
+          player.pitch = Math.max(-limit, Math.min(limit, player.pitch));
+        }
+      }
+
+      function onMouseDown(e) {
+        if (e.button !== 0) return;
+        if (state.mode === "chop") {
+          tryChop();
+        } else if (state.mode === "build") {
+          tryPlaceStructure();
+        } else if (state.mode === "inspect") {
+          tryInspect();
+        }
+      }
+
+      function setMode(mode) {
+        state.mode = mode;
+        elHint.textContent =
+          mode === "chop"
+            ? "Aim at a tree and left-click to chop."
+            : mode === "build"
+              ? "Left-click on the ground to place queued structures."
+              : "Left-click objects to inspect them.";
+        updateHUD();
+      }
+
+      function toggleBuildMode() {
+        state.buildMode = !state.buildMode;
+        if (state.buildMode) setMode("build");
+        updateHUD();
+      }
+
+      /* -------------------------------------------------------
+   Raycasting helpers
+------------------------------------------------------- */
+
+      function getRayFromCamera() {
+        raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+        return raycaster;
+      }
+
+      function findTreeInCrosshair() {
+        const ray = getRayFromCamera();
+        const meshes = trees.filter((t) => t.alive).map((t) => t.mesh);
+        const hits = ray.intersectObjects(meshes, true);
+        if (!hits.length) return null;
+        const mesh = hits[0].object;
+        return trees.find(
+          (t) => t.mesh === mesh || t.mesh.children.includes(mesh),
+        );
+      }
+
+      function findGroundPoint() {
+        const ray = getRayFromCamera();
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const point = new THREE.Vector3();
+        ray.ray.intersectPlane(plane, point);
+        return point;
+      }
+
+      /* -------------------------------------------------------
+   Chop / build / inspect logic
+------------------------------------------------------- */
+
+      function tryChop() {
+        const tree = findTreeInCrosshair();
+        if (!tree || !tree.alive) return;
+
+        const damage = gameConfig.baseChopDamage * state.axeMultiplier;
+        tree.health -= damage;
+        state.energy = Math.max(0, state.energy - 0.02);
+
+        logEvent(
+          `Chopped ${tree.type} (${tree.quality}), -${damage.toFixed(1)} HP.`,
+          "Chop:",
+        );
+
+        if (tree.health <= 0) {
+          fellTree(tree);
+        }
+
+        updateHUD();
+      }
+
+      function fellTree(tree) {
+        tree.alive = false;
+        scene.remove(tree.mesh);
+        const logsGained = Math.min(tree.logYield, state.maxLogs - state.logs);
+        state.logs += logsGained;
+        state.xp += 10;
+        state.world.treeCount = trees.filter((t) => t.alive).length;
+        logEvent(
+          `Felled a ${tree.quality} ${tree.type}, gained ${logsGained} logs.`,
+          "Tree:",
+        );
+        checkLevelUp();
+        rebuildMiniMap();
+      }
+
+      function tryPlaceStructure() {
+        const pending = state.structures.find((s) => !s.placed);
+        if (!pending) {
+          logEvent(
+            "No queued structures. Queue one in the Structures tab.",
+            "Build:",
+          );
+          return;
+        }
+        const point = findGroundPoint();
+        if (!point) return;
+
+        const dist = Math.sqrt(point.x * point.x + point.z * point.z);
+        if (dist > gameConfig.worldRadius - 2) {
+          logEvent("Too far from center to build here.", "Build:");
+          return;
+        }
+
+        const mesh = createStructureMesh(pending.type);
+        mesh.position.copy(point);
+        scene.add(mesh);
+        structures3D.push({ mesh, data: pending });
+
+        pending.placed = true;
+        applyStructureEffects();
+        logEvent(`Placed ${pending.type}.`, "Build:");
+        updateHUD();
+      }
+
+      function createStructureMesh(type) {
+        const group = new THREE.Group();
+        const baseGeo = new THREE.BoxGeometry(1.4, 0.3, 1.4);
+        const baseMat = new THREE.MeshStandardMaterial({
+          color: 0x4e342e,
+          roughness: 0.9,
+        });
+        const base = new THREE.Mesh(baseGeo, baseMat);
+        base.position.y = 0.15;
+        group.add(base);
+
+        const bodyGeo = new THREE.BoxGeometry(1.2, 0.9, 1.2);
+        const bodyMat = new THREE.MeshStandardMaterial({
+          color: 0x8d6e63,
+          roughness: 0.8,
+        });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.75;
+        group.add(body);
+
+        const roofGeo = new THREE.ConeGeometry(1.1, 0.7, 4);
+        const roofMat = new THREE.MeshStandardMaterial({
+          color: 0xffb300,
+          roughness: 0.6,
+        });
+        const roof = new THREE.Mesh(roofGeo, roofMat);
+        roof.position.y = 1.3;
+        roof.rotation.y = Math.PI / 4;
+        group.add(roof);
+
+        if (type === "Lumber Mill") {
+          bodyMat.color.setHex(0x455a64);
+          roofMat.color.setHex(0xff7043);
+        } else if (type === "Storage Shed") {
+          bodyMat.color.setHex(0x6d4c41);
+        } else if (type === "Watch Tower") {
+          body.scale.y = 1.6;
+          body.position.y = 1.1;
+          roof.position.y = 1.8;
+        } else if (type === "Shrine of Growth") {
+          roofMat.color.setHex(0x7e57c2);
+        }
+
+        return group;
+      }
+
+      function tryInspect() {
+        const tree = findTreeInCrosshair();
+        if (tree && tree.alive) {
+          logEvent(
+            `Inspecting ${tree.quality} ${tree.type} · HP ${tree.health.toFixed(1)}/${tree.maxHealth.toFixed(
+              1,
+            )}, yields ${tree.logYield} logs.`,
+            "Inspect:",
+          );
+          return;
+        }
+
+        const ray = getRayFromCamera();
+        const meshes = structures3D.map((s) => s.mesh);
+        const hits = ray.intersectObjects(meshes, true);
+        if (hits.length) {
+          const mesh = hits[0].object;
+          const s = structures3D.find(
+            (st) => st.mesh === mesh || st.mesh.children.includes(mesh),
+          );
+          if (s) {
+            logEvent(
+              `Inspecting ${s.data.type} · Effect: ${s.data.effect} +${s.data.value}`,
+              "Inspect:",
+            );
+            return;
+          }
+        }
+
+        logEvent("Nothing interesting under the crosshair.", "Inspect:");
+      }
+
+      /* -------------------------------------------------------
+   Selling, regrow, leveling
+------------------------------------------------------- */
+
+      elSellLogs.addEventListener("click", () => {
+        if (state.logs <= 0) {
+          logEvent("No logs to sell.", "Sell:");
+          return;
+        }
+        const total = state.logs * state.sellPricePerLog;
+        state.money += total;
+        logEvent(`Sold ${state.logs} logs for $${total.toFixed(1)}.`, "Sell:");
+        state.logs = 0;
+        updateHUD();
+      });
+
+      elRegrow.addEventListener("click", () => {
+        if (state.money < 25) {
+          logEvent("You need $25 to force regrowth.", "World:");
+          return;
+        }
+        state.money -= 25;
+        regrowTrees(true);
+        updateHUD();
+      });
+
+      elAutoRegrow.addEventListener("click", () => {
+        state.autoRegrow = !state.autoRegrow;
+        updateHUD();
+      });
+
+      function checkLevelUp() {
+        while (state.xp >= state.xpToNext) {
+          state.xp -= state.xpToNext;
+          state.level++;
+          state.xpToNext = Math.round(state.xpToNext * 1.4);
+          state.energy = 1;
+          logEvent(`Level up! You are now level ${state.level}.`, "Level:");
+        }
+      }
+
+      /* -------------------------------------------------------
+   Movement & update loop
+------------------------------------------------------- */
+
+      function updatePlayer(dt) {
+        const speed = state.moveSpeedBase * state.moveSpeedMultiplier;
+        let forward = 0;
+        let right = 0;
+        if (keys["KeyW"] || keys["ArrowUp"]) forward += 1;
+        if (keys["KeyS"] || keys["ArrowDown"]) forward -= 1;
+        // your requested change: A moves left, D moves right (signs flipped vs original)
+        if (keys["KeyA"] || keys["ArrowLeft"]) right += 1;
+        if (keys["KeyD"] || keys["ArrowRight"]) right -= 1;
+
+        const len = Math.hypot(forward, right);
+        if (len > 0) {
+          forward /= len;
+          right /= len;
+        }
+
+        const yaw = player.yaw;
+        const dx =
+          (Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed * dt;
+        const dz =
+          (Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed * dt;
+
+        player.x += dx;
+        player.z += dz;
+
+        const dist = Math.sqrt(player.x * player.x + player.z * player.z);
+        if (dist > gameConfig.worldRadius - 2) {
+          const factor = (gameConfig.worldRadius - 2) / dist;
+          player.x *= factor;
+          player.z *= factor;
+        }
+
+        camera.position.set(player.x, player.y, player.z);
+        const dir = new THREE.Vector3(
+          Math.sin(yaw) * Math.cos(player.pitch),
+          Math.sin(player.pitch),
+          Math.cos(yaw) * Math.cos(player.pitch),
+        );
+        camera.lookAt(camera.position.clone().add(dir));
+      }
+
+      function updateHelpers(dt) {
+        helperTimer += dt * 1000;
+        if (helperTimer < gameConfig.helperTickInterval) return;
+        helperTimer = 0;
+
+        state.helperModels.forEach((h) => {
+          if (!h.mesh) return;
+          if (!h.targetTree || !h.targetTree.alive) {
+            h.targetTree = trees.find((t) => t.alive);
+            if (!h.targetTree) return;
+          }
+
+          const targetPos = h.targetTree.mesh.position;
+          const pos = h.mesh.position;
+          const dir = new THREE.Vector3().subVectors(targetPos, pos);
+          const dist = dir.length();
+          if (dist > 0.1) {
+            dir.normalize();
+            const step = h.speed * dt;
+            pos.addScaledVector(dir, Math.min(step, dist));
+            h.mesh.position.copy(pos);
+          } else {
+            h.targetTree.health -= 1.2;
+            if (h.targetTree.health <= 0) {
+              fellTree(h.targetTree);
+              h.targetTree = null;
+            }
+          }
+        });
+
+        updateHUD();
+      }
+
+      function updatePassive(dt) {
+        passiveTimer += dt * 1000;
+        if (passiveTimer < gameConfig.passiveTickInterval) return;
+        passiveTimer = 0;
+
+        const passive = state.passiveIncomeBase * state.passiveIncomeMultiplier;
+        if (passive > 0) {
+          state.money += passive;
+          logEvent(`Passive income: +$${passive.toFixed(1)}.`, "Income:");
+          updateHUD();
+        }
+      }
+
+      function updateRegrow(dt) {
+        regrowTimer += dt * 1000;
+        if (regrowTimer >= gameConfig.regrowInterval) {
+          regrowTimer = 0;
+          const alive = trees.filter((t) => t.alive).length;
+          const threshold = state.settings.density * 0.6;
+          if (state.autoRegrow && alive < threshold) {
+            regrowTrees(false);
+          }
+        }
+      }
+
+      function updateWorldTime(dt) {
+        state.world.timeAccumulator += dt;
+        if (state.world.timeAccumulator >= 60) {
+          state.world.timeAccumulator = 0;
+          state.world.day++;
+          state.world.timeOfDay = pcRandom("timeOfDay");
+          state.world.weather = pcRandom("weatherPatterns");
+          elBadgeWorld.textContent = "Day " + state.world.day;
+        }
+      }
+
+      /* -------------------------------------------------------
+   Crosshair & minimap
+------------------------------------------------------- */
+
+      function updateCrosshairHighlight() {
+        const tree = findTreeInCrosshair();
+        elCrosshair.classList.toggle("highlight", !!tree);
+      }
+
+      function rebuildMiniMap() {
+        elMiniMapTrees.innerHTML = "";
+        const radius = gameConfig.worldRadius;
+        trees.forEach((t) => {
+          if (!t.alive) return;
+          const dot = document.createElement("div");
+          dot.className = "mini-tree";
+          const nx = (t.mesh.position.x / radius) * 0.5 + 0.5;
+          const nz = (t.mesh.position.z / radius) * 0.5 + 0.5;
+          dot.style.left = nx * 100 + "%";
+          dot.style.top = nz * 100 + "%";
+          elMiniMapTrees.appendChild(dot);
+        });
+      }
+
+      function updateMiniMapPlayer() {
+        const radius = gameConfig.worldRadius;
+        const nx = (player.x / radius) * 0.5 + 0.5;
+        const nz = (player.z / radius) * 0.5 + 0.5;
+        elMiniMapPlayer.style.left = nx * 100 + "%";
+        elMiniMapPlayer.style.top = nz * 100 + "%";
+      }
+
+      /* -------------------------------------------------------
+   Settings & save/load
+------------------------------------------------------- */
+
+      elSettingVolume.addEventListener("input", () => {
+        state.settings.volume = parseFloat(elSettingVolume.value);
+      });
+
+      elSettingDensity.addEventListener("input", () => {
+        state.settings.density = parseInt(elSettingDensity.value, 10);
+      });
+
+      elSettingHQ.addEventListener("change", () => {
+        state.settings.highQuality = elSettingHQ.checked;
+        renderer.setPixelRatio(
+          state.settings.highQuality ? window.devicePixelRatio : 1,
+        );
+      });
+
+      elSettingInvert.addEventListener("change", () => {
+        state.settings.invertY = elSettingInvert.checked;
+      });
+
+      elSettingFov.addEventListener("input", () => {
+        state.settings.fov = parseInt(elSettingFov.value, 10);
+        camera.fov = state.settings.fov;
+        camera.updateProjectionMatrix();
+      });
+
+      elSettingSens.addEventListener("input", () => {
+        state.settings.sens = parseFloat(elSettingSens.value);
+      });
+
+      elSettingDifficulty.addEventListener("change", () => {
+        state.settings.difficulty = elSettingDifficulty.value;
+        updateHUD();
+      });
+
+      elBuildToggle.addEventListener("click", toggleBuildMode);
+
+      elModeButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          setMode(btn.dataset.mode);
+        });
+      });
+
+      elSave.addEventListener("click", () => {
+        const saveData = {
+          state,
+          trees: trees
+            .filter((t) => t.alive)
+            .map((t) => ({
+              type: t.type,
+              quality: t.quality,
+              health: t.health,
+              maxHealth: t.maxHealth,
+              logYield: t.logYield,
+              position: t.mesh.position.toArray(),
+            })),
+          structures: state.structures,
+          helpers: state.helpers.map((h) => ({
+            name: h.name,
+            rate: h.rate,
+            speed: h.speed,
+            position: h.mesh ? h.mesh.position.toArray() : [0, 0, 0],
+          })),
+        };
+        pcSave("save", saveData);
+        logEvent("Game saved.", "Save:");
+      });
+
+      elLoad.addEventListener("click", () => {
+        const data = pcLoad("save", null);
+        if (!data) {
+          logEvent("No save found.", "Save:");
+          return;
+        }
+        loadFromData(data);
+        logEvent("Game loaded.", "Save:");
+      });
+
+      function loadFromData(data) {
+        Object.assign(state, data.state);
+
+        trees.forEach((t) => scene.remove(t.mesh));
+        trees = [];
+        data.trees.forEach((t) => {
+          const mesh = createTreeMesh(t.type, t.quality);
+          mesh.position.fromArray(t.position);
+          scene.add(mesh);
+          trees.push({
+            mesh,
+            type: t.type,
+            quality: t.quality,
+            health: t.health,
+            maxHealth: t.maxHealth,
+            logYield: t.logYield,
+            alive: true,
+          });
+        });
+
+        structures3D.forEach((s) => scene.remove(s.mesh));
+        structures3D = [];
+        state.structures = data.structures || [];
+        state.structures.forEach((s) => {
+          if (!s.placed) return;
+          const mesh = createStructureMesh(s.type);
+          const angle = Math.random() * Math.PI * 2;
+          const radius = 6 + Math.random() * 10;
+          mesh.position.set(
+            Math.cos(angle) * radius,
+            0,
+            Math.sin(angle) * radius,
+          );
+          scene.add(mesh);
+          structures3D.push({ mesh, data: s });
+        });
+
+        state.helperModels.forEach((h) => h.mesh && scene.remove(h.mesh));
+        state.helperModels = [];
+        state.helpers = [];
+        (data.helpers || []).forEach((hd) => {
+          const type =
+            perchanceLists.aiHelperTypes.find((t) => t.name === hd.name) ||
+            perchanceLists.aiHelperTypes[0];
+          const helper = {
+            name: hd.name,
+            rate: hd.rate,
+            cooldown: 0,
+            targetTree: null,
+            speed: hd.speed,
+            mesh: null,
+          };
+          const mesh = createHelperMesh(type.color);
+          mesh.position.fromArray(hd.position);
+          scene.add(mesh);
+          helper.mesh = mesh;
+          state.helpers.push(helper);
+          state.helperModels.push(helper);
+        });
+
+        applyStructureEffects();
+        state.world.treeCount = trees.filter((t) => t.alive).length;
+        rebuildMiniMap();
+        updateHUD();
+        renderShop();
+      }
+
+      /* -------------------------------------------------------
+   Boot & main loop
+------------------------------------------------------- */
+
+      function gameLoop() {
+        const now = performance.now();
+        const dt = (now - lastTime) / 1000;
+        lastTime = now;
+
+        updatePlayer(dt);
+        updateHelpers(dt);
+        updatePassive(dt);
+        updateRegrow(dt);
+        updateWorldTime(dt);
+        updateCrosshairHighlight();
+        updateMiniMapPlayer();
+
+        renderer.render(scene, camera);
+        requestAnimationFrame(gameLoop);
+      }
+
+      init3D();
+      updateHUD();
+      renderShop();
+      requestAnimationFrame(gameLoop);
+    </script>
+  </body>
+</html>
+
+</body>
+</html>

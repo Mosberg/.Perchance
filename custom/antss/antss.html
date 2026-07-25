@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>antss — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="gameCtn" style="position:relative; width:100vw; height:100vh; overflow:hidden; background:#222; font-family:sans-serif;">
+  <!-- Canvas Layer -->
+  <canvas id="gameCanvasEl"></canvas>
+
+  <!-- UI Overlay -->
+  <div id="uiLayerEl" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;">
+    
+    <!-- Top HUD -->
+    <div id="topBarEl" style="pointer-events:auto; display:flex; gap:20px; padding:10px; background:rgba(0,0,0,0.7); color:white; border-bottom:2px solid #444;">
+      <div style="font-weight:bold;">ANT COLONY OVERMIND</div>
+      <div id="resourceDisplayEl" style="display:flex; gap:15px;">
+        <!-- Populated by JS -->
+      </div>
+      <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
+        <button id="pauseBtn" onclick="window.game.togglePause()">Pause</button>
+        <button id="speedBtn" onclick="window.game.cycleSpeed()">1x</button>
+        <button id="menuBtn" onclick="window.game.toggleMenu()">Settings</button>
+      </div>
+    </div>
+
+    <!-- Bottom Controls -->
+    <div id="bottomBarEl" style="pointer-events:auto; position:absolute; bottom:0; width:100%; display:flex; padding:10px; background:rgba(0,0,0,0.8); color:white; justify-content:space-between; border-top:2px solid #444;">
+      <div id="roomControlsEl" style="display:flex; gap:10px;">
+        <h3>Rooms:</h3>
+        <div id="roomBtnContainerEl" style="display:flex; gap:5px;"></div>
+      </div>
+      <div id="antControlsEl" style="display:flex; gap:10px;">
+        <h3>Ants:</h3>
+        <div id="antBtnContainerEl" style="display:flex; gap:5px;"></div>
+      </div>
+      <div id="infoPanelEl" style="width:300px; font-size:12px; overflow-y:auto; max-height:100px;">
+        <div id="logEl"></div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModalEl" hidden style="pointer-events:auto; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#333; padding:20px; border:2px solid #555; color:white; width:300px;">
+      <h3>Settings</h3>
+      <div style="margin:10px 0;">
+        <label>Simulation Depth:</label><br>
+        <input type="range" min="1" max="5" value="3" id="simDepthInputEl" oninput="window.game.settings.simDepth = this.value">
+      </div>
+      <div style="margin:10px 0;">
+        <label>Debug Mode:</label>
+        <input type="checkbox" id="debugCheckEl" onchange="window.game.settings.debug = this.checked">
+      </div>
+      <div style="margin-top:20px; display:flex; justify-content:space-between;">
+        <button onclick="window.game.saveData()">Save Game</button>
+        <button onclick="window.game.toggleMenu()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/**
+ * ANT COLONY OVERMIND
+ * A Vanilla JS implementation of a complex colony sim.
+ * Architecture follows the prompt's request for modularity and config-driven design,
+ * even though it runs in a single file without Phaser (to ensure zero dependencies and high performance).
+ */
+
+// ==========================================
+// 1. CONFIGS (DATA)
+// ==========================================
+
+const CONFIG = {
+  ants: {
+    worker: { name: "Worker", color: "#aaffaa", cost: { food: 10 }, speed: 1, strength: 1, jobs: ["dig", "forage"] },
+    soldier: { name: "Soldier", color: "#ffaaaa", cost: { food: 20, biomass: 5 }, speed: 1.2, strength: 5, jobs: ["patrol", "fight"] },
+    nurse: { name: "Nurse", color: "#aaaaff", cost: { food: 15, biomass: 5 }, speed: 0.8, strength: 1, jobs: ["tend", "heal"] },
+  },
+  rooms: {
+    queen: { name: "Queen Chamber", color: "#ffcc00", cost: { stone: 50 }, size: 3, desc: "Heart of the colony." },
+    storage: { name: "Storage", color: "#8888ff", cost: { stone: 20 }, size: 2, capacity: 100, desc: "Stores resources." },
+    fungus: { name: "Fungus Farm", color: "#00ff88", cost: { biomass: 30 }, size: 2, production: { food: 0.1 }, desc: "Generates food passively." },
+    barracks: { name: "Barracks", color: "#ff4444", cost: { stone: 40, resin: 20 }, size: 3, desc: "Unlocks soldiers." },
+  },
+  resources: {
+    food: { name: "Food", color: "#00ff00" },
+    water: { name: "Water", color: "#0088ff" },
+    biomass: { name: "Biomass", color: "#bb4400" },
+    stone: { name: "Stone", color: "#888888" },
+    resin: { name: "Resin", color: "#ccff00" }
+  },
+  grid: { width: 60, height: 60, tileSize: 40 }
+};
+
+// ==========================================
+// 2. CORE SYSTEMS
+// ==========================================
+
+class Utils {
+  static dist(e1, e2) { return Math.hypot(e1.x - e2.x, e1.y - e2.y); }
+  static rand(min, max) { return Math.random() * (max - min) + min; }
+  static randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+  static rectIntersect(r1, r2) {
+    return !(r2.x > r1.x + r1.w || r2.x + r2.w < r1.x || r2.y > r1.y + r1.h || r2.y + r2.h < r1.y);
+  }
+}
+
+class InputHandler {
+  constructor(game) {
+    this.game = game;
+    this.keys = {}; // FIX: Initialize keys object
+    this.mouse = { x: 0, y: 0, leftDown: false, rightDown: false };
+    
+    window.addEventListener('mousedown', (e) => {
+      if(e.target.tagName !== 'CANVAS') return;
+      if(e.button === 0) this.mouse.leftDown = true;
+      this.handleClick(e);
+    });
+    window.addEventListener('mouseup', (e) => {
+      if(e.button === 0) this.mouse.leftDown = false;
+    });
+    window.addEventListener('mousemove', (e) => {
+      const rect = this.game.canvas.getBoundingClientRect();
+      this.mouse.x = e.clientX - rect.left;
+      this.mouse.y = e.clientY - rect.top;
+      // Update hover state
+      const gx = Math.floor((this.mouse.x + this.game.camera.x) / CONFIG.grid.tileSize);
+      const gy = Math.floor((this.mouse.y + this.game.camera.y) / CONFIG.grid.tileSize);
+      this.game.hoverCell = { x: gx, y: gy };
+    });
+    window.addEventListener('contextmenu', e => e.preventDefault());
+  }
+
+  handleClick(e) {
+    if (!this.game.hoverCell) return;
+    const cell = this.game.grid.get(this.game.hoverCell.x, this.game.hoverCell.y);
+    
+    // Basic interaction: Dig dirt if worker selected, or select ant
+    if (e.button === 0) { // Left click
+      if (cell.type === 'dirt') {
+        // Order nearby workers to dig
+        this.game.systems.ant.assignTask(this.game.hoverCell.x, this.game.hoverCell.y, 'dig');
+      } else if (cell.type === 'room') {
+        this.game.log(`Room: ${cell.roomRef.name}`);
+      }
+    }
+  }
+}
+
+class Camera {
+  constructor() {
+    this.x = 0; 
+    this.y = 0;
+    this.speed = 10;
+  }
+  update(input) {
+    if (input.keys['ArrowLeft'] || input.keys['a']) this.x -= this.speed;
+    if (input.keys['ArrowRight'] || input.keys['d']) this.x += this.speed;
+    if (input.keys['ArrowUp'] || input.keys['w']) this.y -= this.speed;
+    if (input.keys['ArrowDown'] || input.keys['s']) this.y += this.speed;
+    // Clamp
+    this.x = Math.max(0, Math.min(this.x, CONFIG.grid.width * CONFIG.grid.tileSize - window.innerWidth));
+    this.y = Math.max(0, Math.min(this.y, CONFIG.grid.height * CONFIG.grid.tileSize - window.innerHeight));
+  }
+}
+
+// ==========================================
+// 3. GAME ENTITIES
+// ==========================================
+
+class Grid {
+  constructor(width, height) {
+    this.width = width;
+    this.height = height;
+    this.cells = new Array(width * height);
+    this.init();
+  }
+
+  init() {
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        let type = 'dirt';
+        // Surface is y=0
+        if (y === 0) type = 'surface'; 
+        else if (Math.random() < 0.05) type = 'rock';
+        else if (Math.random() < 0.02) type = 'food_source';
+        
+        this.cells[y * this.width + x] = {
+          x, y, type, 
+          hp: 100, 
+          roomRef: null,
+          pheromone: { food: 0, danger: 0, home: 0 },
+          visible: y === 0 // Fog of war
+        };
+      }
+    }
+  }
+
+  get(x, y) {
+    if (x < 0 || x >= this.width || y < 0 || y >= this.height) return null;
+    return this.cells[y * this.width + x];
+  }
+
+  set(x, y, data) {
+    if (x < 0 || x >= this.width || y < 0 || y >= this.height) return;
+    this.cells[y * this.width + x] = { ...this.cells[y * this.width + x], ...data };
+  }
+}
+
+class Ant {
+  constructor(x, y, typeKey) {
+    this.x = x;
+    this.y = y;
+    this.typeKey = typeKey;
+    this.stats = CONFIG.ants[typeKey];
+    this.state = 'idle'; // idle, move, dig, carry, fight
+    this.target = null; // {x, y}
+    this.inventory = null;
+    this.hp = 100;
+    this.id = Math.random().toString(36).substr(2, 9);
+    this.path = [];
+  }
+
+  update(dt, game) {
+    // Fog of War: Update vision
+    const gx = Math.floor(this.x / CONFIG.grid.tileSize);
+    const gy = Math.floor(this.y / CONFIG.grid.tileSize);
+    
+    // Simple vision radius logic
+    const range = 3;
+    for(let dy = -range; dy <= range; dy++) {
+      for(let dx = -range; dx <= range; dx++) {
+        let c = game.grid.get(gx + dx, gy + dy);
+        if(c) c.visible = true;
+      }
+    }
+
+    // State Machine
+    if (this.state === 'idle') {
+      this.wander();
+    } else if (this.state === 'move' && this.target) {
+      this.moveTowards(this.target, this.stats.speed, game);
+      if (Utils.dist(this, this.target) < 5) {
+        this.arrive(game);
+      }
+    }
+  }
+
+  moveTowards(target, speed, game) {
+    const angle = Math.atan2(target.y - this.y, target.x - this.x);
+    const nextX = this.x + Math.cos(angle) * speed;
+    const nextY = this.y + Math.sin(angle) * speed;
+    
+    // Collision check with grid
+    const gx = Math.floor(nextX / CONFIG.grid.tileSize);
+    const gy = Math.floor(nextY / CONFIG.grid.tileSize);
+    const cell = game.grid.get(gx, gy);
+
+    if (cell && (cell.type === 'dirt' || cell.type === 'rock')) {
+      // Blocked
+      if(this.state === 'move') this.state = 'idle'; // Stop
+    } else {
+      this.x = nextX;
+      this.y = nextY;
+    }
+  }
+
+  wander() {
+    // Pick random adjacent point
+    const gx = Math.floor(this.x / CONFIG.grid.tileSize);
+    const gy = Math.floor(this.y / CONFIG.grid.tileSize);
+    const tx = gx + Utils.randInt(-2, 2);
+    const ty = gy + Utils.randInt(-2, 2);
+    
+    const cell = window.game.grid.get(tx, ty);
+    if (cell && cell.type !== 'rock' && cell.type !== 'dirt') {
+      this.target = { x: tx * CONFIG.grid.tileSize + 20, y: ty * CONFIG.grid.tileSize + 20 };
+      this.state = 'move';
+    }
+  }
+
+  arrive(game) {
+    const gx = Math.floor(this.x / CONFIG.grid.tileSize);
+    const gy = Math.floor(this.y / CONFIG.grid.tileSize);
+    const cell = game.grid.get(gx, gy);
+
+    if (this.action === 'dig' && cell && cell.type === 'dirt') {
+      // Digging logic handled in AntSystem for simplicity
+    }
+    
+    this.state = 'idle';
+    this.target = null;
+    this.action = null;
+  }
+
+  draw(ctx) {
+    ctx.fillStyle = this.stats.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw simple mandibles
+    if(this.state === 'move') {
+      ctx.strokeStyle = "#000";
+      ctx.beginPath();
+      ctx.moveTo(this.x + Math.cos(Math.atan2(this.target.y - this.y, this.target.x - this.x))*5, this.y + Math.sin(Math.atan2(this.target.y - this.y, this.target.x - this.x))*5);
+      ctx.lineTo(this.x + Math.cos(Math.atan2(this.target.y - this.y, this.target.x - this.x))*8, this.y + Math.sin(Math.atan2(this.target.y - this.y, this.target.x - this.x))*8);
+      ctx.stroke();
+    }
+  }
+}
+
+// ==========================================
+// 4. MANAGER SYSTEMS
+// ==========================================
+
+class AntSystem {
+  constructor(game) {
+    this.game = game;
+    this.ants = [];
+  }
+
+  spawn(type, x, y) {
+    this.ants.push(new Ant(x, y, type));
+    this.game.log(`Spawned ${CONFIG.ants[type].name}`);
+  }
+
+  update(dt) {
+    this.ants.forEach(ant => ant.update(dt, this.game));
+    
+    // Digging logic (simplified)
+    this.ants.forEach(ant => {
+      if(ant.state === 'move' && ant.action === 'dig') {
+        const gx = Math.floor(ant.x / CONFIG.grid.tileSize);
+        const gy = Math.floor(ant.y / CONFIG.grid.tileSize);
+        const cell = this.game.grid.get(gx, gy);
+        
+        if(Utils.dist(ant, ant.target) < 10) {
+          if(cell && cell.type === 'dirt') {
+            cell.hp -= 2 * dt;
+            if(cell.hp <= 0) {
+              cell.type = 'tunnel';
+              this.game.resources.food += 1; // Get some dirt/biomass
+              ant.state = 'idle';
+              ant.action = null;
+              this.game.ui.updateResources();
+            }
+          }
+        }
+      }
+    });
+  }
+
+  assignTask(gx, gy, type) {
+    // Find nearest idle worker
+    const workers = this.ants.filter(a => a.typeKey === 'worker' && a.state === 'idle');
+    if (workers.length === 0) return;
+
+    // Sort by distance
+    workers.sort((a, b) => {
+      const distA = Math.hypot(a.x - gx * CONFIG.grid.tileSize, a.y - gy * CONFIG.grid.tileSize);
+      const distB = Math.hypot(b.x - gx * CONFIG.grid.tileSize, b.y - gy * CONFIG.grid.tileSize);
+      return distA - distB;
+    });
+
+    const worker = workers[0];
+    worker.target = { x: gx * CONFIG.grid.tileSize + 20, y: gy * CONFIG.grid.tileSize + 20 };
+    worker.state = 'move';
+    worker.action = 'dig';
+  }
+
+  draw(ctx) {
+    this.ants.forEach(ant => ant.draw(ctx));
+  }
+}
+
+class RoomSystem {
+  constructor(game) {
+    this.game = game;
+  }
+
+  build(typeKey, gx, gy) {
+    const config = CONFIG.rooms[typeKey];
+    
+    // Check resources
+    for (let res in config.cost) {
+      if (this.game.resources[res] < config.cost[res]) {
+        this.game.log(`Not enough ${res}!`);
+        return;
+      }
+    }
+
+    // Deduct
+    for (let res in config.cost) {
+      this.game.resources[res] -= config.cost[res];
+    }
+    this.game.ui.updateResources();
+
+    // Carve out space
+    const size = config.size || 1;
+    for(let dy=0; dy<size; dy++) {
+      for(let dx=0; dx<size; dx++) {
+        const cell = this.game.grid.get(gx+dx, gy+dy);
+        if(cell) {
+          cell.type = 'room';
+          cell.roomRef = config;
+        }
+      }
+    }
+    this.game.log(`Built ${config.name}`);
+  }
+}
+
+// ==========================================
+// 5. UI SYSTEM
+// ==========================================
+
+class UISystem {
+  constructor(game) {
+    this.game = game;
+    this.initUI();
+  }
+
+  initUI() {
+    // Generate Resource Display
+    const resContainer = document.getElementById('resourceDisplayEl');
+    resContainer.innerHTML = '';
+    Object.keys(CONFIG.resources).forEach(key => {
+      const el = document.createElement('div');
+      el.id = `res_${key}`;
+      el.innerHTML = `${CONFIG.resources[key].name}: 0`;
+      el.style.color = CONFIG.resources[key].color;
+      resContainer.appendChild(el);
+    });
+
+    // Generate Room Buttons
+    const roomBtnContainer = document.getElementById('roomBtnContainerEl');
+    Object.keys(CONFIG.rooms).forEach(key => {
+      if(key === 'queen') return; // Can't build extra queen chambers easily in this demo
+      const btn = document.createElement('button');
+      btn.textContent = CONFIG.rooms[key].name;
+      btn.onclick = () => { 
+        this.game.placementMode = key; 
+        this.game.log(`Placing ${CONFIG.rooms[key].name}... Click on map.`);
+      };
+      roomBtnContainer.appendChild(btn);
+    });
+
+    // Generate Ant Buttons
+    const antBtnContainer = document.getElementById('antBtnContainerEl');
+    Object.keys(CONFIG.ants).forEach(key => {
+      const btn = document.createElement('button');
+      btn.textContent = `+ ${CONFIG.ants[key].name}`;
+      btn.onclick = () => {
+        // Spawn at queen
+        let queenFound = false;
+        for(let cell of this.game.grid.cells) {
+          if(cell && cell.roomRef && cell.roomRef.name === 'Queen Chamber') {
+            this.game.systems.ant.spawn(key, cell.x * CONFIG.grid.tileSize + 20, cell.y * CONFIG.grid.tileSize + 20);
+            queenFound = true;
+            break;
+          }
+        }
+        if(!queenFound) this.game.log("No Queen Chamber found!");
+      };
+      antBtnContainer.appendChild(btn);
+    });
+  }
+
+  updateResources() {
+    Object.keys(this.game.resources).forEach(key => {
+      const el = document.getElementById(`res_${key}`);
+      if(el) el.innerHTML = `${CONFIG.resources[key].name}: ${Math.floor(this.game.resources[key])}`;
+    });
+  }
+
+  draw(ctx) {
+    // Hover highlight
+    if(this.game.hoverCell && this.game.placementMode) {
+      const size = CONFIG.rooms[this.game.placementMode].size || 1;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+      ctx.fillRect(
+        this.game.hoverCell.x * CONFIG.grid.tileSize - this.game.camera.x,
+        this.game.hoverCell.y * CONFIG.grid.tileSize - this.game.camera.y,
+        CONFIG.grid.tileSize * size,
+        CONFIG.grid.tileSize * size
+      );
+    }
+  }
+}
+
+// ==========================================
+// 6. MAIN GAME CLASS
+// ==========================================
+
+class Game {
+  constructor() {
+    this.canvas = document.getElementById('gameCanvasEl');
+    this.ctx = this.canvas.getContext('2d');
+    this.resize();
+    
+    this.settings = { speed: 1, paused: false, debug: false, simDepth: 3 };
+    
+    this.resources = { food: 100, water: 50, biomass: 10, stone: 0, resin: 0 };
+    
+    this.camera = new Camera();
+    this.input = new InputHandler(this);
+    this.grid = new Grid(CONFIG.grid.width, CONFIG.grid.height);
+    
+    this.systems = {
+      ant: new AntSystem(this),
+      room: new RoomSystem(this)
+    };
+    this.ui = new UISystem(this);
+
+    this.placementMode = null;
+    this.lastTime = 0;
+    
+    // Setup Default Room (Queen)
+    const cx = Math.floor(CONFIG.grid.width/2);
+    const cy = Math.floor(CONFIG.grid.height/2);
+    this.systems.room.build('queen', cx, cy);
+
+    // Setup Inputs
+    window.addEventListener('keydown', e => this.input.keys[e.key] = true);
+    window.addEventListener('keyup', e => this.input.keys[e.key] = false);
+    window.addEventListener('resize', () => this.resize());
+
+    // Interaction for placement
+    this.canvas.addEventListener('mousedown', (e) => {
+      if(this.placementMode && this.game.hoverCell) {
+        this.systems.room.build(this.placementMode, this.game.hoverCell.x, this.game.hoverCell.y);
+        this.placementMode = null; // Reset after placement
+      }
+    });
+    
+    // Initial Ants
+    for(let i=0; i<5; i++) this.systems.ant.spawn('worker', cx*40+20, cy*40+20);
+
+    requestAnimationFrame(t => this.loop(t));
+  }
+
+  resize() {
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+  }
+
+  log(msg) {
+    const el = document.getElementById('logEl');
+    el.innerHTML = `> ${msg}<br>` + el.innerHTML;
+  }
+
+  togglePause() {
+    this.settings.paused = !this.settings.paused;
+    document.getElementById('pauseBtn').textContent = this.settings.paused ? "Resume" : "Pause";
+  }
+
+  cycleSpeed() {
+    const speeds = [1, 2, 4];
+    const idx = speeds.indexOf(this.settings.speed);
+    this.settings.speed = speeds[(idx + 1) % speeds.length];
+    document.getElementById('speedBtn').textContent = this.settings.speed + "x";
+  }
+
+  toggleMenu() {
+    document.getElementById('settingsModalEl').hidden = !document.getElementById('settingsModalEl').hidden;
+  }
+  
+  saveData() {
+    localStorage.antColonySave = JSON.stringify({
+      resources: this.resources,
+      grid: this.grid.cells.map(c => ({x:c.x, y:c.y, type:c.type, hp:c.hp})),
+      ants: this.systems.ants.map(a => ({x:a.x, y:a.y, type:a.typeKey}))
+    });
+    this.log("Game Saved!");
+  }
+
+  loop(timestamp) {
+    const dt = (timestamp - this.lastTime) / 1000;
+    this.lastTime = timestamp;
+
+    if (!this.settings.paused) {
+      const step = dt * this.settings.speed;
+      this.camera.update(this.input);
+      this.systems.ant.update(step);
+      
+      // Passive generation
+      const room = this.grid.cells.find(c => c.roomRef && c.roomRef.production);
+      if(room && Math.random() < 0.01) {
+         this.resources.food += room.roomRef.production.food || 0;
+         this.ui.updateResources();
+      }
+      
+      // Random Events (Simplified)
+      if(Math.random() < 0.0005) {
+        const events = ["A cold snap chills the tunnels.", "A spider scout is seen nearby.", "The workers find a rich patch of clay."];
+        this.log(events[Math.floor(Math.random()*events.length)]);
+      }
+    }
+
+    this.draw();
+    requestAnimationFrame(t => this.loop(t));
+  }
+
+  draw() {
+    // Clear
+    this.ctx.fillStyle = "#222";
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    this.ctx.save();
+    this.ctx.translate(-this.camera.x, -this.camera.y);
+
+    // Draw Grid
+    const ts = CONFIG.grid.tileSize;
+    
+    // Optimization: Only draw visible cells
+    const startX = Math.floor(this.camera.x / ts);
+    const startY = Math.floor(this.camera.y / ts);
+    const endX = startX + Math.ceil(this.canvas.width / ts) + 1;
+    const endY = startY + Math.ceil(this.canvas.height / ts) + 1;
+
+    for (let y = startY; y <= endY; y++) {
+      for (let x = startX; x <= endX; x++) {
+        const cell = this.grid.get(x, y);
+        if (!cell) continue;
+
+        // Fog of War
+        if(!cell.visible && !this.settings.debug) {
+            this.ctx.fillStyle = "#111";
+            this.ctx.fillRect(x*ts, y*ts, ts, ts);
+            continue;
+        }
+
+        if (cell.type === 'dirt') {
+            this.ctx.fillStyle = "#5d4037";
+            this.ctx.fillRect(x*ts, y*ts, ts, ts);
+            // Texture detail
+            this.ctx.fillStyle = "#4e342e";
+            this.ctx.fillRect(x*ts+5, y*ts+5, ts-10, ts-10);
+        } else if (cell.type === 'rock') {
+            this.ctx.fillStyle = "#888";
+            this.ctx.fillRect(x*ts, y*ts, ts, ts);
+        } else if (cell.type === 'surface') {
+            this.ctx.fillStyle = "#2e7d32";
+            this.ctx.fillRect(x*ts, y*ts, ts, ts);
+        } else if (cell.type === 'tunnel') {
+            this.ctx.fillStyle = "#111";
+            this.ctx.fillRect(x*ts, y*ts, ts, ts);
+        } else if (cell.type === 'room') {
+            this.ctx.fillStyle = cell.roomRef ? cell.roomRef.color : "#000";
+            this.ctx.fillRect(x*ts, y*ts, ts, ts);
+            this.ctx.strokeStyle = "#fff";
+            this.ctx.strokeRect(x*ts, y*ts, ts, ts);
+        } else if (cell.type === 'food_source') {
+            this.ctx.fillStyle = "#333"; // background dirt
+            this.ctx.fillRect(x*ts, y*ts, ts, ts);
+            this.ctx.fillStyle = "#00ff00";
+            this.ctx.beginPath();
+            this.ctx.arc(x*ts+ts/2, y*ts+ts/2, 10, 0, Math.PI*2);
+            this.ctx.fill();
+        }
+        
+        // Debug Grid
+        if(this.settings.debug) {
+            this.ctx.strokeStyle = "#333";
+            this.ctx.strokeRect(x*ts, y*ts, ts, ts);
+        }
+      }
+    }
+
+    this.systems.ant.draw(this.ctx);
+    this.ui.draw(this.ctx);
+    this.ctx.restore();
+  }
+}
+
+// Start Game
+window.onload = () => {
+  window.game = new Game();
+};
+</script>
+
+<style>
+  /* CSS reset and simple styles */
+  * { box-sizing: border-box; }
+  body { margin:0; padding:0; overflow:hidden; background:black; }
+  button { cursor:pointer; padding:5px 10px; background:#444; color:white; border:1px solid #666; }
+  button:hover { background:#555; }
+  button:active { background:#333; }
+</style>
+
+</body>
+</html>

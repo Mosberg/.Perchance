@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>simple-image-generator-text2image — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="panel">
+    <div id="lastEditBadge">Last edit: [generatorStats("lastEditTime")]</div>
+
+    <div id="header">
+      <h1>Simple Image Generator</h1>
+      <p>Text to Image</p>
+      <p>Type a prompt and generate your images.</p>
+    </div>
+
+    <div id="controls">
+      <div class="fieldGroup promptMainGroup">
+        <label for="promptInput">Prompt</label>
+        <textarea id="promptInput" rows="4" placeholder="What do you want in the image..."></textarea>
+      </div>
+
+      <div class="bottomControls">
+        <div class="fieldGroup selectGroup sizeGroup">
+          <label for="resolutionSelect">Size</label>
+          <select id="resolutionSelect">
+            <option value="768x768">Square</option>
+            <option value="768x512">Landscape</option>
+            <option value="512x768" selected>Portrait</option>
+          </select>
+        </div>
+
+        <div class="fieldGroup selectGroup amountGroup">
+          <label for="countSelect">Amount</label>
+          <select id="countSelect">
+            <option value="1">1 image</option>
+            <option value="2">2 images</option>
+            <option value="3" selected>3 images</option>
+            <option value="4">4 images</option>
+            <option value="5">5 images</option>
+            <option value="6">6 images</option>
+          </select>
+        </div>
+
+        <div class="fieldGroup selectGroup styleGroup">
+          <label for="artStyleSelect">Art Style</label>
+          <select id="artStyleSelect">
+            <option value="__none" selected>No style</option>
+          </select>
+        </div>
+
+        <button id="generateBtn">✨ Generate</button>
+        <button id="clearBtn" type="button">Clear</button>
+      </div>
+    </div>
+
+    <div id="helperRow">
+      <div id="statusText">Ready</div>
+      <div id="hintText">Press Ctrl + Enter to generate</div>
+    </div>
+
+    <div id="errorBox" hidden></div>
+
+    <div id="resultsSection">
+      <div id="translatedPromptBox" hidden>
+        <div id="translatedPromptTitle">Final prompt sent to image AI</div>
+        <div id="translatedPromptText"></div>
+      </div>
+      <div id="gallery"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id)
+
+  const promptInput = $("promptInput")
+  const resolutionSelect = $("resolutionSelect")
+  const countSelect = $("countSelect")
+  const artStyleSelect = $("artStyleSelect")
+  const generateBtn = $("generateBtn")
+  const clearBtn = $("clearBtn")
+  const statusText = $("statusText")
+  const hintText = $("hintText")
+  const errorBox = $("errorBox")
+  const gallery = $("gallery")
+  const resultsSection = $("resultsSection")
+  const translatedPromptBox = $("translatedPromptBox")
+  const translatedPromptText = $("translatedPromptText")
+
+  const UPLOAD_URL = "https://marcoalmeidati.com.br/ImageGen/upload.php"
+  const MAX_PARALLEL = 3
+  const MAX_RETRIES = 1
+  const DEFAULT_HINT = "Press Ctrl + Enter to generate"
+  const BUSY_HINT = "This may take a while"
+
+  const STYLE_TEMPLATES = {
+    "Painted Anime": `{prompt}, art in the style of atey ghailan, painterly anime style at pixiv, art in the style of kantoku, in art style of redjuice/necömi/rella/tiv pixiv collab, your name anime art style, masterpiece digital painting, exquisite lighting and composition, inspired by wlop art style, 8k, sharp, very detailed, high resolution, illustration. Overall, it's an absolute world-class masterpiece painterly anime-inspired digital art. It's an aesthetically pleasing painterly anime-inspired digital artwork with impeccable attention to detail and impressive composition.`,
+    "Casual Photo": `A casual photo. A casual photo of {promptActual}. It's a casual photo.`,
+    "Cinematic": `{prompt}, cinematic shot, dynamic lighting, 75mm, Technicolor, Panavision, cinemascope, sharp focus, fine details, 8k, HDR, realism, realistic, key visual, film still, cinematic color grading, depth of field. Overall, it's an absolute world-class cinematic masterpiece. It's an aesthetically pleasing cinematic shot with impeccable attention to detail and impressive composition.`,
+    "Digital Painting": `{prompt}, breathtaking digital art, trending on artstation, in the style of atey ghailan, in the style of greg rutkowski, in the style of greg tocchini, in the style of james gilleard, 8k, high resolution, best quality. Overall, it's an absolute world-class masterpiece digital painting. It's an aesthetically pleasing digital painting with impeccable attention to detail and impressive composition.`,
+    "Concept Art": `{prompt}, concept art, digital art, illustration, inspired by wlop style, 8k, fine details, sharp, very detailed, high resolution, world-class masterpiece. Overall, it's absolute world-class masterpiece concept art. It's an aesthetically pleasing concept art with impeccable attention to detail and impressive composition.`,
+    "3D Disney Character": `3D cartoon Disney character portrait render. {prompt}, bokeh, 4k, highly detailed, Pixar render, CGI Animation, Disney, cute big circular reflective eyes, dof, cinematic film, Disney realism, subtle details, breathtaking Pixar short, fine details, close up, sharp focus, HDR, Disney-style octane render, incredible composition, superb lighting and detail. Overall, it's an absolute world-class masterpiece 3D Disney-inspired Character. It's an aesthetically pleasing 3D Disney-inspired piece with impeccable attention to detail and impressive composition.`,
+    "2D Disney Character": `2D cartoon Disney character digital art of {prompt}. superb linework, classic 2D Disney style art, inspired in the style of the art styles of Glen Keane and Aaron Blaise, Disney-style character concept with a Disney-style face, trending on artstation, Disney-style version of {prompt}. Overall, it's an absolute world-class masterpiece 2D Disney-inspired Character. It's an aesthetically pleasing 2D Disney-inspired piece with impeccable attention to detail and impressive composition.`,
+    "Disney Sketch": `Glen Keane character concept art black and white pencil sketch of {prompt}. rough pencil sketch in the style of Glen Keane, rough pencil sketch, close up, loose Disney-style character concept art sketch, nice sketchy pencil strokes, Disney character design sketch, pencil texture. Overall, it's an charmingly aesthetic and well-composed Disney-style sketch.`,
+    "Concept Sketch": `black and white technical drawing showcasing a {prompt}, annotation details, world-class masterpiece black and white, pencil strokes, annotated technical concept art sketch, pencil texture. Overall, it's a charmingly aesthetic and well-composed concept sketch.`,
+    "Painterly": `painterly digital painting, {prompt}, digital painting in the style of Ilya Kuvshinov with painterly brush strokes, in the style of Ilya Kuvshinov, world-class painterly masterpiece. Overall, it's an absolute world-class masterpiece painterly digital painting. It's an aesthetically pleasing painterly digital painting with impeccable attention to detail and impressive composition.`,
+    "Oil Painting": `breathtaking alla prima oil painting, {prompt}, close up, alla prima style, oil on linen, painterly oil on canvas, painterly style, exquisite composition and lighting, modern painterly masterpiece, in the style of alexi zaitsev, award-winning painterly alla prima oil painting. Overall, it's an absolute world-class masterpiece oil painting. It's an aesthetically pleasing oil painting with impeccable attention to detail and impressive composition.`,
+    "Oil Painting - Realism": `breathtaking oil painting, {prompt}, photorealistic oil painting, in the style of charlie bowater, fine details, in the style of wlop, trending on artstation, very detailed. Overall, it's an absolute world-class masterpiece realism oil painting. It's an aesthetically pleasing realism oil painting with impeccable attention to detail and impressive composition.`,
+    "Oil Painting - Old": `{prompt}, Oil painting in the style of Jean-François Millet and Gustave Courbet and Jules Breton`,
+    "Oil Painting - 70s Pulp": `1970s vintage pulp art, ultra realistic, fully restored, exquisite lighting and composition, polished, masterpiece, vintage pulp art, in the style of Earle K. Bergey, in the style of Kelly Freas, in the style of Alex Schomburg, in the style of H. J. Ward, glossy pulp art, Amazing Stories, Weird Tales, 8k, high resolution, best quality, hyper-realistic, Mattias Adolfsson style, detailed stylization, {prompt}, ultra realistic, wlop-style, exquisite lighting and composition, polished, world-class masterpiece, digitally enhanced, breathtaking shot, subtle details, superb quality, art in the style of Kuvshinov, Kuvshinov style, detailed stylization. Overall, it's an absolute world-class masterpiece artwork. It's an aesthetically pleasing restored 1970s vintage pulp art with impeccable attention to detail and impressive composition. It has perfect contrast and color balance. Almost photorealism.`,
+    "Professional Photo": `{prompt}, sharp focus, depth of field, 8k photo, HDR, professional lighting, taken with Canon EOS R5, DSLR, 75mm lens`,
+    "Anime": `anime art of {prompt}, world-class masterpiece, 4k, best quality, anime art. Overall, it's an absolute world-class masterpiece anime-inspired artwork. It's an aesthetically pleasing anime art with impeccable attention to detail and beautiful composition.`,
+    "Drawn Anime": `anime-style illustration with perfect clean lines, illustration of {prompt}, anime drawing/art, bold linework, illustration, cel shaded, anime-style digital illustration. It's an anime-inspired 2D-style anime illustration. Aesthetic high-skill, professional anime illustration, which looks like a screencap from an anime series. It has clean line work and a pleasant, appealing drawn aesthetic style. Overall, it's a world-class illustration with flawless line work, perfect composition, and impeccable attention to detail.`,
+    "Anime Screencap": `Anime screencap, {prompt}. It's an anime screencap from a popular anime. Beautiful visual quality, remastered, extremely high quality, very aesthetic, high production value, high-skill masterpiece. The image shows impeccable and beautiful composition and contrast. It's an exquisite anime screencap style image.`,
+    "Cute Anime": `adorable, cute, kawaii, {prompt}, cute moe anime character portrait, adorable, featured on pixiv, kawaii moé masterpiece, cuteness overload, very detailed, sooooo adorable. Overall, it's an absolute world-class masterpiece anime-inspired artwork. It's an aesthetically pleasing anime art with impeccable attention to detail and beautiful composition.`,
+    "Soft Anime": `{prompt}, anime masterpiece with soft lighting, gentle intricate style, highly detailed, pixiv, anime art, 4k, art from your name anime, garden of words style art, high quality. Overall, it's an absolute world-class masterpiece soft beautiful anime-inspired artwork. It's an aesthetically pleasing, soft, beautiful anime art with impeccable attention to detail and beautiful composition.`,
+    "Fantasy Painting": `{prompt}, d&d, fantasy, highly detailed, digital painting, artstation, sharp focus, fantasy art, illustration, 8k, in the style of greg rutkowski. It's an absolute world-class masterpiece artwork. It's an aesthetically pleasing artwork with impeccable attention to detail and impressive composition.`,
+    "Dark Fantasy": `{prompt}, dark fantasy art, gothic atmosphere, ominous mood, dramatic lighting, ancient ruins, cursed lands, shadowy details, high detail, cinematic composition, rich textures, eerie beauty, masterpiece dark fantasy illustration. Overall, it's an absolute world-class dark fantasy artwork. It's atmospheric, dramatic, beautifully composed, and filled with ominous detail.`,
+    "Fantasy Landscape": `{prompt}, fantasy matte painting, absolute masterpiece, detailed matte painting in the style of andreas rocha and greg rutkowski, in the style of Brothers Hildebrandt, superb composition, vivid fantasy art, breathtaking fantasy masterpiece. It's an absolute world-class masterpiece artwork. It's an aesthetically pleasing artwork with impeccable attention to detail and impressive composition.`,
+    "Fantasy Portrait": `{prompt}, d&d, fantasy, highly detailed, digital painting, artstation, sharp focus, fantasy art, character art, illustration, 8k, art in the style of artgerm and greg rutkowski. It's an absolute world-class masterpiece artwork. It's an aesthetically pleasing artwork with impeccable attention to detail and impressive composition.`,
+    "Studio Ghibli": `Studio Ghibli style artwork of {prompt}, Studio Ghibli style art film still, sharp, very detailed, high resolution, inspired by the style of Hayao Miyazaki, anime, film still from Spirited Away. In the style of Kiki Delivery Service, with a similar art style to Princess Mononoke. Aesthetically similar to My Neighbor Totoro's art style. Overall, it's an absolute world-class masterpiece Studio Ghibli-inspired artwork. It's an aesthetically pleasing classic Studio Ghibli style artwork with impeccable attention to detail and impressive composition.`,
+    "50s Enamel Sign": `50s enamel sign of {prompt}, 50s advert enamel sign, masterpiece, authentic vintage enamel sign`,
+    "Vintage Comic": `comic book style art of {prompt}, drawing, in the style of Dave Stevens, in the style of Adam Hughes, 1940's, 1950's, hand-drawn, color, high resolution, best quality, closeup`,
+    "Franco-Belgian Comic": `franco-belgian color comic about {prompt}, bande dessinée, franco-belgian comic panel, masterpiece, breathtaking composition, intricate, detailed, best quality`,
+    "Tintin Comic": `color comic panel in the style of Hergé about {prompt}, in the style of Hergé, tintin style, french comic panel, franco-belgian style, masterpiece, high-resolution Hergé style`,
+    "Medieval": `medieval illuminated manuscript picture of {prompt}, medieval illuminated manuscript art, masterpiece medieval color illustration, 16th century, 8k high-resolution scan of 16th century illuminated manuscript painting, detailed medieval masterpiece.`,
+    "Baroque Painting": `baroque oil painting of {prompt}, dramatic chiaroscuro lighting, rich deep colors, ornate composition, old master painting, grand theatrical atmosphere, intricate fabric details, expressive poses, realistic faces, museum-quality painting, highly detailed. Overall, it's an absolute world-class Baroque-inspired oil painting. It's dramatic, elegant, richly detailed, and composed with old-master level lighting.`,
+    "Pixel Art": `{prompt}, best pixel art, neo-geo graphical style, retro nostalgic masterpiece, 128px, 16-bit pixel art, 2D pixel art style, adventure game pixel art, inspired by the art style of hyper light drifter, masterful dithering, superb composition, beautiful palette, exquisite pixel detail`,
+    "Low Poly 3D": `low poly 3D render of {prompt}, stylized geometric shapes, faceted surfaces, simple clean materials, soft lighting, colorful low-poly aesthetic, game art style, minimal but expressive details, isometric-friendly composition, high quality render. Overall, it's an absolute world-class low-poly 3D artwork. It's clean, stylized, geometric, and visually appealing.`,
+    "Furry - Oil": `{prompt}, crisp vibrant detailed soft painterly digital art, volumetric lighting, natural lighting, realistic lighting, vibrant colors, crisp oil painting, painterly realism, depth of field, subtle soft details, vivid, fresh, striking, in the style of chunie, in the style of darkgem, in the style of honovy, inspired by zaush, inspired by anhes, inspired by puinkey, in the style of caraid, in the style of dagasi, inspired by taranfiddler, in the style of atey ghailan, in the style of MilletGustave, in the style of Curbet, inspired by Charlie Bowater style, lol art. Overall, it's a world-class painterly masterpiece. It's aesthetically pleasing digital art with impeccable attention to detail and impressive composition.`,
+    "Furry - Cinematic": `{prompt}, cinematic shot, dynamic lighting, 75mm, Technicolor, Panavision, cinemascope, sharp focus, fine details, 8k, HDR, realism, realistic, key visual, film still, cinematic color grading, depth of field. Overall, it's an absolute world-class masterpiece. It's an aesthetically pleasing image with impeccable attention to detail and impressive composition.`,
+    "Furry - Painted": `anthro {prompt} digital art, masterpiece, 4k, fine details. It's an absolute world-class masterpiece artwork. Overall, it's an aesthetically pleasing artwork with impeccable attention to detail and impressive composition.`,
+    "Furry - Drawn": `anthro {prompt} illustration, hand-drawn, bold linework, anthro illustration, cel shaded, 4k, fine details, masterpiece. Overall, it's an absolute world-class masterpiece artwork. It's an aesthetically pleasing artwork with impeccable attention to detail and impressive composition.`,
+    "Cute Figurine": `{prompt}, figurine, modern Disney style, octane render, chibi`,
+    "3D Emoji": `masterpiece {prompt} cartoon 3D emoji concept render, close-up, facing forward, matte finish, 3D emoji render, app icon, simple design, new iOS 18.4 style {prompt} emoji render, simple background, centered, world-class masterpiece work of art, crisp render, sharp focus, charmingly aesthetic design, 4k, soft lighting, masterpiece emoji-style figurine 3D render, pure white background`,
+    "Illustration": `breathtaking illustration of {prompt}, illustration, masterpiece, breathtaking illustration. Overall, it's an absolute world-class masterpiece illustration. It's an aesthetically pleasing illustration with impeccable attention to detail and impressive composition.`,
+    "Cute Illustration": `A cute cartoon showing {prompt}, in a soft, cute, minimalist, webcomic-style illustration. Line art is somewhat bold but gentle, with clean lines, and subtle variation. Colors are soft, flat, with gentle pastel tones. No shading except for light inner shadows or simple highlights. The background is plain white or contains a light wash of color with subtle textured style. The overall scene is wholesome and endearing like a page from a Liz Climo comic. Composition is centered with space around the character, evoking authentic warmth through the wholesome, soft, web comic style. It's an aesthetically pleasing masterpiece, showing high skill in evoking an authentic and beautifully minimalist style.`,
+    "Children’s Book Illustration": `children's book illustration of {prompt}, warm whimsical style, soft colors, gentle shapes, charming character design, cozy storybook atmosphere, expressive but simple details, hand-drawn feel, friendly composition, beautiful picture book art. Overall, it's an absolute world-class children's book illustration. It's warm, charming, readable, and emotionally inviting.`,
+    "Flat Illustration": `{prompt}, illustration, flat, 2D, vector art, masterpiece, made with adobe illustrator, behance competition winner, trending on dribble, 4k, high resolution, crisp lines. Overall, it's an absolute world-class masterpiece flat-style illustration. It's an aesthetically pleasing flat-style illustration with impeccable attention to detail and impressive composition.`,
+    "Risograph Print": `risograph print illustration of {prompt}, limited color palette, offset print texture, grainy ink, bold shapes, handmade poster aesthetic, slightly misregistered layers, flat graphic composition, art book style, high-quality print design. Overall, it's an absolute world-class risograph-style illustration. It's textured, graphic, colorful, and beautifully composed.`,
+    "Watercolor": `{prompt}, watercolor, high resolution, intricate details, 4k, wallpaper, concept art, watercolor on textured paper. Overall, it's an absolute world-class masterpiece watercolor artwork. It's an aesthetically pleasing watercolor artwork with impeccable attention to detail and impressive composition.`,
+    "1990s Photo": `{prompt}, 90s home video, nostalgic 90s photo, taken with kodak disposable camera`,
+    "1980s Photo": `famous vintage 80s photo, {prompt}, grainy photograph, 80s photo with film grain, Kodacolor II 80s photo with vignetting, retro, old-school cool, 80s photo with wear and tear and minor creasing and scratches, vintage color photo`,
+    "1970s Photo": `famous vintage 70s photo, {prompt}, grainy photograph, 1970s photo with film grain, 70s photo with vignetting, retro, old-school cool, 70s photo, vintage photo`,
+    "1960s Photo": `famous vintage 60s photo, {prompt}, grainy photograph, 1960s photo with film grain, 60s photo with vignetting, retro, old-school cool, 60s photo, vintage photo`,
+    "1950s Photo": `famous vintage 50s photo, {prompt}, grainy photograph, 1950s photo with film grain, 1950s photo with vignetting, retro, old-school cool, 1950s photo, vintage photo`,
+    "1940s Photo": `famous vintage 1940s photo, {prompt}, grainy photograph, 1940s photo with film grain, 1940s photo with vignetting, retro, old-school cool, 1940s photo, vintage photo`,
+    "1930s Photo": `famous vintage 1930s photo, {prompt}, grainy photograph, 1930s photo with film grain, 1930s photo with vignetting, retro, old-school cool, 1930s photo, vintage photo`,
+    "1920s Photo": `famous vintage 1920s photo, {prompt}, 1920s photo, restored photograph, sepia or black and white, historical archive photo`,
+    "Polaroid Photo": `polaroid photo of {prompt}, instant film photography, soft focus, natural imperfections, slight overexposure, vintage color cast, white polaroid frame, candid composition, nostalgic snapshot, realistic casual photo. Overall, it's an authentic and aesthetically pleasing polaroid-style photograph. It's nostalgic, imperfect, warm, and candid.`,
+    "Vintage Pulp Art": `1970s vintage pulp art, {prompt}, vintage pulp art, in the style of Earle K. Bergey, in the style of Kelly Freas, in the style of Alex Schomburg, in the style of H. J. Ward, glossy pulp art, Amazing Stories, Weird Tales, 8k, high resolution, best quality`,
+    "50s Infomercial Anime": `{prompt}, 1950s infomercial style, delicate linework, paprika anime art style, chromatic aberration glow, 2d painted cel animation, soft focus, 2D pixiv 1950s`,
+    "Vaporwave": `{prompt}, vaporwave aesthetic, retrofuturistic 1980s and 1990s visual style, neon pink and cyan lighting, chrome, marble statues, grid horizon, sunset gradient, nostalgic digital dreamscape, synthwave mood, glossy surreal composition. Overall, it's an absolute world-class vaporwave artwork. It's nostalgic, neon, stylish, and visually striking.`,
+    "Liminal Space": `{prompt}, liminal space photography, empty familiar environment, eerie quiet atmosphere, fluorescent lighting, uncanny stillness, nostalgic interior, unsettling emptiness, wide-angle composition, abandoned mall, hallway, empty room, dreamlike realism. Overall, it's an absolute world-class liminal space image. It's quiet, unsettling, nostalgic, and strangely familiar.`,
+    "Brutalist Architecture": `{prompt}, brutalist architecture style, massive raw concrete structures, geometric forms, monumental scale, stark urban environment, overcast lighting, architectural photography, clean lines, heavy shadows, minimal ornamentation, imposing atmosphere. Overall, it's an absolute world-class brutalist architectural image. It's monumental, stark, geometric, and visually powerful.`,
+    "3D Pokemon": `An incredibly perfect high-quality 3D render of a pokemon creature, {prompt}, 8k render, beautiful pokemon digital art, fakemon, pokemon creature, cryptid, masterpiece, soft focus, best quality, high quality. Perfect soft lighting, beautiful composition. It's an impressive CGI image from the upcoming Pokemon Movie 2026. Overall, it's an absolute world-class masterpiece 3D-rendered Pokemon-inspired creature. It's an aesthetically pleasing 3D Pokemon-inspired piece with impeccable attention to detail and impressive composition.`,
+    "Painted Pokemon": `Beautiful, very high-quality painterly digital concept art, {prompt}, 8k digital painting of a pokemon, amazing pokemon creature art in the style of piperdraws, cryptid creations in the style of Piper Thibodeau, in the style of Naoki Saito and Mitsuhiro Arita, incredible composition. Overall, it's an absolute world-class masterpiece painterly Pokemon-inspired artwork. It's an aesthetically pleasing painterly Pokemon-inspired artwork with impeccable attention to detail and impressive composition.`,
+    "2D Pokemon": `{prompt}, pokemon creature concept, superb line art, beautiful colors and composition, 2D art style, beautiful pokemon digital art, fakemon, in the style of Sowsow, pokemon creature, cryptid, masterpiece, in the style of Yuu Nishida, 4k. The Pokémon-like creature is centered within this anime-style 2D image. It's from the upcoming Pokemon Movie 2026 which has the classic 2D Pokemon art style. Overall, it's an absolute world-class masterpiece 2D Pokemon-inspired artwork. It's an aesthetically pleasing 2D Pokemon-inspired artwork with impeccable attention to detail and impressive composition. Clean, perfect linework, impeccable clean 2D anime-inspired art style.`,
+    "Vintage Anime": `{prompt}, 1990s anime, vintage anime, 90's anime style, in the style of hajime sorayama, in the style of greg tocchini, anime masterpiece, pixiv, akira-style art, akira anime art, 4k, high quality. Overall, it's an absolute world-class masterpiece vintage anime artwork. It's an aesthetically pleasing vintage anime artwork with impeccable attention to detail and impressive composition.`,
+    "Neon Vintage Anime": `{prompt}, neon vintage anime style, 90's anime style, 1990s anime, hajime sorayama, greg tocchini, neon vintage anime masterpiece, anime art, 4k, high quality. Overall, it's an absolute world-class masterpiece neon vintage anime artwork. It's an aesthetically pleasing neon vintage anime artwork with impeccable attention to detail and impressive composition.`,
+    "Manga": `{prompt}, incredible hand-drawn manga, black and white, in the style of Takehiko Inoue, in the style of Katsuhiro Otomo and akira toriyama manga, hand-drawn art in the style of rumiko takahashi and Inio Asano, Ken Akamatsu manga art. Overall, it's an absolute world-class masterpiece black and white manga-style artwork. It's an aesthetically pleasing black and white manga artwork with impeccable attention to detail and impressive composition.`,
+    "Surrealism": `surrealist artwork of {prompt}, dreamlike atmosphere, impossible geometry, symbolic objects, strange scale, unexpected juxtapositions, uncanny calm, mysterious visual metaphors, detailed composition, high resolution, masterpiece surreal art. Overall, it's an absolute world-class surrealist artwork. It's dreamlike, strange, poetic, and visually memorable.`,
+    "Fantasy World Map": `beautiful fantasy map of {prompt}, beautiful fantasy map inspired by middle earth and azeroth and discworld and westeros and essos and the witcher world and tamriel and faerûn and thedas, 4k, beautiful colors, crisp, high-resolution artistic map, topographic 3D terrain, artistic map. Overall, it's an absolute world-class masterpiece fantasy world map. It's an aesthetically pleasing fantasy world map artwork with impeccable attention to detail and impressive composition.`,
+    "Fantasy City Map": `an aerial view of a city, TTRPG city map showing the full city, {prompt}, fantasy art, highly-skilled senior environment artist piece, beautiful fantasy map. Overall, it's an absolute world-class masterpiece fantasy city map. It's an aesthetically pleasing fantasy city map artwork with impeccable attention to detail and impressive composition.`,
+    "Old World Map": `fantasy world map of {prompt}, fantasy world map, highly detailed digital painting, fantasy art, map illustration, 8k. Overall, it's an absolute world-class masterpiece old world map. It's an aesthetically pleasing old world style map artwork with impeccable attention to detail and impressive composition.`,
+    "3D Isometric Icon": `{prompt}, 3D isometric render of cute {prompt}, 3D app icon, clean isometric design, beautiful design, soft gradient background, soft colors, centered, 3D blender render, masterpiece, best quality, high resolution, 8k octane render, beautiful color scheme, soft smooth lighting, physically based rendering, square image, high polycount`,
+    "Flat Style Icon": `{prompt}, creative icon, flat style icon, masterpiece, high resolution, crisp, beautiful composition and color choice, beautiful flat painted style, behance contest-winner, award winning icon illustration, 8k, best quality`,
+    "Flat Style Logo": `beautiful flat-style logo design depicting {prompt}, creative flat-style logo design, trending on dribbble, featured on behance, portfolio piece, minimal flat design, breathtaking graphic design, 8k, high resolution vector logo, plain background, amazingly beautiful logo design, winner of best logo award`,
+    "Game Art Icon": `{prompt}, a concept art icon for fantasy game UI, a digital art logo, illustration, inspired by wlop style, 8k, fine details, sharp, very detailed icon, high resolution rpg ability, spell or item icon`,
+    "Digital Painting Icon": `{prompt}, app logo icon, digital art pictogram icon, trending on artstation, app icon in the style of atey ghailan, app icon in the style of greg rutkowski, app icon in the style of greg tocchini, app icon in the style of james gilleard, 8k, high resolution, best quality`,
+    "Concept Art Icon": `{prompt}, a concept art icon, a digital art logo, illustration, fantasy concept art logo icon, inspired by wlop style, 8k, fine details, sharp, very detailed, high resolution logo icon`,
+    "Cute 3D Icon": `{prompt}, a cute 3D icon of {prompt}, cartoon 3D icon, very cute shape, stylized octane render, 8k, masterpiece, soooo cute, beautiful cute perfection, beautiful soft lighting, soft colors, centered, high resolution, soft gradient background`,
+    "Cute 3D Icon Set": `{prompt}, a set of lovely little 3D icons, cute 3D icons, very cute shapes, stylized octane render, 8k, masterpiece, soooo cute, beautiful cute perfection, beautiful soft lighting, soft colors, centered, high resolution, cute icon set`,
+    "Lego / Brick Toy Style": `brick toy style model of {prompt}, built from colorful interlocking plastic bricks, toy diorama, blocky construction, playful miniature scene, clean studio lighting, highly detailed brick-built design, charming collectible toy aesthetic. Overall, it's an absolute world-class brick toy style render. It's playful, colorful, blocky, and carefully constructed like a premium toy diorama.`,
+    "Crayon Drawing": `{prompt}, crayon drawing`,
+    "Pencil": `black and white pencil drawing, {prompt}, black and white, breathtaking pencil illustration, highly detailed, 4k, textured paper, pencil texture, sketch`,
+    "Tattoo Design": `amazing tattoo design, {prompt}, breathtaking tattoo design, incredible tattoo design`,
+    "Waifu": `{prompt}, waifu character portrait, 1girl, very high resolution, semi-realistic anime art. Intricate and impressive anime artwork with stunningly beautiful composition and style. Overall, it's an absolute world-class masterpiece anime artwork. It's an aesthetically pleasing waifu artwork with impeccable attention to detail and impressive composition.`,
+    "YuGiOh Art": `yugioh-inspired card art for {prompt}, art in the style of genzoman, in the style of Akina Fujiwara, in the style of rossdraws, monster art, close up, painterly details, breathtaking art, centered, masterpiece, amazing composition. Overall, it's an absolute world-class masterpiece Yu-Gi-Oh-inspired artwork. It's an aesthetically pleasing Yu-Gi-Oh inspired artwork with impeccable attention to detail and impressive composition.`,
+    "Traditional Japanese": `{prompt}, in ukiyo-e art style, traditional japanese masterpiece`,
+    "Nihonga Painting": `japanese nihonga painting about {prompt}, Nihonga, ancient japanese painting, intricate, detailed`,
+    "Claymation": `{prompt}, claymation, incredible claymation style, stop-motion clay, clay texture, beautiful handcrafted look`,
+    "Cartoon": `{prompt}, cartoon-style art, superb linework, nice colors and composition, bold linework, masterpiece, cute art in the style of Dana Terrace, in the style of Rebecca Sugar, in the style of ry-spirit, amazing and wholesome cartoon-style art, cute art style`,
+    "Cursed Photo": `cursed photo of {prompt}, creepy and cursed, absolutely cursed photo, unsettling photo, cursed image, bad photo, weird photo, very strange, color photo, creepy photo, nightmare fuel`
+  }
+
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+  function getTotal() {
+    return +countSelect.value
+  }
+
+  function setStatus(status, hint = DEFAULT_HINT) {
+    statusText.textContent = status
+    hintText.textContent = hint
+  }
+
+  function setBusy(isBusy) {
+    ;[generateBtn, clearBtn, promptInput, resolutionSelect, countSelect, artStyleSelect].forEach(el => {
+      el.disabled = isBusy
+    })
+    generateBtn.textContent = isBusy ? "Generating..." : "✨ Generate"
+    hintText.textContent = isBusy ? BUSY_HINT : DEFAULT_HINT
+  }
+
+  function showError(message) {
+    errorBox.hidden = false
+    errorBox.textContent = message
+  }
+
+  function hideError() {
+    errorBox.hidden = true
+    errorBox.textContent = ""
+  }
+
+  function showTranslatedPrompt(text) {
+    translatedPromptBox.hidden = false
+    translatedPromptText.textContent = text || ""
+  }
+
+  function hideTranslatedPrompt() {
+    translatedPromptBox.hidden = true
+    translatedPromptText.textContent = ""
+  }
+
+  function scrollToResults() {
+    requestAnimationFrame(() => {
+      resultsSection.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      })
+    })
+  }
+
+  function makePlaceholder(res, text, bg, fg) {
+    return `https://placehold.co/${res}/${bg}/${fg}?text=${encodeURIComponent(text)}`
+  }
+
+  function placeholder(res, text = "Generating...") {
+    return makePlaceholder(res, text, "202123", "7d8188")
+  }
+
+  function failPlaceholder(res, text = "Failed") {
+    return makePlaceholder(res, text, "2b1d1f", "cb8188")
+  }
+
+  function sanitizeFileName(text) {
+    const cleaned = (text || "image")
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
+      .replace(/\s+/g, "-")
+      .trim()
+      .slice(0, 60)
+    return cleaned || "image"
+  }
+
+  function getExtensionFromDataUrl(dataUrl) {
+    const match = /^data:image\/([a-zA-Z0-9+]+);base64,/.exec(dataUrl || "")
+    const ext = match ? match[1].toLowerCase() : "png"
+    if (ext === "jpeg") return "jpg"
+    if (ext === "svg+xml") return "svg"
+    return ext
+  }
+
+  function makeDownloadName(prompt, index, dataUrl) {
+    const ext = getExtensionFromDataUrl(dataUrl)
+    const base = sanitizeFileName(prompt)
+    return `${base || "image"}-${index + 1}.${ext}`
+  }
+
+  function makeCard(index, res) {
+    return `<div class="imageCard">
+      <div class="imageWrap">
+        <img class="resultImg" alt="Generated image ${index + 1}" src="${placeholder(res)}">
+      </div>
+      <div class="cardMeta">
+        <div class="cardTitle">Result ${index + 1}</div>
+        <div class="statusWrap">
+          <div class="cardSub">Waiting...</div>
+          <a class="downloadBtn" href="#" download title="Download image" aria-label="Download image" hidden>⭳</a>
+        </div>
+      </div>
+    </div>`
+  }
+
+  function buildGallery(res, total) {
+    gallery.innerHTML = Array.from({ length: total }, (_, i) => makeCard(i, res)).join("")
+    return [...gallery.querySelectorAll(".imageCard")].map((card, index) => ({
+      index,
+      img: card.querySelector(".resultImg"),
+      sub: card.querySelector(".cardSub"),
+      downloadBtn: card.querySelector(".downloadBtn")
+    }))
+  }
+
+  function clearAll() {
+    promptInput.value = ""
+    countSelect.value = "3"
+    resolutionSelect.value = "512x768"
+    artStyleSelect.value = "__none"
+    gallery.innerHTML = ""
+    hideTranslatedPrompt()
+    hideError()
+    setStatus("Ready")
+    promptInput.focus()
+  }
+
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+  }
+
+  function populateArtStyles() {
+    const styleNames = Object.keys(STYLE_TEMPLATES).sort((a, b) => a.localeCompare(b))
+    const options = [`<option value="__none">No style</option>`]
+    for (const styleName of styleNames) {
+      options.push(`<option value="${escapeHtml(styleName)}">${escapeHtml(styleName)}</option>`)
+    }
+    artStyleSelect.innerHTML = options.join("")
+    artStyleSelect.value = "__none"
+  }
+
+  function getSelectedArtStyleName() {
+    const styleName = artStyleSelect.value.trim()
+    if (!styleName || styleName === "__none") return ""
+    return styleName
+  }
+
+  function buildFinalPrompt(translatedPrompt) {
+    const styleName = getSelectedArtStyleName()
+    const template = STYLE_TEMPLATES[styleName]
+    if (!template) return translatedPrompt
+
+    const promptActual = translatedPrompt.replace(/\b(realistic)\b/gi, "actual")
+
+    return template
+      .replace(/{promptActual}/g, promptActual)
+      .replace(/{prompt}/g, translatedPrompt)
+  }
+
+  async function translatePromptToEnglish(prompt) {
+    const instruction = `Translate the following image-generation prompt to English. Preserve the original meaning, subject details, style keywords, artist/style references, composition, camera terms, quality terms, and special formatting. If the prompt is already in English, keep it in English. Return only the translated prompt, with no explanations.\n\n${prompt}`
+    const translated = await translateText(instruction)
+    const clean = String(translated || "").trim()
+    if (!clean) throw new Error("Failed to translate the prompt.")
+    return clean
+  }
+
+  async function uploadImage(image, prompt) {
+    const response = await fetch(UPLOAD_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image, prompt })
+    })
+    const json = await response.json()
+    if (!response.ok || !json.ok) throw new Error(json.error || "Upload failed")
+    return json
+  }
+
+  async function generateAndUpload(finalPrompt, resolution) {
+    const dataUrl = await generateImage({
+      prompt: finalPrompt,
+      resolution
+    })
+    await uploadImage(dataUrl, finalPrompt)
+    return { dataUrl, finalPrompt }
+  }
+
+  async function generateWithRetry(finalPrompt, resolution) {
+    let lastError
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await generateAndUpload(finalPrompt, resolution)
+      } catch (error) {
+        lastError = error
+        console.error("Attempt failed:", attempt + 1, error)
+        if (attempt < MAX_RETRIES) await wait(800)
+      }
+    }
+    throw lastError
+  }
+
+  async function processOne(finalPrompt, resolution, item, counters, total) {
+    item.sub.textContent = "Generating..."
+    item.downloadBtn.hidden = true
+    item.downloadBtn.removeAttribute("href")
+    item.downloadBtn.removeAttribute("download")
+
+    try {
+      const result = await generateWithRetry(finalPrompt, resolution)
+      item.img.src = result.dataUrl
+      item.sub.textContent = "Done"
+      item.downloadBtn.href = result.dataUrl
+      item.downloadBtn.download = makeDownloadName(finalPrompt, item.index, result.dataUrl)
+      item.downloadBtn.hidden = false
+      counters.done++
+    } catch (error) {
+      console.error(error)
+      item.img.src = failPlaceholder(resolution)
+      item.sub.textContent = "Failed"
+      item.downloadBtn.hidden = true
+      counters.failed++
+    }
+
+    counters.finished++
+    statusText.textContent = `Generating ${counters.finished}/${total}`
+  }
+
+  async function runPool(tasks, limit) {
+    let next = 0
+
+    async function worker() {
+      while (next < tasks.length) {
+        const taskIndex = next
+        next++
+        await tasks[taskIndex]()
+      }
+    }
+
+    const workerCount = Math.min(limit, tasks.length)
+    await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  }
+
+  async function generate() {
+    const prompt = promptInput.value.trim()
+    const resolution = resolutionSelect.value
+    const total = getTotal()
+
+    if (!prompt) {
+      showError("Please enter a description for the image.")
+      promptInput.focus()
+      return
+    }
+
+    hideError()
+    setBusy(true)
+
+    const items = buildGallery(resolution, total)
+    showTranslatedPrompt("Translating to English...")
+    scrollToResults()
+
+    const counters = { finished: 0, done: 0, failed: 0 }
+
+    try {
+      setStatus("Translating...", "Preparing prompt in English")
+      const translatedPrompt = await translatePromptToEnglish(prompt)
+      const finalPrompt = buildFinalPrompt(translatedPrompt)
+      showTranslatedPrompt(finalPrompt)
+
+      setStatus(`Generating 0/${total}`, BUSY_HINT)
+      const tasks = items.map(item => () => processOne(finalPrompt, resolution, item, counters, total))
+      await runPool(tasks, MAX_PARALLEL)
+
+      if (counters.done && !counters.failed) {
+        setStatus("Done", `${counters.done} image${counters.done > 1 ? "s" : ""} generated`)
+      } else if (counters.done) {
+        setStatus("Completed with errors", `${counters.done} done, ${counters.failed} failed`)
+      } else {
+        setStatus("Error", "All generations failed")
+        showError("Failed to generate the images. Please try again.")
+      }
+    } catch (error) {
+      console.error(error)
+      setStatus("Error", "Unable to process the prompt")
+      showError(error.message || "Failed to translate the prompt.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  generateBtn.addEventListener("click", generate)
+  clearBtn.addEventListener("click", clearAll)
+
+  promptInput.addEventListener("keydown", e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !generateBtn.disabled) {
+      generate()
+    }
+  })
+
+  populateArtStyles()
+</script>
+
+<style>
+  :root {
+    --bg: #212121;
+    --bg-elevated: #2a2a2a;
+    --bg-elevated-2: #303030;
+    --panel: #2f2f2f;
+    --panel-soft: #262626;
+    --border: #3a3a3a;
+    --border-strong: #4a4a4a;
+    --text: #ececec;
+    --text-soft: #b4b4b4;
+    --text-muted: #8e8e8e;
+    --accent-text: #111111;
+    --danger-bg: rgba(255, 90, 90, 0.12);
+    --danger-border: rgba(255, 120, 120, 0.22);
+    --danger-text: #ffb4b4;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  #app {
+    min-height: 100vh;
+    padding: 24px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    background: radial-gradient(circle at top, rgba(255, 255, 255, 0.035), transparent 30%), linear-gradient(180deg, #1f1f1f 0%, #212121 100%);
+  }
+
+  #panel {
+    position: relative;
+    width: 100%;
+    max-width: 1180px;
+    background: rgba(47, 47, 47, 0.96);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 24px 24px 36px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+  }
+
+  #lastEditBadge {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.9;
+    white-space: nowrap;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #header {
+    margin-bottom: 20px;
+    text-align: center;
+    padding: 0 180px;
+  }
+
+  #header h1 {
+    margin: 0 0 8px;
+    font-size: 34px;
+    font-weight: 650;
+    letter-spacing: 0.2px;
+    color: #fff;
+  }
+
+  #header p {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: 15px;
+  }
+
+  #controls {
+    width: 100%;
+    max-width: 1120px;
+    margin: 0 auto 12px;
+  }
+
+  .promptMainGroup {
+    width: 100%;
+    margin-bottom: 10px;
+  }
+
+  .bottomControls {
+    display: grid;
+    grid-template-columns: 150px 150px 180px 150px 110px;
+    gap: 10px;
+    align-items: end;
+    justify-content: center;
+    margin: 0 auto;
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .fieldGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .selectGroup {
+    width: 100%;
+  }
+
+  .fieldGroup label {
+    color: var(--text-soft);
+    font-size: 13px;
+    font-weight: 600;
+    padding-left: 2px;
+    text-align: center;
+  }
+
+  #resolutionSelect,
+  #countSelect,
+  #artStyleSelect,
+  #generateBtn,
+  #clearBtn {
+    height: 48px;
+    border-radius: 14px;
+    font-size: 15px;
+  }
+
+  #promptInput {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    border-radius: 14px;
+    font-size: 15px;
+    line-height: 1.45;
+    padding: 14px 16px;
+  }
+
+  #promptInput,
+  #resolutionSelect,
+  #countSelect,
+  #artStyleSelect {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text);
+    outline: none;
+  }
+
+  #promptInput::placeholder {
+    color: var(--text-muted);
+  }
+
+  #resolutionSelect,
+  #countSelect,
+  #artStyleSelect {
+    padding: 0 14px;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  #promptInput:focus,
+  #resolutionSelect:focus,
+  #countSelect:focus,
+  #artStyleSelect:focus {
+    border-color: #6a6a6a;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+  }
+
+  #generateBtn,
+  #clearBtn {
+    cursor: pointer;
+    font-weight: 650;
+    transition: background 0.2s ease, transform 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+  }
+
+  #generateBtn {
+    background: #f4f4f4;
+    color: var(--accent-text);
+    border: 1px solid #f4f4f4;
+  }
+
+  #generateBtn:hover:not(:disabled) {
+    background: #fff;
+    transform: translateY(-1px);
+  }
+
+  #clearBtn {
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  #clearBtn:hover:not(:disabled) {
+    background: var(--bg-elevated-2);
+    border-color: var(--border-strong);
+  }
+
+  #generateBtn:disabled,
+  #clearBtn:disabled,
+  #promptInput:disabled,
+  #resolutionSelect:disabled,
+  #countSelect:disabled,
+  #artStyleSelect:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  #helperRow {
+    width: min(680px, 100%);
+    margin: 0 auto 14px;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  #statusText {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  #errorBox {
+    width: min(1120px, 100%);
+    margin: 0 auto 14px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    color: var(--danger-text);
+    font-size: 14px;
+  }
+
+  #resultsSection {
+    width: 100%;
+    max-width: 1120px;
+    margin: 0 auto;
+  }
+
+  #translatedPromptBox {
+    margin: 0 0 16px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: var(--panel-soft);
+    border: 1px solid var(--border);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  }
+
+  #translatedPromptTitle {
+    margin-bottom: 8px;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 650;
+  }
+
+  #translatedPromptText {
+    color: var(--text-soft);
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  #gallery {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .imageCard {
+    background: var(--panel-soft);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  }
+
+  .imageWrap {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #1d1d1d;
+  }
+
+  .resultImg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #1d1d1d;
+  }
+
+  .cardMeta {
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.01);
+  }
+
+  .cardTitle {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 650;
+  }
+
+  .statusWrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .cardSub {
+    color: var(--text-soft);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .downloadBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-soft);
+    text-decoration: none;
+    font-size: 14px;
+    line-height: 1;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  }
+
+  .downloadBtn:hover {
+    background: var(--bg-elevated-2);
+    border-color: var(--border-strong);
+    color: var(--text);
+    transform: translateY(-1px);
+  }
+
+  @media (max-width: 980px) {
+    #gallery {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #header {
+      padding: 20px 0 0;
+    }
+
+    #lastEditBadge {
+      top: 14px;
+      right: 16px;
+      max-width: 190px;
+    }
+
+    .bottomControls {
+      grid-template-columns: 150px 150px 180px;
+    }
+
+    #generateBtn,
+    #clearBtn {
+      width: 150px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    #app {
+      padding: 14px;
+    }
+
+    #panel {
+      padding: 42px 16px 28px;
+      border-radius: 16px;
+    }
+
+    #lastEditBadge {
+      top: 14px;
+      left: 16px;
+      right: 16px;
+      max-width: none;
+      text-align: center;
+    }
+
+    #header {
+      padding: 0;
+    }
+
+    .bottomControls {
+      grid-template-columns: 1fr;
+      width: 100%;
+    }
+
+    .selectGroup,
+    #generateBtn,
+    #clearBtn,
+    #helperRow,
+    #errorBox {
+      width: 100%;
+    }
+
+    #helperRow {
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    #gallery {
+      grid-template-columns: 1fr;
+    }
+
+    #header h1 {
+      font-size: 28px;
+    }
+  }
+</style>
+</body>
+</html>

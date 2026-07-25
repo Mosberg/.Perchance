@@ -1,0 +1,566 @@
+kv = {import:kv-plugin}
+superFetch = {import:super-fetch-plugin} // for URL-based media imports (see gallery menu)
+
+createMediaGallery = [$output] // just for the demo in the HTML panel
+
+$output(name) =>
+  if(!name) name = "";
+  if(!/^[a-zA-Z0-9_]*$/.test(name)) throw new Error("Gallery name must be alphanumeric (underscores are also allowed)");
+  /* ── prefix to avoid collisions ── */
+  const pre = `localMediaGallery_${name}.`;
+  const galleriesKey = pre + "names";
+  const defaultGallery = "general";
+  let activeGalleryName = localStorage[pre + "activeGalleryName"] || defaultGallery;
+
+  /* helper to coerce any info object into { [k:string]:string } */
+  const cleanInfo = i => {
+    if (!i || typeof i !== "object") i = {};
+    const o = {};
+    for (const [k, v] of Object.entries(i)) o[k] = String(v);
+    return o;
+  };
+
+  /* global dark-mode + btn-visibility vars (once) */
+  if(!document.getElementById("localMediaGalleryGlobalStyles")) {
+    const s = document.createElement("style");
+    s.id = "localMediaGalleryGlobalStyles";
+    s.textContent = `
+      html{color-scheme:light dark;}
+      :root  {--localMediaGalleryBtnsDisplay:flex;}
+      @media (hover:hover) and (pointer:fine) {
+        [data-local-media-gallery-item] [data-local-media-gallery-bar]{opacity:0;pointer-events:none;transition:opacity .15s;}
+        [data-local-media-gallery-item]:hover [data-local-media-gallery-bar]{opacity:.85;pointer-events:auto;}
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  const getGalleryNames  = () => JSON.parse(localStorage.getItem(galleriesKey) || `["${defaultGallery}"]`);
+  const saveGalleryNames = a => localStorage.setItem(galleriesKey, JSON.stringify([...new Set(a)]));
+
+  const $ = (t,p={},...k)=>{
+    const el=document.createElement(t);
+    for(const [k2,v] of Object.entries(p)){
+      if(k2==="style")el.style.cssText=v;
+      else if(k2==="dataset")Object.assign(el.dataset,v);
+      else el[k2]=v;
+    }
+    k.forEach(c=>c&&el.appendChild(c));
+    return el;
+  };
+
+  const dims = b => new Promise(r => {
+    const url = URL.createObjectURL(b);
+    if (b.type.startsWith("image/")) {
+      const i = new Image();
+      i.onload = () => { r({w:i.width, h:i.height}); URL.revokeObjectURL(url); };
+      i.src = url;
+    } else if (b.type.startsWith("video/")) {
+      const v = document.createElement("video");
+      v.onloadedmetadata = () => { r({w:v.videoWidth||300, h:v.videoHeight||300}); URL.revokeObjectURL(url); };
+      v.src = url;
+    } else {
+      URL.revokeObjectURL(url);
+      r({w:300, h:300});
+    }
+  });
+
+  
+
+  const blobs = kv[pre+"blobs"]; // "blob" store
+  // Backwards-compatibly store Blobs as ArrayBuffers due to long-standing Safari bug #74827837: https://stackoverflow.com/questions/61090349/indexeddb-doesnt-get-the-blobs-correctly-if-accessing-from-an-index-webkitblob
+  // It is unethical to use Safari to browse the world wide web
+  const originalBlobsSet = blobs.set.bind(blobs);
+  blobs.set = async (id, data) => {
+    // data is either {blob, info} or just a raw blob
+    const blob = data?.blob ?? data;
+    const info = data?.info ?? null;
+    const arrayBuffer = await blob.arrayBuffer();
+    return originalBlobsSet(id, { buffer: arrayBuffer, type: blob.type, info });
+  };
+  const originalBlobsGet = blobs.get.bind(blobs);
+  blobs.get = async (id) => {
+    const rec = await originalBlobsGet(id);
+    if (!rec) return null;
+    
+    // Backwards compat: if it's already a Blob, return as-is
+    if (rec instanceof Blob) return { blob: rec, info: null };
+    if (rec.blob instanceof Blob) return rec;
+    
+    // New format: reconstruct from ArrayBuffer
+    if (rec.buffer) {
+      const blob = new Blob([rec.buffer], { type: rec.type || 'application/octet-stream' });
+      return { blob, info: rec.info ?? null };
+    }
+    
+    // Fallback for unexpected format
+    return rec;
+  };
+
+  /* ───────────────────────────── JSZip loader */
+  let jszipMod = null;
+  const getJSZip = () => jszipMod?jszipMod:import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm").then(m=>(jszipMod=m.default||m));
+
+  /* ───────────────────────────── backup / restore (ZIP) */
+  async function saveBackup() {
+    if(!confirm("This will download a .zip backup of all galleries to your device. Proceed?"))return;
+    const files = [];
+    for(const g of getGalleryNames()) {
+      const items = await kv[pre+g].values();
+      for (const m of items) {
+        const rec = await blobs.get(m.id);
+        const b = rec?.blob || rec;
+        const ext = (b.type.split("/")[1] || "bin").replace(/[^\w.-]/g,'');
+        files.push({name:`galleries/${g}/${m.id}.${ext}`, blob:b});
+        files.push({name:`galleries/${g}/${m.id}.info.json`, blob:new Blob([JSON.stringify({meta:m,info:rec?.info||null,mime:b.type},null,2)], {type:"application/json"})});
+      }
+    }
+    const JSZip = await getJSZip();
+    const zip = new JSZip();
+    files.forEach(f => zip.file(f.name,f.blob));
+    const zipBlob = await zip.generateAsync({type:"blob"});
+    const a=$("a",{href:URL.createObjectURL(zipBlob), download:`media_gallery_backup_${new Date().toISOString().replace(/[:]/g,'-').slice(0,19)}.zip`});
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function loadBackup() {
+    return new Promise(resolve => {
+      const inp=$("input",{type:"file",accept:".zip",style:"display:none"});
+      inp.onchange=async()=>{
+        try {
+          const file=inp.files[0];
+          if(!file) return;
+          if(!confirm("Importing will MERGE the backup into your current galleries (existing items are kept). Continue?")) return;
+          const JSZip = await getJSZip();
+          const zip = await JSZip.loadAsync(file);
+          const entries = [];
+          await Promise.all(Object.values(zip.files).map(async z => {
+            if(z.dir) return;
+            entries.push({name:z.name, blob:await z.async("blob")});
+          }));
+          const infoMap = Object.create(null);
+          const mediaMap = Object.create(null);
+          for(const e of entries){
+            if(e.name.endsWith(".info.json")){
+              const m = /^galleries\/([^\/]+)\/([^\/]+)\.info\.json$/.exec(e.name);
+              if(!m)continue;
+              const [ , gal, id ] = m;
+              infoMap[gal]??={}; infoMap[gal][id]=JSON.parse(await e.blob.text());
+            }else{
+              const m = /^galleries\/([^\/]+)\/([^\/]+)$/.exec(e.name);
+              if(!m) continue;
+              const [ , gal, fn ] = m;
+              const id = fn.replace(/\.[^.]+$/,'');
+              mediaMap[gal] ??= {};
+              mediaMap[gal][id] = e.blob;
+            }
+          }
+          for(const [gal, objs] of Object.entries(mediaMap)) {
+            const current = getGalleryNames();
+            if(!current.includes(gal)) saveGalleryNames([...current,gal]);
+            for(const [id, blob] of Object.entries(objs)) {
+              const skip = await blobs.get(id);
+              if(skip) continue;
+              const inf = infoMap[gal]?.[id] || {};
+              let b = blob;
+              if(!b.type && inf.mime) {
+                b = new Blob([await blob.arrayBuffer()], {type:inf.mime});
+              }
+              const {w, h} = await dims(b);
+              await blobs.set(id,{blob:b,info:cleanInfo(inf.info||null)});
+              await kv[pre+gal].set(id, {id, date:inf.meta?.date||Date.now(), rating:inf.meta?.rating||0,w,h});
+            }
+          }
+        } finally {
+          resolve();
+        }
+      };
+      document.body.appendChild(inp);
+      inp.click();
+      inp.remove();
+    });
+  }
+
+  async function add(blob, opts={}) {
+    let folder = opts.folder ?? activeGalleryName
+    let info = opts.info ?? null;
+    info = cleanInfo(info);
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const {w, h} = await dims(blob);
+    await blobs.set(id, {blob, info});
+    await kv[pre+folder].set(id, {id, date:Date.now(), rating:0, w, h});
+    const names=getGalleryNames();
+    if(!names.includes(folder)) saveGalleryNames([...names, folder]);
+    return id;
+  }
+
+  async function clearAllData(){
+    if(prompt('Type "yes" to permanently delete ALL gallery data:')!=="yes")return;
+    for(const n of getGalleryNames()) await kv[pre+n].clear();
+    await blobs.clear();
+    saveGalleryNames([defaultGallery]);
+    activeGalleryName = defaultGallery;
+    localStorage.removeItem(pre+"activeGalleryName");
+    localStorage.removeItem(pre+"seenPersistenceWarning");
+  }
+
+  // show fullscreen gallery
+  async function show() {
+    const isMobile = window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 500;
+    document.getElementById("localMediaGallery_root")?.remove();
+    const prevHtmlOv = document.documentElement.style.overflow;
+    const prevBodyOv = document.body.style.overflow;
+    document.documentElement.style.overflow = document.body.style.overflow = "hidden";
+
+    const root=$("div",{id:"localMediaGallery_root", style:"position:fixed;inset:0;display:flex;flex-direction:column;background:light-dark(#fff,#000);z-index:9999;font:14px system-ui,sans-serif;"});
+    document.body.appendChild(root);
+
+    // close gallery on Esc (unless a lightbox is up)
+    const closeGallery = () => {
+      document.removeEventListener("keydown", onKeyGallery);
+      document.documentElement.style.overflow = prevHtmlOv;
+      document.body.style.overflow = prevBodyOv;
+      root.remove();
+    };
+    const onKeyGallery = e => {
+      if (e.key === "Escape" && !document.querySelector("[data-local-media-gallery-lightbox]")) closeGallery();
+    };
+    document.addEventListener("keydown", onKeyGallery);
+
+    if(!localStorage[pre+"seenPersistenceWarning"]){
+      root.appendChild(
+        $("div",
+          {style:"background:light-dark(rgb(255 226 151),rgb(110 76 0));padding:4px;display:flex;gap:4px;flex-wrap:wrap;justify-content:center;align-items:center;"},
+          document.createTextNode(`This gallery is stored privately on your device only. Your browser may delete it if you clear your cache or if your device's storage is low - 𝗯𝗮𝗰𝗸𝘂𝗽 𝗿𝗲𝗴𝘂𝗹𝗮𝗿𝗹𝘆 via the menu!`),
+          $("button",{textContent:"✅ Understood", onclick:e=>{localStorage[pre+"seenPersistenceWarning"]=1;e.target.parentNode.remove();}})
+        )
+      );
+    }
+
+    const headerBarEl = root.appendChild($("div",{style:"padding:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;border-bottom:1px solid light-dark(#ccc,#333);"}));
+
+    /* menu picker */
+    const selMenu = $("select", {style:"max-width:90px;"});
+    const menuOpts = () => [
+      {v:"",           t:"☰ menu"},
+      {v:"saveBackup", t:"💾 save full backup"},
+      {v:"loadBackup", t:"📂 load full backup"},
+      {v:"importLocal",t:"📤 import local file"},
+      {v:"importURL",  t:"🌐 import from URL"},
+      {v:"toggleBtns", t:(getComputedStyle(document.documentElement).getPropertyValue("--localMediaGalleryBtnsDisplay")!=="none"?"🔘 hide buttons":"🔘 show buttons")},
+      {v:"storageInfo",t:"💽 storage info"},
+      {v:"",t:"—", disabled:true},
+      {v:"clearAll",   t:"💣 clear ALL data"},
+    ];
+    const refreshMenu=()=>{ selMenu.innerHTML=""; menuOpts().forEach(o=>selMenu.appendChild($("option",{value:o.v,textContent:o.t, disabled:!!o.disabled}))) };
+    refreshMenu();
+    headerBarEl.appendChild(selMenu);
+    
+    /* folder picker */
+    const selGallery = $("select", {style:"max-width:90px;"});
+    const refreshOpts = () => {
+      selGallery.innerHTML = "";
+      getGalleryNames().forEach(n => selGallery.appendChild($("option", {value:n, textContent:n})));
+      selGallery.appendChild($("option", {value:"__new__", textContent:"➕ 𝗮𝗱𝗱 𝗻𝗲𝘄 𝗳𝗼𝗹𝗱𝗲𝗿"}));
+      selGallery.appendChild($("option", {value:"__del__", textContent:"🗑️ 𝗱𝗲𝗹𝗲𝘁𝗲 𝗮 𝗳𝗼𝗹𝗱𝗲𝗿"}));
+      selGallery.value = activeGalleryName;
+    };
+    refreshOpts();
+    headerBarEl.appendChild(selGallery);
+
+    /* sort picker */
+    const selSort = $("select", {
+      innerHTML: '<option value="dateDesc">🆕 newest</option><option value="dateAsc">📜 oldest</option><option value="ratingDesc">⭐ best</option><option value="ratingAsc">💔 worst</option>',
+      style: "max-width:90px;"
+    });
+    headerBarEl.appendChild(selSort);
+
+    /* close */
+    headerBarEl.appendChild($("button",{textContent:"✖️", title:"Esc", style:"margin-left:auto;background:none;border:none;font-size:18px;", onclick:closeGallery}));
+
+    /* grid */
+    const grid = root.appendChild($("div",{style:"flex:1;overflow:auto;display:flex;flex-wrap:wrap;gap:4px;padding:4px;align-content:flex-start;justify-content:center;"}));
+
+    /* lazy loader */
+    let io;
+    const observe = () => {
+      io?.disconnect();
+      io = new IntersectionObserver(es => es.forEach(async en => {
+        if(en.isIntersecting && !en.target.dataset.loaded) {
+          en.target.dataset.loaded = 1;
+          const rec = await blobs.get(en.target.dataset.id);
+          const b = rec?.blob || rec;
+          if(!b) return;
+          if(b.type.startsWith("image/")) {
+            const url = URL.createObjectURL(b);
+            activeUrls.push(url);
+            en.target.appendChild($("img",{src:url,style:"width:100%;height:100%;",onclick:()=>lightbox(en.target.dataset.id)}));
+          } else if(b.type.startsWith("video/")) {
+            const url = URL.createObjectURL(b);
+            activeUrls.push(url);
+            en.target.appendChild($("video",{src:url,style:"width:100%;height:100%;",muted:true,loop:true,autoplay:true,playsInline:true,onclick:()=>lightbox(en.target.dataset.id)}));
+          } else {
+            en.target.appendChild($("div",{style:"width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:32px;background:#222;color:#fff;min-height:150px;",onclick:()=>lightbox(en.target.dataset.id)},document.createTextNode("🎵")));
+          }
+        }
+      }), {root:grid,rootMargin:"300px"});
+      [...grid.children].forEach(c=>io.observe(c));
+    };
+
+    /* lightbox */
+    let currentLightboxUrl = null;
+    const lightbox = id0 => {
+      let idx = mediaArr.findIndex(m => m.id===id0);
+      const ov = $("div",{dataset:{localMediaGalleryLightbox:1}, style:"position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:10000;", onclick:e=>e.target===ov&&close()});
+      const holder = $("div");
+      const onKey = e => {
+        if(e.key==="ArrowLeft"  && idx>0)               { idx--; load(); }
+        else if(e.key==="ArrowRight" && idx<mediaArr.length-1) { idx++; load(); }
+        else if(e.key==="Escape") close();
+      };
+      const close = ()=>{ document.removeEventListener("keydown",onKey); ov.remove(); };
+      document.addEventListener("keydown", onKey);
+      const load = async() => {
+        if (currentLightboxUrl) URL.revokeObjectURL(currentLightboxUrl);
+        holder.innerHTML = "";
+        const rec = await blobs.get(mediaArr[idx].id);
+        const b = rec?.blob || rec;
+        currentLightboxUrl = URL.createObjectURL(b);
+        let el;
+        if(b.type.startsWith("image/")) el = $("img",{src:URL.createObjectURL(b),style:"max-width:90vw;max-height:90vh;object-fit:contain;"});
+        else if(b.type.startsWith("video/")) el = $("video",{src:URL.createObjectURL(b),style:"max-width:90vw;max-height:90vh;object-fit:contain;",controls:true,autoplay:true});
+        else el = $("audio", {src:URL.createObjectURL(b),controls:true});
+        holder.appendChild(el);
+        btnPrev.style.opacity = idx===0?.3:1;
+        btnNext.style.opacity = idx===mediaArr.length-1?.3:1;
+      };
+      const nav=(txt,d,side) => ov.appendChild($("button",{textContent:txt,style:`position:absolute;${side}:10px;top:50%;transform:translateY(-50%);font-size:32px;background:none;border:none;color:#fff;`,onclick:e=>{
+        e.stopPropagation();
+        if(idx+d < 0 || idx+d >= mediaArr.length) return;
+        idx += d;
+        load();
+      }}));
+      const btnPrev=nav("⬅️",-1,"left");
+      ov.appendChild(holder);
+      const btnNext=nav("➡️",1,"right");
+      ov.appendChild($("button",{textContent:"✖️",style:"position:absolute;top:10px;right:10px;font-size:24px;background:none;border:none;color:#fff;",onclick:close}));
+      document.body.appendChild(ov);load();
+    };
+
+    /* info editor modal */
+    async function openInfoEditor(m){
+      const rec = await blobs.get(m.id);
+      if(!rec) return;
+      const infoOrig = cleanInfo(rec.info||{});
+      const origStr = JSON.stringify(infoOrig);
+
+      const overlay=$("div",{style:"position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:10001;"});
+      const modal=$("div",{style:"position:relative;background:light-dark(#fff,#222);color:light-dark(#000,#fff);padding:8px;border-radius:8px;width:500px;max-width:90vw;max-height:80vh;min-height:100px;display:flex;flex-direction:column;"});
+      const list=$("div",{style:"flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;justify-content:center;"});
+      modal.appendChild(list);
+
+      const plusBtn=$("button",{textContent:"➕ add entry",style:"align-self:center;",onclick:()=>addRow("","")});
+      list.appendChild(plusBtn);
+
+      const rows=[];
+      const addRow=(k="",v="")=>{
+        const keyInp=$("input",{value:k,style:"width:100%;padding:4px;",placeholder:"entry name"});
+        const valArea=$("textarea",{value:v,style:"width:100%;flex:1;padding:4px;height:60px;resize:vertical;",placeholder:"entry content"});
+        const row=$("div",{style:"display:flex;gap:4px;flex-direction:column;background:light-dark(#dedede,#3a3a3a);padding:0.25rem;border-radius:2px;"},keyInp,valArea);
+        rows.push({keyInp,valArea});
+        list.insertBefore(row,plusBtn);
+      };
+      for(const [k,v] of Object.entries(infoOrig)) addRow(k,v);
+
+      const titleEl=$("div",{textContent:"ℹ️ file info",style:"position:absolute;top:-30px;width:100%;text-align:center;opacity:0.9;"});
+      modal.appendChild(titleEl);
+      const saveBtn=$("button",{textContent:"💾 save",style:"position:absolute;bottom:8px;right:8px;"});
+      modal.appendChild(saveBtn);
+      const closeBtn=$("button",{textContent:"✖️",style:"position:absolute;top:-10px;right:-14px;background:none;border:none;font-size:18px;"});
+      modal.appendChild(closeBtn);
+      
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+
+      const gather=()=>{
+        const o = {};
+        rows.forEach(({keyInp,valArea}) => {
+          const k = keyInp.value.trim();
+          if(k) o[k] = String(valArea.value);
+        });
+        return o;
+      };
+      const maybeClose = () => {
+        if(JSON.stringify(gather()) !== origStr){
+          if(!confirm("Discard unsaved changes?")) return false;
+        }
+        overlay.remove();
+        return true;
+      };
+      overlay.onclick=e=>{if(e.target===overlay)maybeClose();};
+      closeBtn.onclick=e=>{e.stopPropagation();maybeClose();};
+      saveBtn.onclick=async e=>{
+        let keys = rows.map(({keyInp}) => keyInp.value.trim()).filter(k => k);
+        if(keys.length !== new Set(keys).size) return alert("Entry names must be unique.");
+        e.stopPropagation();
+        await blobs.set(m.id,{blob:rec.blob||rec,info:gather()});
+        overlay.remove();
+      };
+    }
+
+    /* item controls */
+    const controls = (m,ph) => {
+      const bar = $("div",{
+        dataset:{localMediaGalleryBar:1},
+        style:`z-index:5;position:absolute;bottom:4px;left:4px;right:4px;display:var(--localMediaGalleryBtnsDisplay,flex);justify-content:center;gap:16px;${isMobile?"opacity:.85;":""}`
+      });
+      /* delete */
+      bar.appendChild($("button",{title:"Delete item",textContent:"🗑️",onclick:async e=>{
+        e.stopPropagation();
+        if(!confirm("Delete this item?"))return;
+        await blobs.delete(m.id);
+        await kv[pre+activeGalleryName].delete(m.id);
+        mediaArr=mediaArr.filter(x => x.id !== m.id);
+        ph.remove();
+      }}));
+      /* move */
+      let lastMoveFolderName;
+      bar.appendChild($("button",{title:"move to another folder",textContent:"📁",onclick:async e=>{
+        e.stopPropagation();
+        const t = prompt("Move to folder:",lastMoveFolderName??activeGalleryName);
+        if(!t || t === activeGalleryName)return;
+        lastMoveFolderName = t;
+        await kv[pre+t].set(m.id, m);
+        await kv[pre+activeGalleryName].delete(m.id);
+        saveGalleryNames([...getGalleryNames(), t]);
+        refreshOpts();
+        loadGallery();
+      }}));
+      /* rate */
+      bar.appendChild($("button",{title:"rate item",textContent:"⭐",onclick:async e=>{
+        e.stopPropagation();
+        const v = prompt("You can add a numeric rating/score for sorting:", m.rating);
+        if(v==null) return;
+        m.rating = Number(v);
+        if(isNaN(m.rating)) m.rating = 0;
+        await kv[pre+activeGalleryName].set(m.id, m);
+        render();
+      }}));
+      /* download */
+      bar.appendChild($("button",{title:"download item", textContent:"📥",onclick:async e => {
+        e.stopPropagation();
+        const rec = await blobs.get(m.id);
+        const b = rec?.blob || rec;
+        const a = $("a", {href:URL.createObjectURL(b), download:`${m.id}.${(b.type.split("/")[1]||"bin")}`});
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }}));
+      /* info editor */
+      bar.appendChild($("button",{title:"edit info",textContent:"ℹ️",onclick:async e=>{
+        e.stopPropagation();
+        openInfoEditor(m);
+      }}));
+      return bar;
+    };
+
+    const sortFn=()=>{
+      switch(selSort.value){
+        case"dateAsc":    return (a,b) => a.date-b.date;
+        case"ratingDesc": return (a,b) => b.rating-a.rating;
+        case"ratingAsc":  return (a,b) => a.rating-b.rating;
+        default:          return (a,b) => b.date-a.date;
+      }
+    };
+
+    /* render */
+    let mediaArr=[];
+    let activeUrls = [];
+    const rowH=300;
+    const render = () => {
+      activeUrls.forEach(u => URL.revokeObjectURL(u));
+      activeUrls = [];
+      grid.innerHTML = "";
+      const h = rowH;
+      mediaArr.sort(sortFn()).forEach(m => {
+        let w=m.w?(m.w/m.h)*h:h;
+        if(isMobile) w=Math.min(w,window.innerWidth-12);                /* ← mobile clamp */
+        const ph=$("div", {dataset:{id:m.id, localMediaGalleryItem:1}, style:`flex:0 0 ${w}px;max-height:${h}px;background:light-dark(#ddd,#444);position:relative;max-width:100%;`});
+        ph.appendChild(controls(m, ph));
+        grid.appendChild(ph);
+      });
+      observe();
+    };
+
+    /* load gallery */
+    const loadGallery = async()=>{ mediaArr=await kv[pre+activeGalleryName].values(); render(); };
+    loadGallery();
+
+    /* events */
+    selGallery.onchange=async()=>{
+      if(selGallery.value === "__new__") {
+        const n=prompt("Gallery name:");
+        if(!n){ selGallery.value=activeGalleryName; return; }
+        saveGalleryNames( [...getGalleryNames(),n] );
+        activeGalleryName=n;
+        localStorage[pre+"activeGalleryName"]=n;
+        refreshOpts();
+        selGallery.value=n;
+      } else if(selGallery.value === "__del__") {
+        const n=prompt("Type the exact gallery name to delete:");
+        if(!n||n===defaultGallery||!getGalleryNames().includes(n)) { selGallery.value=activeGalleryName; return; }
+        if(!confirm(`Delete gallery "${n}"? This cannot be undone.`)) { selGallery.value=activeGalleryName; return; }
+        await kv[pre+n].clear();
+        saveGalleryNames( getGalleryNames().filter(x=>x!==n) );
+        if(activeGalleryName===n){ activeGalleryName=defaultGallery; localStorage[pre+"activeGalleryName"]=activeGalleryName; }
+        refreshOpts();
+        selGallery.value = activeGalleryName;
+      } else {
+        activeGalleryName = selGallery.value;
+        localStorage[pre+"activeGalleryName"] = activeGalleryName;
+      }
+      loadGallery();
+    };
+    selSort.onchange=render;
+    
+    selMenu.onchange=async()=>{
+      if(selMenu.value==="saveBackup"){ await saveBackup(); }
+      else if(selMenu.value==="loadBackup"){ await loadBackup(); refreshOpts(); await loadGallery(); }
+      else if(selMenu.value==="importLocal"){
+        const inp=$("input",{type:"file",multiple:true,style:"display:none"});
+        inp.onchange=async()=>{
+          for(const f of inp.files) await add(f);
+          await loadGallery();
+        };
+        document.body.appendChild(inp);inp.click();inp.remove();
+      }
+      else if(selMenu.value==="importURL"){
+        const u=prompt("Enter a URL to import:");
+        if(u){
+          try{
+            const resp=await superFetch(u);
+            if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const b=await resp.blob();
+            await add(b);
+            await loadGallery();
+          }catch(e){ alert("Failed to import: "+e.message); }
+        }
+      }
+      else if(selMenu.value==="toggleBtns"){
+        const cur=getComputedStyle(document.documentElement).getPropertyValue("--localMediaGalleryBtnsDisplay").trim();
+        document.documentElement.style.setProperty("--localMediaGalleryBtnsDisplay",cur==="none"?"flex":"none");
+        refreshMenu();render();
+      }else if(selMenu.value==="storageInfo"){
+        const {usage,quota}=await navigator.storage.estimate();
+        const persisted=await navigator.storage.persisted();
+        alert(`You're using ${(usage/1024**3).toFixed(1)} out of ${(quota/1024**3).toFixed(1)} GB.\n\nYour browser has indicated that this storage is ${persisted?`𝗽𝗲𝗿𝗺𝗮𝗻𝗲𝗻𝘁, but you should still backup regularly`:"𝘁𝗲𝗺𝗽𝗼𝗿𝗮𝗿𝘆, possibly because you haven't used this site often, or you're in incognito mode, or you're low on device storage space."}.`);
+      } else if(selMenu.value==="clearAll"){
+        await clearAllData();
+        refreshOpts();
+        loadGallery();
+      }
+      selMenu.value="";
+    };
+  }
+
+  return {add,show,getActiveFolderName:()=>activeGalleryName,clearAllData};

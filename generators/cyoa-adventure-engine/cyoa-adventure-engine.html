@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>cyoa-adventure-engine — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- Infinite Text: AI CYOA Adventure Engine -->
+<div id="appCtn">
+  <!-- Title Screen -->
+  <div id="titleScreenEl" class="screen screen-center">
+    <div class="title-main">Infinite Text</div>
+    <div class="title-sub">AI-Powered CYOA Adventure Engine</div>
+    <div class="title-form">
+      <input id="themeInputEl" class="input" placeholder="Theme (e.g. Cyberpunk Heist, Cosmic Horror)" />
+      <textarea id="themeDescEl" class="input" rows="3" placeholder="Optional scenario details..."></textarea>
+      <input id="adventureNameInput" class="input" placeholder="Name this adventure..." />
+      <div class="btn-row">
+        <button id="newGameBtn" class="btn btn-primary" onclick="startNewGame()">Begin Adventure</button>
+        <button id="loadGameBtn" class="btn" onclick="showLoadScreen()">Load</button>
+      </div>
+      <div id="titleLoadingEl" class="loading-row" hidden>
+        <div class="spinner"></div>
+        <span id="titleLoadingTextEl">Generating world...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="gameScreenEl" class="screen" hidden>
+    <div class="topbar">
+      <div id="adventureTitleEl" class="topbar-title"></div>
+      <div class="topbar-actions">
+        <button class="btn btn-icon" onclick="toggleInventory()" title="Inventory"><span id="invBadgeEl" class="inv-badge" hidden>0</span>Inv</button>
+        <button class="btn btn-icon" onclick="saveCurrentGame()">Save</button>
+        <button class="btn btn-icon" onclick="showTitleScreen()">Menu</button>
+      </div>
+    </div>
+    <div id="gameLogEl" class="game-log"></div>
+    <div class="action-bar">
+      <div id="chipsRowEl" class="chips-row"></div>
+      <div id="invPanelEl" class="inv-panel" hidden></div>
+      <div class="input-row">
+        <input id="customCmdInput" class="input input-action" placeholder="Type an action..." onkeydown="if(event.key==='Enter') submitCustomAction()" />
+        <button id="customCmdBtn" class="btn btn-primary btn-send" onclick="submitCustomAction()">Send</button>
+      </div>
+      <div id="loadingEl" class="loading-row" hidden>
+        <div class="spinner"></div>
+        <span id="loadingTextEl">Thinking...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Screen -->
+  <div id="loadScreenEl" class="screen screen-center" hidden>
+    <div class="title-main small">Load Adventure</div>
+    <div id="saveListEl" class="save-list"></div>
+    <div class="btn-row">
+      <button class="btn" onclick="showTitleScreen()">Back</button>
+      <button class="btn btn-danger" onclick="confirmDeleteAllSaves()">Delete All</button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toastEl" class="toast" hidden></div>
+</div>
+
+<style>
+:root {
+  --bg: #1a1a1a; --fg: #e0e0e0; --accent: #4fc3f7; --dim: #888;
+  --panel: #2a2a2a; --panel2: #222; --border: #444; --accent-dim: #2a4a5e;
+  --green: #81c784; --red: #ef5350;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; text-align: left; -webkit-text-size-adjust: 100%; }
+
+#appCtn { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+.screen { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.screen-center { align-items: center; justify-content: center; padding: 24px 16px; gap: 6px; }
+
+.title-main { font-size: 2rem; font-weight: 300; color: var(--accent); text-align: center; }
+.title-main.small { font-size: 1.5rem; margin-bottom: 12px; }
+.title-sub { color: var(--dim); text-align: center; margin-bottom: 24px; font-size: 0.9rem; }
+.title-form { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; }
+
+.input { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--fg); font-size: 16px; font-family: inherit; outline: none; transition: border-color .2s; }
+.input:focus { border-color: var(--accent); }
+.input-action { flex: 1; min-width: 0; }
+textarea.input { resize: none; line-height: 1.4; }
+
+.btn { cursor: pointer; border: 1px solid var(--border); background: var(--panel); color: var(--fg); padding: 10px 16px; border-radius: 8px; font-size: 0.95rem; font-family: inherit; transition: background .15s, border-color .15s, color .15s; min-height: 40px; }
+.btn:hover:not(:disabled) { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+.btn-primary:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.btn-danger { color: var(--red); border-color: var(--red); }
+.btn-danger:hover:not(:disabled) { background: var(--red); color: #fff; }
+.btn-icon { padding: 8px 12px; min-height: 36px; font-size: 0.85rem; position: relative; }
+.btn-send { padding: 10px 18px; }
+.btn-row { display: flex; gap: 8px; justify-content: center; }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0; gap: 8px; }
+.topbar-title { font-weight: 600; color: var(--accent); font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.topbar-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.inv-badge { position: absolute; top: -4px; right: -4px; background: var(--accent); color: #1a1a1a; font-size: 0.65rem; font-weight: 700; border-radius: 8px; padding: 1px 5px; min-width: 14px; text-align: center; }
+
+.game-log { flex: 1; overflow-y: auto; padding: 12px 14px; -webkit-overflow-scrolling: touch; min-height: 0; }
+.log-entry { padding: 8px 0 8px 12px; margin-bottom: 6px; border-left: 3px solid var(--accent); line-height: 1.55; animation: fadeIn .3s ease; word-wrap: break-word; }
+.log-entry.system { border-left-color: var(--dim); color: var(--dim); font-style: italic; font-size: 0.9em; }
+.log-entry.action { border-left-color: var(--green); color: var(--green); font-weight: 500; }
+.log-entry.description { border-left-color: var(--accent); white-space: pre-wrap; }
+.log-entry.room-title { border-left-color: var(--accent); color: var(--accent); font-weight: 600; font-size: 1.05rem; margin-top: 14px; }
+.log-entry.error { border-left-color: var(--red); color: var(--red); }
+
+.action-bar { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--panel); padding: 8px 10px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 6px; }
+.chips-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+.chips-row:empty { display: none; }
+.chip { flex-shrink: 0; padding: 7px 12px; border-radius: 16px; border: 1px solid var(--border); background: var(--panel2); color: var(--fg); font-size: 0.85rem; cursor: pointer; white-space: nowrap; transition: background .15s, border-color .15s; font-family: inherit; }
+.chip:hover { background: var(--accent-dim); }
+.chip.exit { border-color: var(--accent-dim); color: var(--accent); }
+.chip.exit:hover { background: var(--accent-dim); border-color: var(--accent); }
+.chip.interact { border-color: var(--border); color: var(--fg); }
+.chip.interact:hover { background: var(--accent-dim); border-color: var(--accent); }
+
+.inv-panel { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0; }
+.inv-panel:empty { display: none; }
+.inv-tag { display: inline-block; background: var(--accent-dim); color: var(--accent); padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; }
+
+.input-row { display: flex; gap: 8px; }
+
+.loading-row { display: flex; align-items: center; gap: 8px; color: var(--accent); font-size: 0.85rem; }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; flex-shrink: 0; }
+
+.save-list { max-width: 420px; width: 100%; max-height: 50vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); margin-bottom: 12px; }
+.save-slot { padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background .15s; gap: 8px; }
+.save-slot:last-child { border-bottom: none; }
+.save-slot:hover { background: var(--accent-dim); }
+.save-slot-title { font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.save-slot-meta { font-size: 0.78rem; color: var(--dim); flex-shrink: 0; }
+
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--accent); color: var(--accent); padding: 10px 18px; border-radius: 8px; z-index: 100; animation: fadeIn .3s; max-width: 90vw; text-align: center; font-size: 0.9rem; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+@media (min-width: 768px) {
+  .game-log { padding: 16px 24px; }
+  .action-bar { padding: 10px 24px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .topbar { padding: 10px 24px; }
+  .title-main { font-size: 2.5rem; }
+  .toast { bottom: 100px; }
+}
+
+.game-log::-webkit-scrollbar, .chips-row::-webkit-scrollbar, .save-list::-webkit-scrollbar { width: 6px; height: 6px; }
+.game-log::-webkit-scrollbar-thumb, .chips-row::-webkit-scrollbar-thumb, .save-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+
+<script>
+let $ = id => document.getElementById(id);
+let root = window.root;
+
+let G = freshState();
+
+function freshState() {
+  return {
+    name: '', theme: '', desc: '',
+    rooms: new Map(), current: '',
+    inventory: [], turns: 0,
+    transcript: [], busy: false
+  };
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.hidden = true);
+  $(id).hidden = false;
+}
+
+function setBusy(v, text) {
+  G.busy = v;
+  $('loadingEl').hidden = !v;
+  if (v && text) $('loadingTextEl').textContent = text;
+  $('customCmdInput').disabled = v;
+  $('customCmdBtn').disabled = v;
+}
+
+function showToast(msg) {
+  let t = $('toastEl');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(t._to);
+  t._to = setTimeout(() => t.hidden = true, 2500);
+}
+
+function escapeHtml(str) {
+  let d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function escapeAttr(str) {
+  return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function extractJson(t) {
+  let s = t.indexOf('{');
+  let e = t.lastIndexOf('}');
+  if (s === -1 || e === -1 || e < s) throw new Error('No JSON in response');
+  return t.slice(s, e + 1);
+}
+
+function stripMeta(text) {
+  return text.split(/\n(?:INTERACTABLES|EXITS|GOTO|INVENTORY_ADD|INVENTORY_REMOVE|UPDATED_ROOM)\s*:/i)[0].trim();
+}
+
+function parseRoomDesc(text) {
+  let m = text.match(/INTERACTABLES\s*:\s*(.+)$/im);
+  let interactables = m ? m[1].split(',').map(s => s.trim()).filter(Boolean) : [];
+  return { desc: stripMeta(text), interactables };
+}
+
+function parseInteraction(text) {
+  let res = { text: stripMeta(text), add: null, remove: null, goto: null, roomDesc: null };
+  let m;
+  if (m = text.match(/INVENTORY_ADD\s*:\s*(.+)$/im)) res.add = m[1].trim();
+  if (m = text.match(/INVENTORY_REMOVE\s*:\s*(.+)$/im)) res.remove = m[1].trim();
+  if (m = text.match(/GOTO\s*:\s*(.+)$/im)) res.goto = m[1].trim();
+  if (m = text.match(/UPDATED_ROOM\s*:\s*(.+)$/im)) res.roomDesc = m[1].trim();
+  return res;
+}
+
+function findRoomByName(n) {
+  let nl = n.toLowerCase();
+  for (let [id, r] of G.rooms) if (r.name.toLowerCase() === nl) return id;
+  for (let [id, r] of G.rooms) if (r.name.toLowerCase().includes(nl)) return id;
+  return null;
+}
+
+function roomExits(room) {
+  return room.connections.map(c => G.rooms.get(c)?.name || c).join(', ');
+}
+
+function buildTranscript() {
+  let max = root.config.maxTranscriptEntries;
+  return G.transcript.slice(-max).join('\n\n');
+}
+
+function addTranscript(entry) {
+  G.transcript.push(entry);
+  let max = root.config.maxTranscriptEntries;
+  if (G.transcript.length > max * 2) G.transcript = G.transcript.slice(-max);
+}
+
+function buildMap(data) {
+  let m = new Map();
+  for (let r of data.rooms) {
+    m.set(r.id, {
+      id: r.id, name: r.name,
+      short_summary: r.short_summary || '',
+      connections: Array.isArray(r.connections) ? [...r.connections] : [],
+      interactables: (r.interactables || []).map(n => ({ name: n, handled: false })),
+      visited: false,
+      description: r.short_summary || ''
+    });
+  }
+  for (let r of m.values()) {
+    for (let c of r.connections) {
+      let o = m.get(c);
+      if (o && !o.connections.includes(r.id)) o.connections.push(r.id);
+    }
+  }
+  G.rooms = m;
+}
+
+async function genMap(theme, desc) {
+  let raw = await root.generateText({ instruction: root.mapPrompt(theme, desc) });
+  return JSON.parse(extractJson(String(raw)));
+}
+
+async function describeCurrentRoom() {
+  let room = G.rooms.get(G.current);
+  let exits = roomExits(room);
+  let entryEl = log('description', '');
+  let buffer = '';
+  let result = await root.generateText({
+    instruction: root.roomDescPrompt(G.theme, room.name, room.short_summary, exits),
+    onChunk: (d) => {
+      buffer = d.fullTextSoFar;
+      entryEl.textContent = stripMeta(buffer);
+    }
+  });
+  let { desc, interactables } = parseRoomDesc(String(result));
+  room.description = desc;
+  room.interactables = interactables.map(n => ({ name: n, handled: false }));
+  entryEl.textContent = desc;
+  addTranscript(`ROOM: ${room.name} — ${room.short_summary}`);
+}
+
+window.startNewGame = async function() {
+  let theme = $('themeInputEl').value.trim() || root.config.defaultTheme;
+  let desc = $('themeDescEl').value.trim();
+  let name = $('adventureNameInput').value.trim() || 'Untitled Adventure';
+
+  $('titleLoadingEl').hidden = false;
+  $('titleLoadingTextEl').textContent = 'Generating world...';
+  G = freshState();
+  G.theme = theme; G.desc = desc; G.name = name; G.busy = true;
+
+  try {
+    let data = await genMap(theme, desc);
+    buildMap(data);
+    G.current = data.startRoomId || data.rooms[0].id;
+    G.rooms.get(G.current).visited = true;
+    $('adventureTitleEl').textContent = G.name;
+    $('gameLogEl').innerHTML = '';
+    showScreen('gameScreenEl');
+    log('room-title', G.rooms.get(G.current).name);
+    await describeCurrentRoom();
+    render();
+  } catch (e) {
+    console.error(e);
+    showToast('Failed to generate world: ' + e.message);
+  } finally {
+    $('titleLoadingEl').hidden = true;
+    setBusy(false);
+  }
+};
+
+window.moveToRoom = async function(roomId) {
+  if (G.busy) return;
+  let cur = G.rooms.get(G.current);
+  if (!cur.connections.includes(roomId)) { showToast('No path there.'); return; }
+  G.turns++;
+  let next = G.rooms.get(roomId);
+  log('system', 'You travel to ' + next.name + '.');
+  addTranscript(`PLAYER: travel to ${next.name}`);
+  G.current = roomId;
+  if (!next.visited) {
+    next.visited = true;
+    log('room-title', next.name);
+    setBusy(true, 'Describing area...');
+    try { await describeCurrentRoom(); } catch (e) { log('error', 'Your vision blurs...'); }
+    setBusy(false);
+  } else {
+    log('room-title', next.name);
+    log('description', next.description);
+  }
+  render();
+};
+
+window.submitCustomAction = async function() {
+  let input = $('customCmdInput');
+  let txt = input.value.trim();
+  if (!txt || G.busy) return;
+  input.value = '';
+  G.turns++;
+  log('action', '> ' + txt);
+  setBusy(true, 'Narrating...');
+  let entryEl = log('description', '');
+  try {
+    let room = G.rooms.get(G.current);
+    let exits = roomExits(room);
+    let inv = G.inventory.length ? G.inventory.join(', ') : 'nothing';
+    let prompt = root.actionPrompt(G.theme, room.name, exits, inv, buildTranscript(), txt);
+    let buffer = '';
+    let result = await root.generateText({
+      instruction: prompt,
+      onChunk: (d) => {
+        buffer = d.fullTextSoFar;
+        entryEl.textContent = stripMeta(buffer);
+      }
+    });
+    let res = parseInteraction(String(result));
+    entryEl.textContent = res.text;
+    addTranscript(`PLAYER: ${txt}\nNARRATOR: ${res.text}`);
+    if (res.add) { G.inventory.push(res.add); showToast('Got: ' + res.add); }
+    if (res.remove) { G.inventory = G.inventory.filter(x => x !== res.remove); showToast('Lost: ' + res.remove); }
+    if (res.goto) {
+      let tid = findRoomByName(res.goto);
+      if (tid && room.connections.includes(tid)) {
+        G.current = tid;
+        let troom = G.rooms.get(tid);
+        if (!troom.visited) {
+          troom.visited = true;
+          log('room-title', troom.name);
+          await describeCurrentRoom();
+        } else {
+          log('room-title', troom.name);
+          log('description', troom.description);
+        }
+      }
+    }
+    if (res.roomDesc) G.rooms.get(G.current).description = res.roomDesc;
+    render();
+  } catch (e) {
+    entryEl.textContent = '';
+    log('error', 'The narrator hesitates...');
+  } finally {
+    setBusy(false);
+  }
+};
+
+window.interactWith = async function(itemName) {
+  if (G.busy) return;
+  let room = G.rooms.get(G.current);
+  let item = room.interactables.find(i => i.name === itemName);
+  if (!item) return;
+  G.turns++;
+  log('action', '> Interact: ' + itemName);
+  if (item.handled) { log('system', 'Nothing new happens with ' + itemName + '.'); render(); return; }
+  setBusy(true, 'Narrating...');
+  let entryEl = log('description', '');
+  try {
+    let inv = G.inventory.length ? G.inventory.join(', ') : 'nothing';
+    let prompt = root.interactPrompt(G.theme, room.name, inv, buildTranscript(), itemName);
+    let buffer = '';
+    let result = await root.generateText({
+      instruction: prompt,
+      onChunk: (d) => {
+        buffer = d.fullTextSoFar;
+        entryEl.textContent = stripMeta(buffer);
+      }
+    });
+    let res = parseInteraction(String(result));
+    entryEl.textContent = res.text;
+    item.handled = true;
+    addTranscript(`PLAYER: interact with ${itemName}\nNARRATOR: ${res.text}`);
+    if (res.add) { G.inventory.push(res.add); showToast('Got: ' + res.add); }
+    if (res.remove) { G.inventory = G.inventory.filter(x => x !== res.remove); showToast('Lost: ' + res.remove); }
+    if (res.roomDesc) room.description = res.roomDesc;
+    render();
+  } catch (e) {
+    log('error', 'Nothing happens...');
+  } finally {
+    setBusy(false);
+  }
+};
+
+function render() {
+  let room = G.rooms.get(G.current);
+  if (!room) return;
+  let html = '';
+  if (room.connections.length) {
+    html += room.connections.map(cid => {
+      let r = G.rooms.get(cid);
+      return r ? `<button class="chip exit" onclick="moveToRoom('${escapeAttr(cid)}')">→ ${escapeHtml(r.name)}</button>` : '';
+    }).join('');
+  }
+  let unhandled = room.interactables.filter(i => !i.handled);
+  if (unhandled.length) {
+    html += unhandled.map(i =>
+      `<button class="chip interact" onclick="interactWith('${escapeAttr(i.name)}')">${escapeHtml(i.name)}</button>`
+    ).join('');
+  }
+  $('chipsRowEl').innerHTML = html;
+  let badge = $('invBadgeEl');
+  if (G.inventory.length) { badge.textContent = G.inventory.length; badge.hidden = false; }
+  else badge.hidden = true;
+  if (!$('invPanelEl').hidden) {
+    $('invPanelEl').innerHTML = G.inventory.length
+      ? G.inventory.map(i => `<span class="inv-tag">${escapeHtml(i)}</span>`).join('')
+      : '<span style="color:var(--dim);font-size:0.85rem;">Empty</span>';
+  }
+}
+
+function log(type, text) {
+  let d = document.createElement('div');
+  d.className = 'log-entry ' + type;
+  d.textContent = text;
+  $('gameLogEl').appendChild(d);
+  $('gameLogEl').scrollTop = $('gameLogEl').scrollHeight;
+  return d;
+}
+
+window.toggleInventory = function() {
+  let p = $('invPanelEl');
+  if (p.hidden) {
+    p.innerHTML = G.inventory.length
+      ? G.inventory.map(i => `<span class="inv-tag">${escapeHtml(i)}</span>`).join('')
+      : '<span style="color:var(--dim);font-size:0.85rem;">Empty</span>';
+    p.hidden = false;
+  } else p.hidden = true;
+};
+
+window.saveCurrentGame = async function() {
+  try {
+    let key = 'adv_' + Date.now();
+    let payload = {
+      name: G.name, savedAt: Date.now(),
+      state: {
+        name: G.name, theme: G.theme, desc: G.desc,
+        current: G.current, inventory: G.inventory,
+        turns: G.turns, transcript: G.transcript,
+        roomsArr: Array.from(G.rooms.entries())
+      }
+    };
+    await root.kv.saves.set(key, payload);
+    showToast('Game saved.');
+  } catch (e) { showToast('Save failed.'); console.error(e); }
+};
+
+window.showLoadScreen = async function() {
+  showScreen('loadScreenEl');
+  await renderSaveList();
+};
+
+async function renderSaveList() {
+  let list = $('saveListEl');
+  try {
+    let entries = await root.kv.saves.entries();
+    if (!entries.length) {
+      list.innerHTML = '<div class="save-slot" style="cursor:default;"><span style="color:var(--dim);">No saved adventures.</span></div>';
+      return;
+    }
+    entries.sort((a, b) => (b[1].savedAt || 0) - (a[1].savedAt || 0));
+    list.innerHTML = entries.map(([k, v]) => {
+      let d = new Date(v.savedAt).toLocaleString();
+      return `<div class="save-slot" onclick="loadGame('${escapeAttr(k)}')">
+        <span class="save-slot-title">${escapeHtml(v.name)}</span>
+        <span class="save-slot-meta">${d}</span>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = '<div class="save-slot" style="cursor:default;"><span style="color:var(--red);">Could not load saves.</span></div>';
+    console.error(e);
+  }
+}
+
+window.loadGame = async function(key) {
+  try {
+    let data = await root.kv.saves.get(key);
+    if (!data) { showToast('Save missing.'); return; }
+    let s = data.state;
+    G = {
+      name: s.name || 'Untitled', theme: s.theme || '', desc: s.desc || '',
+      current: s.current, inventory: s.inventory || [],
+      turns: s.turns || 0, transcript: s.transcript || [],
+      rooms: new Map(s.roomsArr || []), busy: false
+    };
+    $('adventureTitleEl').textContent = G.name;
+    $('gameLogEl').innerHTML = '';
+    let room = G.rooms.get(G.current);
+    if (room) { log('room-title', room.name); log('description', room.description); }
+    showScreen('gameScreenEl');
+    render();
+    showToast('Loaded ' + data.name);
+  } catch (e) { showToast('Load failed.'); console.error(e); }
+};
+
+window.confirmDeleteAllSaves = async function() {
+  if (!confirm('Delete ALL saves? This cannot be undone.')) return;
+  try {
+    let entries = await root.kv.saves.entries();
+    for (let [k] of entries) await root.kv.saves.delete(k);
+    await renderSaveList();
+    showToast('All saves deleted.');
+  } catch (e) { showToast('Delete failed.'); console.error(e); }
+};
+
+window.showTitleScreen = () => showScreen('titleScreenEl');
+showScreen('titleScreenEl');
+</script>
+
+</body>
+</html>

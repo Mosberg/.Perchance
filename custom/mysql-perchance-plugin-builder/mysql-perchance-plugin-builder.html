@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>mysql-perchance-plugin-builder — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+MySQL Perchance Plugin Builder
+- Design tables with a visual schema editor
+- Run SELECT, INSERT, DELETE, CREATE, DROP queries
+- Export a self-contained Perchance plugin script
+-->
+<div style="font-family:system-ui,sans-serif; max-width:1100px; margin:0 auto; text-align:left; padding:20px;">
+  <h1 style="margin-top:0;">🗄️ MySQL Perchance Plugin Builder</h1>
+  <p>Prototype a tiny relational database and export it as a Perchance plugin.</p>
+
+  <div style="display:flex; gap:20px; flex-wrap:wrap;">
+    <!-- Query Panel -->
+    <div style="flex:1; min-width:320px;">
+      <label style="font-weight:bold; font-size:14px;">SQL Query</label>
+      <textarea id="sqlInput" style="width:100%; height:70px; font-family:monospace; font-size:13px; margin-top:4px;">SELECT * FROM users WHERE role = 'admin'</textarea>
+      <div style="margin-top:6px;">
+        <button id="runBtn" onclick="runSql()">▶ Run Query</button>
+        <button id="clearBtn" onclick="sqlInput.value=''">Clear</button>
+      </div>
+
+      <h3>Results</h3>
+      <div id="resultsCtn" style="border:1px solid #ccc; padding:10px; min-height:80px; background:#f9f9f9; overflow:auto;"></div>
+
+      <div style="margin-top:10px; font-size:12px; color:#555;">
+        Supports: <code>SELECT</code>, <code>INSERT INTO</code>, <code>DELETE FROM</code>, <code>CREATE TABLE</code>, <code>DROP TABLE</code>
+      </div>
+    </div>
+
+    <!-- Schema Panel -->
+    <div style="flex:1; min-width:320px;">
+      <h3 style="margin-top:0;">Schema</h3>
+      <div id="schemaCtn" style="border:1px solid #ccc; padding:10px; min-height:150px; background:#fafafa; overflow:auto;"></div>
+      <div style="margin-top:8px;">
+        <button id="addTableBtn" onclick="addTable()">+ Add Table</button>
+        <button id="resetBtn" onclick="resetDb()">Reset Demo Data</button>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:30px; margin-bottom:8px;">📋 Generated Perchance Plugin Code</h3>
+  <p style="margin-top:0; font-size:13px; color:#333;">Copy this into your Perchance generator's HTML/JS plugin section:</p>
+  <textarea id="pluginCodeEl" readonly style="width:100%; height:240px; font-family:monospace; font-size:12px; background:#1e1e1e; color:#d4d4d4; padding:12px; border:none; border-radius:4px; resize:vertical;"></textarea>
+  <button onclick="navigator.clipboard.writeText(pluginCodeEl.value)" style="margin-top:6px;">📋 Copy to Clipboard</button>
+</div>
+
+<style>
+  code { background:#eee; padding:2px 5px; border-radius:3px; font-family:monospace; }
+  button { cursor:pointer; padding:4px 10px; font-size:13px; }
+</style>
+
+<script>
+  let db = {};
+
+  function resetDb() {
+    db = {
+      users: {columns: ['id','name','role'], rows: [['1','Alice','admin'],['2','Bob','user'],['3','Carol','user']]},
+      items: {columns: ['id','item_name','owner_id'], rows: [['1','Sword','1'],['2','Shield','2']]}
+    };
+    renderSchema(); generatePlugin();
+  }
+
+  function formatTable(cols, rows) {
+    if(!rows.length) return '<p><i>No rows.</i></p>';
+    return `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <tr>${cols.map(c=>`<th style="border:1px solid #999; padding:5px; background:#eee;">${c}</th>`).join('')}</tr>
+      ${rows.map(r=>`<tr>${r.map(v=>`<td style="border:1px solid #999; padding:5px;">${v}</td>`).join('')}</tr>`).join('')}
+    </table>`;
+  }
+
+  function renderSchema() {
+    let keys = Object.keys(db);
+    if(!keys.length) { schemaCtn.innerHTML = '<p><i>No tables defined.</i></p>'; return; }
+    schemaCtn.innerHTML = keys.map(name => {
+      let t = db[name];
+      return `<div style="margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <b style="font-size:15px;">${name}</b>
+          <span>
+            <button onclick="addRow('${name}')" style="font-size:12px;">+ Row</button>
+            <button onclick="dropTable('${name}')" style="font-size:12px;">Drop</button>
+          </span>
+        </div>
+        <table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:4px;">
+          <tr>${t.columns.map(c=>`<th style="border:1px solid #ccc; padding:4px; background:#f0f0f0;">${c}</th>`).join('')}<th style="border:1px solid #ccc; padding:4px; background:#f0f0f0; width:30px;"></th></tr>
+          ${t.rows.map((row,i)=>`<tr>${row.map(v=>`<td style="border:1px solid #ccc; padding:4px;">${v}</td>`).join('')}<td style="border:1px solid #ccc; padding:4px; text-align:center;"><button onclick="deleteRow('${name}',${i})" style="font-size:11px; color:#c00;">×</button></td></tr>`).join('')}
+        </table>
+      </div>`;
+    }).join('');
+  }
+
+  function executeSql(sql) {
+    let lower = sql.trim().toLowerCase();
+    let m, table, vals, idx, rows, cols;
+    if((m = lower.match(/^create\s+table\s+(\w+)\s*\(([^)]+)\)/))) {
+      table = m[1];
+      db[table] = {columns: m[2].split(',').map(s=>s.trim()), rows: []};
+      return {type:'msg', text:`Table ${table} created.`};
+    }
+    if((m = lower.match(/^drop\s+table\s+(\w+)/))) {
+      delete db[m[1]];
+      return {type:'msg', text:`Table ${m[1]} dropped.`};
+    }
+    if((m = lower.match(/^insert\s+into\s+(\w+)\s+values\s*\(([^)]+)\)/))) {
+      table = m[1];
+      if(!db[table]) return {type:'err', text:'Table not found'};
+      vals = m[2].split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
+      db[table].rows.push(vals);
+      return {type:'msg', text:`Inserted 1 row into ${table}.`};
+    }
+    if((m = lower.match(/^delete\s+from\s+(\w+)\s+where\s+(\w+)\s*=\s*(.+)/))) {
+      table = m[1];
+      if(!db[table]) return {type:'err', text:'Table not found'};
+      idx = db[table].columns.indexOf(m[2]);
+      let val = m[3].trim().replace(/^["']|["']$/g, '');
+      let before = db[table].rows.length;
+      db[table].rows = db[table].rows.filter(r => r[idx] != val);
+      return {type:'msg', text:`Deleted ${before - db[table].rows.length} rows.`};
+    }
+    if((m = lower.match(/^select\s+(.+?)\s+from\s+(\w+)(?:\s+where\s+(\w+)\s*=\s*(.+))?/))) {
+      table = m[2];
+      if(!db[table]) return {type:'err', text:'Table not found'};
+      rows = db[table].rows.map(r => [...r]);
+      if(m[4]) {
+        idx = db[table].columns.indexOf(m[3]);
+        let val = m[4].trim().replace(/^["']|["']$/g, '');
+        rows = rows.filter(r => r[idx] == val);
+      }
+      cols = m[1].trim();
+      let outCols, outRows;
+      if(cols === '*') { outCols = db[table].columns; outRows = rows; }
+      else {
+        outCols = cols.split(',').map(s=>s.trim());
+        let idxs = outCols.map(c => db[table].columns.indexOf(c));
+        outRows = rows.map(r => idxs.map(i => r[i]));
+      }
+      return {type:'table', columns: outCols, rows: outRows};
+    }
+    return {type:'err', text:'Syntax error or unsupported query.'};
+  }
+
+  function runSql() {
+    let result = executeSql(sqlInput.value);
+    if(result.type === 'err') resultsCtn.innerHTML = `<p style="color:#c00; margin:0;">${result.text}</p>`;
+    else if(result.type === 'msg') resultsCtn.innerHTML = `<p style="color:#080; margin:0;">${result.text}</p>`;
+    else resultsCtn.innerHTML = formatTable(result.columns, result.rows);
+    renderSchema(); generatePlugin();
+  }
+
+  function addTable() {
+    let name = prompt('New table name:');
+    if(!name || db[name]) { alert('Invalid or duplicate table name.'); return; }
+    let cols = prompt('Columns (comma separated):');
+    if(!cols) return;
+    db[name] = {columns: cols.split(',').map(s=>s.trim()), rows: []};
+    renderSchema(); generatePlugin();
+  }
+
+  function addRow(name) {
+    let vals = db[name].columns.map(col => prompt(`Value for "${col}":`) || '');
+    db[name].rows.push(vals);
+    renderSchema(); generatePlugin();
+  }
+
+  function deleteRow(name, i) {
+    db[name].rows.splice(i, 1);
+    renderSchema(); generatePlugin();
+  }
+
+  function dropTable(name) {
+    if(!confirm(`Drop table "${name}"?`)) return;
+    delete db[name];
+    renderSchema(); generatePlugin();
+  }
+
+  function generatePlugin() {
+    let code = `// MySQL Perchance Plugin v1.0
+// Paste this into Perchance's HTML/JS plugin section.
+let db = ${JSON.stringify(db, null, 2)};
+
+${executeSql.toString()}
+
+// Perchance integration
+window.mysqlPlugin = {query: executeSql, tables: db};
+`;
+    pluginCodeEl.value = code;
+  }
+
+  resetDb();
+</script>
+</body>
+</html>

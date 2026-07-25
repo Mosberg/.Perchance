@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>pokemon-yellow-html5 — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Pokemon Yellow – HTML5 Edition</title>
+  <style>
+    /* Basic page reset & Game Boy styling */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      touch-action: none; /* Prevent scroll on mobile */
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background: #202020;
+      color: #fff;
+      font-family: 'Courier New', Courier, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    h1 {
+      margin: 8px 0;
+      font-size: 16px;
+      text-align: center;
+      color: #f8c900; /* Pokemon Yellow */
+      text-shadow: 2px 2px #000;
+    }
+
+    #game-wrapper {
+      position: relative;
+      border: 4px solid #c0c0c0;
+      border-radius: 10px 10px 40px 10px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      background: #000;
+    }
+
+    #game-container {
+      width: 320px; /* Game Boy aspect ratioish */
+      height: 288px;
+      background: #f8f8f8;
+      overflow: hidden;
+    }
+
+    /* Loading Overlay */
+    #loadingEl {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: #000;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      font-size: 14px;
+    }
+
+    /* Mobile Controls */
+    #controls {
+      margin-top: 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      width: 320px;
+    }
+
+    .d-pad {
+      grid-column: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 2px;
+    }
+
+    .btn {
+      background: #333;
+      border: 2px solid #555;
+      border-radius: 5px;
+      color: #ccc;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      active: #111;
+      cursor: pointer;
+    }
+    .btn:active { background: #555; transform: translateY(2px); }
+    .btn-up { grid-column: 2; grid-row: 1; border-radius: 5px 5px 0 0; }
+    .btn-left { grid-column: 1; grid-row: 2; border-radius: 0 0 0 5px; }
+    .btn-right { grid-column: 3; grid-row: 2; border-radius: 0 0 5px 0; }
+    .btn-down { grid-column: 2; grid-row: 2; }
+
+    .actions {
+      grid-column: 3;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 10px;
+      padding-bottom: 10px;
+    }
+
+    .ab-btn {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: #a9364a; /* Classic Game Boy A/B redish */
+      border: none;
+      box-shadow: 0 4px 0 #6b2230;
+      color: white;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ab-btn:active { box-shadow: 0 0 0 #6b2230; transform: translateY(4px); }
+    
+    .info {
+      font-size: 12px;
+      color: #888;
+      margin-top: 10px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Pokemon Yellow – HTML5 Edition</h1>
+  
+  <div id="game-wrapper">
+    <div id="loadingEl">Generating Assets...</div>
+    <div id="game-container"></div>
+  </div>
+
+  <!-- On-screen controls for mobile -->
+  <div id="controls">
+    <div class="d-pad">
+      <div class="btn btn-up" data-key="UP">▲</div>
+      <div class="btn btn-left" data-key="LEFT">◀</div>
+      <div class="btn btn-down" data-key="DOWN">▼</div>
+      <div class="btn btn-right" data-key="RIGHT">▶</div>
+    </div>
+    <div class="actions">
+      <div style="flex:1"></div>
+      <button class="ab-btn" data-key="B">B</button>
+      <button class="ab-btn" data-key="A">A</button>
+    </div>
+  </div>
+
+  <div class="info">Use Arrow Keys/Z(X)/X(C) or On-screen buttons. A=Confirm, B=Back.</div>
+
+  <!-- Phaser 3 (ESM build via CDN) - Using 3.80 for stability as 4 is unreleased -->
+  <script type="module">
+    import * as Phaser from 'https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.esm.js';
+
+    // --- Asset Generation ---
+    // We use generateImage for "True Copy" feel, fallback to colored blocks if slow/error
+    let pikachuTexture = null;
+    let playerTexture = null;
+    
+    // Simple canvas drawer for tiles (instant load)
+    function createTile(color) {
+      let c = document.createElement('canvas');
+      c.width = 32; c.height = 32;
+      let ctx = c.getContext('2d');
+      ctx.fillStyle = color;
+      ctx.fillRect(0,0,32,32);
+      // Add some noise/texture
+      ctx.fillStyle = "rgba(0,0,0,0.1)";
+      ctx.fillRect(0,0,32,2); ctx.fillRect(0,0,2,32);
+      return c.toDataURL();
+    }
+
+    const TILE_GRASS = createTile('#74c236');
+    const TILE_WALL = createTile('#5c4b38'); // Wood fence
+    const TILE_PATH = createTile('#d4ce98');
+
+    // --- Scenes ---
+
+    class BootScene extends Phaser.Scene {
+      constructor() { super('BootScene'); }
+
+      async create() {
+        // Load programmatic textures
+        this.textures.addBase64('grass', TILE_GRASS);
+        this.textures.addBase64('wall', TILE_WALL);
+        this.textures.addBase64('path', TILE_PATH);
+
+        // Try to load generated images if available
+        if(pikachuTexture) this.textures.addBase64('pikachu', pikachuTexture);
+        if(playerTexture) this.textures.addBase64('player', playerTexture);
+
+        // Create placeholder graphics if generation failed or returned nothing
+        if(!playerTexture) {
+          let g = this.make.graphics({x:0, y:0, add:false});
+          g.fillStyle(0xff0000, 1).fillRect(0,0,32,32); // Red hat
+          g.fillStyle(0x000000, 1).fillRect(4,8,24,4); // Visor
+          g.generateTexture('player', 32, 32);
+        }
+        if(!pikachuTexture) {
+          let g = this.make.graphics({x:0, y:0, add:false});
+          g.fillStyle(0xffff00, 1).fillRect(4,4,24,24); // Yellow body
+          g.fillStyle(0x000000, 1).fillRect(8,10,4,4); // Eyes
+          g.fillRect(20,10,4,4);
+          g.fillStyle(0xff0000, 1).fillRect(6,14,20,8); // Cheeks
+          g.generateTexture('pikachu', 32, 32);
+        }
+
+        // Load font (using system font fallback)
+        this.scene.start('WorldScene');
+      }
+    }
+
+    class WorldScene extends Phaser.Scene {
+      constructor() { super('WorldScene'); }
+
+      create() {
+        this.createMap();
+        this.createPlayer();
+        this.setupInput();
+        this.setupCamera();
+        
+        // Encounter Logic
+        this.encounterTimer = 0;
+        this.inGrass = false;
+      }
+
+      createMap() {
+        // Simple Tilemap using Group
+        this.walls = this.physics.add.group();
+        this.grass = this.physics.add.group();
+        this.interactables = this.physics.add.group();
+
+        // Create a small Pallet Town-like layout
+        // 1 = Wall, 0 = Grass, 2 = Path, 9 = House/Door
+        const mapData = [
+          [1,1,1,1,1,1,1,1,1,1],
+          [1,0,0,0,2,2,0,0,0,1],
+          [1,0,9,0,2,2,0,9,0,1],
+          [1,0,0,0,2,2,0,0,0,1],
+          [1,1,1,1,1,1,1,1,1,1],
+        ];
+
+        const tileSize = 32;
+        
+        mapData.forEach((row, r) => {
+          row.forEach((tile, c) => {
+            let x = c * tileSize;
+            let y = r * tileSize;
+            
+            if (tile === 1) {
+              let w = this.add.image(x, y, 'wall').setOrigin(0);
+              this.walls.add(w);
+              this.physics.add.existing(w, true); // Static
+            } else if (tile === 0) {
+              let g = this.add.image(x, y, 'grass').setOrigin(0);
+              this.grass.add(g);
+              this.physics.add.existing(g, true);
+            } else if (tile === 2) {
+              let p = this.add.image(x, y, 'path').setOrigin(0);
+              this.physics.add.existing(p, true);
+            }
+          });
+        });
+      }
+
+      createPlayer() {
+        this.player = this.physics.add.sprite(160, 160, 'player');
+        this.player.body.setCollideWorldBounds(true);
+        this.player.body.setSize(20, 20); // Smaller hitbox
+        this.player.setDepth(10);
+        
+        this.physics.add.collider(this.player, this.walls);
+      }
+
+      setupInput() {
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z); // A
+        this.keyB = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X); // B
+
+        // Map mobile buttons to keys
+        document.querySelectorAll('[data-key]').forEach(btn => {
+          const keyName = btn.dataset.key;
+          const handler = (isDown) => {
+            if(keyName === 'UP') this.cursors.up.isDown = isDown;
+            if(keyName === 'DOWN') this.cursors.down.isDown = isDown;
+            if(keyName === 'LEFT') this.cursors.left.isDown = isDown;
+            if(keyName === 'RIGHT') this.cursors.right.isDown = isDown;
+            if(keyName === 'A') this.keyA.isDown = isDown;
+            if(keyName === 'B') this.keyB.isDown = isDown;
+          };
+
+          btn.addEventListener('touchstart', (e) => { e.preventDefault(); handler(true); });
+          btn.addEventListener('touchend', (e) => { e.preventDefault(); handler(false); });
+          btn.addEventListener('mousedown', () => handler(true));
+          btn.addEventListener('mouseup', () => handler(false));
+        });
+      }
+
+      setupCamera() {
+        this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+        this.cameras.main.setBounds(0, 0, 320, 160);
+      }
+
+      update(time, delta) {
+        const speed = 100;
+        this.player.body.setVelocity(0);
+
+        // Movement
+        if (this.cursors.left.isDown) this.player.body.setVelocityX(-speed);
+        else if (this.cursors.right.isDown) this.player.body.setVelocityX(speed);
+        
+        if (this.cursors.up.isDown) this.player.body.setVelocityY(-speed);
+        else if (this.cursors.down.isDown) this.player.body.setVelocityY(speed);
+
+        // Check terrain for encounters
+        // Using simple distance check to grass tiles for this demo
+        this.inGrass = false;
+        this.grass.children.iterate((tile) => {
+          if (Phaser.Geom.Intersects.RectangleToRectangle(this.player.getBounds(), tile.getBounds())) {
+            this.inGrass = true;
+          }
+        });
+
+        // Random Encounter
+        if (this.inGrass && this.player.body.speed > 0) {
+          if (Math.random() < 0.01) { // 1% chance per frame in grass (simplified)
+            this.startEncounter();
+          }
+        }
+      }
+
+      async startEncounter() {
+        this.physics.pause();
+        this.scene.pause();
+        this.scene.launch('BattleScene');
+        
+        // Wait for battle to finish
+        const battleScene = this.scene.get('BattleScene');
+        battleScene.events.once('battle-end', async (result) => {
+          this.scene.resume();
+          this.physics.resume();
+          this.player.body.stop();
+          // Move player slightly back to prevent instant re-trigger
+          if(result === 'win') {
+             // Save progress using Perchance KV
+             root.kv.pokemonSave.set('wins', (await root.kv.pokemonSave.get('wins') || 0) + 1);
+          }
+        });
+      }
+    }
+
+    class BattleScene extends Phaser.Scene {
+      constructor() { super('BattleScene'); }
+
+      create() {
+        // Battle Layout
+        this.add.rectangle(160, 144, 320, 288, 0xffffff); // White bg
+        this.add.rectangle(160, 250, 300, 60, 0x000000).setDepth(2); // Text box
+
+        // Sprites
+        this.enemy = this.add.sprite(240, 80, 'pikachu').setScale(2);
+        this.playerBack = this.add.sprite(80, 180, 'player').setScale(2).setFlipX(true); // Reuse player sprite as back view
+
+        // UI Elements
+        this.statusText = this.add.text(20, 260, 'Wild PIKACHU appeared!', { fontSize: '12px', color: '#fff' }).setDepth(3);
+        
+        // Health Bars (Visual only)
+        this.add.rectangle(60, 60, 60, 6, 0x000000); // Enemy bar bg
+        this.enemyHP = this.add.rectangle(61, 60, 58, 4, 0x00ff00).setOrigin(0,0.5);
+        
+        this.add.rectangle(200, 200, 60, 6, 0x000000); // Player bar bg
+        this.playerHP = this.add.rectangle(201, 200, 58, 4, 0x00ff00).setOrigin(0,0.5);
+
+        // Options
+        this.cursorPos = 0;
+        this.options = ['FIGHT', 'BAG', 'PKMN', 'RUN'];
+        this.optionTexts = [];
+        this.createOptionsMenu();
+
+        // State
+        this.turn = 'player';
+        this.battleActive = true;
+        
+        // Input
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
+        this.keyB = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X);
+        
+        // Mobile inputs handled via global key emulation in WorldScene, 
+        // but since WorldScene is paused, we need to re-bind or rely on how Phaser handles global keys.
+        // Phaser input works globally across scenes usually.
+      }
+
+      createOptionsMenu() {
+        this.options.forEach((opt, i) => {
+          let x = 20 + (i % 2) * 140;
+          let y = 230 + Math.floor(i / 2) * 20;
+          let txt = this.add.text(x, y, opt, { fontSize: '10px', color: '#000' }).setDepth(3);
+          this.optionTexts.push(txt);
+        });
+        this.updateCursor();
+      }
+
+      updateCursor() {
+        this.optionTexts.forEach(txt => txt.setText(txt.text.replace('>', '')));
+        let x = 10 + (this.cursorPos % 2) * 140;
+        let y = 230 + Math.floor(this.cursorPos / 2) * 20;
+        this.optionTexts[this.cursorPos].setText('>' + this.options[this.cursorPos]);
+      }
+
+      update() {
+        if (!this.battleActive) return;
+
+        if (Phaser.Input.Keyboard.JustDown(this.keyA)) {
+          this.handleAction();
+        } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
+          if (this.cursorPos < 2) { this.cursorPos += 2; this.updateCursor(); }
+        } else if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+          if (this.cursorPos >= 2) { this.cursorPos -= 2; this.updateCursor(); }
+        } else if (Phaser.Input.Keyboard.JustDown(this.cursors.right)) {
+          if (this.cursorPos % 2 === 0) { this.cursorPos += 1; this.updateCursor(); }
+        } else if (Phaser.Input.Keyboard.JustDown(this.cursors.left)) {
+          if (this.cursorPos % 2 === 1) { this.cursorPos -= 1; this.updateCursor(); }
+        }
+      }
+
+      async handleAction() {
+        if (this.turn !== 'player') return;
+
+        let action = this.options[this.cursorPos];
+        
+        if (action === 'FIGHT') {
+          this.statusText.setText('PIKACHU used THUNDER SHOCK!');
+          this.tweens.add({ targets: this.enemy, x: 220, duration: 100, yoyo: true, repeat: 3 });
+          this.enemyHP.width -= 30; // Damage
+          await this.wait(1000);
+          if(this.enemyHP.width <= 0) {
+            this.endBattle('win');
+            return;
+          }
+        } else if (action === 'RUN') {
+          this.statusText.setText('Got away safely!');
+          await this.wait(500);
+          this.endBattle('run');
+          return;
+        } else if (action === 'BAG') {
+          this.statusText.setText('You have no items!');
+          await this.wait(1000);
+          return; // Turn doesn't end
+        } else {
+          this.statusText.setText('PIKACHU is your only POKEMON!');
+          await this.wait(1000);
+          return;
+        }
+
+        this.turn = 'enemy';
+        this.enemyTurn();
+      }
+
+      async enemyTurn() {
+        this.statusText.setText('Wild PIKACHU used TACKLE!');
+        await this.wait(500);
+        this.tweens.add({ targets: this.playerBack, x: 60, duration: 100, yoyo: true, repeat: 3 });
+        this.playerHP.width -= 10;
+        await this.wait(1000);
+        
+        if (this.playerHP.width <= 0) {
+           this.statusText.setText('You blacked out...');
+           await this.wait(1000);
+           this.endBattle('lose');
+        } else {
+           this.turn = 'player';
+           this.statusText.setText('What will PIKACHU do?');
+        }
+      }
+
+      endBattle(result) {
+        this.battleActive = false;
+        this.events.emit('battle-end', result);
+        this.scene.stop();
+      }
+
+      wait(ms) { return new Promise(resolve => this.time.delayedCall(ms, resolve)); }
+    }
+
+    // --- Initialization ---
+
+    async function initGame() {
+      const loadingEl = document.getElementById('loadingEl');
+      
+      try {
+        // Generate Assets (AI)
+        // We do this before starting Phaser to ensure textures exist
+        const pP = root.generateImage("pixel art of a boy trainer with red cap from behind, simple style, transparent background", {resolution:"64x64"});
+        const pikP = root.generateImage("pixel art of a yellow pikachu mouse, cute, simple style, transparent background", {resolution:"64x64"});
+        
+        [playerTexture, pikachuTexture] = await Promise.all([pP, pikP]);
+      } catch(e) {
+        console.warn("Image generation failed or cancelled, using fallbacks.", e);
+      }
+      
+      loadingEl.hidden = true;
+
+      const config = {
+        type: Phaser.AUTO,
+        width: 320,
+        height: 288,
+        parent: 'game-container',
+        backgroundColor: '#ffffff',
+        pixelArt: true, // Important for retro look
+        physics: {
+          default: 'arcade',
+          arcade: {
+            gravity: { y: 0 },
+            debug: false
+          }
+        },
+        scene: [BootScene, WorldScene, BattleScene]
+      };
+
+      new Phaser.Game(config);
+    }
+
+    // Start the whole process
+    initGame();
+  </script>
+</body>
+
+</body>
+</html>

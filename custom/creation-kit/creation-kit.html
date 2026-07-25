@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>creation-kit — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="appCtn">
+  <!-- Toolbar -->
+  <div id="toolbarEl" style="display:flex; gap:10px; padding:10px; background:#333; color:white;">
+    <button id="tileToolBtn" onclick="setTool('tile')" style="padding:5px 15px;">Tile</button>
+    <button id="charToolBtn" onclick="setTool('character')" style="padding:5px 15px;">Character</button>
+    <button id="eraseToolBtn" onclick="setTool('erase')" style="padding:5px 15px;">Erase</button>
+    <button id="playBtn" onclick="togglePlayMode()" style="padding:5px 15px; background:#4CAF50;">Play</button>
+    <button id="resetBtn" onclick="resetMap()" style="padding:5px 15px; background:#f44336;">Reset</button>
+  </div>
+
+  <!-- Main Content Area -->
+  <div style="display:flex; height:calc(100vh - 60px);">
+    <!-- Palette Panel -->
+    <div id="paletteEl" style="width:120px; padding:10px; background:#444; overflow-y:auto;"></div>
+    
+    <!-- Map Grid -->
+    <div id="mapGridEl" style="flex:1; display:grid; grid-template-columns:repeat(20, 30px); grid-template-rows:repeat(20, 30px); gap:1px; background:#222; padding:10px; overflow:auto;"></div>
+    
+    <!-- Properties Panel -->
+    <div id="propertiesPanelEl" style="width:200px; padding:10px; background:#444; color:white; overflow-y:auto;">
+      <h3>Properties</h3>
+      <div id="propertiesContentEl">Select a cell</div>
+    </div>
+  </div>
+  
+  <!-- Game Message Display -->
+  <div id="gameMessageEl" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); color:white; padding:15px; border-radius:5px; max-width:80%;"></div>
+</div>
+
+<style>
+  body { margin:0; font-family:sans-serif; overflow:hidden; }
+  .map-cell { 
+    position:relative; 
+    border:1px solid #555; 
+    cursor:pointer; 
+    transition:all 0.2s;
+  }
+  .map-cell:hover { border-color:#fff; }
+  .palette-item { 
+    width:40px; 
+    height:40px; 
+    margin:5px; 
+    display:inline-block; 
+    cursor:pointer; 
+    border:2px solid transparent;
+    transition:all 0.2s;
+  }
+  .palette-item:hover { border-color:#fff; }
+  .palette-item.selected { border-color:#4CAF50; }
+  .character-rep { 
+    position:absolute; 
+    top:0; 
+    left:0; 
+    width:100%; 
+    height:100%; 
+    border-radius:50%; 
+    display:flex; 
+    align-items:center; 
+    justify-content:center; 
+    font-weight:bold;
+    pointer-events:none;
+  }
+</style>
+
+<script>
+  // Game configuration
+  const GRID_SIZE = 20;
+  const CELL_SIZE = 30;
+  
+  // Tile and character definitions
+  const tiles = [
+    { type: 'floor', name: 'Floor', color: '#eee' },
+    { type: 'wall', name: 'Wall', color: '#333' },
+    { type: 'grass', name: 'Grass', color: '#7CFC00' },
+    { type: 'water', name: 'Water', color: '#1E90FF' },
+    { type: 'sand', name: 'Sand', color: '#F0E68C' }
+  ];
+  
+  const characters = [
+    { type: 'player', name: 'Player', color: 'red', label: 'P' },
+    { type: 'enemy', name: 'Enemy', color: 'black', label: 'E' },
+    { type: 'npc', name: 'NPC', color: 'blue', label: 'N' },
+    { type: 'treasure', name: 'Treasure', color: 'gold', label: '$' }
+  ];
+  
+  // Game state
+  let mapData = [];
+  let currentTool = 'tile';
+  let currentTile = tiles[0];
+  let currentCharacter = characters[0];
+  let selectedCell = null;
+  let inPlayMode = false;
+  let playerPos = { row: -1, col: -1 };
+  let isDrawing = false;
+  
+  // Initialize the map
+  function initializeMap() {
+    mapData = [];
+    for (let i = 0; i < GRID_SIZE; i++) {
+      mapData[i] = [];
+      for (let j = 0; j < GRID_SIZE; j++) {
+        mapData[i][j] = {
+          tile: { ...tiles[0] },
+          character: null,
+          dialog: ''
+        };
+      }
+    }
+    renderMap();
+  }
+  
+  // Render the map grid
+  function renderMap() {
+    let html = '';
+    for (let i = 0; i < GRID_SIZE; i++) {
+      for (let j = 0; j < GRID_SIZE; j++) {
+        const cell = mapData[i][j];
+        let charHtml = '';
+        
+        if (cell.character) {
+          charHtml = `<div class="character-rep" style="background-color:${cell.character.color};">${cell.character.label}</div>`;
+        }
+        
+        html += `<div id="cell-${i}-${j}" class="map-cell" data-row="${i}" data-col="${j}" style="background-color:${cell.tile.color};">
+          ${charHtml}
+        </div>`;
+      }
+    }
+    mapGridEl.innerHTML = html;
+  }
+  
+  // Set current tool
+  function setTool(tool) {
+    currentTool = tool;
+    document.querySelectorAll('#toolbarEl button').forEach(btn => btn.style.background = '');
+    
+    if (tool === 'tile') {
+      tileToolBtn.style.background = '#4CAF50';
+      updatePalette('tile');
+    } else if (tool === 'character') {
+      charToolBtn.style.background = '#4CAF50';
+      updatePalette('character');
+    } else if (tool === 'erase') {
+      eraseToolBtn.style.background = '#4CAF50';
+      paletteEl.innerHTML = '';
+    }
+  }
+  
+  // Update palette based on selected tool
+  function updatePalette(type) {
+    paletteEl.innerHTML = '';
+    
+    if (type === 'tile') {
+      tiles.forEach(tile => {
+        paletteEl.innerHTML += `
+          <div class="palette-item ${currentTile.type === tile.type ? 'selected' : ''}" 
+               data-type="tile" 
+               data-tile="${tile.type}" 
+               style="background-color:${tile.color};"
+               title="${tile.name}"></div>
+        `;
+      });
+    } else if (type === 'character') {
+      characters.forEach(char => {
+        paletteEl.innerHTML += `
+          <div class="palette-item ${currentCharacter.type === char.type ? 'selected' : ''}" 
+               data-type="character" 
+               data-char="${char.type}" 
+               style="background-color:${char.color}; border-radius:50%;"
+               title="${char.name}">
+            <div style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold;">${char.label}</div>
+          </div>
+        `;
+      });
+    }
+    
+    // Add click handlers to palette items
+    document.querySelectorAll('.palette-item').forEach(item => {
+      item.addEventListener('click', function() {
+        document.querySelectorAll('.palette-item').forEach(p => p.classList.remove('selected'));
+        this.classList.add('selected');
+        
+        if (this.dataset.type === 'tile') {
+          currentTile = tiles.find(t => t.type === this.dataset.tile);
+        } else if (this.dataset.type === 'character') {
+          currentCharacter = characters.find(c => c.type === this.dataset.char);
+        }
+      });
+    });
+  }
+  
+  // Handle cell click
+  function handleCellClick(e) {
+    if (!e.target.classList.contains('map-cell')) return;
+    
+    const row = parseInt(e.target.dataset.row);
+    const col = parseInt(e.target.dataset.col);
+    const cell = mapData[row][col];
+    
+    if (inPlayMode) return;
+    
+    if (currentTool === 'tile') {
+      cell.tile = { ...currentTile };
+    } else if (currentTool === 'character') {
+      if (currentCharacter.type === 'player') {
+        // Remove existing player
+        for (let i = 0; i < GRID_SIZE; i++) {
+          for (let j = 0; j < GRID_SIZE; j++) {
+            if (mapData[i][j].character && mapData[i][j].character.type === 'player') {
+              mapData[i][j].character = null;
+            }
+          }
+        }
+      }
+      cell.character = { ...currentCharacter };
+      if (currentCharacter.type === 'npc') {
+        cell.dialog = "Hello, traveler!";
+      }
+    } else if (currentTool === 'erase') {
+      if (e.shiftKey) {
+        cell.tile = { ...tiles[0] }; // Reset to default tile
+      }
+      cell.character = null;
+    }
+    
+    selectedCell = { row, col };
+    renderMap();
+    updatePropertiesPanel();
+  }
+  
+  // Update properties panel
+  function updatePropertiesPanel() {
+    if (!selectedCell) {
+      propertiesContentEl.innerHTML = 'Select a cell';
+      return;
+    }
+    
+    const { row, col } = selectedCell;
+    const cell = mapData[row][col];
+    let html = `<div><strong>Cell:</strong> (${row}, ${col})</div>`;
+    html += `<div><strong>Tile:</strong> ${cell.tile.name}</div>`;
+    
+    if (cell.character) {
+      html += `<div><strong>Character:</strong> ${cell.character.name}</div>`;
+      if (cell.character.type === 'npc') {
+        html += `
+          <div style="margin-top:10px;">
+            <strong>Dialog:</strong><br>
+            <textarea id="dialogInputEl" rows="3" style="width:100%; margin-top:5px;" placeholder="Enter dialog...">${cell.dialog}</textarea>
+          </div>
+        `;
+      }
+    } else {
+      html += `<div><strong>Character:</strong> None</div>`;
+    }
+    
+    propertiesContentEl.innerHTML = html;
+    
+    // Add event listener for dialog input
+    const dialogInput = dialogInputEl;
+    if (dialogInput) {
+      dialogInput.addEventListener('input', function() {
+        cell.dialog = this.value;
+      });
+    }
+  }
+  
+  // Toggle play mode
+  function togglePlayMode() {
+    inPlayMode = !inPlayMode;
+    
+    if (inPlayMode) {
+      // Enter play mode
+      toolbarEl.style.display = 'none';
+      paletteEl.style.display = 'none';
+      propertiesPanelEl.style.display = 'none';
+      gameMessageEl.style.display = 'none';
+      playBtn.textContent = 'Stop';
+      
+      // Find player position
+      for (let i = 0; i < GRID_SIZE; i++) {
+        for (let j = 0; j < GRID_SIZE; j++) {
+          if (mapData[i][j].character && mapData[i][j].character.type === 'player') {
+            playerPos = { row: i, col: j };
+            break;
+          }
+        }
+      }
+      
+      // If no player found, create one
+      if (playerPos.row === -1) {
+        playerPos = { row: 0, col: 0 };
+        mapData[0][0].character = { ...characters[0] };
+      }
+      
+      renderMap();
+    } else {
+      // Exit play mode
+      toolbarEl.style.display = '';
+      paletteEl.style.display = '';
+      propertiesPanelEl.style.display = '';
+      gameMessageEl.style.display = 'none';
+      playBtn.textContent = 'Play';
+    }
+  }
+  
+  // Reset map
+  function resetMap() {
+    if (confirm('Reset map to default state?')) {
+      initializeMap();
+      selectedCell = null;
+      updatePropertiesPanel();
+    }
+  }
+  
+  // Handle keyboard controls
+  function handleKeyDown(e) {
+    if (!inPlayMode) return;
+    
+    const { row, col } = playerPos;
+    let newRow = row;
+    let newCol = col;
+    
+    if (e.key === 'ArrowUp') newRow--;
+    if (e.key === 'ArrowDown') newRow++;
+    if (e.key === 'ArrowLeft') newCol--;
+    if (e.key === 'ArrowRight') newCol++;
+    
+    // Check bounds and collisions
+    if (newRow >= 0 && newRow < GRID_SIZE && newCol >= 0 && newCol < GRID_SIZE) {
+      const targetCell = mapData[newRow][newCol];
+      
+      // Check if walkable (not wall or water)
+      if (targetCell.tile.type !== 'wall' && targetCell.tile.type !== 'water') {
+        // Move player
+        mapData[row][col].character = null;
+        playerPos = { row: newRow, col: newCol };
+        mapData[newRow][newCol].character = { ...characters[0] };
+        renderMap();
+        
+        // Check for interactions
+        if (targetCell.character) {
+          if (targetCell.character.type === 'npc') {
+            gameMessageEl.textContent = targetCell.dialog;
+            gameMessageEl.style.display = 'block';
+            setTimeout(() => { gameMessageEl.style.display = 'none'; }, 3000);
+          } else if (targetCell.character.type === 'treasure') {
+            gameMessageEl.textContent = "You found treasure!";
+            gameMessageEl.style.display = 'block';
+            mapData[newRow][newCol].character = null;
+            setTimeout(() => { gameMessageEl.style.display = 'none'; }, 3000);
+          } else if (targetCell.character.type === 'enemy') {
+            gameMessageEl.textContent = "You encountered an enemy!";
+            gameMessageEl.style.display = 'block';
+            setTimeout(() => { gameMessageEl.style.display = 'none'; }, 3000);
+          }
+        }
+      }
+    }
+    
+    // Exit play mode with ESC
+    if (e.key === 'Escape') {
+      togglePlayMode();
+    }
+  }
+  
+  // Initialize event listeners
+  document.addEventListener('DOMContentLoaded', function() {
+    initializeMap();
+    setTool('tile');
+    
+    // Map grid event listeners
+    mapGridEl.addEventListener('mousedown', function(e) {
+      isDrawing = true;
+      handleCellClick(e);
+    });
+    
+    mapGridEl.addEventListener('mouseover', function(e) {
+      if (isDrawing) handleCellClick(e);
+    });
+    
+    document.addEventListener('mouseup', function() {
+      isDrawing = false;
+    });
+    
+    // Keyboard controls
+    document.addEventListener('keydown', handleKeyDown);
+  });
+</script>
+</body>
+</html>

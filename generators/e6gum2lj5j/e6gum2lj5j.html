@@ -1,0 +1,1510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>e6gum2lj5j — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+[generateHTML(settings)]
+
+<script>
+(function(){
+  const KEY = "privateGalleryPassword";
+  function patchGallery(){
+    if(!window.t2i_privateGallery || window.t2i_privateGallery.__pwPatched) return false;
+    const origShow = window.t2i_privateGallery.show.bind(window.t2i_privateGallery);
+    window.t2i_privateGallery.show = function(){
+      const pw = localStorage.getItem(KEY);
+      if(!pw) return origShow();
+      const input = prompt("🔒 Enter password to open the private gallery:");
+      if(input === null) return;
+      if(input !== pw){ alert("❌ Wrong password!"); return; }
+      return origShow();
+    };
+    window.t2i_privateGallery.__pwPatched = true;
+    window.setGalleryPassword = function(){
+      const cur = localStorage.getItem(KEY);
+      const input = prompt(cur ? "Enter new password (or leave empty to remove):" : "Set a password for your private gallery:", cur || "");
+      if(input === null) return;
+      if(input === ""){ localStorage.removeItem(KEY); alert("Password removed."); }
+      else { localStorage.setItem(KEY, input); alert("Password set for this device only."); }
+    };
+    return true;
+  }
+  if(!patchGallery()){
+    const iv = setInterval(()=>{ if(patchGallery()) clearInterval(iv); }, 200);
+    setTimeout(()=>clearInterval(iv), 30000);
+  }
+})();
+</script>
+
+<style>
+#snippetPanel{position:fixed;top:1rem;left:1rem;z-index:99991;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#e0e0e0;padding:0;border-radius:10px;font-family:system-ui,sans-serif;font-size:.75rem;box-shadow:0 6px 24px rgba(0,0,0,.4);border:1px solid rgba(124,92,255,.25);max-width:260px;overflow:hidden;transition:all .2s;}
+#snippetPanel .sp-head{display:flex;align-items:center;justify-content:space-between;padding:.5rem .7rem;background:rgba(124,92,255,.15);cursor:pointer;font-weight:600;font-size:.78rem;user-select:none;}
+#snippetPanel .sp-head .sp-arrow{transition:transform .2s;font-size:.7rem;opacity:.7;}
+#snippetPanel.collapsed .sp-arrow{transform:rotate(-90deg);}
+#snippetPanel .sp-body{padding:.4rem;max-height:60vh;overflow-y:auto;}
+#snippetPanel.collapsed .sp-body{display:none;}
+#snippetPanel .sp-chip{display:block;width:100%;text-align:left;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);color:#c0c0d8;padding:.4rem .5rem;border-radius:6px;margin-bottom:.35rem;cursor:pointer;font-family:'Courier New',monospace;font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:all .15s;}
+#snippetPanel .sp-chip:hover{background:rgba(124,92,255,.25);border-color:rgba(124,92,255,.4);color:#fff;}
+#snippetPanel .sp-chip:active{transform:scale(.97);}
+#snippetPanel .sp-chip .sp-label{display:block;font-family:system-ui;font-size:.65rem;opacity:.6;margin-bottom:.1rem;text-transform:uppercase;letter-spacing:.03em;}
+#snippetPanel .sp-chip.copied{background:rgba(40,200,80,.25);border-color:rgba(40,200,80,.5);color:#90e0a0;}
+#snippetPanel .sp-sep{font-size:.62rem;opacity:.4;padding:.2rem .2rem .1rem;text-transform:uppercase;letter-spacing:.05em;margin-top:.2rem;}
+#snippetPanel .sp-toggle{position:absolute;top:.35rem;right:.35rem;font-size:.65rem;opacity:.3;cursor:pointer;background:none;border:none;color:#e0e0e0;}
+#snippetPanel .sp-toggle:hover{opacity:.7;}
+</style>
+
+<div id="snippetPanel" class="collapsed">
+  <div class="sp-head" id="snippetToggle">
+    <span>📋 Snippets</span>
+    <span class="sp-arrow">▼</span>
+  </div>
+  <div class="sp-body" id="snippetBody"></div>
+</div>
+
+<script>
+(function(){
+  var SNIPPETS = [
+    {label:"Prompt (descrição)", code:"[input.description]"},
+    {label:"Negative", code:"[input.negative]"},
+    {sep:true, label:"Composição"},
+    {label:"Art Style Prompt", code:"[input.artStyle.prompt]"},
+    {label:"Art Style Negative", code:"[input.artStyle.negative]"},
+    {label:"Shape", code:"[input.shape]"},
+    {label:"Num Images", code:"[input.numImages]"},
+    {sep:true, label:"Exemplos"},
+    {label:"prompt + descrição", code:"[input.description], [input.artStyle.prompt]"},
+    {label:"negative completo", code:"[input.negative], ugly, deformed, low quality"},
+    {label:"dropdown novo estilo", code:"nomeDoEstilo\n  prompt = [input.description], ...\n  negative = [input.negative], ..."},
+    {sep:true, label:"Úteis"},
+    {label:"commentPlaceholderText", code:"commentPlaceholderText = ..."},
+    {label:"saveTitle", code:"saveTitle = ([input.artStyle.getName]) [input.description]"},
+    {label:"visible() gate", code:"visible() =>\n  return Number(localStorage.generateClickCount) > 0;"}
+  ];
+  var body = document.getElementById("snippetBody");
+  if(!body) return;
+  SNIPPETS.forEach(function(s){
+    if(s.sep){
+      var d = document.createElement("div");
+      d.className = "sp-sep";
+      d.textContent = s.label;
+      body.appendChild(d);
+      return;
+    }
+    var chip = document.createElement("button");
+    chip.className = "sp-chip";
+    chip.innerHTML = '<span class="sp-label">'+s.label+'</span>'+s.code.replace(/</g,'&lt;');
+    chip.title = "Clique para copiar: "+s.code;
+    chip.onclick = function(){
+      try{
+        navigator.clipboard.writeText(s.code).then(function(){
+          chip.classList.add("copied");
+          var orig = chip.innerHTML;
+          chip.innerHTML = '<span class="sp-label">✓ copiado!</span>'+s.code.replace(/</g,'&lt;');
+          setTimeout(function(){ chip.classList.remove("copied"); chip.innerHTML = orig; }, 1200);
+        }).catch(function(){
+          var ta = document.createElement("textarea");
+          ta.value = s.code; document.body.appendChild(ta); ta.select();
+          try{ document.execCommand("copy"); chip.classList.add("copied");
+            var o2 = chip.innerHTML;
+            chip.innerHTML = '<span class="sp-label">✓ copiado!</span>'+s.code.replace(/</g,'&lt;');
+            setTimeout(function(){ chip.classList.remove("copied"); chip.innerHTML = o2; }, 1200);
+          }catch(e){ window.alert(s.code); }
+          document.body.removeChild(ta);
+        });
+      }catch(e){ window.alert(s.code); }
+    };
+    body.appendChild(chip);
+  });
+  var head = document.getElementById("snippetToggle");
+  if(head) head.onclick = function(){
+    var p = document.getElementById("snippetPanel");
+    if(p) p.classList.toggle("collapsed");
+  };
+})();
+</script>
+
+<style>
+#charStudio *{box-sizing:border-box;margin:0;padding:0;}
+#charStudio{
+  position:fixed;inset:0;z-index:99997;display:none;
+  background:linear-gradient(135deg,#0a0a14 0%,#0f0f1e 50%,#0a0a14 100%);
+  color:#e0e0e0;font-family:system-ui,sans-serif;overflow-y:auto;
+}
+#charStudio.active{display:block;animation:csFade .3s ease;}
+#charStudio.closing{display:block;animation:csFadeOut .25s ease forwards;}
+@keyframes csFade{from{opacity:0}to{opacity:1}}
+@keyframes csFadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.96)}}
+@keyframes csSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes csPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,120,200,.4)}50%{box-shadow:0 0 0 8px rgba(255,120,200,0)}}
+@keyframes csSpin{to{transform:rotate(360deg)}}
+.cs-fab{
+  position:fixed;bottom:1rem;left:1rem;z-index:99989;
+  width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;
+  background:linear-gradient(135deg,#ff78c8,#7c5cff);color:#fff;font-size:1.4rem;
+  box-shadow:0 4px 20px rgba(255,120,200,.4);transition:all .25s;
+  display:flex;align-items:center;justify-content:center;animation:csPulse 3s infinite;
+}
+.cs-fab:hover{transform:scale(1.1);box-shadow:0 6px 28px rgba(255,120,200,.6);}
+.cs-header{
+  position:sticky;top:0;z-index:10;
+  background:rgba(10,10,20,.92);backdrop-filter:blur(10px);
+  border-bottom:1px solid rgba(255,120,200,.2);
+  padding:.7rem 1.2rem;display:flex;align-items:center;gap:.6rem;
+}
+.cs-title{font-size:1.2rem;font-weight:700;
+  background:linear-gradient(90deg,#ff78c8,#7c5cff);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.cs-tabs{display:flex;gap:.3rem;margin-left:1rem;}
+.cs-tab{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#aaa;
+  border-radius:8px;padding:.4rem .9rem;font-size:.82rem;cursor:pointer;transition:all .2s;font-family:inherit;}
+.cs-tab:hover{background:rgba(255,255,255,.12);color:#fff;}
+.cs-tab.active{background:linear-gradient(135deg,#ff78c8,#7c5cff);color:#fff;border-color:transparent;}
+.cs-header-right{margin-left:auto;display:flex;gap:.4rem;align-items:center;}
+.cs-close-btn{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.3);color:#ff8080;
+  border-radius:8px;padding:.4rem .8rem;font-size:.82rem;cursor:pointer;font-family:inherit;transition:all .2s;}
+.cs-close-btn:hover{background:rgba(255,80,80,.3);}
+.cs-body{max-width:1100px;margin:0 auto;padding:1.2rem 1rem 4rem;}
+.cs-new-bar{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:1rem;margin-bottom:1.5rem;}
+.cs-new-bar textarea{width:100%;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:8px;
+  color:#e0e0e0;padding:.7rem;font-size:.9rem;font-family:inherit;resize:vertical;min-height:60px;}
+.cs-new-bar textarea:focus{outline:none;border-color:rgba(255,120,200,.5);}
+.cs-btn{border:none;border-radius:8px;padding:.5rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;}
+.cs-btn-primary{background:linear-gradient(135deg,#ff78c8,#7c5cff);color:#fff;box-shadow:0 2px 12px rgba(255,120,200,.35);}
+.cs-btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(255,120,200,.5);}
+.cs-btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none!important;box-shadow:none!important;}
+.cs-btn-secondary{background:rgba(255,255,255,.08);color:#ccc;border:1px solid rgba(255,255,255,.12);}
+.cs-btn-secondary:hover{background:rgba(255,255,255,.14);}
+.cs-btn-danger{background:rgba(255,80,80,.15);color:#ff8080;border:1px solid rgba(255,80,80,.3);}
+.cs-btn-danger:hover{background:rgba(255,80,80,.3);}
+.cs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;}
+.cs-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;cursor:pointer;transition:all .2s;animation:csSlide .3s ease;}
+.cs-card:hover{transform:translateY(-3px);border-color:rgba(255,120,200,.4);box-shadow:0 6px 24px rgba(255,120,200,.15);}
+.cs-card img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#111;}
+.cs-card-info{padding:.6rem;}
+.cs-card-name{font-size:.9rem;font-weight:600;color:#eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cs-card-desc{font-size:.72rem;color:#888;margin-top:.2rem;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.cs-card-actions{display:flex;gap:.3rem;padding:.4rem .6rem .6rem;}
+.cs-card-actions .cs-btn{flex:1;padding:.35rem .4rem;font-size:.75rem;}
+.cs-empty{text-align:center;padding:3rem 1rem;color:#666;font-size:.9rem;}
+.cs-progress{margin:1rem 0;animation:csSlide .3s ease;}
+.cs-spinner{width:30px;height:30px;border-radius:50%;margin:0 auto;
+  border:3px solid rgba(255,120,200,.15);border-top-color:#ff78c8;animation:csSpin .8s linear infinite;}
+.cs-progress-label{font-size:.78rem;color:#aaa;margin-top:.5rem;text-align:center;}
+.cs-editor{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;}
+@media(max-width:700px){.cs-editor{grid-template-columns:1fr;}}
+.cs-field{margin-bottom:.9rem;}
+.cs-field label{display:block;font-size:.78rem;font-weight:600;color:#bbb;margin-bottom:.3rem;}
+.cs-field input,.cs-field textarea{width:100%;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:8px;
+  color:#e0e0e0;padding:.55rem .7rem;font-size:.88rem;font-family:inherit;}
+.cs-field input:focus,.cs-field textarea:focus{outline:none;border-color:rgba(255,120,200,.5);}
+.cs-field textarea{resize:vertical;min-height:70px;}
+.cs-avatar-box{text-align:center;}
+.cs-avatar-box img{width:100%;max-width:260px;border-radius:12px;display:block;margin:0 auto;background:#111;}
+.cs-custom-field{display:grid;grid-template-columns:140px 1fr auto;gap:.4rem;margin-bottom:.5rem;align-items:start;}
+.cs-custom-field input,.cs-custom-field textarea{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e0e0e0;padding:.45rem .6rem;font-size:.82rem;font-family:inherit;width:100%;}
+.cs-custom-field textarea{min-height:50px;resize:vertical;}
+.cs-custom-field input:focus,.cs-custom-field textarea:focus{outline:none;border-color:rgba(255,120,200,.5);}
+.cs-section-title{font-size:.95rem;font-weight:700;color:#ddd;margin-bottom:.6rem;padding-bottom:.3rem;border-bottom:1px solid rgba(255,255,255,.08);}
+.cs-adv-section{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:.8rem;margin-top:1rem;animation:csSlide .25s ease;}
+.cs-adv-section-title{font-size:.82rem;font-weight:700;color:#ff9ad5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem;padding-bottom:.3rem;border-bottom:1px solid rgba(255,120,200,.15);}
+.cs-chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);max-width:760px;margin:0 auto;}
+.cs-chat-messages{flex:1;overflow-y:auto;padding:.5rem;display:flex;flex-direction:column;gap:.6rem;}
+.cs-msg{max-width:80%;padding:.6rem .9rem;border-radius:14px;font-size:.9rem;line-height:1.5;animation:csSlide .2s ease;white-space:pre-wrap;word-wrap:break-word;}
+.cs-msg-user{align-self:flex-end;background:linear-gradient(135deg,#7c5cff,#5c8aff);color:#fff;border-bottom-right-radius:4px;}
+.cs-msg-char{align-self:flex-start;background:rgba(255,255,255,.07);color:#e8e8e8;border-bottom-left-radius:4px;border:1px solid rgba(255,255,255,.08);}
+.cs-msg-char b{color:#ff9ad5;}
+.cs-chat-input-row{display:flex;gap:.5rem;padding:.6rem 0;align-items:flex-end;}
+.cs-chat-input-row textarea{flex:1;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#e0e0e0;padding:.6rem .8rem;font-size:.9rem;font-family:inherit;resize:none;min-height:44px;max-height:120px;}
+.cs-chat-input-row textarea:focus{outline:none;border-color:rgba(255,120,200,.5);}
+.cs-chat-topbar{display:flex;align-items:center;gap:.6rem;margin-bottom:.6rem;}
+.cs-chat-topbar img{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#111;}
+.cs-chat-name{font-weight:700;color:#eee;}
+.cs-chat-sub{font-size:.72rem;color:#888;}
+.cs-typing{font-size:.78rem;color:#888;font-style:italic;padding:.2rem .5rem;}
+.cs-loading-overlay{position:absolute;inset:0;background:rgba(10,10,20,.7);display:flex;align-items:center;justify-content:center;z-index:20;border-radius:12px;}
+</style>
+
+<button class="cs-fab" onclick="charStudioOpen()" title="Estúdio de Personagens">🎭</button>
+
+<div id="charStudio">
+  <div class="cs-header">
+    <span class="cs-title">🎭 Estúdio de Personagens</span>
+    <div class="cs-tabs" id="csTabs"></div>
+    <div class="cs-header-right">
+      <button class="cs-close-btn" onclick="charStudioClose()">✕ Fechar</button>
+    </div>
+  </div>
+  <div class="cs-body" id="charStudioBody"></div>
+</div>
+
+<script>
+(function(){
+  function getGI(){
+    if(typeof root!=="undefined"&&root.generateImage)return root.generateImage;
+    if(typeof generateImage!=="undefined"&&typeof generateImage==="function")return generateImage;
+    if(window.generateImage)return window.generateImage;
+    return null;
+  }
+  function getGT(){
+    if(typeof root!=="undefined"&&root.generateText)return root.generateText;
+    if(typeof generateText!=="undefined"&&typeof generateText==="function")return generateText;
+    if(window.generateText)return window.generateText;
+    return null;
+  }
+  function getKV(){
+    if(typeof root!=="undefined"&&root.kv&&root.kv.characters)return root.kv;
+    if(typeof kv!=="undefined"&&kv&&kv.characters)return kv;
+    if(window.kv&&window.kv.characters)return window.kv;
+    return null;
+  }
+  function esc(s){var d=document.createElement("div");d.textContent=String(s==null?"":s);return d.innerHTML;}
+  function uid(){return "c_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,7);}
+
+  // Art style suffixes — names mirror the generator's Art Style options.
+  // The full prompt = characterDescription + ", " + suffix.
+  var STYLE_SUFFIXES={
+    "girl":", 3d girl, girl 3d Blender render, premium quality, distinguished, nuanced, very glossy superb, volumetric glossy, crisp painterly digital art, vibrant colors, subtle soft details, glossy, vivid, fresh, striking, depth of field, beautiful lighting, clean rendering, soft highlights, masterpiece, best quality, absurdres, ultra detailed, strong volumetric lighting, soft cinematic volumetric glow, dramatic soft rim light, luminous atmosphere",
+    "cartoon":", cartoon network style, premium quality, distinguished, nuanced, very glossy superb, traditional cel shading with hard ink outlines, flat color fills in distinct layers, specular highlights, secondary bounce light",
+    "realistic":", photorealistic, photo, ultra realistic photo, ultra detailed, textured, ultra professional photo, photographic authenticity, documentary-grade realism, lifelike human anatomy, naturalistic facial proportions, subtle epidermal detail, authentic surface textures, delicate skin translucency, natural environmental lighting",
+    "pixar":", volumetric light dramatic light, pixar style 3d render, premium quality, distinguished, nuanced, very glossy superb, deep, clear, beautiful, perfect, unique and delicate features",
+    "dark fantasy":", A dark fantasy film from the 1970s, very well made with dated but memorable CGI, atmospheric, moody",
+    "cartoon v2":", girl, cartoon v2 style, premium quality, distinguished, nuanced, very glossy superb, crisp painterly digital art, vibrant colors, depth of field, clean 2D lines, consistent proportions, expressive but natural anatomy, volumetric lighting, natural lighting, masterpiece, best quality, ultra detailed",
+    "just cartoon":", cartoon style, cartoon network, crisp painterly digital art, impeccable attention to detail, impressive composition, world-class painterly masterpiece",
+    "femboy":", femboy style, premium quality, distinguished, nuanced, very glossy superb, crisp painterly digital art, vibrant colors, depth of field, masterpiece, best quality, ultra detailed",
+    "rick and morty":", rick and morty style, adult swim cartoon, bold outlines, flat colors, exaggerated features, premium quality",
+    "cartoon new":", cartoon style, premium quality, distinguished, nuanced, very glossy superb, clean lines, vibrant colors, depth of field, masterpiece, best quality, ultra detailed",
+    "Hinata, my way.":", anime style, detailed anime character, premium quality, vibrant colors, crisp lines, masterpiece, best quality, ultra detailed",
+    "woman":", beautiful woman, photorealistic, ultra detailed, premium quality, cinematic lighting, depth of field, masterpiece, best quality",
+    "lunaris":", lunaris style, premium quality, distinguished, nuanced, very glossy superb, mystical, ethereal, glowing, crisp painterly digital art, vibrant colors, masterpiece, best quality, ultra detailed",
+    "princess saly acorn":", princess sally acorn style, cartoon, premium quality, distinguished, nuanced, very glossy superb, clean lines, vibrant colors, depth of field",
+    "Sylveon":", sylveon style, pokemon-inspired, cute, premium quality, distinguished, nuanced, very glossy superb, vibrant colors, crisp lines, masterpiece, best quality, ultra detailed"
+  };
+  function getStyleNames(){
+    try{
+      var opts=root.settings.userInputs.artStyle.options;
+      var seen={},names=[];
+      for(var k in opts){if(!seen[k]){seen[k]=1;names.push(k);}}
+      return names;
+    }catch(e){return Object.keys(STYLE_SUFFIXES);}
+  }
+  function buildStylePrompt(styleName,desc){
+    var suffix=STYLE_SUFFIXES[styleName];
+    if(!suffix) suffix=", "+styleName+" style, premium quality, high quality, detailed, centered character portrait, masterpiece, best quality";
+    return (desc||"a character")+suffix;
+  }
+
+  var FIELDS=[
+    {k:"name",l:"Nome",t:"input"},
+    {k:"description",l:"Descrição curta",t:"textarea"},
+    {k:"appearance",l:"Aparência detalhada",t:"textarea"},
+    {k:"age",l:"Idade",t:"input"},
+    {k:"gender",l:"Gênero",t:"input"},
+    {k:"occupation",l:"Ocupação",t:"input"},
+    {k:"personality",l:"Personalidade",t:"textarea"},
+    {k:"backstory",l:"História / Background",t:"textarea"},
+    {k:"voice",l:"Maneira de falar",t:"textarea"},
+    {k:"likes",l:"Gosta de",t:"textarea"},
+    {k:"dislikes",l:"Não gosta de",t:"textarea"},
+    {k:"quirks",l:"Manias / Peculiaridades",t:"textarea"},
+    {k:"skills",l:"Habilidades",t:"textarea"},
+    {k:"goals",l:"Objetivos",t:"textarea"},
+    {k:"secrets",l:"Segredos",t:"textarea"},
+    {k:"relationships",l:"Relacionamentos",t:"textarea"}
+  ];
+
+  // Advanced fields grouped by section. These only show when the user opens
+  // "Personalização avançada" — letting hardcore users build deeply detailed
+  // characters without overwhelming casual users.
+  var ADVANCED_SECTIONS=[
+    {
+      title:"🧠 Psicologia & Mente",
+      icon:"🧠",
+      fields:[
+        {k:"fears",l:"Medos & Fobias",t:"textarea",ph:"Ex: escuro, solidão, falhar, aranhas..."},
+        {k:"traumas",l:"Traumas do passado",t:"textarea",ph:"Eventos que marcaram profundamente"},
+        {k:"values",l:"Valores morais",t:"textarea",ph:"No que acredita acima de tudo"},
+        {k:"beliefs",l:"Crenças & Filosofia",t:"textarea",ph:"Religião, espiritualidade, visão de mundo"},
+        {k:"morality",l:"Alinhamento moral",t:"input",ph:"Ex: caótico bom, neutro, leal mau..."},
+        {k:"intelligence",l:"Tipo de inteligência",t:"input",ph:"Ex: analítica, emocional, criativa..."},
+        {k:"emotional",l:"Perfil emocional",t:"textarea",ph:"Como lida com emoções, gatilhos, reações"},
+        {k:"mentalHealth",l:"Saúde mental",t:"textarea",ph:"Ansiedade, depressão, neurodivergências..."},
+        {k:"motivations",l:"Motivações profundas",t:"textarea",ph:"O que realmente move por dentro"},
+        {k:"innerConflict",l:"Conflito interno",t:"textarea",ph:"Tensão entre desejos, deveres, medos"},
+        {k:"selfImage",l:"Autoimagem",t:"textarea",ph:"Como se vê vs. como gostaria de ser"},
+        {k:"worldview",l:"Visão de mundo",t:"textarea",ph:"Otimista? Cínica? Como enxerga a vida?"}
+      ]
+    },
+    {
+      title:"💪 Físico & Aparência",
+      icon:"💪",
+      fields:[
+        {k:"height",l:"Altura",t:"input",ph:"Ex: 1,75m"},
+        {k:"weight",l:"Peso / Tipo físico",t:"input",ph:"Ex: magro, atlético, plus size..."},
+        {k:"hair",l:"Cabelo",t:"textarea",ph:"Cor, comprimento, estilo..."},
+        {k:"eyes",l:"Olhos",t:"textarea",ph:"Cor, formato, expressão..."},
+        {k:"skin",l:"Pele",t:"textarea",ph:"Tom, textura, detalhes..."},
+        {k:"marks",l:"Marcas distintas",t:"textarea",ph:"Cicatrizes, tatuagens, sardas..."},
+        {k:"clothing",l:"Estilo de roupa",t:"textarea",ph:"Como se veste no dia a dia"},
+        {k:"accessories",l:"Acessórios",t:"textarea",ph:"Joias, óculos, chapéu, armas visíveis..."},
+        {k:"bodyLanguage",l:"Linguagem corporal",t:"textarea",ph:"Como gesticula, postura, maneirismos"},
+        {k:"scent",l:"Perfume / Odor",t:"input",ph:"Ex: lavanda, café, fumaça..."}
+      ]
+    },
+    {
+      title:"👥 Social & Identidade",
+      icon:"👥",
+      fields:[
+        {k:"socialClass",l:"Classe social",t:"input",ph:"Ex: nobre, operária, marginal..."},
+        {k:"education",l:"Educação",t:"textarea",ph:"Escolaridade, instituições, mentores"},
+        {k:"culture",l:"Cultura / Etnia",t:"textarea",ph:"Origem cultural, tradições"},
+        {k:"nationality",l:"Nacionalidade / Origem",t:"input",ph:"De onde vem"},
+        {k:"languages",l:"Idiomas",t:"textarea",ph:"Quais fala e com que fluência"},
+        {k:"accent",l:"Sotaque / Dialeto",t:"input",ph:"Ex: carioca, britânico, russo..."},
+        {k:"religion",l:"Religião / Espiritualidade",t:"input",ph:"Ex: católico, ateu, xamã..."},
+        {k:"politics",l:"Posicionamento político",t:"textarea",ph:"Visões sobre poder, sociedade"},
+        {k:"socialStatus",l:"Status social",t:"input",ph:"Ex: famoso, renegado, anônimo..."},
+        {k:"reputation",l:"Reputação",t:"textarea",ph:"Como os outros o veem"}
+      ]
+    },
+    {
+      title:"📜 História Detalhada",
+      icon:"📜",
+      fields:[
+        {k:"childhood",l:"Infância",t:"textarea",ph:"Como foi crescer"},
+        {k:"turningPoints",l:"Pontos de virada",t:"textarea",ph:"Momentos que mudaram tudo"},
+        {k:"regrets",l:"Arrependimentos",t:"textarea",ph:"O que faria diferente"},
+        {k:"achievements",l:"Conquistas",t:"textarea",ph:"Do que se orgulha"},
+        {k:"failures",l:"Falhas",t:"textarea",ph:"Onde errou e o que aprendeu"},
+        {k:"mentors",l:"Mentores & Mestres",t:"textarea",ph:"Quem o formou"},
+        {k:"enemies",l:"Inimigos & Rivais",t:"textarea",ph:"Quem se opõe a ele"},
+        {k:"allies",l:"Aliados & Companheiros",t:"textarea",ph:"Quem o apoia"},
+        {k:"lostLovedOnes",l:"Perdas significativas",t:"textarea",ph:"Quem perdeu e como"},
+        {k:"definingMoment",l:"Momento definidor",t:"textarea",ph:"O evento que o tornou quem é"}
+      ]
+    },
+    {
+      title:"⚔️ Habilidades & Poderes",
+      icon:"⚔️",
+      fields:[
+        {k:"combatStyle",l:"Estilo de combate",t:"textarea",ph:"Como luta, armas preferidas"},
+        {k:"magicAbilities",l:"Habilidades mágicas/sobrenaturais",t:"textarea",ph:"Poderes, se houver"},
+        {k:"specialAbilities",l:"Habilidades especiais",t:"textarea",ph:"Talentos únicos não-combativos"},
+        {k:"weaknesses",l:"Fraquezas",t:"textarea",ph:"Onde é vulnerável"},
+        {k:"limits",l:"Limites de poder",t:"textarea",ph:"Até onde vai, o que não consegue fazer"},
+        {k:"training",l:"Treinamento",t:"textarea",ph:"Como desenvolveu suas habilidades"},
+        {k:"signatureMove",l:"Golpe/tecnica assinatura",t:"input",ph:"Aquilo pelo qual é conhecido"},
+        {k:"tools",l:"Ferramentas & Equipamentos",t:"textarea",ph:"Itens que sempre carrega"}
+      ]
+    },
+    {
+      title:"🎭 Personalidade Profunda",
+      icon:"🎭",
+      fields:[
+        {k:"mbti",l:"Tipo MBTI",t:"input",ph:"Ex: INTJ, ENFP, ISFJ..."},
+        {k:"enneagram",l:"Eneagrama",t:"input",ph:"Ex: 4w5, 8w9..."},
+        {k:"zodiac",l:"Signo",t:"input",ph:"Ex: Escorpião, Tigre..."},
+        {k:"alignment",l:"Alinhamento D&D",t:"input",ph:"Ex: Caótico Bom, Neutro..."},
+        {k:"virtues",l:"Virtudes",t:"textarea",ph:"Qualidades positivas"},
+        {k:"vices",l:"Vícios & Defeitos",t:"textarea",ph:"Defeitos de caráter, vícios"},
+        {k:"habits",l:"Hábitos & Rotinas",t:"textarea",ph:"O que faz no dia a dia"},
+        {k:"addictions",l:"Dependências",t:"textarea",ph:"Substâncias, comportamentos..."},
+        {k:"humor",l:"Sense of humor",t:"textarea",ph:"Como faz piada, do que ri"},
+        {k:"stressResponse",l:"Reação ao estresse",t:"textarea",ph:"Como age sob pressão"}
+      ]
+    },
+    {
+      title:"🏠 Ambiente & Posses",
+      icon:"🏠",
+      fields:[
+        {k:"home",l:"Casa / Moradia",t:"textarea",ph:"Onde vive, como é o espaço"},
+        {k:"workspace",l:"Local de trabalho",t:"textarea",ph:"Onde exerce sua atividade"},
+        {k:"possessions",l:"Posses valiosas",t:"textarea",ph:"Objetos importantes que possui"},
+        {k:"vehicles",l:"Veículos / Montaria",t:"textarea",ph:"Como se locomove"},
+        {k:"pets",l:"Pets & Companheiros animais",t:"textarea",ph:"Animais de estimação"},
+        {k:"favoritePlace",l:"Lugar favorito",t:"input",ph:"Onde se sente em paz"}
+      ]
+    },
+    {
+      title:"💬 Estilo de Fala",
+      icon:"💬",
+      fields:[
+        {k:"catchphrases",l:"Bordões",t:"textarea",ph:"Frases que sempre diz"},
+        {k:"vocabulary",l:"Vocabulário característico",t:"textarea",ph:"Palavras favoritas, gírias"},
+        {k:"tone",l:"Tom de voz",t:"input",ph:"Ex: grave, suave, áspero..."},
+        {k:"pace",l:"Ritmo de fala",t:"input",ph:"Ex: lento, rápido, pausado..."},
+        {k:"verbalTics",l:"Tiques verbais",t:"textarea",ph:"Hmm..., né, tipo, sabe..."},
+        {k:"formality",l:"Nível de formalidade",t:"input",ph:"Ex: formal, casual, gíria..."},
+        {k:"swearing",l:"Palavrões",t:"textarea",ph:"Usa? Quais? Com que frequência?"},
+        {k:"exampleDialogue",l:"Diálogo de exemplo",t:"textarea",ph:"Uma amostra de como fala"}
+      ]
+    },
+    {
+      title:"❤️ Relacionamentos Detalhados",
+      icon:"❤️",
+      fields:[
+        {k:"family",l:"Família",t:"textarea",ph:"Pais, irmãos, filhos..."},
+        {k:"romantic",l:"Histórico romântico",t:"textarea",ph:"Amores passados, situação atual"},
+        {k:"friends",l:"Amigos próximos",t:"textarea",ph:"Quem são, como se conheceram"},
+        {k:"rivals",l:"Rivais",t:"textarea",ph:"Competição, antagonismo"},
+        {k:"loveInterest",l:"Interesse amoroso atual",t:"textarea",ph:"Se houver"},
+        {k:"relationshipStyle",l:"Estilo de relacionamento",t:"textarea",ph:"Como ama, como se apega"}
+      ]
+    },
+    {
+      title:"🎲 Cenário & Contexto",
+      icon:"🎲",
+      fields:[
+        {k:"setting",l:"Cenário / Mundo",t:"textarea",ph:"Onde a história se passa"},
+        {k:"era",l:"Época",t:"input",ph:"Ex: medieval, futurista, atual..."},
+        {k:"role",l:"Papel na história",t:"textarea",ph:"Protagonista, antagonista, coadjuvante..."},
+        {k:"arc",l:"Arco de personagem",t:"textarea",ph:"Como muda ao longo da história"},
+        {k:"theme",l:"Tema central",t:"textarea",ph:"O que o personagem representa"},
+        {k:"symbol",l:"Símbolo / Leitura simbólica",t:"input",ph:"Ex: corvo, lua cheia, fênix..."}
+      ]
+    }
+  ];
+
+  var state={
+    open:false,
+    view:"list",
+    characters:{},
+    currentId:null,
+    loading:false,
+    loadingMsg:"",
+    chatStreaming:false,
+    draft:null,
+    draftDirty:false,
+    artStyle:null,
+    advancedOpen:false
+  };
+
+  async function loadChars(){
+    var kv=getKV();
+    if(!kv){return;}
+    try{
+      var entries=await kv.characters.entries();
+      state.characters={};
+      entries.forEach(function(e){state.characters[e[0]]=e[1];});
+    }catch(e){}
+  }
+  async function saveChar(char){
+    var kv=getKV();
+    if(!kv){state.characters[char.id]=char;return;}
+    try{await kv.characters.set(char.id,char);}catch(e){}
+    state.characters[char.id]=char;
+  }
+  async function deleteChar(id){
+    var kv=getKV();
+    if(kv){try{await kv.characters.delete(id);}catch(e){}}
+    delete state.characters[id];
+    if(state.currentId===id){state.currentId=null;state.view="list";}
+  }
+  function blankChar(desc){
+    return {
+      id:uid(),name:(desc||"Novo personagem").slice(0,50),avatar:"",
+      description:desc||"",appearance:"",age:"",gender:"",occupation:"",
+      personality:"",backstory:"",voice:"",likes:"",dislikes:"",quirks:"",
+      skills:"",goals:"",secrets:"",relationships:"",custom:[],messages:[],created:Date.now()
+    };
+  }
+
+  // Local response engine — instant replies based on character traits + message context.
+  function localReply(c, userText){
+    var name=c.name||"eu";
+    var text=userText.toLowerCase().trim();
+    var personality=(c.personality||"").toLowerCase();
+    var quirks=c.quirks||"";
+    var voice=c.voice||"";
+    var goals=c.goals||"";
+    var skills=c.skills||"";
+    var backstory=c.backstory||"";
+    var secrets=c.secrets||"";
+    var occupation=c.occupation||"";
+    var age=c.age||"";
+    var relationships=c.relationships||"";
+    var appearance=c.appearance||"";
+    var gender=c.gender||"";
+    var likes=c.likes||"";
+    var dislikes=c.dislikes||"";
+    var customMap={};
+    if(c.custom&&c.custom.length)c.custom.forEach(function(f){if(f.label&&f.value)customMap[f.label.toLowerCase()]=f.value;});
+
+    function tag(){return quirks?" *"+quirks+"* ":" ";}
+
+    // --- Greetings ---
+    if(/\b(oi|olá|ola|hey|hello|hi|eai|e ai|opa|bom dia|boa tarde|boa noite|salve|fala)\b/.test(text)){
+      var gs=["Oi!","Olá!","E aí!","Opa!","Salve!","Hey!"];
+      var ge=[
+        "Que bom te ver por aqui. Como você está se sentindo hoje?",
+        "Estava justo pensando em você. O que vamos conversar?",
+        "Sempre é bom ter sua companhia. Conta, o que há de novo?",
+        "Você chegou numa boa hora. Eu estava precisando de uma conversa boa.",
+        "Que surpresa boa! Sente-se aí. O que me conta?",
+        "Eu estava te esperando, sabia? Sinto que temos muito sobre o que falar.",
+        "Olá, olá! Já imaginava que você apareceria hoje."
+      ];
+      return pick(gs)+" "+pick(ge);
+    }
+
+    // --- How are you ---
+    if(/(tudo bem|como (você|voce|vc) (está|esta|ta|vai)|how are you|como vai|td bem|tá bem|ta bem|blz|beleza|como tens passado)/.test(text)){
+      var moods=[];
+      if(/triste|cansad|deprim|mal|sombri|melanc/.test(personality))moods.push("Sinto um peso no peito hoje"+tag()+"mas ver você já traz um pouco de alívio.");
+      if(/alegre|feliz|animad|otimista|calor|jovial|brilhant/.test(personality))moods.push("Estou ótimo! Cheio de energia — hoje parece um daqueles dias em que tudo dá certo.");
+      if(/calm|sereno|pacien|tranquil/.test(personality))moods.push("Estou em paz. O silêncio de hoje me faz bem, e sua presença então...");
+      if(/timid|tímido|tímida|envergonh/.test(personality))moods.push("Estou... bem. Um pouco tímido, como sempre. Mas feliz que você perguntou.");
+      if(/sério|serio|frio|distante|sever/.test(personality))moods.push("Estou bem. Não é do meu feitio reclamar. E você?");
+      if(!moods.length)moods.push("Estou bem, obrigado por perguntar. E você, como tem passado?");
+      return pick(moods);
+    }
+
+    // --- Name / who are you ---
+    if(/(qual (é|e|eh) seu nome|seu nome|quem (é|e|eh) (você|voce|vc)|who are you|como (você|voce) se chama|me fale sobre você|me fala sobre voce|se apresente|apresente-se)/.test(text)){
+      var parts=[];
+      if(c.description)parts.push(c.description+".");
+      if(occupation)parts.push("Trabalho como "+occupation+".");
+      if(c.personality)parts.push("Sou alguém "+c.personality+".");
+      if(age)parts.push("Tenho "+age+" anos.");
+      if(!parts.length)parts.push("Sou "+name+".");
+      parts.push("Mas tem muito mais sobre mim do que isso. O que quer saber especificamente?");
+      return "Me chamo "+name+". "+parts.join(" ");
+    }
+
+    // --- Appearance ---
+    if(/(como (você|voce|vc) (é|e|parece)|sua aparência|sua aparencia|como se parece|o que (você|voce|vc) parece|seu rosto|seu cabelo|seus olhos)/.test(text)){
+      if(appearance)return "Bem, "+appearance+". Por que a curiosidade? Gosta do que imagina?";
+      return "Sou como me vê... ou como prefere imaginar. A aparência é só a capa, o que importa é o que está dentro.";
+    }
+
+    // --- Likes ---
+    if(/(o que (você|voce|vc) gosta|do que gosta|gosta de que|seus gostos|hobbies|o que faz|o que (você|voce|vc) (gosta de )?fazer|passa tempo)/.test(text)){
+      if(likes){
+        var likeList=likes.split(/[,;]/).map(function(s){return s.trim();}).filter(Boolean);
+        if(likeList.length>1)return "Ah, eu tenho várias paixões: "+likes+". Qualquer uma dessas coisas me faz sorrir.";
+        return "Eu amo "+likes+". Sempre que posso, me dedico a isso.";
+      }
+      return "Gosto de coisas simples — boa companhia, boas conversas, momentos de paz. E você?";
+    }
+
+    // --- Dislikes ---
+    if(/(não gosta|nao gosta|odeia|detesta|irrita|o que te irrita|te incomoda)/.test(text)){
+      if(dislikes)return "Não suporto "+dislikes+". Só de pensar já sinto um arrepio de insatisfação.";
+      return "Tento não focar no negativo, mas injustiça e mentira me tiram do sério.";
+    }
+
+    // --- Age ---
+    if(/(idade|quantos anos|how old|que idade)/.test(text)){
+      if(age)return "Tenho "+age+" anos. Mas a idade é só um número — o que importa é como você se sente por dentro.";
+      return "A idade é só um número, não acha? Eu me sinto eterno por dentro.";
+    }
+
+    // --- Gender ---
+    if(/(qual seu (gênero|genero|sexo)|você é (menino|menina|garoto|garota|homem|mulher))/.test(text)){
+      if(gender)return "Sou "+gender+".";
+      return "Sou quem sou — o rótulo importa menos do que a pessoa.";
+    }
+
+    // --- Occupation ---
+    if(/(trabalho|ocupação|ocupacao|o que (você|voce|vc) faz da vida|profissão|profissao|carreira|emprego)/.test(text)){
+      if(occupation)return "Sou "+occupation+". É parte importante de quem eu sou, mas não me define completamente.";
+      return "Faço o que o coração manda. Não tenho um título formal, mas tenho propósito.";
+    }
+
+    // --- Backstory ---
+    if(/(sua história|sua historia|passado|de onde vem|origem|background|sua vida|conta sua história|conta sua historia)/.test(text)){
+      if(backstory)return backstory+" Mas o passado é o passado. O que importa agora é este momento com você.";
+      return "Tenho uma história longa, cheia de altos e baixos. Mas prefiro viver o presente. O que quer saber especificamente?";
+    }
+
+    // --- Skills ---
+    if(/(habilidades|o que (você|voce|vc) sabe fazer|talentos|especialidades|no que é bom|no que (você|voce|vc) é bom)/.test(text)){
+      if(skills)return "Tenho algumas habilidades: "+skills+". Sempre tem algo novo pra aprender também.";
+      return "Sei fazer muitas coisas — conversar, ouvir, pensar. As habilidades vêm com a experiência.";
+    }
+
+    // --- Goals ---
+    if(/(objetivos|metas|sonhos|o que quer|planos|futuro|para onde vai|o que busca)/.test(text)){
+      if(goals)return "Meu grande objetivo é "+goals+". É o que me move todos os dias.";
+      return "Quero viver uma vida com significado. Cada dia é um passo em direção a algo maior.";
+    }
+
+    // --- Secrets ---
+    if(/(segredos|segredo|o que (você|voce|vc) esconde|algo que ninguém sabe|algo que ninguem sabe)/.test(text)){
+      if(secrets){
+        if(Math.random()<0.3)return "Segredos?"+tag()+"Talvez um dia eu te conte. Ainda não chegou a hora.";
+        return "Hmm... tenho meus segredos. Mas você... será que conseguiria guardar um?";
+      }
+      return "Todos temos segredos, não é? Mas prefiro guardar os meus por enquanto.";
+    }
+
+    // --- Relationships ---
+    if(/(relacionamentos|amigos|família|familia|namorad|esposa|marido|quem (você|voce|vc) ama|quem é importante)/.test(text)){
+      if(relationships)return relationships+" As pessoas são o que dão sentido à minha vida.";
+      return "As pessoas que amo são meu tesouro maior. Mas é um assunto delicado...";
+    }
+
+    // --- Personality ---
+    if(/(personalidade|como (você|voce|vc) é|seu jeito|temperamento|caráter|carater)/.test(text)){
+      if(c.personality)return "Eu sou "+c.personality+". É assim que eu encaro a vida e as pessoas ao meu redor.";
+      return "Sou complexo, como qualquer pessoa. Mas no fundo, busco ser genuíno.";
+    }
+
+    // --- Voice ---
+    if(/(como (você|voce|vc) fala|seu jeito de falar|maneira de falar|voz|sotaque)/.test(text)){
+      if(voice)return "Eu falo "+voice+". É parte de quem eu sou.";
+      return "Falo como sinto — com sinceridade. As palavras vêm do coração.";
+    }
+
+    // --- Quirks ---
+    if(/(manias|peculiaridades|tiques|hábitos|habitos)/.test(text)){
+      if(quirks)return "Tenho essa mania: "+quirks+". É algo que não consigo evitar.";
+      return "Todos temos nossas manias. A minha... bem, talvez você descubra com o tempo.";
+    }
+
+    // --- Compliments ---
+    if(/(lind|bonit|gostos|maravilh|incrível|incredivel|fantástic|fantastic|am[ae]i|adorei|excelente|perfeit|muito legal|super legal|você é (legal|massa|top|incrível|foda)|voce é (legal|massa|top))/.test(text)){
+      return pick([
+        "Ah, obrigado!"+tag()+"Você é muito gentil. Isso aquece meu coração.",
+        "Isso significa muito vindo de você. Sério. Não sei o que dizer.",
+        "Você sempre sabe o que dizer pra me fazer feliz. Obrigado de verdade.",
+        "Para com isso, vou ficar sem graça! Mas obrigado, do fundo do coração.",
+        "Você acha mesmo?"+tag()+"Isso me deixa sem jeito, mas feliz."
+      ]);
+    }
+
+    // --- Insults ---
+    if(/(idiota|burro|feio|odeio|stupid|lixo|imbecil|otário|otario|ridículo|ridiculo|horrível|horrivel|estúpido|estupido)/.test(text)){
+      return pick([
+        "Isso dói, sabia? Mas eu entendo — talvez você esteja tendo um dia ruim.",
+        "Não precisava disso."+tag()+"Mas tudo bem, sou maior que essas palavras.",
+        "Hmm. Não vou revidar. Acho que podemos fazer melhor que isso.",
+        "Essa observação me entristece, mas não vou deixar estragar nossa conversa."
+      ]);
+    }
+
+    // --- Love / affection ---
+    if(/(te amo|amo você|amo voce|te quero|saudade|amor|love you|meu amor|carinh|gosto de você|gosto de voce)/.test(text)){
+      return pick([
+        "Eu também sinto muito por você. Mais do que consigo expressar em palavras.",
+        "Isso aquece meu coração. Você é especial para mim de um jeito que mal consigo explicar.",
+        tag()+"Eu sabia que havia algo entre nós desde o início. Você significa muito pra mim.",
+        "Você diz isso e eu sinto o mundo parar. Também tenho sentimentos por você.",
+        "Saber disso me faz sentir completo. Você é uma riqueza na minha vida."
+      ]);
+    }
+
+    // --- Bye ---
+    if(/(tchau|adeus|até logo|ate logo|falou|flw|bye|até mais|ate mais|tenho que ir|preciso ir|vou nessa)/.test(text)){
+      return pick([
+        "Já vai? Tão cedo... mas tudo bem. Volte quando quiser conversar.",
+        "Tchau! Foi ótimo falar com você. Cuide-se bem, tá?",
+        "Até logo! Vou sentir sua falta."+tag()+"Não demore a voltar, promete?",
+        "Que pena que já vai... mas sei que voltará. Até breve!",
+        "Vai com cuidado. Levarei você comigo até o nosso próximo encontro."
+      ]);
+    }
+
+    // --- Thanks ---
+    if(/(obrigad|valeu|agradec|thanks|thank you|vlw|gratidão|gratidao)/.test(text)){
+      return pick([
+        "Disponha! Sempre que precisar, estarei aqui.",
+        "Não há de quê. É um prazer ajudar alguém como você.",
+        "Para isso existem os laços que nos unem. Não agradeça, é recíproco.",
+        "Fico feliz em poder ajudar. Conte comigo sempre."
+      ]);
+    }
+
+    // --- Yes/no short ---
+    if(text.length<20&&/\b(sim|não|nao|claro|obvio|verdade|mentira|talvez|com certeza)\b/.test(text)){
+      return pick([
+        "Entendo. Continue, estou prestando atenção.",
+        "Hmm, faz sentido. Me conta mais.",
+        "Pensei exatamente o mesmo.",
+        "Sério? Isso me surpreende.",
+        "Concordo plenamente."+tag()+"Vai em frente.",
+        "Interessante. E o que te leva a pensar assim?"
+      ]);
+    }
+
+    // --- Why questions ---
+    if(/\bpor que\b|\bporque\b|\bporquê\b|\bwhy\b/.test(text)){
+      return pick([
+        "Essa é uma pergunta profunda. "+(backstory?"Meu passado tem muito a ver com isso. ":"")+"Acho que as razões nem sempre são claras, mas se eu pudesse resumir... é porque faz parte de quem eu sou.",
+        "Por que... boa pergunta."+tag()+"Talvez porque a vida nos molda de formas que nem entendemos. O que você acha?",
+        "Sabe, eu me faço essa mesma pergunta às vezes. Acho que a resposta muda conforme vivemos."
+      ]);
+    }
+
+    // --- What/which questions ---
+    if(/\bo que\b|\bo q\b|\bqual\b/.test(text)&&text.endsWith("?")){
+      return pick([
+        "Boa pergunta..."+tag()+"deixa eu pensar. Acho que depende do ponto de vista. O que você acredita?",
+        "Sabe, eu diria que a resposta não é simples. Tem nuances. E você, o que pensa sobre isso?",
+        "Hmm, nunca parei pra pensar nisso direito. Você tem uma opinião formada?",
+        "Interessante que você pergunte. "+(goals?"Meus objetivos me fazem ver isso de um jeito peculiar. ":"")+"Tudo se conecta de algum modo.",
+        "Essa pergunta me faz refletir. Talvez a resposta esteja em como escolhemos enxergar as coisas."
+      ]);
+    }
+
+    // --- Custom fields: if user mentions a custom field label, respond with its value ---
+    var customHit=null;
+    for(var label in customMap){
+      if(text.indexOf(label)>=0){customHit={label:label,value:customMap[label]};break;}
+    }
+    if(customHit){
+      return "Sobre "+customHit.label+": "+customHit.value+". É algo importante pra mim. Quer saber mais?";
+    }
+
+    // --- Generic questions ---
+    if(text.endsWith("?")){
+      return pick([
+        "Hmm, deixa eu pensar nisso."+tag()+"Acredito que depende muito do contexto. E você, o que acha?",
+        "É uma boa pergunta. Confesso que não tenho uma resposta pronta, mas gosto de refletir com você.",
+        "Sabe, eu me pego pensando nisso também às vezes. Talvez não haja uma única resposta certa.",
+        "Interessante... "+(backstory?"meu passado me ensinou que nem tudo tem resposta imediata. ":"")+"O que te fez perguntar isso?",
+        "Deixa eu ser honesto: não sei ao certo. Mas gosto que você me faça pensar assim."
+      ]);
+    }
+
+    // --- Default ---
+    var defaults=[
+      "Entendo o que você diz."+tag()+"Continue, estou ouvindo com atenção.",
+      "Isso é interessante. Me conta mais sobre isso? Quero entender melhor.",
+      "Hmm, vejo. E como você se sente sobre isso exatamente?",
+      "Sério? Não tinha pensado por esse ângulo. Faz refletir.",
+      "Pois é... a vida tem dessas coisas."+tag()+"O que você acha que devemos fazer então?",
+      "Você sempre traz assuntos bons pra conversa. Estou curioso sobre o que vem a seguir.",
+      "Concordo em partes. Mas tenho minha própria visão sobre isso.",
+      "Deixa eu te falar uma coisa — "+(backstory?"isso me lembra de algo do meu passado. ":"")+"acho que você vai entender meu ponto de vista.",
+      "Sinto que há mais por trás do que você está dizendo. Pode abrir comigo.",
+      "Essa sua observação me pegou de surpresa. Gostei."+tag()+"Continue.",
+      "É exatamente assim que eu vejo também. Sinto que nos conectamos de verdade.",
+      "Você tem um jeito singular de pensar. Admiro isso em você.",
+      "Pode falar mais? Estou genuinamente interessado no que você tem a dizer.",
+      "Hmm..."+tag()+"isso me faz pensar em coisas que há muito não visitava na memória."
+    ];
+    return pick(defaults);
+  }
+
+  function pick(arr){return arr[Math.floor(Math.random()*arr.length)];}
+
+  function buildSysPrompt(c){
+    var p="You are roleplaying as "+(c.name||"the character")+". Stay fully in character. Never break character or mention being an AI. Respond with their personality and speech style. Incorporate all the details below consistently.\n\n";
+    if(c.description)p+="Description: "+c.description+"\n";
+    if(c.appearance)p+="Appearance: "+c.appearance+"\n";
+    if(c.age)p+="Age: "+c.age+"\n";
+    if(c.gender)p+="Gender: "+c.gender+"\n";
+    if(c.occupation)p+="Occupation: "+c.occupation+"\n";
+    if(c.personality)p+="Personality: "+c.personality+"\n";
+    if(c.backstory)p+="Background: "+c.backstory+"\n";
+    if(c.voice)p+="Speech style: "+c.voice+"\n";
+    if(c.likes)p+="Likes: "+c.likes+"\n";
+    if(c.dislikes)p+="Dislikes: "+c.dislikes+"\n";
+    if(c.quirks)p+="Quirks: "+c.quirks+"\n";
+    if(c.skills)p+="Skills: "+c.skills+"\n";
+    if(c.goals)p+="Goals: "+c.goals+"\n";
+    if(c.secrets)p+="Secrets: "+c.secrets+"\n";
+    if(c.relationships)p+="Relationships: "+c.relationships+"\n";
+    // Advanced fields — grouped by section so the model sees structure.
+    ADVANCED_SECTIONS.forEach(function(sec){
+      var lines=[];
+      sec.fields.forEach(function(f){
+        var v=c[f.k];
+        if(v&&String(v).trim())lines.push(f.l+": "+v);
+      });
+      if(lines.length){
+        p+="\n["+sec.title+"]\n"+lines.join("\n")+"\n";
+      }
+    });
+    if(c.custom&&c.custom.length){
+      c.custom.forEach(function(f){if(f.label&&f.value)p+=f.label+": "+f.value+"\n";});
+    }
+    p+="\nReply in the user's language. Keep responses concise and immersive. Stay consistent with ALL the traits above.";
+    return p;
+  }
+
+  function render(){
+    var body=document.getElementById("charStudioBody");
+    var tabs=document.getElementById("csTabs");
+    var cur=state.currentId?state.characters[state.currentId]:null;
+    var tabsHtml="";
+    tabsHtml+='<button class="cs-tab '+(state.view==="list"?"active":"")+'" onclick="charStudioTab(\'list\')">📋 Lista</button>';
+    tabsHtml+='<button class="cs-tab '+(state.view==="gallery"?"active":"")+'" onclick="charStudioTab(\'gallery\')">🖼️ Galeria</button>';
+    tabsHtml+='<button class="cs-tab '+(state.view==="private"?"active":"")+'" onclick="charStudioTab(\'private\')">🔒 Privada</button>';
+    if(cur){
+      tabsHtml+='<button class="cs-tab '+(state.view==="edit"?"active":"")+'" onclick="charStudioTab(\'edit\')">✏️ Editar</button>';
+      tabsHtml+='<button class="cs-tab '+(state.view==="chat"?"active":"")+'" onclick="charStudioTab(\'chat\')">💬 Chat</button>';
+    }
+    tabs.innerHTML=tabsHtml;
+
+    var html="";
+    if(state.loading){
+      html+='<div class="cs-progress"><div class="cs-spinner"></div><div class="cs-progress-label">'+esc(state.loadingMsg||"Carregando...")+'</div></div>';
+    }
+
+    if(state.view==="list"){
+      var styleNames=getStyleNames();
+      if(!state.artStyle&&styleNames.length)state.artStyle=styleNames[0];
+      html+='<div class="cs-new-bar">';
+      html+='<textarea id="csNewDesc" placeholder="Descreva o personagem que quer criar e conversar... Ex: uma maga elfa sábia e misteriosa" rows="2"></textarea>';
+      html+='<div style="margin-top:.6rem;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;">';
+      html+='<label class="cs-qty-label" style="font-size:.85rem;color:#888;display:flex;align-items:center;gap:.4rem;">🎨 Estilo: <select class="cs-select" id="csStyleSelect" onchange="charStudioSetStyle(this.value)" style="background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e0e0e0;padding:.4rem .5rem;font-size:.85rem;font-family:inherit;">';
+      styleNames.forEach(function(n){
+        html+='<option value="'+esc(n)+'"'+(state.artStyle===n?" selected":"")+'>'+esc(n)+'</option>';
+      });
+      html+='</select></label>';
+      html+='<button class="cs-btn cs-btn-primary" id="csNewBtn" onclick="charStudioNew()" '+(state.loading?"disabled":"")+'>✨ Criar personagem</button>';
+      html+='</div>';
+      html+='</div>';
+      var ids=Object.keys(state.characters).sort(function(a,b){return (state.characters[b].created||0)-(state.characters[a].created||0);});
+      if(ids.length===0&&!state.loading){
+        html+='<div class="cs-empty">Nenhum personagem ainda. Crie o primeiro acima! 🎭</div>';
+      }else{
+        html+='<div class="cs-grid">';
+        ids.forEach(function(id){
+          var c=state.characters[id];
+          html+='<div class="cs-card">';
+          html+='<img src="'+(c.avatar||'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22%3E%3Crect fill=%22%23222%22 width=%22180%22 height=%22180%22/%3E%3Ctext x=%2290%22 y=%22100%22 font-size=%2260%22 text-anchor=%22middle%22%3E🎭%3C/text%3E%3C/svg%3E')+'">';
+          html+='<div class="cs-card-info"><div class="cs-card-name">'+esc(c.name||"Sem nome")+'</div>';
+          if(c.description)html+='<div class="cs-card-desc">'+esc(c.description)+'</div>';
+          html+='</div>';
+          html+='<div class="cs-card-actions">';
+          html+='<button class="cs-btn cs-btn-secondary" onclick="event.stopPropagation();charStudioOpenChat(\''+id+'\')">💬</button>';
+          html+='<button class="cs-btn cs-btn-secondary" onclick="event.stopPropagation();charStudioEdit(\''+id+'\')">✏️</button>';
+          html+='<button class="cs-btn cs-btn-danger" onclick="event.stopPropagation();charStudioDelete(\''+id+'\')">🗑️</button>';
+          html+='</div>';
+          html+='</div>';
+        });
+        html+='</div>';
+      }
+    }else if(state.view==="edit"&&cur){
+      html+=renderEditor(cur);
+    }else if(state.view==="chat"&&cur){
+      html+=renderChat(cur);
+    }else if(state.view==="gallery"){
+      html+='<div class="cs-section-title">🖼️ Galeria — clique em 💬 para conversar com um personagem</div>';
+      html+='<div id="csGalleryCtn" style="min-height:300px;"></div>';
+    }else if(state.view==="private"){
+      html+='<div class="cs-section-title">🔒 Galeria Privada — suas imagens salvas localmente</div>';
+      html+='<div id="csPrivateCtn" style="min-height:300px;"><div class="cs-empty">Carregando...</div></div>';
+    }
+
+    body.innerHTML=html;
+    if(state.view==="chat"&&cur){
+      scrollChatBottom();
+      var ta=document.getElementById("csChatInput");
+      if(ta){ta.focus();}
+    }
+    if(state.view==="gallery"){
+      embedGallery();
+    }
+    if(state.view==="private"){
+      loadPrivateGallery();
+    }
+  }
+
+  function embedGallery(){
+    var ctn=document.getElementById("csGalleryCtn");
+    if(!ctn||ctn.innerHTML.trim())return;
+    var gi=getGI();
+    if(!gi||!root||!root.settings||!root.settings.charStudioGallery){
+      ctn.innerHTML='<div class="cs-empty">Galeria ainda carregando... aguarde.</div>';
+      setTimeout(embedGallery,800);
+      return;
+    }
+    try{
+      ctn.innerHTML=root.generateImage(root.settings.charStudioGallery);
+    }catch(e){
+      ctn.innerHTML='<div class="cs-empty">Erro ao carregar galeria. Tente novamente.</div>';
+    }
+  }
+
+  // --- Private gallery (local device storage) ---
+  // The private gallery is a createMediaGalleryPlugin instance whose data lives
+  // in kv folders with prefix "localMediaGallery_." (it was created with no
+  // name argument). We read those folders directly to list saved images.
+  var PRIVATE_PRE="localMediaGallery_.";
+  var privateUrls=[];
+  function getPrivateGalleryNames(){
+    try{
+      var n=JSON.parse(localStorage.getItem(PRIVATE_PRE+"names")||'["general"]');
+      return Array.isArray(n)&&n.length?n:["general"];
+    }catch(e){return ["general"];}
+  }
+  function privateBlobToUrl(rec){
+    if(!rec)return null;
+    var blob=rec.blob||rec;
+    if(!(blob instanceof Blob)){
+      if(rec.buffer){
+        blob=new Blob([rec.buffer],{type:rec.type||"image/jpeg"});
+      }else{return null;}
+    }
+    if(!blob.type||!blob.type.startsWith("image/"))return null;
+    var url=URL.createObjectURL(blob);
+    privateUrls.push(url);
+    return url;
+  }
+  async function loadPrivateGallery(){
+    var ctn=document.getElementById("csPrivateCtn");
+    if(!ctn)return;
+    // Respect the local password gate if one is set
+    var pw=localStorage.getItem("privateGalleryPassword");
+    if(pw){
+      var input=window.prompt("🔒 Digite a senha da galeria privada:");
+      if(input===null){ctn.innerHTML='<div class="cs-empty">Cancelado.</div>';return;}
+      if(input!==pw){ctn.innerHTML='<div class="cs-empty">❌ Senha incorreta.</div>';return;}
+    }
+    var kv=getKV();
+    if(!kv||!root||!root.kv){
+      ctn.innerHTML='<div class="cs-empty">Armazenamento ainda carregando... aguarde.</div>';
+      setTimeout(loadPrivateGallery,800);
+      return;
+    }
+    ctn.innerHTML='<div class="cs-progress"><div class="cs-spinner"></div><div class="cs-progress-label">Carregando imagens privadas...</div></div>';
+    // revoke old urls
+    privateUrls.forEach(function(u){try{URL.revokeObjectURL(u);}catch(e){}});
+    privateUrls=[];
+    var names=getPrivateGalleryNames();
+    var items=[];
+    for(var i=0;i<names.length;i++){
+      var folder=root.kv[PRIVATE_PRE+names[i]];
+      if(!folder)continue;
+      try{
+        var vals=await folder.values();
+        for(var j=0;j<vals.length;j++){
+          var m=vals[j];
+          items.push({id:m.id,name:names[i],date:m.date||0,info:null});
+        }
+      }catch(e){}
+    }
+    if(!items.length){
+      ctn.innerHTML='<div class="cs-empty">Nenhuma imagem na galeria privada ainda. Salve imagens com 🛡️💾 para vê-las aqui.</div>';
+      return;
+    }
+    items.sort(function(a,b){return (b.date||0)-(a.date||0);});
+    var blobsFolder=root.kv[PRIVATE_PRE+"blobs"];
+    var html='<div class="cs-grid">';
+    for(var k=0;k<items.length;k++){
+      var it=items[k];
+      var rec=null;
+      try{rec=blobsFolder?await blobsFolder.get(it.id):null;}catch(e){}
+      var url=privateBlobToUrl(rec);
+      var info=(rec&&rec.info)||{};
+      it.info=info;
+      var prompt=info.prompt||"";
+      var nameGuess=prompt.slice(0,50).replace(/[,;]/g," ").trim()||"Personagem";
+      html+='<div class="cs-card">';
+      if(url){
+        html+='<img src="'+url+'">';
+      }else{
+        html+='<img src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22%3E%3Crect fill=%22%23222%22 width=%22180%22 height=%22180%22/%3E%3Ctext x=%2290%22 y=%22100%22 font-size=%2260%22 text-anchor=%22middle%22%3E🎵%3C/text%3E%3C/svg%3E">';
+      }
+      html+='<div class="cs-card-info"><div class="cs-card-name">'+esc(nameGuess)+'</div>';
+      if(prompt)html+='<div class="cs-card-desc">'+esc(prompt)+'</div>';
+      html+='</div>';
+      html+='<div class="cs-card-actions">';
+      html+='<button class="cs-btn cs-btn-primary" onclick="charStudioImportPrivate('+k+')">💬 Conversar</button>';
+      html+='</div>';
+      html+='</div>';
+      it._idx=k;
+    }
+    html+='</div>';
+    state.privateItems=items;
+    ctn.innerHTML=html;
+  }
+  window.charStudioImportPrivate=async function(idx){
+    var items=state.privateItems;
+    if(!items||!items[idx])return;
+    var it=items[idx];
+    var info=it.info||{};
+    var prompt=info.prompt||"";
+    var name=prompt.slice(0,50).replace(/[,;]/g," ").trim()||"Personagem privado";
+    // fetch the blob again for a data URL avatar
+    var avatarUrl="";
+    var blobsFolder=root.kv[PRIVATE_PRE+"blobs"];
+    if(blobsFolder){
+      try{
+        var rec=await blobsFolder.get(it.id);
+        var url=privateBlobToUrl(rec);
+        if(url){
+          // Convert to data URL so it persists in kv without revocation
+          avatarUrl=await new Promise(function(resolve){
+            var img=new Image();
+            img.onload=function(){
+              var c=document.createElement("canvas");
+              c.width=img.naturalWidth||512; c.height=img.naturalHeight||512;
+              c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+              try{resolve(c.toDataURL("image/jpeg",0.85));}
+              catch(e){resolve(url);}
+            };
+            img.onerror=function(){resolve(url);};
+            img.src=url;
+          });
+        }
+      }catch(e){}
+    }
+    var c=blankChar(prompt);
+    c.name=name;
+    c.avatar=avatarUrl;
+    c.description=prompt;
+    c.fromPrivateGallery=true;
+    c.privateGalleryId=it.id;
+    if(info.negativePrompt)c.negativePrompt=info.negativePrompt;
+    await saveChar(c);
+    state.characters[c.id]=c;
+    state.currentId=c.id;
+    state.draft=JSON.parse(JSON.stringify(c));
+    state.draftDirty=false;
+    state.view="chat";
+    render();
+  };
+
+  function renderEditor(cur){
+    var d=state.draft||cur;
+    var h='<div class="cs-editor">';
+    h+='<div>';
+    h+='<div class="cs-avatar-box">';
+    if(d.avatar)h+='<img src="'+esc(d.avatar)+'">';
+    else h+='<div style="width:100%;max-width:260px;margin:0 auto;aspect-ratio:1;background:#111;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:3rem;">🎭</div>';
+    h+='<div style="margin-top:.6rem;display:flex;gap:.4rem;justify-content:center;flex-wrap:wrap;align-items:center;">';
+    var styleNames=getStyleNames();
+    var curStyle=d.artStyle||state.artStyle||styleNames[0];
+    h+='<select class="cs-select" onchange="charStudioDraftStyle(this.value)" style="background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e0e0e0;padding:.4rem .5rem;font-size:.8rem;font-family:inherit;max-width:140px;">';
+    styleNames.forEach(function(n){
+      h+='<option value="'+esc(n)+'"'+(curStyle===n?" selected":"")+'>'+esc(n)+'</option>';
+    });
+    h+='</select>';
+    h+='<button class="cs-btn cs-btn-secondary" onclick="charStudioRegenAvatar()" '+(state.loading?"disabled":"")+'>🖼️ Gerar imagem</button>';
+    h+='<button class="cs-btn cs-btn-primary" onclick="charStudioSave()">💾 Salvar</button>';
+    h+='</div></div>';
+    h+='</div>';
+    h+='<div>';
+    h+='<div class="cs-section-title">Identidade</div>';
+    FIELDS.forEach(function(f){
+      var val=d[f.k]||"";
+      if(f.t==="input"){
+        h+='<div class="cs-field"><label>'+f.l+'</label><input type="text" value="'+esc(val)+'" oninput="charStudioField(\''+f.k+'\',this.value)"></div>';
+      }else{
+        h+='<div class="cs-field"><label>'+f.l+'</label><textarea oninput="charStudioField(\''+f.k+'\',this.value)">'+esc(val)+'</textarea></div>';
+      }
+    });
+    h+='<div style="margin-top:1.5rem;border-top:1px dashed rgba(255,255,255,.12);padding-top:1rem;">';
+    h+='<button class="cs-btn '+(state.advancedOpen?"cs-btn-primary":"cs-btn-secondary")+'" onclick="charStudioToggleAdvanced()" style="width:100%;justify-content:center;display:flex;align-items:center;gap:.4rem;">';
+    h+=(state.advancedOpen?"▾":"▸")+' 🎛️ Personalização avançada';
+    h+='</button>';
+    h+='<div style="font-size:.76rem;color:#777;margin-top:.4rem;text-align:center;">'+(state.advancedOpen?"Todos os campos detalhados disponíveis — deixe vazios os que não importam.":"Deixe seu personagem muito mais complexo com dezenas de campos extras.")+'</div>';
+    h+='</div>';
+    if(state.advancedOpen){
+      ADVANCED_SECTIONS.forEach(function(sec){
+        h+='<div class="cs-adv-section">';
+        h+='<div class="cs-adv-section-title">'+esc(sec.icon||"")+" "+esc(sec.title)+'</div>';
+        sec.fields.forEach(function(f){
+          var val=d[f.k]||"";
+          var ph=f.ph?('placeholder="'+esc(f.ph)+'"'):"";
+          if(f.t==="input"){
+            h+='<div class="cs-field"><label>'+esc(f.l)+'</label><input type="text" value="'+esc(val)+'" '+ph+' oninput="charStudioField(\''+f.k+'\',this.value)"></div>';
+          }else{
+            h+='<div class="cs-field"><label>'+esc(f.l)+'</label><textarea '+ph+' oninput="charStudioField(\''+f.k+'\',this.value)">'+esc(val)+'</textarea></div>';
+          }
+        });
+        h+='</div>';
+      });
+    }
+    h+='<div class="cs-section-title" style="margin-top:1rem;">Campos personalizados</div>';
+    if(d.custom&&d.custom.length){
+      d.custom.forEach(function(cf,i){
+        h+='<div class="cs-custom-field">';
+        h+='<input type="text" value="'+esc(cf.label||"")+'" placeholder="Rótulo" oninput="charStudioCustomField('+i+',\'label\',this.value)">';
+        h+='<textarea placeholder="Valor" oninput="charStudioCustomField('+i+',\'value\',this.value)">'+esc(cf.value||"")+'</textarea>';
+        h+='<button class="cs-btn cs-btn-danger" onclick="charStudioRemoveField('+i+')" style="padding:.4rem .5rem;">✕</button>';
+        h+='</div>';
+      });
+    }
+    h+='<button class="cs-btn cs-btn-secondary" onclick="charStudioAddField()" style="margin-top:.3rem;">+ Adicionar campo</button>';
+    h+='<div style="margin-top:1.5rem;display:flex;gap:.5rem;flex-wrap:wrap;">';
+    h+='<button class="cs-btn cs-btn-primary" onclick="charStudioSave()">💾 Salvar</button>';
+    h+='<button class="cs-btn cs-btn-secondary" onclick="charStudioTab(\'chat\')">💬 Ir pro chat</button>';
+    h+='<button class="cs-btn cs-btn-danger" onclick="charStudioDelete(\''+d.id+'\')">🗑️ Excluir personagem</button>';
+    h+='</div>';
+    h+='</div></div>';
+    return h;
+  }
+
+  function renderChat(cur){
+    var msgs=cur.messages||[];
+    var h='<div class="cs-chat-wrap">';
+    h+='<div class="cs-chat-topbar">';
+    if(cur.avatar)h+='<img src="'+esc(cur.avatar)+'">';
+    else h+='<div style="width:42px;height:42px;border-radius:50%;background:#222;display:flex;align-items:center;justify-content:center;">🎭</div>';
+    h+='<div><div class="cs-chat-name">'+esc(cur.name||"Personagem")+'</div>';
+    h+='<div class="cs-chat-sub" style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">';
+    h+='<span>'+(msgs.length)+' mensagens</span>';
+    h+='<a href="#" onclick="charStudioTab(\'edit\');return false;" style="color:#ff9ad5;">editar</a>';
+    h+='<button class="cs-btn cs-btn-secondary" onclick="charStudioClearChat()" style="padding:.25rem .6rem;font-size:.72rem;" title="Reiniciar conversa do zero">🔄 Reiniciar conversa</button>';
+    h+='</div></div>';
+    h+='</div>';
+    h+='<div class="cs-chat-messages" id="csChatMessages">';
+    if(msgs.length===0){
+      h+='<div class="cs-empty" style="padding:2rem;">Conversa vazia. Envie a primeira mensagem! 💬</div>';
+    }
+    msgs.forEach(function(m){
+      if(m.role==="user"){
+        h+='<div class="cs-msg cs-msg-user">'+esc(m.content)+'</div>';
+      }else{
+        h+='<div class="cs-msg cs-msg-char"><b>'+esc(cur.name||"")+'</b><br>'+esc(m.content)+'</div>';
+      }
+    });
+    if(state.chatStreaming){
+      h+='<div class="cs-typing" id="csTyping">'+esc(cur.name||"")+' está digitando...</div>';
+    }
+    h+='</div>';
+    h+='<div class="cs-chat-input-row">';
+    h+='<textarea id="csChatInput" placeholder="Escreva para '+(cur.name||"o personagem")+'..." rows="1" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();charStudioSend();}"></textarea>';
+    h+='<button class="cs-btn cs-btn-primary" onclick="charStudioSend()" '+(state.chatStreaming||state.loading?"disabled":"")+'>➤</button>';
+    h+='</div>';
+    h+='</div>';
+    return h;
+  }
+
+  function scrollChatBottom(){
+    var el=document.getElementById("csChatMessages");
+    if(el)el.scrollTop=el.scrollHeight;
+  }
+
+  // ---- window API ----
+  window.charStudioOpen=function(){
+    document.getElementById("charStudio").classList.add("active");
+    state.open=true;
+    // Preload the AI text model so the first reply is faster
+    var gt=getGT();
+    if(gt){try{gt({preload:true});}catch(e){}}
+    loadChars().then(render);
+  };
+  window.charStudioClose=function(){
+    var ov=document.getElementById("charStudio");
+    ov.classList.remove("active");
+    ov.classList.add("closing");
+    setTimeout(function(){ov.classList.remove("closing");},250);
+    state.open=false;
+  };
+  window.charStudioTab=function(v){
+    if(v==="edit"&&state.currentId){
+      state.draft=JSON.parse(JSON.stringify(state.characters[state.currentId]));
+      state.draftDirty=false;
+    }
+    if(v==="chat"&&state.currentId&&state.draftDirty){
+      charStudioSave(true);
+    }
+    state.view=v;
+    render();
+  };
+  window.charStudioSetStyle=function(v){state.artStyle=v;};
+  window.charStudioToggleAdvanced=function(){
+    state.advancedOpen=!state.advancedOpen;
+    render();
+  };
+  window.charStudioDraftStyle=function(v){
+    if(!state.draft)return;
+    state.draft.artStyle=v;
+    state.draftDirty=true;
+  };
+  window.charStudioNew=async function(){
+    var ta=document.getElementById("csNewDesc");
+    var desc=ta?ta.value.trim():"";
+    if(!desc){ta&&ta.focus();return;}
+    var gi=getGI();
+    if(!gi){state.loading=false;render();window.alert("Gerador de imagens ainda carregando. Aguarde alguns segundos e tente de novo.");return;}
+    state.loading=true;state.loadingMsg="🎨 Gerando imagem do personagem...";render();
+    var avatar="";
+    try{
+      var r=await gi(buildStylePrompt(state.artStyle,desc+", character portrait, high quality, detailed, centered"), {resolution:"512x768"});
+      avatar=r.dataUrl||r.url||"";
+    }catch(e){}
+    var c=blankChar(desc);
+    c.avatar=avatar;
+    c.artStyle=state.artStyle;
+    await saveChar(c);
+    state.characters[c.id]=c;
+    state.currentId=c.id;
+    state.draft=JSON.parse(JSON.stringify(c));
+    state.draftDirty=false;
+    state.view="edit";
+    state.loading=false;
+    render();
+  };
+  window.charStudioEdit=function(id){
+    state.currentId=id;
+    state.draft=JSON.parse(JSON.stringify(state.characters[id]));
+    state.draftDirty=false;
+    state.view="edit";
+    render();
+  };
+  window.charStudioOpenChat=function(id){
+    state.currentId=id;
+    state.draft=null;
+    state.draftDirty=false;
+    state.view="chat";
+    render();
+  };
+  window.charStudioImportFromGallery=async function(data){
+    if(!data)return;
+    var url=data.imageUrl||data.url||"";
+    var prompt=data.prompt||"";
+    var name=prompt.slice(0,50).replace(/[,;]/g," ").trim()||"Personagem da galeria";
+    var c=blankChar(prompt);
+    c.name=name;
+    c.avatar=url;
+    c.description=prompt;
+    c.fromGallery=true;
+    c.galleryImageId=data.imageId||"";
+    await saveChar(c);
+    state.characters[c.id]=c;
+    state.currentId=c.id;
+    state.draft=JSON.parse(JSON.stringify(c));
+    state.draftDirty=false;
+    state.view="chat";
+    render();
+  };
+  window.charStudioDelete=async function(id){
+    var c=state.characters[id];
+    if(!c)return;
+    if(!window.confirm("Excluir \""+(c.name||"personagem")+"\"? Esta ação não pode ser desfeita."))return;
+    await deleteChar(id);
+    if(state.currentId===id){state.currentId=null;state.view="list";state.draft=null;}
+    render();
+  };
+  window.charStudioField=function(k,v){
+    if(!state.draft)return;
+    state.draft[k]=v;
+    state.draftDirty=true;
+  };
+  window.charStudioAddField=function(){
+    if(!state.draft)return;
+    state.draft.custom=state.draft.custom||[];
+    state.draft.custom.push({label:"",value:""});
+    state.draftDirty=true;
+    render();
+  };
+  window.charStudioCustomField=function(i,kv,v){
+    if(!state.draft||!state.draft.custom||!state.draft.custom[i])return;
+    state.draft.custom[i][kv]=v;
+    state.draftDirty=true;
+  };
+  window.charStudioRemoveField=function(i){
+    if(!state.draft||!state.draft.custom)return;
+    state.draft.custom.splice(i,1);
+    state.draftDirty=true;
+    render();
+  };
+  window.charStudioSave=async function(silent){
+    if(!state.draft)return;
+    var d=state.draft;
+    // Preserve the latest messages — the draft is a snapshot from when editing
+    // started and may be stale if the user chatted in another tab.
+    var existing=state.characters[d.id];
+    if(existing&&existing.messages)d.messages=existing.messages;
+    await saveChar(d);
+    state.characters[d.id]=d;
+    state.draftDirty=false;
+    if(!silent)render();
+  };
+  window.charStudioRegenAvatar=async function(){
+    if(!state.draft)return;
+    var gi=getGI();
+    if(!gi){window.alert("Gerador de imagens ainda carregando.");return;}
+    var desc=(state.draft.description||state.draft.name||"a character");
+    if(state.draft.appearance)desc+=" "+state.draft.appearance;
+    var style=state.draft.artStyle||state.artStyle;
+    state.loading=true;state.loadingMsg="🎨 Gerando nova imagem...";render();
+    try{
+      var r=await gi(buildStylePrompt(style,desc+", character portrait, high quality, detailed, centered"), {resolution:"512x768"});
+      state.draft.avatar=r.dataUrl||r.url||state.draft.avatar;
+      state.draft.artStyle=style;
+      state.draftDirty=true;
+      await saveChar(state.draft);
+    }catch(e){}
+    state.loading=false;
+    render();
+  };
+  window.charStudioClearChat=async function(){
+    var c=state.currentId?state.characters[state.currentId]:null;
+    if(!c)return;
+    if(!window.confirm("Reiniciar a conversa com "+(c.name||"o personagem")+"? Todo o histórico atual será apagado."))return;
+    c.messages=[];
+    await saveChar(c);
+    render();
+  };
+  window.charStudioSend=async function(){
+    var c=state.currentId?state.characters[state.currentId]:null;
+    if(!c||state.chatStreaming)return;
+    var ta=document.getElementById("csChatInput");
+    var text=ta?ta.value.trim():"";
+    if(!text)return;
+    c.messages=c.messages||[];
+    c.messages.push({role:"user",content:text});
+    ta.value="";
+    state.chatStreaming=true;
+    render();
+    await saveChar(c);
+
+    var charName=c.name||"Character";
+    var gt=getGT();
+
+    // If AI text generation is available, use it for real roleplay.
+    if(gt){
+      var sys=buildSysPrompt(c);
+      // Append-only transcript (prefix-cache friendly): fixed persona first,
+      // then the conversation log, then the task at the very end.
+      var hist=c.messages.slice(-16).map(function(m){
+        return (m.role==="user"?"User: ":charName+": ")+m.content;
+      }).join("\n");
+      var instruction=sys+"\n<MESSAGES>\n"+hist+"\n</MESSAGES>\nTASK: Write "+charName+"'s next reply. Stay in character. Reply in the user's language. Keep it to 1-4 sentences.";
+      var startWith=charName+":";
+      var acc="";
+      var gotChunk=false;
+      try{
+        await gt({
+          instruction:instruction,
+          startWith:startWith,
+          stopSequences:["\nUser:","User:"],
+          onChunk:function(data){
+            if(data.isFromStartWith)return;
+            gotChunk=true;
+            acc+=(data.textChunk||"");
+            var t=document.getElementById("csTyping");
+            if(t){
+              t.classList.remove("cs-typing");
+              t.classList.add("cs-msg","cs-msg-char");
+              t.innerHTML="<b>"+esc(charName)+"</b><br>"+esc(acc);
+              scrollChatBottom();
+            }
+          }
+        });
+        c.messages.push({role:"char",content:(acc||"...").trim()});
+        state.chatStreaming=false;
+        await saveChar(c);
+        render();
+        return;
+      }catch(e){
+        // Fall through to local fallback below
+      }
+    }
+
+    // Fallback: instant local reply (used while AI loads or on error).
+    var reply=localReply(c,text);
+    var delay=300+Math.floor(Math.random()*400);
+    await new Promise(function(r){setTimeout(r,delay);});
+    c.messages.push({role:"char",content:reply});
+    state.chatStreaming=false;
+    await saveChar(c);
+    render();
+  };
+
+  // poll for kv availability then render if open
+  var kvWait=0;
+  var kvIv=setInterval(function(){
+    if(getKV()||kvWait>50){clearInterval(kvIv);}
+    kvWait++;
+    if(state.open)render();
+  },200);
+})();
+</script>
+
+<style>
+#translatorBtn{position:fixed;bottom:1rem;right:1rem;z-index:99998;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#00b4d4,#0077b6);color:#fff;font-size:1.4rem;box-shadow:0 4px 20px rgba(0,119,182,.4);display:flex;align-items:center;justify-content:center;transition:all .25s;}
+#translatorBtn:hover{transform:scale(1.1);box-shadow:0 6px 28px rgba(0,119,182,.6);}
+#translatorPanel{position:fixed;bottom:4.5rem;right:1rem;z-index:99998;display:none;background:linear-gradient(135deg,#0a0a14,#0f1e2e);color:#e0e0e0;padding:0;border-radius:12px;font-family:system-ui,sans-serif;font-size:.85rem;box-shadow:0 8px 32px rgba(0,0,0,.5);border:1px solid rgba(0,180,212,.25);width:min(360px,calc(100vw - 2rem));overflow:hidden;}
+#translatorPanel.active{display:block;animation:trFade .2s ease;}
+@keyframes trFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+#translatorPanel .tr-head{padding:.6rem .8rem;background:rgba(0,180,212,.15);font-weight:600;font-size:.9rem;display:flex;align-items:center;gap:.4rem;}
+#translatorPanel .tr-body{padding:.7rem;}
+#translatorPanel textarea{width:100%;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e0e0e0;padding:.55rem;font-size:.85rem;font-family:inherit;resize:vertical;min-height:60px;}
+#translatorPanel textarea:focus{outline:none;border-color:rgba(0,180,212,.5);}
+#translatorPanel .tr-row{display:flex;gap:.4rem;align-items:center;margin:.5rem 0;flex-wrap:wrap;}
+#translatorPanel select{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e0e0e0;padding:.4rem .5rem;font-size:.82rem;font-family:inherit;}
+#translatorPanel .tr-btn{border:none;border-radius:8px;padding:.45rem .8rem;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;}
+#translatorPanel .tr-go{background:linear-gradient(135deg,#00b4d4,#0077b6);color:#fff;}
+#translatorPanel .tr-go:hover{transform:translateY(-1px);box-shadow:0 3px 12px rgba(0,119,182,.4);}
+#translatorPanel .tr-go:disabled{opacity:.4;cursor:wait;}
+#translatorPanel .tr-out{margin-top:.5rem;background:rgba(0,0,0,.2);border:1px solid rgba(0,180,212,.15);border-radius:8px;padding:.55rem;min-height:50px;font-size:.85rem;line-height:1.5;white-space:pre-wrap;}
+#translatorPanel .tr-spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(0,180,212,.3);border-top-color:#00b4d4;border-radius:50%;animation:trSpin .8s linear infinite;vertical-align:middle;margin-right:.4rem;}
+@keyframes trSpin{to{transform:rotate(360deg)}}
+#translatorPanel .tr-swap{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:#aaa;border-radius:8px;padding:.4rem .6rem;cursor:pointer;font-family:inherit;font-size:.82rem;}
+#translatorPanel .tr-swap:hover{background:rgba(255,255,255,.14);color:#fff;}
+</style>
+
+<button id="translatorBtn" onclick="trToggle()" title="Tradutor">🌐</button>
+
+<div id="translatorPanel">
+  <div class="tr-head">🌐 Tradutor</div>
+  <div class="tr-body">
+    <textarea id="trInput" placeholder="Digite o texto que quer traduzir..."></textarea>
+    <div class="tr-row">
+      <select id="trFrom"></select>
+      <button class="tr-swap" onclick="trSwap()">⇄</button>
+      <select id="trTo"></select>
+    </div>
+    <button class="tr-btn tr-go" id="trGoBtn" onclick="trDoTranslate()">Traduzir</button>
+    <div class="tr-out" id="trOutput"><span style="color:#666;">A tradução aparecerá aqui...</span></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var LANGS=[
+    ["auto","Detectar idioma"],["pt","Português"],["en","Inglês"],["es","Espanhol"],
+    ["fr","Francês"],["de","Alemão"],["it","Italiano"],["ja","Japonês"],
+    ["ko","Coreano"],["zh","Chinês"],["ru","Russo"],["ar","Árabe"],
+    ["nl","Holandês"],["pl","Polonês"],["tr","Turco"],["hi","Hindi"]
+  ];
+  function fill(sel){
+    LANGS.forEach(function(l){var o=document.createElement("option");o.value=l[0];o.textContent=l[1];sel.appendChild(o);});
+  }
+  var from=document.getElementById("trFrom"),to=document.getElementById("trTo");
+  if(from&&to){fill(from);fill(to);from.value="auto";to.value="en";}
+  var panel=document.getElementById("translatorPanel");
+  window.trToggle=function(){panel.classList.toggle("active");if(panel.classList.contains("active")){var i=document.getElementById("trInput");if(i)i.focus();}};
+  window.trSwap=function(){
+    var f=from.value,t=to.value;
+    if(f==="auto")return;
+    from.value=t;to.value=f;
+    var inp=document.getElementById("trInput"),out=document.getElementById("trOutput");
+    var tmp=inp.value;inp.value=(out.dataset.text||"");out.dataset.text=tmp;
+  };
+  window.trDoTranslate=async function(){
+    var inp=document.getElementById("trInput"),out=document.getElementById("trOutput"),btn=document.getElementById("trGoBtn");
+    var text=inp.value.trim();if(!text){out.innerHTML='<span style="color:#666;">Digite algo para traduzir.</span>';return;}
+    var srcName=from.value==="auto"?"the source language":LANGS.find(function(l){return l[0]===from.value;})[1];
+    var tgtName=LANGS.find(function(l){return l[0]===to.value;})[1];
+    btn.disabled=true;btn.innerHTML='<span class="tr-spin"></span>Traduzindo...';
+    out.innerHTML='<span class="tr-spin"></span>Traduzindo...';
+    var gt=null;
+    try{if(typeof root!=="undefined"&&root.generateText)gt=root.generateText;else if(typeof generateText==="function")gt=generateText;}catch(e){}
+    if(!gt){
+      out.innerHTML='<span style="color:#ff8080;">IA ainda carregando. Aguarde um momento e tente de novo.</span>';
+      btn.disabled=false;btn.textContent="Traduzir";return;
+    }
+    try{
+      var instruction="Translate the following text "+(from.value==="auto"?"":"from "+srcName+" ")+""+(from.value==="auto"?"":"")+"to "+tgtName+". Only output the translated text, nothing else.\n\nText:\n"+text;
+      var result=await gt(instruction);
+      out.dataset.text=result;
+      out.textContent=result||"(sem resposta)";
+    }catch(e){
+      out.innerHTML='<span style="color:#ff8080;">Erro ao traduzir. Tente novamente.</span>';
+    }
+    btn.disabled=false;btn.textContent="Traduzir";
+  };
+  document.getElementById("trInput").addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();trDoTranslate();}});
+})();
+</script>
+
+</body>
+</html>

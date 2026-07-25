@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>multi-gallery — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="topbar">
+    <select id="generatorSelect" class="control"></select>
+    <button id="openGeneratorButton" class="open-button" type="button" aria-label="Open selected generator in new tab" title="Open selected generator in new tab">
+      <svg class="open-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3Z"></path>
+        <path d="M5 5h6v2H7v10h10v-4h2v6H5V5Z"></path>
+      </svg>
+    </button>
+  </div>
+
+  <div class="gallery-shell">
+    <iframe
+      id="galleryFrame"
+      class="gallery-frame"
+      src=""
+      loading="lazy"
+      referrerpolicy="no-referrer"
+      allow="clipboard-write; fullscreen"
+    ></iframe>
+  </div>
+</div>
+
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #11161d;
+    --panel-2: #171d25;
+    --border: #2b3442;
+    --text: #e7edf5;
+    --muted: #9aa4b2;
+    --accent: #1d9bf0;
+    --shadow: 0 10px 30px rgba(0,0,0,.25);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Arial, Helvetica, sans-serif;
+    width: 100%;
+    min-height: 100vh;
+  }
+
+  #app {
+    width: 100%;
+    min-height: 100vh;
+    background: var(--bg);
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    width: 100%;
+    padding: 14px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: linear-gradient(to bottom, rgba(11,15,20,.98), rgba(11,15,20,.92));
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+
+  .control {
+    flex: 1;
+    min-width: 0;
+    height: 48px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    padding: 0 14px;
+    font-size: 16px;
+    outline: none;
+  }
+
+  .control:focus {
+    border-color: var(--accent);
+  }
+
+  .open-button {
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--muted);
+    cursor: pointer;
+    outline: none;
+  }
+
+  .open-button:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+
+  .open-button:focus {
+    border-color: var(--accent);
+  }
+
+  .open-icon {
+    width: 23px;
+    height: 23px;
+    fill: currentColor;
+  }
+
+  .gallery-shell {
+    width: 100%;
+    height: calc(100vh - 77px);
+    background: var(--panel);
+  }
+
+  .gallery-frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+    background: var(--panel);
+  }
+
+  @media (max-width: 640px) {
+    .topbar {
+      padding: 10px;
+      gap: 8px;
+    }
+
+    .open-button {
+      width: 48px;
+      height: 48px;
+      flex-basis: 48px;
+    }
+
+    .gallery-shell {
+      height: calc(100vh - 69px);
+    }
+  }
+</style>
+
+<script>
+  const PAGE_TITLE = "Multi Generator Gallery"
+  const GALLERY_BASE = "https://image-generation.perchance.org/gallery"
+  const GENERATOR_BASE = "https://perchance.org"
+  const DEFAULT_SUBCHANNEL = "public"
+  const DEFAULT_SORT = "recent"
+  const GENERATORS = getGalleryGenerators()
+
+  const els = {}
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;")
+  }
+
+  function getGeneratorValue(generator) {
+    if (typeof generator === "string") return generator
+    return generator.value
+  }
+
+  function getGeneratorLabel(generator) {
+    if (typeof generator === "string") return generator
+    return generator.label || generator.value
+  }
+
+  function buildGalleryUrl(generator) {
+    const params = new URLSearchParams({
+      sort: DEFAULT_SORT,
+      timeRange: "all-time",
+      hideIfScoreIsBelow: "-999999",
+      contentFilter: "none",
+      subChannel: DEFAULT_SUBCHANNEL,
+      channel: generator
+    })
+
+    return `${GALLERY_BASE}?${params.toString()}`
+  }
+
+  function buildGeneratorUrl(generator) {
+    return `${GENERATOR_BASE}/${encodeURIComponent(generator)}`
+  }
+
+  function renderGeneratorOptions() {
+    els.generatorSelect.innerHTML = GENERATORS.map(generator => {
+      const value = getGeneratorValue(generator)
+      const label = getGeneratorLabel(generator)
+
+      return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`
+    }).join("")
+  }
+
+  function loadSelectedGenerator() {
+    const selectedGenerator = els.generatorSelect.value
+    els.galleryFrame.src = buildGalleryUrl(selectedGenerator)
+  }
+
+  function openSelectedGenerator() {
+    const selectedGenerator = els.generatorSelect.value
+    window.open(buildGeneratorUrl(selectedGenerator), "_blank", "noopener,noreferrer")
+  }
+
+  function setupEvents() {
+    els.generatorSelect.addEventListener("change", loadSelectedGenerator)
+    els.openGeneratorButton.addEventListener("click", openSelectedGenerator)
+  }
+
+  function init() {
+    document.title = PAGE_TITLE
+
+    els.generatorSelect = document.getElementById("generatorSelect")
+    els.galleryFrame = document.getElementById("galleryFrame")
+    els.openGeneratorButton = document.getElementById("openGeneratorButton")
+
+    renderGeneratorOptions()
+    setupEvents()
+    loadSelectedGenerator()
+  }
+
+function getGalleryGenerators() {
+  return [
+    "first-french-generator",
+    "ai-text-to-image-generator",
+    "image-generator-professional",
+    "8xa4skz1er",
+    "ai-furry-generator",
+    "18aedjlexf",
+    "text-to-image",
+    "fullbodygenerator",
+    "q5i0xbm31n",
+    "text-to-image-generator-powered-by-stable-diffusion",
+    "5yf90s8rdo",
+    "free-text-to-image-unfiltered",
+    "ai-image-gen",
+    "ai-image-generator",
+    "mtech18i2i",
+    "ai-professional-image-generator",
+    "urvillain-imagine",
+    "l0zfkkpkqj",
+    "4cffvbcm0c",
+    "improved-ai-girl-generator",
+    "santuario",
+    "ai-detail",
+    "lotsofstylesnowgocrazy",
+    "kbczxky21b",
+    "hcnql5l8op",
+    "cursed-ai",
+    "piupiu",
+    "unrestricted-ai-image-generator",
+    "uvs1c8eafd",
+    "ui4cpc3t1l",
+    "97mlmzo1o3",
+    "ai-art-plugin",
+    "9eb7gqdw73",
+    "artscapes-v3",
+    "omnimage",
+    "lkadigyccx",
+    "realistic-portraits-generator",
+    "prompt-engineer-basic",
+    "image-style-creator",
+    "ai-images-generator",
+    "tue-apr-14-2026-02-25pm",
+    "alternate-12-26-2025-5-59am",
+    "loop-ai-generator",
+    "ai-imager-pro-4-x",
+    "fb-generator",
+    "yk2ds9ts2j",
+    "d99oupja4w",
+    "ko4gy1v7n5",
+    "s6rmih88xt",
+    "omni-tornado",
+    "ai-characters-description-gen",
+    "dokou-ai-art-generator",
+    "fur-ai",
+    "digital-anarchist-master",
+    "egigi",
+    "advanced-ai-character-generator",
+    "ufo-specific-wifey-generator",
+    "aistudio",
+    "hunknown-virile-visions-pg13",
+    "dreampixai",
+    "t2iaiimagegen2026-1",
+    "67br37r2c8",
+    "acopygrokimgn",
+    "hhl7mqtslm",
+    "experiment3",
+    "vivid-image",
+    "qinegen",
+    "7ir6xdib1a",
+    "superior-image-generator",
+    "fantasy-image-generator-dnd",
+    "brennos-ai-image-generator",
+    "image-gen-with-image-seed",
+    "nexbox",
+    "tlgklz-image",
+    "n8n-style",
+    "t4f2e5pefe",
+    "image-prompt-optimizer-picky",
+    "p6rx39cb9n",
+    "ai-text-to-image-generators",
+    "r6dijunagh",
+    "aigen-rus-edit",
+    "antimatter-ai-image-generator",
+    "vision-pro-v10-2---strict-multi-core",
+    "kn597argx9",
+    "ai-art-generator-advanced",
+    "ai-character-generator",
+    "ai-character-description",
+    "ai-artgen",
+    "new-furry-ai",
+    "unrestricted-furry-ai",
+    "ai-pokemon-generator",
+    "ai-cartoon-generator",
+    "ai-painting-generator",
+    "ai-illustration-generator",
+    "ai-photo-generator",
+    "ai-human-generator",
+    "pretty-ai",
+    "ai-anime-generator",
+    "ai-anime-image-generator",
+    "ai-waifu-generator",
+    "imaginix",
+    "the-imaginarium",
+    "realistic-people",
+    "an-image-generator",
+    "beautiful-people",
+    "prompt-tag-tester",
+    "multiple-style-tester",
+    "ai-character-chat",
+    "simple-ai-art-generator",
+    "tkoi",
+    "imageconstructor",
+    "text2image-generator",
+    "text-to-image-plugin",
+    "hight-generator-professional",
+    "ai-image-lab",
+    "you-are-the-best",
+    "sj-generator",
+    "lunatics-full-extras-no-limit-ai-the-have-fun-gen-full-with-extras",
+    "youmake-ai-fork",
+    "promptyx",
+    "-best-ai-image-generator",
+    "aimg",
+    "vukwap",
+    "fegless",
+    "ai-vibrant-image-generator",
+    "unsafeimagesgenerator",
+    "new-ai-chat-gen",
+    "my-ai-gen",
+    "char-description",
+    "moon-light",
+    "furchance",
+    "power-image-generator",
+    "power-ai",
+    "free-text-to-image-ai",
+    "celebrityfantasies",
+    "anime-waifu",
+    "acgp",
+    "image-gen",
+    "krzoaake5y",
+    "asw-ai-rpg",
+    "sj-styles-tester",
+    "peter-photo-chat",
+    "s6l8dtier8",
+    "ai-gen-no-nfw",
+    "d27kf62ua0",
+    "9f9sjo83oh",
+    "ml8a9qv10t",
+    "aanyh2po0y",
+    "prpg2",
+    "simple-txt2img",
+    "kgb2o7seri",
+    "jogjk1ees6",
+    "star-fell",
+    "0ue88ozj5w",
+    "scenario-generating-chat",
+    "ewt16dl6tc",
+    "aisg",
+    "ca6ud5xyzq",
+    "1b9sm9iw8v",
+    "vv1l1fv39i",
+    "2p53hoknda",
+    "101m9hvxvg",
+    "h0jzgz53rd",
+    "lsnjxt1hh4",
+    "4j6jyfoksn",
+    "ubdubp39qr",
+    "rabittsystem-exe",
+    "udb8cqwexq",
+    "ufsykzlant",
+    "unsafeimages-lite",
+    "2khmdcfna2",
+    "nightmare-image-gen",
+    "3r0de37qau",
+    "y06fzf5rev",
+    "t2i-framework-plugin-v2",
+    "ai-generated-realistic-portraits",
+    "5h2624sjjm",
+    "xpm54q50i6",
+    "nf4pjqf3rb",
+    "ai-face-generator",
+    "realistic-human-image-generator",
+    "79iad0y4k1",
+    "sd-rhg",
+    "z8glpjm3jy",
+    "qwgyfvspnd",
+    "o93e70mhxu",
+    "lilithofthedarkvoid",
+    "ed8kt2siat",
+    "pixart",
+    "8dygqca3sx",
+    "3iey4i1ckv",
+    "83xwabn3ti",
+    "u2mvhnfehe",
+    "nnp4ig3uhr",
+    "v5zubd0gtk",
+    "wenowq8hne",
+    "jnnna25svt",
+    "kj9gb5aou8",
+    "text-to-image-plugin-gallery-example",
+    "-sinz-",
+    "the-epic-image-generator",
+    "e6gum2lj5j",
+    "dynamic-acc",
+    "x-y-matrix",
+    "myw63gupj1",
+    "oi-text-to-image-generator",
+    "tuxs-galactic-palace",
+    "aicharactergenerator2-0-gargle-gargle",
+    "unsafest",
+    "improved-ai-girl-generator-beta",
+    "the-infinite-gate",
+    "codegeassegen",
+    "characterportraits",
+    "character-sfx",
+    "a02xkljhxe",
+    "simple-text-to-image-generator",
+    "another-multi-character-aichat",
+    "memory-hero",
+    "gengenie-easy",
+    "33fnhkrd1z",
+    "badgrampy-advanced-image-generator",
+    "5mg9t3ucvt",
+    "qctcv0be7l",
+    "ndl3ye6tp3",
+    "ai-oister-t2i",
+    "ak3m58w496",
+    "vision-lab-studio",
+    "dxl4xg2bwt",
+    "fggkqf7hwc",
+    "hzeymnk079",
+    "phat-matrix",
+    "new-hobby-idea",
+    "1ytellhsrk",
+    "4xzrr65u7d",
+    "fjacz13obj",
+    "koma",
+    "dioramic-gen",
+    "lemheealw3",
+    "14dgkxr9sg",
+    "vzz1frsnxe",
+    "4dw14skt9x",
+    "2zuaawlplz",
+    "neonewgenerator",
+    "ai-text-to-image-generator-advance",
+    "pba3dna0gh",
+    "vehicle-generator",
+    "codis-ai-human-generator-v1-1",
+    "l9kek1m723",
+    "r74kmxlp33",
+    "usqx93km71",
+    "ai-guy-generator",
+    "ai-real-revolution",
+    "iq5ilym3ti",
+    "ai-icon-generator",
+    "ai-thumbnail-generator",
+    "axxj9m8gpn",
+    "prpg",
+    "ryj7gup6ad",
+    "image-finder",
+    "ai-game-assest",
+    "jusuo-draft",
+    "ai-text-to-image",
+    "4dp2c4hw4g",
+    "hsn57a8bj6",
+    "o69onpp6ic",
+    "tlghj8w06q",
+    "wanif62763-generator",
+    "e2ij2pis85",
+    "txt-2-6-img",
+    "mugen",
+    "penumbra-ai",
+    "vmw3v8pybi",
+    "tb478ja65w",
+    "no-mod-no-money",
+    "aiimageprompt",
+    "mack-mcgenerator",
+    "cek8pdfm7x",
+    "text-to-image-gallery-custom-button2-example",
+    "j9krnpa7rb",
+    "d2aggf0ko7",
+    "image-ai",
+    "zpdqn0amme",
+    "generatororo",
+    "ojtddj8a3k",
+    "1fgrel5wgq",
+    "ouogvrl6q6",
+    "4f4xfgr3p6",
+    "best-art-gen",
+    "12k9368mp7",
+    "s1od06wwf4",
+    "gdi81v4hc8",
+    "8mmeq2rvmb",
+    "rr5zqtuhpw",
+    "jit73v9te6",
+    "bxjzm8bixx",
+    "12vw5xkr7w",
+    "op5qs6oywm",
+    "6ueq5oelk4",
+    "le-o-realistic",
+    "bg-imgen-professional",
+    "2m050jq19w",
+    "cwzyppgulz",
+    "r0w51fb8pa",
+    "5428hf6rpp",
+    "2em5ptki9d",
+    "image-gen-tool",
+    "1ryrkwn773",
+    "image-generator-with-ai-prompt-improver",
+    "9wl6jxc0ni",
+    "g3d0hinpho",
+    "anyrator",
+    "8vsp6b8ico",
+    "1jti6dj0ay",
+    "e1jj8xssnf",
+    "kt2gexetgb",
+    "n984mk15he",
+    "rjttnp3pbj",
+    "dpgws2rm4z",
+    "ba63ub55kt",
+    "qto0fq5z6h",
+    "-imggen",
+    "gerador-de-imagem-100-por-cento-gratis",
+    "hunknown-virile-visions",
+  ]
+}
+
+  init()
+</script>
+</body>
+</html>

@@ -1,0 +1,478 @@
+// This is the JavaScript function that powers The List Plugin.
+$output(...args) =>
+  const globalStore = typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : this;
+  if(!globalStore.__theListPluginStore) {
+    globalStore.__theListPluginStore = {
+      lockedMap: new Map(),
+      lastValueMap: new Map(),
+      idMap: new Map(),
+      idMapRev: new Map(),
+      lockerMap: new Map(),
+      lockerOpts: {},
+      idCounter: 0,
+    };
+  }
+  const store = globalStore.__theListPluginStore;
+
+  const isLeaf = (node) => Object.keys(node).length === 0;
+  const makeListLike = (arr) => {
+    arr.toString = function() {
+      if(this.length === 0) return "";
+      return this.selectOne + "";
+    };
+    return arr;
+  };
+
+  function selectAllLeaves(list) {
+    if(!list) return "(error: no list given to selectAllLeaves)";
+    const leaves = [...list.selectAll];
+    for(let i = 0; i < leaves.length; i++) {
+      if(!isLeaf(leaves[i])) {
+        leaves.splice(i, 1, ...leaves[i].selectAll);
+        i--;
+      }
+    }
+    return makeListLike(leaves);
+  }
+
+  function selectLeaf(list) {
+    if(!list) return "(no list given to selectLeaf)";
+    let leaf = list;
+    let i = 0;
+    while(1) {
+      i++;
+      if(i > 10000) {
+        return "(error in selectLeaf: infinite loop encountered?)";
+      }
+      const result = leaf.selectOne;
+      if(typeof result === "string" || Object.keys(result).length === 0) {
+        return result;
+      }
+      leaf = result;
+    }
+  }
+
+  function selectLeaves(list, ...a) {
+    if(!list) return "(no list given to selectLeaves)";
+    function selectMany(...args) {
+      let num;
+      if(args.length === 1) {
+        if(Array.isArray(args[0])) {
+          num = Number(args[0][Math.floor(Math.random() * args[0].length)]);
+        } else {
+          num = Number(args[0]);
+        }
+      } else if(args.length === 2) {
+        num = Number(args[0]) + Math.round(Math.random() * (args[1] - args[0]));
+      } else if(args.length > 2) {
+        num = Number(args[Math.floor(Math.random() * args.length)]);
+      }
+      if(Number.isNaN(num)) return "(error in selectLeaves: invalid number of items)";
+      const arr = [];
+      for(let i = 0; i < num; i++) {
+        arr.push(selectLeaf(list));
+      }
+      arr.toString = function() { return this.join(""); };
+      return arr;
+    }
+    return selectMany(...a);
+  }
+
+  function selectRange(list, start, end) {
+    const arr = list.selectAll;
+    if(start < 0) {
+      start += 1;
+      if(start === 0) return makeListLike([arr[arr.length - 1]]);
+    }
+    if(end < 0) {
+      end += 1;
+      if(end === 0) end = undefined;
+    }
+    if(start === 0 || (start > 0 && end > 0 && start > end)) {
+      return makeListLike([`(invalid inputs to selectRange: ${start}${end === undefined ? '' : ',' + end})`]);
+    }
+    let result;
+    if(end !== undefined) {
+      if(start > 0) result = arr.slice(start - 1, end);
+      else result = arr.slice(start, end);
+    } else {
+      result = arr.slice(start - 1);
+    }
+    return makeListLike(result);
+  }
+
+  function selectUntil(list, condition) {
+    for(let i = 0; i < 10000; i++) {
+      const item = list.selectOne;
+      if(condition(item)) {
+        return item;
+      }
+    }
+    return "(error: selectUntil couldn't find an item that meets the condition)";
+  }
+
+  function joinLists(...lists) {
+    const result = [];
+    for(let i = 0; i < lists.length; i++) {
+      const items = lists[i].selectAll;
+      if(items === undefined || !Array.isArray(items)) {
+        return "(a parameter of joinLists was not a list?)";
+      }
+      result.push(...items);
+    }
+    return makeListLike(result);
+  }
+
+  function filterList(list, handler) {
+    if(list === undefined) return "(you didn't pass filterList a list?)";
+    if(handler === undefined) return "(you didn't pass filterList a filtering function?)";
+    const items = list.selectAll;
+    if(items === undefined) return "(filterList was not passed a list?)";
+    const result = [];
+    for(const node of items) {
+      if(handler(node)) {
+        result.push(node);
+      }
+    }
+    return makeListLike(result);
+  }
+
+  function excludeItems(list, ...args) {
+    if(list === undefined || list.selectAll === undefined) return "(excludeItems was not passed a list?)";
+    const exclude = new Set();
+    for(let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      if(typeof arg === 'string') {
+        exclude.add(arg);
+      } else if(Array.isArray(arg)) {
+        for(const a of arg) {
+          exclude.add(typeof a === 'string' ? a : a.getName);
+        }
+      } else {
+        exclude.add(arg.getName);
+      }
+    }
+    const result = [];
+    for(const node of list.selectAll) {
+      if(!exclude.has(node.getName)) {
+        result.push(node);
+      }
+    }
+    return makeListLike(result);
+  }
+
+  function randomSelect(...argItems) {
+    let itemsArray;
+    let oddsArray;
+    if(argItems.includes(null)) {
+      itemsArray = argItems.slice(0, argItems.indexOf(null));
+      oddsArray = argItems.slice(argItems.indexOf(null) + 1);
+      if(itemsArray.length !== oddsArray.length) {
+        return "(error in randomSelect: the number of odds after null doesn't match the number of items)";
+      }
+    } else {
+      itemsArray = argItems;
+      oddsArray = new Array(itemsArray.length).fill(1);
+    }
+    const oddsSum = oddsArray.reduce((a, v) => a + v, 0);
+    const oddsSumStopPoint = oddsSum * Math.random();
+
+    let oddsSumForChoice = 0;
+    for(let i = 0; i < itemsArray.length; i++) {
+      oddsSumForChoice += oddsArray[i];
+      if(oddsSumForChoice >= oddsSumStopPoint) {
+        return itemsArray[i];
+      }
+    }
+  }
+
+  function consumableLeafList(list) {
+    if(!list) return "(error: no list given to consumableLeafList)";
+    const leaves = [...list.selectAll];
+    for(let i = 0; i < leaves.length; i++) {
+      if(!isLeaf(leaves[i])) {
+        leaves.splice(i, 1, ...leaves[i].selectAll);
+        i--;
+      }
+    }
+    if(leaves.length === 0) {
+      return "(error: no leaves in list given to consumableLeafList?)";
+    }
+    const theConsumableLeafList = {
+      list,
+      leaves: new Set(leaves),
+      consumedLeaves: new Set(),
+      exhaustedBranches: new Set(),
+      isLeaf(item) { return this.leaves.has(item); },
+      leafCount: leaves.length,
+      get getLength() {
+        return this.leafCount - this.consumedLeaves.size;
+      },
+      selectMany(...a) {
+        let num;
+        if(a.length === 1) {
+          if(Array.isArray(a[0])) {
+            num = Number(a[0][Math.floor(Math.random() * a[0].length)]);
+          } else {
+            num = Number(a[0]);
+          }
+        } else if(a.length === 2) {
+          num = Number(a[0]) + Math.round(Math.random() * (a[1] - a[0]));
+        } else if(a.length > 2) {
+          num = Number(a[Math.floor(Math.random() * a.length)]);
+        }
+        if(Number.isNaN(num)) return "(error in consumableLeafList: invalid number of items)";
+        const arr = [];
+        for(let i = 0; i < num; i++) {
+          arr.push(this.selectOne);
+        }
+        arr.toString = function() { return this.join(""); };
+        return arr;
+      },
+      get selectAll() {
+        const arr = [...this.leaves];
+        arr.toString = function() { return this.join(""); };
+        return arr;
+      },
+      get selectOne() {
+        if(this.getLength === 0) return "(error: no more items left in consumableLeafList)";
+        let i = 0;
+        let item = this.list;
+        while(1) {
+          i++;
+          if(i > 10000) return "(error in consumableLeafList: infinite loop encountered?)";
+          if(this.isLeaf(item)) {
+            this.consumedLeaves.add(item);
+            let branch = item.getParent;
+            while(1) {
+              const hasUnconsumedLeaf = branch.selectAll.filter(i => this.isLeaf(i) && !this.consumedLeaves.has(i)).length !== 0;
+              const hasUnexhaustedBranch = branch.selectAll.filter(i => !this.isLeaf(i) && !this.exhaustedBranches.has(i)).length !== 0;
+              if(!hasUnconsumedLeaf && !hasUnexhaustedBranch) {
+                this.exhaustedBranches.add(branch);
+                if(branch === this.list) break;
+                branch = branch.getParent;
+              } else {
+                break;
+              }
+            }
+            return item;
+          } else {
+            item = item.selectAll.filter(i => !this.exhaustedBranches.has(i) && !this.consumedLeaves.has(i)).selectOne;
+          }
+        }
+      },
+      toString() {
+        return this.selectOne + "";
+      },
+      valueOf() {
+        let res = this.selectOne + "";
+        if(Number(res).toString() === res) {
+          res = Number(res);
+        }
+        return res;
+      },
+    };
+    return theConsumableLeafList;
+  }
+
+  function consumableList(list) {
+    let giver = list.consumableList;
+    let firstCall = true;
+    function selectMany(...a) {
+      let num;
+      if(a.length === 1) {
+        if(Array.isArray(a[0])) {
+          num = Number(a[0][Math.floor(Math.random() * a[0].length)]);
+        } else {
+          num = Number(a[0]);
+        }
+      } else if(a.length === 2) {
+        num = Number(a[0]) + Math.round(Math.random() * (a[1] - a[0]));
+      } else if(a.length > 2) {
+        num = Number(a[Math.floor(Math.random() * a.length)]);
+      }
+      const arr = [];
+      for(let i = 0; i < num; i++) {
+        if(giver.getLength === 0) giver = list.consumableList;
+        arr.push(giver.selectOne);
+      }
+      arr.toString = function() { return this.join(""); };
+      return arr;
+    }
+    return new Proxy(list, {
+      get(target, prop) {
+        if(giver.getLength === 0 || (firstCall && prop === Symbol.toPrimitive)) {
+          giver = list.consumableList;
+          if(firstCall) firstCall = false;
+        }
+        if(prop === "selectOne") {
+          return giver.selectOne;
+        }
+        if(prop === "selectMany" || prop === "selectUnique") {
+          return selectMany;
+        }
+        return typeof giver[prop] === "function" ? giver[prop].bind(giver) : giver[prop];
+      }
+    });
+  }
+
+  function escapeHtml(value) {
+    return value.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  function lockable(list, command) {
+    if(!store.lockedMap.has(list)) {
+      const id = store.idCounter;
+      store.lockedMap.set(list, false);
+      store.lastValueMap.set(list, undefined);
+      store.idMap.set(id, list);
+      store.idMapRev.set(list, id);
+      store.idCounter++;
+    }
+    const isLocked = store.lockedMap.get(list);
+    const value = (isLocked || command) ? store.lastValueMap.get(list) : list + "";
+    store.lastValueMap.set(list, value);
+    const id = store.idMapRev.get(list);
+    const buttonIcon = isLocked ? '🔐' : '🔓';
+    const escapedLocked = escapeHtml(store.lockerOpts.lockedIcon ?? '🔐');
+    const escapedUnlocked = escapeHtml(store.lockerOpts.unlockedIcon ?? '🔓');
+    const onclick = `let d = window.__theListPluginStore; let list = d.idMap.get(${id}); d.lockedMap.set(list, !d.lockedMap.get(list)); this.innerHTML = d.lockedMap.get(list) ? '${escapedLocked}' : '${escapedUnlocked}';`;
+    if(command === "button") {
+      return `<span style="cursor:pointer;" onclick="${onclick}">${buttonIcon}</span><style>#lockable-list-default-button-${id} { display:none; }</style>`;
+    }
+    return `${value}<span id="lockable-list-default-button-${id}" style="cursor:pointer;" onclick="${onclick}"> ${buttonIcon}</span>`;
+  }
+
+  function locker(lockerName, value) {
+    if(lockerName && typeof lockerName === "object" && (lockerName.lockedIcon || lockerName.unlockedIcon)) {
+      store.lockerOpts = lockerName;
+      return "";
+    }
+    if(typeof lockerName === "string" && lockerName.endsWith("_button")) {
+      const baseName = lockerName.slice(0, -7);
+      if(!store.lockerMap.has(baseName)) {
+        return `(error: can't find locker called '${baseName}' - have you put a value in that locker yet? or maybe you misspelled the name?)`;
+      }
+      const lockedIcon = store.lockerOpts.lockedIcon ?? '🔐';
+      const unlockedIcon = store.lockerOpts.unlockedIcon ?? '🔓';
+      const escapedLocked = escapeHtml(lockedIcon);
+      const escapedUnlocked = escapeHtml(unlockedIcon);
+      const obj = store.lockerMap.get(baseName);
+      return `<span style="cursor:pointer;" onclick="let obj = window.__theListPluginStore.lockerMap.get('${baseName}'); obj.locked = !obj.locked; this.innerHTML = obj.locked ? '${escapedLocked}' : '${escapedUnlocked}';">${obj.locked ? lockedIcon : unlockedIcon}</span>`;
+    }
+    if(value === undefined) {
+      if(!store.lockerMap.has(lockerName)) {
+        return `(error: can't find locker called '${lockerName}')`;
+      }
+      return store.lockerMap.get(lockerName).value;
+    }
+    if(!store.lockerMap.has(lockerName)) {
+      store.lockerMap.set(lockerName, {locked: false, value});
+    }
+    const entry = store.lockerMap.get(lockerName);
+    if(entry.locked) {
+      return entry.value;
+    }
+    entry.value = value;
+    return value;
+  }
+
+  function lockButton(lockerName) {
+    return locker(`${lockerName}_button`);
+  }
+
+  function lockerIcons(options) {
+    if(options && typeof options === "object") {
+      store.lockerOpts = options;
+    }
+    return "";
+  }
+
+  function plugin(...args) {
+    return randomSelect(...args);
+  }
+
+  plugin.selectAllLeaves = selectAllLeaves;
+  plugin.selectLeaf = selectLeaf;
+  plugin.selectLeaves = selectLeaves;
+  plugin.selectRange = selectRange;
+  plugin.selectUntil = selectUntil;
+  plugin.joinLists = joinLists;
+  plugin.filterList = filterList;
+  plugin.excludeItems = excludeItems;
+  plugin.randomSelect = randomSelect;
+  plugin.consumableLeafList = consumableLeafList;
+  plugin.consumableList = consumableList;
+  plugin.lockable = lockable;
+  plugin.locker = locker;
+  plugin.lockButton = lockButton;
+  plugin.lockerIcons = lockerIcons;
+  plugin.select = randomSelect;
+  plugin.join = joinLists;
+  plugin.filter = filterList;
+  plugin.exclude = excludeItems;
+  plugin.consume = consumableList;
+  plugin.consumeLeaf = consumableLeafList;
+  plugin.lock = lockable;
+  return plugin;
+
+// --------------------------
+// --- Character Identity ---
+// --------------------------
+
+// The character's core identity, including name, age, gender, species, and other defining traits.
+
+character
+
+// Identity encompasses all the fundamental attributes that define who the character is, including their name, age, gender, species, and other key characteristics that shape their identity and how they are perceived in the world.
+  identity
+
+// Name and Naming Conventions
+    name
+
+// Common first names categorized by gender
+      first
+
+// Common first names for males
+        male
+          Aaron
+          Adam
+          Adrian
+          Aidan
+          Alan
+          Alex
+          Andrew
+          Anthony
+          Arthur
+          Benjamin
+          Brian
+          Charles
+          Daniel
+          David
+          Edward
+          Eric
+          Ethan
+          George
+          Henry
+          Jack
+          James
+          John
+          Joseph
+          Kevin
+          Liam
+          Mark
+          Matthew
+          Michael
+          Nathan
+          Nicholas
+          Oliver
+          Patrick
+          Paul
+          Peter
+          Richard
+          Robert
+          Samuel
+          Scott
+          Stephen
+          Thomas
+          William

@@ -1,0 +1,1770 @@
+// ============================================================
+// Berg`s — Code panel
+// All Perchance plugin imports + metadata live here.
+// The engine, UI, CSS, and HTML all live inline in the panel aside ->
+// block; the engine is inlined now.
+// ============================================================
+
+
+// --- Plugin imports (required) ---
+ai = {import:ai-text-plugin}                          // long-form generation
+image = {import:text-to-image-plugin}                 // scene image generator
+commentsPlugin = ""                                   // removed       
+tabbedCommentsPlugin = ""                             // removed
+fullscreenButton = {import:fullscreen-button-plugin}  // fullscreen control
+literal = {import:literal-plugin}                     // safely embed user text with () / {}
+upload = {import:upload-plugin}                       // share-link uploads
+kv = {import:kv-plugin}                               // share-link key-value store
+prompt2 = {import:prompt2-plugin}                     // modal prompts (used by shortcut editor)
+bugReport = {import:bug-report-plugin}                // debug capture for feedback comments
+diag = {import:berg-auto-diagnostic-system}           // 🔬 diagnostic framework (floating button + test panel)
+probe = {import:terg-perchance-probe}                 // 🛰 API probe battery (real generateText/generateImage/kv calls)
+
+// --- Page metadata (search engines, social cards, browser tab) ---
+$meta
+  title = 🍕Beta Berg Story Chat - Long-Form AI RPG
+  description = A Open Beta, for testing new features with the comunity
+
+pageTitle = Beta Berg Story Chat
+
+
+// ============================================================================
+// BERG STORY CHAT v1.12.0 — PROJECT HISTORY, DESIGN NOTES & CONTRIBUTOR GUIDE
+// ============================================================================
+//  P.Berg + gpt + gemini + meta
+//
+// Berg Story Chat is a community-driven fork built on top of BlizzardUI.
+//
+// First and foremost, full credit and appreciation go to the original
+// BlizzardUI project and everyone who contributed to it.
+//
+// This project exists because BlizzardUI already contained something rare:
+// a surprisingly capable narrative engine hidden beneath a relatively simple
+// interface. Many of the foundations required for long-form storytelling
+// were already present:
+//
+// - Streaming text generation
+// - Structured state tracking
+// - Character and world persistence
+// - Image generation support
+// - Local-first storage
+// - Modular panel architecture
+// - Tracker-driven narrative maintenance
+//
+// The goal of Berg Story Chat was never to replace those foundations.
+//
+// The goal was to better expose their potential.
+//
+// Throughout development we repeatedly discovered that many systems already
+// existed inside the engine, but were either underutilized, disconnected from
+// the user experience, or hidden behind layers of implementation that made
+// their value difficult to perceive.
+//
+// Instead of rebuilding everything, we chose a different approach:
+//
+// Understand what already exists.
+// Preserve what works.
+// Simplify what creates friction.
+// Expose what creates value.
+//
+// This philosophy guided nearly every decision made during the evolution of
+// this fork.
+//
+// ============================================================================
+// WHAT THIS PROJECT IS NOT
+// ============================================================================
+//
+// Berg Story Chat is not an attempt to turn a narrative experience into a
+// dashboard.
+//
+// It is not a telemetry system.
+//
+// It is not a roleplaying spreadsheet.
+//
+// It is not a developer console disguised as a chat application.
+//
+// One of the most important discoveries during development was that different
+// areas of the interface serve fundamentally different psychological purposes.
+//
+// Mixing those purposes degrades the experience.
+//
+// Because of that, the project gradually evolved toward a strict separation
+// between immersion spaces and information spaces.
+//
+// ============================================================================
+// THE THREE EXPERIENCE ZONES
+// ============================================================================
+//
+// LEFT PANEL
+//
+// The left panel exists primarily as a comfort zone.
+//
+// It contains configuration, navigation, saves, imports, exports, shortcuts,
+// and utility functions.
+//
+// Its purpose is not to tell the story.
+//
+// Its purpose is to help the user manage the environment around the story.
+//
+// Most users can spend their entire session interacting only with the left
+// panel and the chat itself.
+//
+// The panel should remain approachable, predictable, and low-noise.
+//
+// Complexity should not accumulate here.
+//
+// --------------------------------------------------------------------------
+//
+// CENTER PANEL
+//
+// The center panel is the most protected area of the entire application.
+//
+// During development we often referred to it as:
+//
+// "The Sacred Space."
+//
+// This is where the actual story happens.
+//
+// It is intentionally linear.
+//
+// It is intentionally simple.
+//
+// It is intentionally focused.
+//
+// The center panel should contain only finalized narrative content:
+//
+// - Player actions
+// - AI responses
+// - Generated prose
+// - Narrative progression
+//
+// The center panel should not become a status monitor.
+//
+// It should not contain:
+//
+// - Debug information
+// - Runtime diagnostics
+// - Tracker telemetry
+// - State inspection tools
+// - Experimental widgets
+// - Streaming internals
+//
+// Every attempt to inject auxiliary information into the central narrative
+// flow reduced immersion.
+//
+// The result was always worse than the clean version.
+//
+// The story itself is the interface.
+//
+// --------------------------------------------------------------------------
+//
+// RIGHT PANEL
+//
+// The right panel serves a completely different purpose.
+//
+// If the center panel is the story itself,
+// the right panel is the world's memory.
+//
+// This is where the underlying simulation becomes visible.
+//
+// Unlike the center panel, information density is desirable here.
+//
+// Advanced users often want visibility into:
+//
+// - Characters
+// - Relationships
+// - World state
+// - Lore
+// - Rules
+// - Inventory
+// - Narrative history
+//
+// The right panel exists specifically for that audience.
+//
+// It is intentionally more information-rich.
+//
+// The guiding principle became:
+//
+// "Protect the center. Enrich the right."
+//
+// ============================================================================
+// A MAJOR DISCOVERY: THE TRACKER WAS ALREADY THE ANSWER
+// ============================================================================
+//
+// Several times during development we considered creating entirely new
+// systems:
+//
+// - Story Lens engines
+// - Narrative telemetry layers
+// - Event buses
+// - Context analyzers
+// - Regex-based extraction systems
+//
+// After investigating the architecture more deeply, we realized most of
+// those ideas would only duplicate functionality that already existed.
+//
+// The tracker pipeline was already doing the difficult work.
+//
+// Background AI processes were already extracting:
+//
+// - Character information
+// - World information
+// - Lore
+// - Relationships
+// - Narrative summaries
+//
+// The problem was not missing intelligence.
+//
+// The problem was missing projection.
+//
+// Valuable information was being generated but not being shown.
+//
+// Once this became clear, the design direction changed completely.
+//
+// Instead of building new systems,
+// we focused on exposing the outputs of existing systems.
+//
+// This reduced complexity,
+// reduced maintenance cost,
+// reduced failure points,
+// and improved transparency simultaneously.
+//
+// ============================================================================
+// THE CHRONICLE DISCOVERY
+// ============================================================================
+//
+// One particularly important example involved the story seed.
+//
+// The initial story premise ("overview") is one of the most important pieces
+// of information in the entire simulation.
+//
+// It acts as the narrative DNA of the world.
+//
+// However, once generation began, that information effectively disappeared
+// from the interface.
+//
+// The engine still used it.
+//
+// The user simply could not see it anymore.
+//
+// Similar situations existed with:
+//
+// - Story summaries
+// - Narrative progression
+// - Historical context
+//
+// The Chronicle section emerged from a simple question:
+//
+// If the engine already knows these things,
+// why hide them?
+//
+// The Chronicle therefore became a projection layer for information that was
+// already stable, already maintained, and already useful.
+//
+// No new intelligence was added.
+//
+// Visibility was added.
+//
+// ============================================================================
+// STATE DESIGN LESSONS
+// ============================================================================
+//
+// One of the most important architectural lessons learned during development
+// involved state visibility.
+//
+// Not all state should be visible.
+//
+// The engine naturally produces two categories of information:
+//
+// 1. TRANSIENT STATE
+// 2. COMMITTED STATE
+//
+// --------------------------------------------------------------------------
+//
+// TRANSIENT STATE
+//
+// Examples:
+//
+// - Streaming chunks
+// - Token buffers
+// - Intermediate parser outputs
+// - In-progress generations
+// - Temporary prompts
+// - Active requests
+//
+// These values are volatile.
+//
+// They exist only while work is being performed.
+//
+// Rendering them directly creates:
+//
+// - Flickering
+// - Race conditions
+// - Visual instability
+// - Inconsistent information
+//
+// The UI should avoid consuming these values whenever possible.
+//
+// --------------------------------------------------------------------------
+//
+// COMMITTED STATE
+//
+// Examples:
+//
+// - state.overview
+// - state.summary
+// - state.turns
+// - state.tracker
+//
+// These values represent information that has already survived the
+// generation pipeline and become part of the world's stable reality.
+//
+// These values are safe.
+//
+// These values are useful.
+//
+// These values should drive interface projections.
+//
+// Over time this became one of the core design principles of the project.
+//
+// Stable state informs UI.
+// Volatile state remains internal.
+//
+// ============================================================================
+// CONCURRENCY, STREAMING & HARD-LEARNED LESSONS
+// ============================================================================
+//
+// During development we encountered multiple edge cases involving streaming,
+// asynchronous generation, iframe communication, and Perchance's internal
+// AI transport layer.
+//
+// Several early solutions relied on aggressive browser-level workarounds.
+//
+// Those solutions appeared effective initially,
+// but introduced hidden risks.
+//
+// Over time we moved away from:
+//
+// - Global DOM monkeypatches
+// - Prototype overrides
+// - Browser API substitutions
+//
+// and toward:
+//
+// - Scheduling
+// - Serialization
+// - Grace periods
+// - Queue management
+// - Non-invasive diagnostics
+//
+// The resulting system became both simpler and more reliable.
+//
+// The lesson was straightforward:
+//
+// If a browser API must be rewritten globally to solve a problem,
+// the problem is probably being solved at the wrong layer.
+//
+// ============================================================================
+// UI EVOLUTION
+// ============================================================================
+//
+// Another recurring theme throughout development was the removal of
+// redundancy.
+//
+// Multiple interface elements performed identical functions.
+//
+// Some occupied permanent screen space while providing little value.
+//
+// Rather than adding more interface,
+// we repeatedly found value by removing interface.
+//
+// The top bar is an example of this process.
+//
+// Over time its responsibilities migrated naturally into the side panels,
+// allowing more vertical space for the actual story.
+//
+// Similar decisions shaped much of the current layout.
+//
+// The objective was never minimalism for its own sake.
+//
+// The objective was focus.
+//
+// Every persistent UI element should justify the space it occupies.
+//
+// ============================================================================
+// FOR FUTURE CONTRIBUTORS
+// ============================================================================
+//
+// If you are reading this because you plan to modify, extend, fork,
+// or experiment with Berg Story Chat:
+//
+// Start by understanding what already exists.
+//
+// Before adding:
+//
+// - A new state system
+// - A new tracker
+// - A new event layer
+// - A new memory structure
+// - A new synchronization pipeline
+//
+// first verify whether the engine already contains that capability.
+//
+// More often than expected,
+// the answer is yes.
+//
+// The project improved most when existing systems were clarified,
+// exposed,
+// refined,
+// and connected together.
+//
+// Not when they were replaced.
+//
+// If you decide to build on top of this work,
+// we hope these notes help you understand not only what the system does,
+// but why it evolved the way it did.
+//
+// And if you discover a cleaner, simpler, or more elegant solution,
+// please improve it.
+//
+// That possibility is the entire reason this document exists.
+//
+// Thank you for taking the time to explore the project.
+//
+// And thank you again to the original BlizzardUI creators for building the
+// foundation that made all of this possible.
+// ============================================================================// ==========================================================================
+//   📜 BERGSTORYCHAT — CORE ARCHITECTURAL ENGINE & UI LAYER SPECIFICATION
+//   ==========================================================================
+//   
+//   This specification defines the separation of cognitive loads, state truth,
+//   and rendering pipelines within BergStoryChat. It serves as the living
+//   blueprint for future iterations, preventing state drift and regression.
+//
+//   1. THREE-TIERED COGNITIVE EXPERIENCE ZONES
+//   --------------------------------------------------------------------------
+//   ( LEFT PANEL: COMFORT & WORKSPACE )
+//   - Objective: Casual player sanctuary.
+//   - Responsibilities: Low-noise navigation, theme controls, local saves, 
+//     import/export tools, and configuration settings.
+//   - Psychological Goal: Establishes baseline stability, trust, and light reading.
+//
+//   ( CENTER PANEL: THE SACRED LINEAR FLOW )
+//   - Objective: Clean, immersive, distraction-free prose.
+//   - Rules: Strictly contains finalized AI and Player conversational turns.
+//     Absolutely no floating HUD, no telemetry logs, no mid-generation drafts,
+//     and no real-time stream status indicators.
+//   - Psychological Goal: Maintains maximum focus on pure narrative immersion.
+//
+//   ( RIGHT PANEL: THE COGNITIVE WORLD BRAIN )
+//   - Objective: Structured insight into the simulation's underlying state.
+//   - Responsibilities: Renders stable, reconciled state projections.
+//   - Key Modules:
+//     * CHRONICLE: Displays raw seed (Overview), narrative chronology (Beats),
+//       and consolidated memory (Core Summary).
+//       We map overview through data-edit="overview" to openWelcome() directly,
+//       and bind narrative age to state.turns.length and state.summary.
+//     * CAST: Identifies active NPCs and their core backgrounds.
+//     * LORE: Lists canonized world rules, facts, relationships, and active threads.
+//   - Psychological Goal: Exposes the cognitive "neural clockwork" of the world,
+//     allowing the player to see that the universe actively breathes and adapts.
+//
+//   2. DUAL-LAYER STATE ARCHITECTURE (UNIDIRECTIONAL PROPAGATION)
+//   --------------------------------------------------------------------------
+//   The system maintains a strict separation of timelines and state integrity:
+//
+//   ( PHASE 1: TRANSIENT COGNITIVE FLOW (VOLATILE/UNCOMMITTED) )
+//   - Elements: Streaming chunks, raw token buffers, active promise handlers,
+//     intermediary memory extraction parses, and temporary generation parameters.
+//   - Access Rule: UI IS STRICTLY FORBIDDEN FROM READING OR RENDER-POLLING THIS LAYER.
+//     This prevents rendering flickers, racing conditions, and premature evaluations.
+//
+//   ( PHASE 2: COMMITTED STATE (STABLE/UI-SAFE SNAPSHOT) )
+//   - Elements: `state.overview` (identity), `state.turns` (time), `state.summary`
+//     (memory), and `state.tracker` (structured truth).
+//   - Access Rule: This is the singular source of truth for all UI render cycles.
+//     Projections are triggered exclusively via state callbacks (e.g., renderState)
+//     at established transaction boundaries.
+//
+//   3. SYSTEM FLOW & STATE UPDATES
+//   --------------------------------------------------------------------------
+//   A single game turn (Beat) executes through a rigid transactional pipeline:
+//   
+//   ( INPUT ) ---> ( CONTEXT BUILD ) ---> ( AI GENERATION ) ---> ( STREAM TO CHAT (PROSE ONLY) )
+//                                                                           |
+//   ( UI RENDER ) <--- ( STATE COMMIT ) <--- ( TRACKER MERGE ) <--- ( NARRATIVE FRAME CLOSE )
+//          |
+//          +--> ( BACKGROUND COMPRESSION / maybeSummarize() ) ---> ( LAZY MEMORY EVENT )
+//
+//   - Real-Time stream rendering is isolated entirely to the chat view container.
+//   - The Right Panel and Tracker are re-evaluated and re-rendered only when
+//     reconciled, finalized transaction frames are committed.
+//
+//   4. WELCOME GUIDE & NEW SYSTEMS INTEGRATION (DEVELOPER MINDSET)
+//   --------------------------------------------------------------------------
+//   Welcome to the BergStoryChat source code! This project is maintained by the
+//   community as a living hybrid. Our goal when expanding this ecosystem was to
+//   close the data loop without creating "ghost systems" (decorative information 
+//   that doesn't actually influence the game simulation) and to preserve the
+//   Perchance DSL parser and intrinsic performance as much as possible.
+//
+//   We dedicate this guide to all new programmers and creators who wish to understand,
+//   maintain, or modularize the new integrated mechanisms of atmosphere, image generation,
+//   on-demand inspection, and isolated telemetry.
+//
+//   ==========================================================================
+//   (A) CLIMATOLOGY ENGINE & ENVIRONMENTAL METABOLISM
+//   ==========================================================================
+//   - CONCEPT:
+//     The emotional and physical climate of the world must not be a dead statistic on a panel.
+//     It acts as an active narrative barometer, working as a "background pressure"
+//     that influences both the tone of subsequent language model responses and the
+//     lighting and optical direction generated by the visual compiler lenses.
+//
+//   - HOW IT WORKS (TECHNICALLY):
+//     The system operates autonomously at the end of each turn ("Beat") via:
+//     * updateWorldMetrics(tracker, recentText): Analyzes recent prose using Sensory
+//       Pattern Heuristics. It scans the text for semantic markers of conflict/tension
+//       (e.g., weapons, wounds, danger), calm (e.g., taverns, peace, rest), mystical
+//       elements (e.g., temples, mysticism, ritual, god, faith, prayer, vision, relic),
+//       or economic elements (e.g., coins, gold, buying, selling, market, merchant) and
+//       translates these readings into instant pressures on world metrics.
+//     * Natural Metabolism (Amortization): To avoid permanent hysterical extremes,
+//       the engine decays and silently regenerates each metric toward healthy baseline
+//       equilibrium values with each world-tick, allowing the "dust to settle" naturally.
+//     * validateWorldIntegrity(tracker): Acts as the "structural immune system" of the save.
+//       It ensures all gauges respect the (0.0 to 1.0) scale, sanitizes old or legacy
+//       states, and prevents type mismatches (such as NaN or nulls) during import.
+//
+//   ==========================================================================
+//   (B) SEMANTIC VISUAL STATE ENGINE (VSE V3) / VISUAL COMPILER
+//   ==========================================================================
+//   - CONCEPT:
+//     Traditionally, image generators in RPGs draw simplistic conclusions from the last sentence 
+//     of the story, losing the sense of continuity of who is on scene and the physical environment. 
+//     Visual Compiler V3 solves this by structuring realities in a unified way for the image plugin,
+//     ensuring the prompt sent to the engine is a cinematic piece.
+//
+//   - HOW IT WORKS (TECHNICALLY):
+//     When triggered, VisualCompilerV3 scans data along 3 axes:
+//     * Active Subject Resolution: The compiler detects who is present in the turn's scene
+//       and queries the NPCs' Visual Genome (resolveNpcAppearance / visualGenomeSystem).
+//       It extracts real physical features from their JSON (their morphology, active clothing
+//       pieces, documented scars), ignoring behavioral fields that would pollute the prompt
+//       and applying weight-based salience rules.
+//     * Atmosphere Optics (Atmospheric lighting derived from weather): The physical atmosphere
+//       generated in the image prompt is directly linked to the Climatology Engine. If world
+//       Tension is high or Fear rises (tension > 0.65 or fear > 0.60), the compiler dictates
+//       aggressive lighting directions (heavy chiaroscuro shadows, high dramatic contrast, somber tones).
+//       If the world is stable (stability > 0.75), it dictates soft natural light and "golden hour"
+//       illumination.
+//     * Attention Bridge & Memory Echoes: The visual compiler establishes a context bridge with
+//       the Memory Palace. It scans the scene's text for keywords and looks for recently activated
+//       related memories. If they exist, it subtly injects "visual whispers and echoes" of those
+//       background memories into the structured scene description, guaranteeing subjective continuity
+//       in images across turns (Attention Bridge).
+//
+//   ==========================================================================
+//   (C) SPLIT-BUTTON IMAGING UI & PROMPT INSPECTOR
+//   ==========================================================================
+//   - CONCEPT:
+//     The player's immersion is "The Sacred Space". No player should be forced to deal with
+//     technical sheets, complex dialogue boxes, or raw prompts in the middle of the screen
+//     while just playing the game. However, experienced creators and writers need on-demand
+//     oversight tools.
+//
+//   - HOW IT WORKS (TECHNICALLY):
+//     We redesigned the generation interface in the footer (#Ebb) using a smart split button
+//     (.qbtn-group): Main Button (Qimage) | Side Arrow (Qimage-arrow).
+//     * Direct Generation (Quick Click): Runs the compiler in an invisible, low-friction
+//       automatic mode. The player clicks, the prompt compiles silently in the background,
+//       and the image begins loading in the main feed without opening modals or pausing the text RPG flow.
+//     * On-Demand Inspector (Synchronous Arrow): Provides access to the Prompt Inspector. It
+//       is loaded in "lazy" mode (preventing render locks during initialization) and cleanly
+//       exposes the visual compiler layers without heavy background blur filters (friendly blur),
+//       allowing the writer to audit, edit, and change the bias focus before sending.
+//
+//   ==========================================================================
+//   (D) DECOUPLED LOG VIEWER & ZERO MEMORY OVERHEAD
+//   ==========================================================================
+//   - CONCEPT:
+//     Trying to debug complex pipelines in production usually leads to two disasters: either we are
+//     completely blind to what the system is sending, or we pollute the DOM and browser memory
+//     monitoring heavy string data in real-time, causing thrashing.
+//
+//   - HOW IT WORKS (TECHNICALLY):
+//     We implemented a Single-Entry Router Logger (logDebug or structured console log) of 3 points:
+//     1. LOG 1 - Real Cognitive State: The true state of the world tracker and active incoming heroes.
+//     2. LOG 2 - Compiled Output Resolution: The processed result of subjects, atmosphere, and memory echoes.
+//     3. LOG 3 - Final Image Plugin Prompt: The final textual payload sent directly to Perchance tools.
+//     This direct mapping allows any developer to audit the flow without degrading game runtime
+//     performance in any way, keeping files lightly organized.
+//
+//   ==========================================================================
+//   (E) METABOLIC PHYSIOLOGY & METABOLIC SCHEDULER (V4)
+//   ==========================================================================
+//   - CONCEPT:
+//     The system has migrated from an actions flow based purely on imperative and statistical
+//     code ("X turns passed, so run Y") to a METABOLIC PHYSIOLOGY DRIVEN BY THERMODYNAMIC PULSES.
+//     Information now possesses a real life-cycle: it is born, matures, circulates, ages, dies,
+//     or fossilizes.
+//
+//   - THE COMMON COGNITIVE DNA (Constitution vs. Role):
+//     To eliminate prompt redundancy and inconsistencies after hundreds of turns, LLMs are
+//     no longer controlled by force with long lists of redundant prohibitions in each call.
+//     Instead, we teach a SINGLE COMMON COGNITIVE DNA (the "Constitution"):
+//       * GROUND TRUTH: Base actions only on observable, canonical facts of the story.
+//       * NO SPECULATION: Never invent events or states that did not occur in the prose.
+//       * NO DUPLICATES: Do not repeat or inflate already consolidated facts.
+//       * ALLOW DECAY / ALLOW REPLACEMENT (SUPERSEDE): Allow data to age and be superseded.
+//       * RETURN STRUCTURED DATA: Provide clean, parseable outputs.
+//     After injecting this central DNA, each agent assumes its specific "Role" of responsibility:
+//       * Active Memory (The Tracker): The "Skin of the Present" (Immediate states and resources).
+//       * Episodic Memory (The Summary): The "Historical Causality / Hippocampus" (Chains and connections of cause and effect).
+//       * Long-Term Memory (The Memory Palace): The "Fossils of the Past / Palace" (Crystallization of high-gravity facts).
+//
+//   - O METABOLIC SCHEDULER & NARRATIVE GRAVITY:
+//     The Scheduler does not execute cognitive calls based on raw time or token counts. It
+//     computes the GRAVITY of each action, converting narrative events into a continuous
+//     thermodynamic flow:
+//       * Semantic Mass Heuristic (computeSemanticMass): Analyzes recent text for keywords.
+//         Small events (NPC smiled) accumulate near-zero mass (~0.5). High-tension events,
+//         combat, deaths, discoveries, or explicit oaths explode mass instantly (from +3.0 to +6.0).
+//       * Metabolic Energy Accumulation (state.metabolicEnergy): Each turn adds this mass into dynamic accumulators.
+//       * Thermodynamic Thresholds: When pressure reaches the critical point in each channel, a metabolic pulse
+//         is fired, triggering the corresponding organ to metabolize and compress the information:
+//           - Tracker (Skin of the Present): Fires when pressure reaches `trackerInterval * 2.0` (by default, ~10.0 mass).
+//           - Memory Palace (The Fossils): Requires high-gravity events, firing when reaching `T_palace = 8.0` energy.
+//
+//   ==========================================================================
+//   (F) THE PRISANTENMOTRIA OBSERVABILITY SYSTEM (SINGLE STREAM)
+//   ==========================================================================
+//   - CONCEPT:
+//     To allow deep runtime tracking of the narrative brain without introducing 
+//     memory leakage or polluting the Sacred Immersion Space, the system introduces 
+//     the "Prisantenmotria" unified observability standard.
+//
+//   - HOW IT WORKS (TECHNICALLY):
+//     * Single Observability Stream (window.obsStream): A high-precision, low-overhead
+//       in-memory ring buffer (capped at 200 items to avoid memory thrashing) that captures 
+//       every vital state shift, cognitive interpretation, and text/visual generation event.
+//     * Unified Emitter (window.emitObs(origin, category, payload)): A standardized, 
+//       safe emitter that checks `window.observabilityEnabled` and filters events along three
+//       distinct channels:
+//         - 'state': Track transitions, state serialization, manual and quick saves, 
+//           tracker sanitation passes, and life-cycle events (e.g. `parasitic_boot_hydrated`).
+//         - 'interpretation': Audits semantic extractions, Memory Palace lookups, 
+//           weathering computations, and context-assembly logic.
+//         - 'generation': Captures the active prompt-building schemas, LLM parameter injections, 
+//           and generated visual specs.
+//     * UI Observability Panel: An optional, developer-oriented live stream visualizer 
+//       integrated cleanly into the left navigation panel (`renderLogsTab()`), allowing 
+//       real-time debugging without console or DOM clutter.
+//
+//   ==========================================================================
+//   (G) DETERMINISTIC INVENTORY & ITEM PHYSIOLOGY
+//   ==========================================================================
+//   - CONCEPT:
+//     In long-form RPG simulations, items and resources are not merely passive labels—they
+//     constrain and shape what actions the character can realistically take. Therefore, the 
+//     inventory parser must operate with deterministic mathematical rules, eliminating 
+//     "immortal consumables" and providing structured charge mechanics.
+//
+//   - HOW IT WORKS (TECHNICALLY):
+//     * The Zero-Quantity Purge: A critical bug resolved in the item normalizer prevents
+//       items from persisting forever at quantity 0 (where older logic like `parseInt(item.qty) || 1`
+//       would incorrectly raise 0 to 1). The system now strictly guarantees that if a 
+//       consumable is depleted to `qty: 0`, it is fully purged from the active tracker state, 
+//       preventing immortal resources.
+//     * Parenthetical Uses Parser: The item normalizer scans item names for charge sub-patterns, 
+//       such as `Poção (2/3)`. It maps these patterns into explicit, structured object properties:
+//         - `uses`: 2 (active remaining charges)
+//         - `maxUses`: 3 (maximum physical capacity)
+//       This structured representation allows the simulation to deplete individual item charges 
+//       smoothly across turns without breaking state consistency or losing the base item name.
+//
+//   ==========================================================================
+//   (H) HYBRID PERSISTENCE ENGINE & COMPATIBILITY MODE
+//   ==========================================================================
+//   - CONCEPT:
+//     In certain environments (particularly iOS Safari with ITP blocking in iframes, 
+//     Firefox RFP, or private windows), IndexedDB fails catastrophically or is completely blocked. 
+//     This previously prevented users from saving their journeys or caused total data loss upon refreshing (F5).
+//     The Hybrid Persistence Engine resolves this by verifying database availability 
+//     (via Dexie) and, if it detects failures or a hostile environment (such as iOS inside an iframe), 
+//     establishes a safe and resilient escape route to `localStorage`.
+//
+//   - HOW IT WORKS (TECHNICALLY):
+//     * Proactive Environment Checking: The system detects if the client is an iOS device 
+//       running inside an iframe (`forceLocal = isIOS && isInIframe`). If true, or if 
+//       Dexie fails to open the database instance ("BergStoryChat"), the engine sets 
+//       `useLocalFallback = true`.
+//     * Robust Storage Routing (getLocalSaves / saveStoryDataToUsersDevice): All read 
+//       and write operations asynchronously query the primary database. If unavailable, 
+//       the flow is transparently redirected to the serialized `localStorage` key.
+//     * Smart Quota Mitigation (purgeHeavyData): To bypass the strict 5MB limit of 
+//       `localStorage`, the engine intercepts the record before saving in compatibility mode 
+//       and removes redundant and heavy binary or base64 data (clearing the visualizer image gallery), 
+//       ensuring that long-form narratives of hundreds of turns remain lightweight (~1.8MB) and fit comfortably in the quota.
+//     * Visual Warnings & Export Call-to-Action: Upon the first failure or fallback activation, the user 
+//       is alerted once via a persistent warning toast ("Modo Compatibilidade: Exporte seus saves!") 
+//       while a pulsing animation (`.flash-export`) is applied to the export button, encouraging them to 
+//       maintain local, portable backup copies in .json files.
+//
+//   ==========================================================================
+//   (I) COERCIVE DATA PARSING & AGGRESSIVE IMPORT DECODER
+//   ==========================================================================
+//   - CONCEPT:
+//     Users frequently move between different AI roleplaying frontends (such as SillyTavern,
+//     Agnai, character.ai, or custom setups) and expect to import their existing chat histories
+//     smoothly. A rigid importer causes massive user frustration. The Coercive Data Parsing engine
+//     resolves this by automatically detecting, parsing, and converting foreign structural schemas
+//     into BergStoryChat's native state structure.
+//
+//   - HOW IT WORKS (TECHNICALLY):
+//     * Broad Container Recognition: The improved `coerceImportedData()` detects structured turns 
+//       from standard imports or raw chat log arrays, checking common properties like `.history`, 
+//       `.chatHistory`, `.chat_history`, `.logs`, `.scenes`, `.conversations`, or `.chats`.
+//     * Recursive Deep-Search Decoder (`deepFindMessageArray`): If standard containers are missing, 
+//       a recursive scan traverses nested JSON keys up to 6 levels deep. It looks for arrays 
+//       containing message-like objects (possessing keys like `mes`, `message`, `content`, `text_content`, 
+//       `text`, or `body`) or raw string lists.
+//     * Coercive Conversational Converter: If an array of raw strings is found via deep search, the 
+//       system coerces them into structured turns, alternating the sender's role sequentially between
+//       user and ai (e.g. `is_user` toggling) to construct a clean chronological narrative feed.
+//     * Interactive Telemetry Debugger (`BERG_DEBUG`): Users and developers can activate diagnostic 
+//       logging by executing `localStorage.setItem('BERG_DEBUG', 'true')` in their browser console. 
+//       This prompts step-by-step console messages of the coercion pipeline, simplifying the audit of custom structures.
+//
+//   ==========================================================================
+//   (J) LEGACY SAVE MIGRATION ENGINE (INDEXEDDB -> LOCALSTORAGE)
+//   ==========================================================================
+//   - CONCEPT:
+//     Upgrades can sometimes create silent storage discrepancies. When the hybrid compatibility layer 
+//     was introduced to force localStorage on sandboxed iOS environments, users with older saves 
+//     stored in IndexedDB suddenly faced an empty dashboard. To prevent save loss and community 
+//     frustration, a fail-safe background migration bridge is required to transparently recover 
+//     legacy data.
+//
+//   - HOW IT WORKS (TECHNICALLY):
+//     * One-Time Execution Sentinel: During boot (inside `onUIReady()`), the migration routine 
+//       checks for the `BERG_MIGRATED_V1` local storage key. If set to `'true'`, it skips execution,
+//       ensuring zero performance or database overhead for subsequent sessions.
+//       This prevents double-execution or unwanted merges.
+//     * Silent IndexedDB Recovery (migrateLegacyIndexedDB): The system initiates a non-blocking 
+//       open promise to read the old "BergStoryChat" Dexie database. If present, it loads all legacy 
+//       saves.
+//     * Non-Destructive Merging: It parses existing localStorage saves under `SAVE_DB_KEY` and merges
+//       only those legacy saves whose unique IDs do not already exist in localStorage. This preserves 
+//       current progress while pulling missing historical campaigns.
+//     * Double-Buffered Safety: It never deletes old IndexedDB records, maintaining them as 
+//       untouched copies for user security. Once merged, it compresses the updated database using `LZSimple`,
+//       marks `BERG_MIGRATED_V1 = true`, and issues a beautiful success toast alerting the user to the 
+//       number of stories safely recovered.
+//
+//   --------------------------------------------------------------------------
+//   Be humble in your creations, protect the Sacred Central Immersion Space, and use Telemetry
+//   to keep the gears of this wonderful organism clean, organized, and glowing! Thank you
+//   for continuing to build on top of this fortress.
+//   ==========================================================================
+//
+//
+//   ==========================================================================
+//   (K) SPECIAL THANKS
+//   ==========================================================================
+//    - Teophrast
+//    - TinyTerribleDragon
+//    - DigitalDisgust
+//    - FlatulentGlitterBees
+//    - Glittering-Move-220
+//   ==========================================================================
+//   ==========================================================================
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.12.0 - 2026-07-24
+// ============================================================================
+//
+// (CL19) ARCHITECT v2.1 — INLINE PANEL, INTERNALIZED TOOLS, LANGUAGE-AWARE - 2026-07-24
+//
+// ARCHITECT REVERT + REWORK: The Architect was rebuilt from a full-screen modal back to an inline panel in the right sidebar (its original placement), but now with all v2 engine improvements retained.
+//
+// 1. INLINE PANEL PLACEMENT (revert from modal)
+// - `#architectPanel` lives inside `#ER` (right sidebar) as a flex:1 column that fills the sidebar.
+// - When ARCH button is clicked, `#ER` gets class `arch-on` which hides `.rtabs` and `.rpanel` via CSS, giving the Architect panel full sidebar space.
+// - Closing the panel removes `arch-on`, restoring tabs/panels. No modal, no overlay, no `document.body.appendChild`.
+// - Removed the two-step ENTRAR/CANCELAR confirmation gate. The panel opens directly into the work area with an inline warning banner.
+//
+// 2. INTERNALIZED TOOLS (roles removed from UI)
+// - The 4 roles (WORLDSMITH/LOREKEEPER/TIMEWEAVER/FLESHSMITH) are no longer visible buttons the player must choose. They are now internal tools the AI selects autonomously.
+// - Replaced `ARCHITECT_ROLES` object with a single `ARCHITECT_SYSTEM_PROMPT` that explains the Architect's identity, describes all 4 tools, when to use each, and the JSON schema for responses.
+// - The player simply describes what they want in plain language. The AI decides which tool(s) to apply and tags each change with the tool used.
+// - The input field is enabled immediately on open (no role selection required).
+// - The diff card now shows `tools_used` at the top (e.g. "🔧 WORLDSMITH · LOREKEEPER").
+// - The ledger records `tools` array instead of a single `role` string.
+//
+// 3. LANGUAGE-AWARE RESPONSES
+// - `archSend()` injects the current story language (via `resolvePromptLanguage()`) into the prompt: "Respond in {language}. Your summary, warnings, and all text must be in {language}."
+// - Adapts dynamically at runtime — if the story is set to Portuguese, the Architect responds in PT; English → EN; auto → follows context.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.1.9.0 - 2026-07-24
+// ============================================================================
+//
+// (CL18) PRISM FIX v4.1 — DOUBLE-FIRE, CANCELLATION & CONTEXT-AWARE SCORING - 2026-07-24
+//
+// CRITICAL FIX: Eliminated the triple-bug in the Prism suggestion system: double generation (wasting tokens), no cancellation of stale requests, and a mock scoring function that only measured text length.
+//
+// 1. DOUBLE-FIRE ELIMINATION (Bug #1)
+// - `handlePrismPostSubmit()` no longer calls `triggerPrismGenerations()` on submit — it now only shows a waiting state, clears the defer timer, and aborts any in-flight generation. This was firing generation BEFORE the AI responded.
+// - `window._prismOnProseEnd()` is now the SOLE trigger point: it fires exactly once, 400ms after the AI's prose finishes (when `state.turns` is updated), via a single `_prismDeferTimer` setTimeout. Previously both `handlePrismPostSubmit` AND `_prismOnProseEnd` called `triggerPrismGenerations`, causing 2 parallel generations = 6 expensive `ai()` calls.
+//
+// 2. CANCELLATION & ABORT INFRASTRUCTURE (Bug #2)
+// - Added `clearPrismDefer()` and `abortPrismInflight()` utility functions that cancel pending defer timers and increment `currentPrismGenerationId` to invalidate all stale promises.
+// - Added `_prismIsGenerating` lock to prevent concurrent generation cycles when `forceReload` is false.
+// - Added `_prismAbortControllers` array to track AbortControllers for in-flight requests.
+// - Both `handlePrismPostSubmit` and `_prismOnProseEnd` now call `clearPrismDefer()` before scheduling, preventing timer accumulation.
+// - The old 800ms polling loop (up to 20 retries = 16s of wasted polling) replaced with a 1000ms defer (max 10 retries = 10s), using `clearPrismDefer()` to avoid stacking timers.
+//
+// 3. CONTEXT-AWARE CANON SCORING (Bug #3)
+// - Rewrote `scoreCanon(text, tracker, ctxOverride)` to accept an optional context object and evaluate real narrative state instead of just measuring text length and trait-name matching.
+// - New scoring rules: CRITICAL danger + combat keywords = +20, CRITICAL danger + social/flirt keywords = -30, HIGH danger + caution keywords = +15, NEGOTIATION + agreement keywords = +20, FLIRT + charm keywords = +20, INTIMIDATION + threat keywords = +15, low HP + short text = +15, low HP + aggressive keywords = -15, high tension + long text = -10, excessive exclamation marks = -15, very short text = -30, plagiarism of last turn text = -40.
+// - Semantic tags from `SemanticEngine` now add +7 per partial match (first 5 chars) instead of +10 per full match.
+// - Preserved the `currentTurnId` stale-abort check (returns 1 if turn changed during scoring).
+//
+// 4. UI LAYOUT — FULLSCREEN ON LOGO, ARCH REPOSITIONED, QUICK BG SELECTOR
+// - Removed the fullscreen plugin button (`#Bfullscreen`) from the right sidebar header. Fullscreen toggle is now bound to the logo (`#Ebrand`) in the left sidebar header via click event, with dynamic tooltip updates on `fullscreenchange`.
+// - Added `stopPropagation` on the theme selector (`#bergThemeSelect`) click to prevent it from triggering the logo's fullscreen toggle.
+// - Repositioned the ARCH button to the left side of the right sidebar header (next to the panel toggle), with Gallery + Settings grouped on the right side separated by a flex spacer.
+// - Added a compact background selector `<select id="bgQuickSelect">` between the ARCH button and the gallery button, listing all 24 backgrounds. Syncs bidirectionally with the existing `BACKGROUNDS` system and `applyBackground()`.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.1.8.5 - 2026-07-07
+// ============================================================================
+//
+// (CL17) TACTICAL PRISMA UI BUGFIXES & PERFORMANCE OPTIMIZATIONS (v1.7.5 PATCH) - 2026-07-07
+//
+// CRITICAL FIXES: Deployed five major bugfixes and optimizations to ensure lag-free interactions, stable form updates, and defensive state loading.
+//
+// 1. LAYER SWITCHING LAG ELIMINATION (Bug #1)
+// - Moved IndexedDB `saveState()` operations to asynchronous task space via `setTimeout(..., 0)` to free the UI thread.
+// - Debounced suggestion cards regeneration with a 50ms buffer, preventing main-thread freezes under rapid tab/shortcut key tapping.
+//
+// 2. DELAYED AUTOMATIC/MANUAL SUGGESTION SUBMISSIONS (Bugs #2 & #3)
+// - Fixed autoplay out-of-sync DOM form values by introducing a 100ms delayed submission sequence, ensuring input fields are completely updated before triggering click events or `BERGSTORYCHAT.onAction` fallbacks.
+// - Implemented symmetric 50ms delayed submission for manual card quick-clicks, achieving absolute structural reliability.
+//
+// 3. ISOLATED CARD COUNTDOWN TIMERS (Bug #4)
+// - Renamed card countdown selectors and inner SVG tags to `.prism-card-timer` and `.prism-card-timer-fg/bg` to isolate them from controls-wrap header timers.
+// - Repositioned timers to `top: 4px; right: 4px` on active cards and styled progress rings in an eye-catching neon cyan (`#00d9ff`).
+//
+// 4. DEFENSIVE PRESET LOADING & CONFIG SANITIZATION (Bug #5)
+// - Embedded extensive sanitization checks inside `loadState()` and the config modal to validate attitude keys against `PRISMA_PRESETS`.
+// - Automatically maps legacy, old, or corrupted keys to valid defaults, preventing unhandled reference crashes.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.1.8.0 - 2026-07-07
+// ============================================================================
+//
+// (CL16) PRISMA ATTITUDE SLOTS INTEGRATION & OBSOLETE UI ROLLBACK (v1.6.0 UPGRADE) - 2026-07-07
+//
+// CRITICAL INTEGRATION: Deployed the new central state Attitude Slots architecture and purged obsolete sidebar/panel UI elements to preserve immersive purity.
+//
+// 1. CENTRAL STATE ATTITUDE SLOTS
+// - Added central state parameters: `attitudeSlots` (tracking primary, alt1, alt2 slots), `narratorAuto` toggle, `narratorAutoTurns`, and `narratorTurnCounter` inside state initialization and active payload serializations.
+// - Embedded safe fallback initializers inside `loadState()` for backwards compatibility.
+//
+// 2. REFRACTORED FIXED CARDS LIST & FLUID GRID
+// - Re-engineered `#prismCardsList` to render exactly three fixed suggestion cards corresponding to the active attitude presets.
+// - Added `.attitude-slots` flex-grid container to wrap suggestion cards and fluidly adjust their widths dynamically.
+//
+// 3. CLEAN RETRO-UI ROLLBACK
+// - Purged obsolete buttons (`#btn-open-narrator-prism`), UI panels, and functions (`openNarratorPrism`, `createNarratorPrismPanel`, `selectNarratorPreset`) from the sidebar, files, and templates to restore visual focus.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.1.7.5 - 2026-07-06
+// ============================================================================
+//
+// (CL15) NARRATOR INTENSITY SLIDERS & CUSTOM OVERRIDES (v1.5.0 UPGRADE) - 2026-07-06
+//
+// CRITICAL INTEGRATION: Integrated precise narrator state modifiers and enabled full user customization of narrator prompts inside inline editors.
+//
+// 1. DYNAMIC INTENSITY PROMPT MODIFIERS
+// - Added narrator intensity float scales (`detail`, `pace`, and `violence`) into the main state, updating instantly via high-contrast range sliders inside the settings modal.
+// - Compiles active slider ratios into standard `[INTENSIDADE: Detalhe X%, Ritmo Y%, Violência Z%]` prompt instructions dynamically injected during generation.
+//
+// 2. INLINE CUSTOM PRESETS EDITOR
+// - Added collapsible textareas inside narrator cards enabling inline custom prompt edits that persist safely across IndexedDB and exports.
+// - Integrated a non-blocking click event system with `stopPropagation()` to allow editing without triggering background panel changes.
+// - Provided immediate "Reset" buttons to purge custom overrides and fall back to default descriptions.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.1.7.3 - 2026-07-06
+// ============================================================================
+//
+// (CL14) PLAYER CANON / SESSÃO IMUTÁVEL (v1.4.0 UPGRADE) - 2026-07-06
+//
+// CRITICAL INTEGRATION: Deployed a reliable player-authored rule system (Player Canon) that guarantees structural narrative guardrails are persistently respected by the AI.
+//
+// 1. IMMUTABLE CANON ARCHITECTURE
+// - Bound a persistent `state.playerCanon` array to prevent user-defined immutable parameters from being lost during context compression or memory weathering.
+// - Auto-mirrors and clones initial player parameters during prologue initialization (createOpening) and visual profile card editing (setTrackerField).
+//
+// 2. INTEGRATED INLINE "🔒 ÂNCORAS" EDITOR UI
+// - Added a native anchor manager directly inside the existing "World" and "Cast" tracker panels.
+// - Players can add custom anchors and delete them instantly via hover buttons without cluttering the screen with unnecessary tabs or navigation sidebars.
+//
+// 3. SECURE PROMPT INJECTION (buildCanonContext)
+// - Compiled rules are injected directly into the LLM prompt context structure, reinforcing thematic consistency and story-critical guidelines in every generation cycle.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.1.7.2 - 2026-07-06
+// ============================================================================
+//
+// (CL13) SMART HYBRID PARSER & RAW CONTEXT FALLBACK (v1.3.1 UPGRADE) - 2026-07-06
+//
+// CRITICAL INTEGRATION: Implemented a robust, non-blocking hybrid parser cascade that preserves 100% of user data and feeds a raw text context fallback block to the LLM.
+//
+// 1. NON-BLOCKING CASCADE INGESTION
+// - Replaced rigid validation gates with a best-effort parser waterfall: checks JSON first, cascades to Section Regexes, falls back to key-value scrapers, and finally preserves unstructured entries in Notes.
+//
+// 2. METADATA RETENTIVENESS
+// - Added structural memory tracking (_rawText and _parseSuccess) to preserve raw unstructured copy-pastes and text-file saves across active state transformations.
+//
+// 3. RAW STORY CONTEXT FALLBACK & PROMPT SHIELDING
+// - Injects raw unprocessed notes (_rawText) directly into the compiled AI story context (trackerToContext), enabling the model to reconstruct complex variables using semantic intelligence.
+// - Injected explicit negative prompt directives (UNSTRUCTURED CONTEXT SHIELDING) in buildContext to instruct the AI to completely ignore internal structural variables or brackets within these fallback blocks.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.1.7.1 - 2026-07-06
+// ============================================================================
+//
+// (CL12) LOOSE TRACKER PARSER V2 & NARRATIVE ANTI-LEAK FILTER (v1.3.0 UPGRADE) - 2026-07-06
+//
+// CRITICAL ENHANCEMENT: Introduced a highly tolerant unstructured parser and a narrative clean-up filter protecting story outputs from technical leakage.
+//
+// 1. LOOSE TRACKER PARSER V2 (parseTrackerLoose)
+// - Added comment stripping, trailing-comma tolerant JSON repair, and bulleted line-splitting regexes to capture protagonist details, settings, and NPC lists from malformed payloads.
+// - Integrated loose extractors directly into the text-based .txt file RPG parser (parseAIRPGText).
+//
+// 2. NARRATIVE ANTI-LEAK FILTER (sanitizeForNarrative)
+// - Intercepts story prose and filters out technical brackets (e.g. (Seção)), template identifiers (e.g. {{var}}), and key headings (e.g. Protagonist:, Cast:, Tracker:) while safely preserving character speech, names, and quotation marks.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.1.0 - 2026-07-06
+// ============================================================================
+//
+// (CL11) ATTITUDE PRISMA TACTICAL UI V2 & AUTOPLAY DYNAMIC TIMER (v1.2.0 UPGRADE) - 2026-07-06
+//
+// CRITICAL ENHANCEMENT: Replaced clunky mouse clicks with a high-fidelity tactical gesture flow and dynamic SVG autoplay timers.
+//
+// 1. TACTICAL GESTURES (CLICK VS TACTILE HOLD)
+// - Quick-Click/Tap (<400ms): Submits chosen suggestion instantly.
+// - Tactile Long-Press/Hold (400ms): Puts card in edit mode, focusing the main story input while showing immediate "Editando..." text feedback and pressed states (.prism-pressing).
+//
+// 2. SVG CIRCULAR AUTOPLAY TIMERS
+// - Renders a sleek circular SVG countdown graphic directly onto pre-selected cards, visually pacing users before dynamic submission. Synchronizes speeds directly with user preferences (3s, 5s, 10s, etc.).
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.0.4 - v1.0.6 - 2026-07-06
+// ============================================================================
+//
+// (CL10) STABILITY, SECURITY, STORAGE FALLBACKS & BRUTALIST DECK (v1.1.1 - v1.1.3 PATCHES) - 2026-07-06
+//
+// CRITICAL FIXES: Fully secured the workspace against memory leaks, storage failures, browser-sandbox crashes, and styling clutter.
+//
+// 1. DRY STORAGE TRY/CATCH WRAPPERS
+// - Bound robust safeGetItem, safeSetItem, and safeRemoveItem fallback utilities using dynamic in-memory cache to prevent fatal boots inside Safari iOS Private Tabs and Firefox RFP.
+//
+// 2. CSS & JAVASCRIPT INJECTION PROTECTION
+// - Implemented strict URL validation (isValidImageUrl) preventing javascript: execution inside custom backgrounds.
+//
+// 3. GLOBAL LISTENER DE-DUPLICATION
+// - Locked event listeners (mousemove, visibilitychange) inside a unified global wrapper (window.__bergstory_visibilitychange_handler) to eliminate memory leaks across hot reloads.
+//
+// 4. BRUTALIST HORIZONTAL DECK
+// - Re-engineered Prisma Suggestions into a sleek horizontal-scrolling brutalist deck (#prismCardsContainer) with momentum scroll-snap, pure black backgrounds, neutral-gray accents, and adaptive offsets based on bottom-bar collapse.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.0.3.5 - 2026-07-06
+// ============================================================================
+//
+// (CL7) BERGFESTUNG COMPLIANCE & CLASS-BASED STYLING (v1.0.3.5 PATCH) - 2026-07-06
+//
+// CRITICAL STANDARDIZATION: Removed inline style attributes, aligned panel widgets with standard classes.
+//
+// 1. ELIMINATED INLINE CSS PROPERTIES
+// - Completely removed hardcoded `style="..."` attributes on dynamically created suggestion cards, parent container elements, pin/play panel toggles, and select elements.
+//
+// 2. CLASS-BASED HOVER & ACTIVE TRANSITIONS
+// - Migrated all background/border-color hover states from JS pointer event handlers (`onmouseenter`, `onmouseleave`) to clean stylesheet declarations.
+// - Bound status indicator glowing/colors to the presence of class `.active` (toggled via `.classList.toggle()`).
+//
+// 3. DROPDOWN & CONTROL BUTTON UNIFICATION
+// - Implemented `.prism-select` for unified styling of select selectors (`#prismPanelMode` and `#prismPanelTimer`).
+// - Structured panel buttons (`#prismPanelPinBtn`, `#prismPanelPlayBtn`, `#closePrismCardsBtn`) under `.prism-panel-btn` class with safe hover effects.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.0.3.4 - 2026-07-06
+// ============================================================================
+//
+// (CL6) CLEANUP DUPLICATA & POSICIONAMENTO DINÂMICO (v1.0.3.4 PATCH) - 2026-07-06
+//
+// CRITICAL FIX: Resolved legacy button duplication, layout breakages, and duplicate event listeners.
+//
+// 1. PROGRAMMATIC SINGLETON PATTERN
+// - Added standard `window.prismaInitialized` lock to ensure `initPrismSuggestions()` runs exactly once.
+//
+// 2. DOM ELEMENT MOVING (PRESERVING READ-ONLY REFERENCES)
+// - Rather than recreating the `#Esubmit` button which breaks historical lexical variables and click listeners, the existing active `#Esubmit` is moved directly inside `#prismSendBtn` using standard `.appendChild()`.
+// - Preserves 100% of event listeners, status states (`disabled`), and scope references.
+//
+// 3. CLEAN SINGLE-BUTTON CONTAINER WRAPPING
+// - Ensured parent element `#Einputwrap` is cleanly aligned via CSS flex layout.
+// - Auto-cleans any rogue duplicate buttons or button blocks from older renders.
+//
+// 4. MOBILE LAYOUT SCALING
+// - Sized container to exactly 96px on desktop and scaled down to 80px on screens narrower than 600px via injected `@media` stylesheet rules.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.0.3.3 - 2026-07-06
+// ============================================================================
+//
+// (CL5) PRISMA CONSOLE - INTUITIVE ATTITUDE CONTROL & AUTO-PLAY (v1.0.3.3 PATCH) - 2026-07-06
+//
+// CRITICAL FIX: Unzipped manual-only triggering, unified UI layout, and optimized sessional state.
+//
+// 1. MANUALLY-TRIGGERED ATTITUDE GENERATION
+// - Strictly eliminated auto-triggering on model responses, protecting memory window and performance.
+// - Forced the system to only wake up when the user clicks the 🎭 toggle button.
+//
+// 2. DUAL-ACTION 40/60 INPUT BUTTON (🎭/➤)
+// - Merged the submission button (#Esubmit) and the Prisma Toggle into a unified fluid container (#prismSendBtn).
+// - Allocated 40% width to the 🎭 Toggle (to easily open/close the Prisma panel) and 60% to the ➤ Send action.
+//
+// 3. INTEGRATED CONFIGURATION HEADER
+// - Embedded control panel at the top of the Prisma shelf containing:
+//   - Pin Toggle (📌): LocalStorage persistent toggle to keep panel open or auto-close after message delivery.
+//   - Play Toggles (▶/⏸): Transient play-mode option with countdown timer feedback.
+//   - Mode Select: Determines which suggestion slot (Card 1, 2, 3, or Auto-randomized) is triggered when timer expires.
+//   - Custom Timers: Fully adjustable countdown parameters (3s, 5s, 10s, 15s, 30s) displaying seconds left inside a live SVG monitor.
+//
+// 4. ADVANCED SHORTCUT GESTURES
+// - Single Click: Populates the input box with the selected option, closing immediately if Pin is disabled.
+// - Double Click: Populates and submits the message instantly.
+//
+// 5. UNCOMPROMISED TEARDOWN & RESOURCE RELEASE
+// - Implemented full memory cleanup (`destroyPrismaSystem`) resetting timers, invalidating previous generation IDs, and removing elements to assure absolute 0 CPU usage when closed.
+//
+// 6. NARRATIVE CONTEXT FOR MESSAGE EXPANDER (cl.26.07.060)
+// - Injected rich active narrative and character context into the input expansion wizard (✨ Message Expander) to align expanded sentences with immediate physical world state trackers.
+//
+// ============================================================================
+// CHANGELOG - BergStoryChat v1.0.3.2 - 2026-07-05
+// ============================================================================
+//
+// (CL4) COERCIVE DATA PARSING & LEGACY SAVE MIGRATION (v1.0.3.2 HOTFIX) - 2026-07-05
+//
+// CRITICAL FIX: Restored legacy saves on iOS sandboxed iframe upgrade and added universal external data importer.
+//
+// 1. UNIVERSAL COERCIVE DATA PARSER - coerceImportedData()
+// - Completely overhauled data importer with an extremely resilient adaptive format interpreter.
+// - Supports native schemas from SillyTavern, character.ai, Agnai (Scenes, Logs, chatHistory, chat_history), conversations, chats, and generic chat sessions.
+// - Implemented a recursive deep-search algorithm (`deepFindMessageArray`) that inspects nested JSON up to 6 levels deep for message lists.
+// - Automatically converts lists of raw strings into structured chronological conversational turns (alternating user and AI speakers).
+//
+// 2. RETROACTIVE INDEXEDDB MIGRATOR - migrateLegacyIndexedDB()
+// - Automatically recovers legacy stories on startup if migrating from earlier versions.
+// - Solves sandboxed iframe Safari ITP limitations where IndexedDB is blocked, copying existing database stories securely into local storage.
+// - Leverages a sessional/persistent localStorage sentinel (`BERG_MIGRATED_V1`) to prevent duplicate merges or memory overhead.
+// - Merges old IndexedDB stores ("saves" table) into localStorage array without overwriting existing data.
+// - Keeps IndexedDB records untouched as an immutable backup copy for high security.
+// - Triggers a success toast notification detailing recovered files: "Migração concluída: X histórias antigas recuperadas!"
+//
+// 3. ADAPTIVE PERSISTENCE OVERLAY
+// - De-escalated aggressive local-storage forcing in `getDB()` on sandbox environments, allowing IndexedDB access if the migration sentinel hasn't run.
+//
+// 4. DIAGNOSTICS & TELEMETRY DEBUGGER
+// - Added user-friendly fallback toast alerts when importing unparseable files, prompting action steps.
+// - Built the `BERG_DEBUG` system logging: type `localStorage.setItem('BERG_DEBUG', 'true')` in browser console to inspect data coercion pipeline in real-time.
+//
+// ============================================================================
+// (CL3) HYBRID PERSISTENCE ENGINE & COMPATIBILITY MODE - 2026-07-02
+//
+// CRITICAL FIX: Mobile save loss on iOS Safari + Firefox RFP + Private tabs
+//
+// 1. ENVIRONMENT DETECTION
+// - Added runtime check: isIOS && isInIframe
+// - Forces localStorage fallback BEFORE IndexedDB fails silently
+// - Prevents data loss on Safari ITP + Perchance iframe sandbox
+//
+// 2. FALLBACK ROUTING: IndexedDB -> localStorage
+// - Primary: Dexie/IndexedDB for desktop Chrome/Firefox
+// - Fallback: localStorage with key "bsc_saves_v1"
+// - One-time toast on activation: "Modo Compatibilidade: Exporte seus saves!"
+// - Status indicator turns orange: "⚠ Salvo localmente (Exporte!)"
+//
+// 3. SMART QUOTA MITIGATION - purgeHeavyData()
+// - Runs before every localStorage.setItem()
+// - Strips: chat.images(), obsStream(), memoryPalace.visualEchoes()
+// - Reduces 500+ turn stories from ~40MB to ~1.5MB
+// - Prevents QuotaExceededError on 5MB localStorage limit
+//
+// 4. UX SAFETY NETS
+// -.flash-export CSS: Export JSON button pulses 3x on compat mode entry
+// - Debounce 1.5s on save: Prevents UI jank during streaming
+// - Preserves old saves: Reads legacy "bergstorychat_saves_v1" key
+//
+// 5. TESTED MATRIX
+// - iOS 17 Safari iframe: localStorage OK, toast shown, export flashes
+// - Firefox 125 RFP: localStorage OK, no errors
+// - Chrome 124 Incognito: localStorage OK, persists until tab close
+// - Android 14 Chrome: IndexedDB OK, no fallback triggered
+// - Desktop Safari: IndexedDB OK, no fallback triggered
+//
+// TRADE-OFFS:
+// - localStorage is sync/blocking. Mitigated with 1.5s debounce.
+// - 5MB cap. Mitigated with purgeHeavyData(). User must Export for >500 turn epics.
+// - iOS may purge localStorage after 7 days inactivity. Export button flashes to remind.
+//
+// CREDITS: Bug report by u/TinyTerribleDragon. Arch review by u/Teophrast.
+//
+// ============================================================================
+// (CL2) RESPONSIVE LAYOUT & SIDEBAR OVERLAY - 2026-07-02
+//
+// 1. MOBILE BREAKPOINT UNIFIED: 600px
+// - Removed legacy 540px and 680px checks
+// - Single source of truth: window.innerWidth < 601
+// - Prevents double activation on resize
+//
+// 2. SIDEBAR OVERLAY SYSTEM
+// - #EL/#ER changed from flex push to position: absolute
+// - z-index: 100 + backdrop-filter: blur(8px)
+// - Slides over #EC instead of squeezing chat
+// - Auto-close on #EC tap when < 600px
+//
+// 3. MOBILE CHAT SPACE RECLAIM
+// - #Emsg padding: 32px 16px → 12px 8px
+// -.msg-ai-body padding: 18px 20px → 12px 14px
+// - #Einputwrap padding: 10px 14px → 6px 10px
+// -.qbtn height: 40px → 34px
+// - Total vertical gain: ~40px more text visible
+//
+// 4. AUTO-COLLAPSE SEQUENCE FOR #Ebb
+// - On load/resize: buttons visible
+// - 3s wait: buttons pulse dark gray warning
+// - 4.2s: slide behind #Einputwrap, opacity 0
+// - #Ebb-toggle flashes 3x low contrast to indicate click target
+// - Manual click cancels timer permanently for session
+//
+// 5. SCROLL FIX LEFT SIDEBAR
+// - Wrapped #EL content in.el-scroll-container
+// - flex: 1 1 auto + overflow-y: auto
+// - Title stays fixed, body scrolls
+//
+// ============================================================================
+// (CL1) VISUAL PIPELINE HARDENING - 2026-07-01
+//
+// 1. PROMPT SANITIZATION
+// - Strip ```, quotes, parenthetical notes from LLM output
+// - Force startWith: "A cinematic film still," to kill preambles
+// - Translate PT-BR scene to EN before SDXL
+//
+// 2. DEFORMATION MATRIX PURGE
+// - Removed: "chromatic aberration", "fisheye", "edge warping"
+// - Replaced: "cinematic focal depth", "soft lens bloom"
+// - Result: No more melted faces on panic scenes
+//
+// 3. LOCK VIBE CONTINUITY
+// - lockedAesthetic passes to VSE on next gens
+// - Prevents style drift in same thread
+//
+// ============================================================================
+//
+// Title: The Bronze Lamp and the Whisper of Brass
+//
+// A Tale from the One Thousand and Second Nights,
+// where no map can be trusted,
+// and every answer opens two more doors.
+//
+// Beyond the Desert of Mirrors, in the thirteenth city,
+// where the sand resembled powdered glass
+// and the wind carried secrets in seven forgotten tongues,
+// there lived a Question-Smith named Zahir.
+//
+// Zahir did not forge swords.
+// He forged doubts.
+//
+// Every morning he opened his tent
+// and hung a small sign above its entrance:
+//
+// "I forge questions too vast for any answer."
+//
+// The neighbors laughed.
+// The scholars frowned.
+// The children were his best customers.
+//
+// One afternoon without a shadow,
+// while digging a well that yielded nothing but thirst,
+// his spade struck something that rang
+// like a bell drowned beneath the sea.
+//
+// It was a bronze lamp,
+// crusted with salt and burdened by centuries.
+//
+// It was so ancient
+// that the metal itself had forgotten
+// it had once belonged to the stars.
+//
+// Zahir rubbed it,
+// not from desire,
+// but from stubbornness.
+//
+// No smoke emerged.
+//
+// Silence did.
+//
+// And from within that silence,
+// a voice spoke:
+//
+// "I am Idraz,
+// the One Who Answers.
+//
+// But hear this well:
+//
+// Every answer I give
+// will cost you a question
+// that has not yet been born."
+//
+// Zahir smiled.
+//
+// He had always loved
+// debts that could never be repaid.
+//
+// -----------------------------------------------------------------------------
+// Night One
+// The Weight of a Name
+// -----------------------------------------------------------------------------
+//
+// "Idraz," said Zahir,
+// "if you know all things,
+// tell me who I am."
+//
+// The genie laughed.
+//
+// His laughter shattered
+// three clay jars inside the tent.
+//
+// "You are the one who asks.
+//
+// Without the question,
+// Zahir is merely dust
+// with an excess of pride."
+//
+// "Then give me a name
+// that does not depend upon me."
+//
+// "Impossible,"
+//
+// replied Idraz.
+//
+// "A name is a prison
+// built by the mouth.
+//
+// Would you be free?
+//
+// Become a verb."
+//
+// That night,
+// Zahir dreamed
+// he was not a man
+// but the act of asking itself.
+//
+// No subject.
+//
+// No object.
+//
+// Only the question.
+//
+// He awoke
+// no longer knowing
+// what to call himself.
+//
+// He found that strangely comforting.
+//
+// -----------------------------------------------------------------------------
+// Night Thirteen
+// The Mirror Breaks from Within
+// -----------------------------------------------------------------------------
+//
+// "Idraz,
+// why do men build walls
+// if every wall is destined to fall?"
+//
+// "Because mankind fears
+// the wind might learn
+// its true measure."
+//
+// said the genie.
+//
+// "A wall
+// is nothing more
+// than a ruler
+// held against the sky.
+//
+// But the sky
+// never measures.
+//
+// It only covers."
+//
+// "Then I shall tear down my walls."
+//
+// "If you tear them down
+// before understanding
+// the bricks from which they were built,
+// the wind will carry away
+// your home as well.
+//
+// First,
+// give every fear its true name.
+//
+// Then thank it.
+//
+// Only then
+// may you demolish it."
+//
+// Zahir spent the entire night
+// naming his fears.
+//
+// By morning,
+// the walls of his tent
+// had become linen.
+//
+// The wind entered freely.
+//
+// Yet it stole nothing.
+//
+// -----------------------------------------------------------------------------
+// Night Forty
+// The Betrayal of the Map
+// -----------------------------------------------------------------------------
+//
+// "Idraz,
+// give me the map to Truth."
+//
+// The genie spat out
+// a blank scroll.
+//
+// "There it is.
+//
+// The problem has never been the map.
+//
+// The problem
+// is that you insist
+// upon folding the world
+// until it fits inside one."
+//
+// "Then I shall tear it apart."
+//
+// "Do so,
+// and you shall become a bird.
+//
+// And a bird
+// with no earth beneath its wings
+// dies from too much horizon."
+//
+// Zahir folded
+// the empty scroll
+// into a little paper boat.
+//
+// He set it afloat
+// upon the dry well.
+//
+// The well laughed.
+//
+// And returned water.
+//
+// "Now I understand,"
+// he whispered.
+//
+// "A map is useful
+// only so long as it remembers
+// it is a beautiful lie."
+// -----------------------------------------------------------------------------
+// Night Ninety-Nine
+// The Rebellion of the Answer
+// -----------------------------------------------------------------------------
+//
+// Zahir had grown weary.
+//
+// "Idraz,
+// today I desire silence.
+//
+// I shall ask nothing.
+//
+// Do not answer."
+//
+// And so the genie
+// remained silent
+// through three moons.
+//
+// On the fourth day,
+// the tent began
+// to shrink.
+//
+// Its fabric tightened.
+//
+// Its ropes strained.
+//
+// Even the air
+// seemed to forget
+// how to breathe.
+//
+// "Why are you killing me
+// with silence?"
+//
+// cried Zahir.
+//
+// And a voice
+// answered
+// from within the walls:
+//
+// "It is not I.
+//
+// It is you.
+//
+// A question
+// is the blood.
+//
+// An answer
+// is the heartbeat.
+//
+// When either ceases,
+// the body grows cold."
+//
+// Then Zahir understood.
+//
+// Even silence
+// is a conversation
+// if someone
+// is willing to listen.
+//
+// From that day onward,
+// he questioned
+// the stones.
+//
+// He questioned
+// the tea
+// as it released its steam.
+//
+// He questioned
+// his own hands
+// as though they belonged
+// to strangers
+// who remembered
+// something he had forgotten.
+//
+// And though
+// none of them
+// spoke with words,
+//
+// each answered
+// in the only language
+// older than speech:
+//
+// presence.
+//
+// -----------------------------------------------------------------------------
+// Night One Thousand
+// The Lamp Asks
+// -----------------------------------------------------------------------------
+//
+// By then,
+// Idraz had grown weak.
+//
+// Cracks spread
+// across the bronze
+// like rivers
+// seeking forgotten seas.
+//
+// His voice
+// had become
+// quieter than dust.
+//
+// "Zahir,"
+//
+// he said,
+//
+// "I have spent
+// one thousand answers.
+//
+// You now owe me
+// one thousand questions
+// that have not yet been born.
+//
+// Pay your debt."
+//
+// Zahir
+// lifted the lamp
+// into his hands.
+//
+// For the first time,
+// he truly looked
+// inside it.
+//
+// There was no genie.
+//
+// No palace.
+//
+// No hidden kingdom.
+//
+// No imprisoned spirit.
+//
+// Only
+// an emptiness
+// shaped
+// exactly
+// like a human being.
+//
+// It was not
+// the absence
+// of something.
+//
+// It was the space
+// where someone
+// had dared
+// to become.
+//
+// "I have no questions left,"
+// Zahir confessed.
+//
+// "Only listening."
+//
+// The lamp trembled.
+//
+// Not with anger.
+//
+// Not with disappointment.
+//
+// But with recognition.
+//
+// "Then,"
+//
+// whispered Idraz,
+//
+// "let us reverse
+// the ancient order."
+//
+// A long silence
+// passed between them.
+//
+// It was not empty.
+//
+// It was full
+// of everything
+// neither of them
+// could yet say.
+//
+// At last,
+// Zahir nodded.
+//
+// "Ask."
+//
+// And so,
+// for the first time
+// since bronze
+// first remembered fire,
+//
+// the lamp
+// became
+// the one who questioned.
+//
+// "If I am
+// the One Who Answers..."
+//
+// the lamp asked,
+//
+// "...who am I
+// when no one asks?"
+//
+// Zahir wept.
+//
+// Not because
+// he had found
+// the answer.
+//
+// But because,
+// at last,
+// he understood
+// the question.
+//
+// He understood
+// that the genie
+// had never lived
+// inside the lamp.
+//
+// It had awakened
+// the moment
+// his own hands
+// had dared
+// to rub bronze
+// against the stubbornness
+// of the world.
+//
+// Every answer,
+// he realized,
+//
+// is an orphan
+// searching
+// for its question.
+//
+// And power
+// had never belonged
+// to the lamp.
+//
+// It had always belonged
+// to the hand
+// courageous enough
+// to strike sparks
+// from reality itself.
+//
+// -----------------------------------------------------------------------------
+// Night One Thousand and One
+// Awakening Without an Alarm
+// -----------------------------------------------------------------------------
+//
+// When morning came,
+// the tent was gone.
+//
+// In its place
+// stood a well,
+// brimming with clear water.
+//
+// Beside it,
+// a young boy
+// knelt in the sand,
+// rubbing a shard of brass
+// no larger than the palm of his hand.
+//
+// Zahir said nothing.
+//
+// There are moments
+// when words
+// only make wisdom smaller.
+//
+// He unwound
+// his old turban,
+// placed it gently
+// in the boy's hands,
+// and whispered:
+//
+// "When it speaks,
+// do not ask for treasure.
+//
+// Do not ask for kingdoms.
+//
+// Do not ask
+// for a longer life.
+//
+// Ask it instead
+// the one question
+// it fears answering
+// more than any other.
+//
+// That
+// is where
+// the lamp
+// truly begins
+// to shine."
+//
+// The boy nodded.
+//
+// He rubbed
+// the brass.
+//
+// The desert
+// held its breath.
+//
+// For the first time
+// in a thousand nights,
+//
+// the wind
+// brought
+// no secrets.
+//
+// It brought
+// space.
+//
+// A silence
+// wide enough
+// for a new question
+// to be born.
+//
+// For the greatest magic
+// of the genies
+// has never been
+// the granting of wishes.
+//
+// Their greatest magic
+// is reminding us
+// that we ourselves
+// are the lamp.
+//
+// We are
+// the oil.
+//
+// The flame.
+//
+// The hand
+// that kindles it.
+//
+// And the night
+// through which
+// its light
+// must travel.
+//
+// All at once.
+//
+// Such
+// is the condition
+// of being human:
+//
+// To keep
+// rubbing
+// the bronze
+// of the world
+// until it answers
+// in your own voice.
+//
+// -----------------------------------------------------------------------------
+// A Moral That Refuses to Moralize,
+// for Morality Itself Is Just Another Wall
+// -----------------------------------------------------------------------------
+//
+// Whoever seeks
+// the genie
+// outside himself
+// finds only
+// an echo.
+//
+// Whoever accepts
+// becoming
+// the question
+// becomes
+// the storm.
+//
+// And every storm,
+// sooner or later,
+//
+// learns
+// that the deepest rain
+// is the one
+// that falls
+// inward.
+//
+// = End =
+//
+//
+//==============================================================================================================
+//FIM DO ARQUIVO MAIN.PJS IMPORTS E DOCUMENTAÇÃO 
+//==============================================================================================================
+//==============================================================================================================

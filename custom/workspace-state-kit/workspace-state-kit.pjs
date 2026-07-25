@@ -1,0 +1,220 @@
+ensureStateKitStore() =>
+  if(!window.__workspaceStateKitV1) {
+    window.__workspaceStateKitV1 = {};
+  }
+  return window.__workspaceStateKitV1;
+
+normalizeNamespace(namespace) =>
+  const raw = namespace === undefined || namespace === null ? "default" : String(namespace).trim();
+  return raw === "" ? "default" : raw;
+
+normalizeKey(key) =>
+  if(key === undefined || key === null) return "";
+  return String(key).trim();
+
+storageKey(namespace, key) =>
+  const ns = normalizeNamespace(namespace);
+  const keyName = normalizeKey(key);
+  return `wsk.v1::${ns}::${keyName}`;
+
+ensureNamespace(namespace) =>
+  const ns = normalizeNamespace(namespace);
+  const store = ensureStateKitStore();
+  if(!store[ns]) {
+    store[ns] = {};
+  }
+  return store[ns];
+
+set(namespace, key, value, mode) =>
+  const keyName = normalizeKey(key);
+  if(keyName === "") return "";
+
+  const space = ensureNamespace(namespace);
+  space[keyName] = value;
+
+  if(mode === "persist") {
+    try {
+      localStorage.setItem(storageKey(namespace, keyName), JSON.stringify(value));
+    } catch(error) {
+      console.warn("workspace-state-kit: localStorage write failed", error);
+    }
+  }
+
+  return value;
+
+get(namespace, key, fallback, mode) =>
+  const keyName = normalizeKey(key);
+  if(keyName === "") return fallback === undefined ? "" : fallback;
+
+  const space = ensureNamespace(namespace);
+  if(space.hasOwnProperty(keyName)) {
+    return space[keyName];
+  }
+
+  if(mode === "persist") {
+    try {
+      const raw = localStorage.getItem(storageKey(namespace, keyName));
+      if(raw !== null) {
+        const parsed = JSON.parse(raw);
+        space[keyName] = parsed;
+        return parsed;
+      }
+    } catch(error) {
+      console.warn("workspace-state-kit: localStorage read failed", error);
+    }
+  }
+
+  return fallback === undefined ? "" : fallback;
+
+exists(namespace, key, mode) =>
+  const keyName = normalizeKey(key);
+  if(keyName === "") return false;
+
+  const space = ensureNamespace(namespace);
+  if(space.hasOwnProperty(keyName)) {
+    return true;
+  }
+
+  if(mode === "persist") {
+    try {
+      return localStorage.getItem(storageKey(namespace, keyName)) !== null;
+    } catch(error) {
+      return false;
+    }
+  }
+
+  return false;
+
+remove(namespace, key, mode) =>
+  const keyName = normalizeKey(key);
+  if(keyName === "") return false;
+
+  const space = ensureNamespace(namespace);
+  const hadValue = space.hasOwnProperty(keyName);
+  if(hadValue) {
+    delete space[keyName];
+  }
+
+  if(mode === "persist") {
+    try {
+      localStorage.removeItem(storageKey(namespace, keyName));
+    } catch(error) {
+      console.warn("workspace-state-kit: localStorage remove failed", error);
+    }
+  }
+
+  return hadValue;
+
+toggle(namespace, key, onValue, offValue, mode) =>
+  const current = get(namespace, key, offValue, mode);
+  const nextValue = current === onValue ? offValue : onValue;
+  return set(namespace, key, nextValue, mode);
+
+increment(namespace, key, delta, mode) =>
+  let step = Number(delta);
+  if(!Number.isFinite(step)) {
+    step = 1;
+  }
+
+  let current = Number(get(namespace, key, 0, mode));
+  if(!Number.isFinite(current)) {
+    current = 0;
+  }
+
+  const nextValue = current + step;
+  set(namespace, key, nextValue, mode);
+  return nextValue;
+
+push(namespace, key, value, maxItems, mode) =>
+  let listValue = get(namespace, key, [], mode);
+  if(!Array.isArray(listValue)) {
+    listValue = [];
+  }
+
+  listValue.push(value);
+
+  const max = Number(maxItems);
+  if(Number.isFinite(max) && max > 0 && listValue.length > max) {
+    listValue = listValue.slice(listValue.length - max);
+  }
+
+  set(namespace, key, listValue, mode);
+  return listValue;
+
+pop(namespace, key, mode) =>
+  let listValue = get(namespace, key, [], mode);
+  if(!Array.isArray(listValue) || listValue.length === 0) {
+    return "";
+  }
+
+  const popped = listValue.pop();
+  set(namespace, key, listValue, mode);
+  return popped;
+
+exportJson(namespace) =>
+  const space = ensureNamespace(namespace);
+  return JSON.stringify(space);
+
+importJson(namespace, jsonText, mode, replaceMode) =>
+  let parsed;
+
+  try {
+    parsed = JSON.parse(String(jsonText || "{}"));
+  } catch(error) {
+    return "error: invalid json";
+  }
+
+  if(!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return "error: expected object json";
+  }
+
+  if(replaceMode === "replace") {
+    const ns = normalizeNamespace(namespace);
+    const store = ensureStateKitStore();
+    store[ns] = {};
+  }
+
+  for(const keyName of Object.keys(parsed)) {
+    set(namespace, keyName, parsed[keyName], mode);
+  }
+
+  return exportJson(namespace);
+
+keys(namespace, separator) =>
+  const space = ensureNamespace(namespace);
+  const sep = separator === undefined ? "," : String(separator);
+  return Object.keys(space).join(sep);
+
+size(namespace) =>
+  const space = ensureNamespace(namespace);
+  return Object.keys(space).length;
+
+clear(namespace, mode) =>
+  const ns = normalizeNamespace(namespace);
+  const store = ensureStateKitStore();
+  const oldSnapshot = JSON.stringify(store[ns] || {});
+
+  if(mode === "persist") {
+    try {
+      const prefix = `wsk.v1::${ns}::`;
+      const toRemove = [];
+      for(let i = 0; i < localStorage.length; i += 1) {
+        const thisKey = localStorage.key(i);
+        if(thisKey && thisKey.startsWith(prefix)) {
+          toRemove.push(thisKey);
+        }
+      }
+      for(let i = 0; i < toRemove.length; i += 1) {
+        localStorage.removeItem(toRemove[i]);
+      }
+    } catch(error) {
+      console.warn("workspace-state-kit: localStorage clear failed", error);
+    }
+  }
+
+  store[ns] = {};
+  return oldSnapshot;
+
+$meta
+  title = Workspace State Kit
+  description = Namespaced state system with import/export, toggles, and optional localStorage persistence.

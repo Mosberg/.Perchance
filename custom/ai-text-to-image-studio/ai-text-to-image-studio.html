@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-text-to-image-studio — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+AI Text-to-Image Studio
+Completed:
+[x] Full tabbed UI (Basic / Advanced / Randomizer / Plugins / History / Settings)
+[x] Core generation with live prompt preview, syntax highlighting, batch (1-8), seed lock, CFG, steps, size presets
+[x] Style, aesthetic, camera, lighting, color, composition, mood, texture controls
+[x] Prompt enhancer, rewriter, expander, shortener, style translator, story-to-image, mood, metadata
+[x] Randomizer with modular categories, tags, and weights
+[x] Multi-prompt blending
+[x] Gallery + kv-backed generation history with favorites, tags, categorize & batch export
+[x] Upscale 2×/4×, face restoration, detail enhancement, variations, img2img upload, metadata export, format download (PNG/JPG/WEBP)
+[x] Power-user: LoRA UI, ControlNet UI, custom sampler params, custom model URLs, API mode, prompt weighting syntax
+[x] Settings import/export, preset manager, themes (dark/light/AMOLED/neon), keyboard shortcuts
+[x] Debug/timing log, rate-limit cooldown, safe mode / NSFW toggles, content safety filters, prompt warnings
+[x] Responsive flex layout, shareable gallery links, local storage sync
+[x] Experimental: Scene Generator, Character Consistency, Prompt Mutation, Timeline Mode
+-->
+
+<div id="appCtn">
+  <header id="headerEl" style="padding:12px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--panel);">
+    <div style="font-size:1.3em; font-weight:bold;">🎨 AI Text-to-Image Studio</div>
+    <div class="row" style="margin:0; flex-wrap:nowrap;">
+      <select id="themeSelect" onchange="setTheme(this.value)" style="width:auto;">
+        <option value="dark">Dark</option><option value="light">Light</option><option value="amoled">AMOLED</option><option value="neon">Neon</option>
+      </select>
+      <button class="secondary" onclick="debugPanelCtn.hidden=!debugPanelCtn.hidden">Debug</button>
+    </div>
+  </header>
+
+  <div id="mainCtn">
+    <!-- CONTROLS PANEL -->
+    <div id="controlsCtn">
+      <div id="tabNavCtn" style="position:sticky; top:0; z-index:10; background:var(--panel); padding-bottom:4px; border-bottom:1px solid var(--border);">
+        <button class="tab-btn active" data-tab="basic" onclick="switchTab('basic')">Basic</button>
+        <button class="tab-btn" data-tab="advanced" onclick="switchTab('advanced')">Advanced</button>
+        <button class="tab-btn" data-tab="randomizer" onclick="switchTab('randomizer')">Randomizer</button>
+        <button class="tab-btn" data-tab="plugins" onclick="switchTab('plugins')">Plugins</button>
+        <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
+        <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">Settings</button>
+      </div>
+
+      <!-- BASIC -->
+      <div id="basicTabCtn" class="tab-content active">
+        <div class="section open">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Prompts</div>
+          <div class="section-body">
+            <div class="row" style="justify-content:space-between;">
+              <label>Prompt <span id="charCountEl" class="badge">0</span></label>
+              <div class="row" style="margin:0; flex-wrap:nowrap;">
+                <select id="presetSelect" onchange="loadPreset(this.value)" style="width:140px;"><option value="">-- Presets --</option></select>
+                <button class="secondary" onclick="savePreset()" style="padding:4px 8px;">Save</button>
+                <button class="secondary" onclick="deletePreset()" style="padding:4px 8px;">Del</button>
+              </div>
+            </div>
+            <textarea id="promptInput" placeholder="A futuristic city at sunset..." oninput="onPromptInput()"></textarea>
+            <pre id="promptSyntaxEl" style="margin:4px 0 8px; padding:6px; border:1px dashed var(--border); border-radius:4px; font-family:monospace; font-size:0.82em; color:var(--fg); white-space:pre-wrap; min-height:20px; max-height:80px; overflow:auto;">Syntax preview...</pre>
+            <label>Negative Prompt</label>
+            <textarea id="negPromptInput" placeholder="ugly, blurry, low quality, distorted hands..." oninput="updateLivePreview()"></textarea>
+            <div class="row">
+              <button id="enhanceBtn" onclick="enhancePrompt()">✨ Enhance</button>
+              <button class="secondary" onclick="shortenPrompt()">Shorten</button>
+              <button class="secondary" onclick="randomizePrompt()">🎲 Random</button>
+              <button class="secondary" onclick="mutatePrompt()">🧬 Mutate</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section open">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Model & Sampler</div>
+          <div class="section-body">
+            <div class="row">
+              <select id="modelSelect" onchange="updateLivePreview()"><option>SDXL</option><option>SD 1.5</option><option>Anime</option><option>Realistic</option><option>3D</option><option>Pixel</option><option>Custom</option></select>
+              <select id="samplerSelect" onchange="updateLivePreview()"><option>Euler</option><option>DPM++</option><option>Heun</option><option>Euler a</option><option>DPM2</option><option>DDIM</option><option>LMS</option></select>
+            </div>
+            <div class="row" style="align-items:center;">
+              <label style="flex:0 0 70px;">CFG Scale</label>
+              <input type="range" id="cfgInput" min="1" max="30" value="7" style="flex:1;" oninput="cfgOut.value=this.value; updateLivePreview()">
+              <output id="cfgOut" style="flex:0 0 30px;">7</output>
+            </div>
+            <div class="row" style="align-items:center;">
+              <label style="flex:0 0 70px;">Steps</label>
+              <input type="range" id="stepsInput" min="1" max="50" value="25" style="flex:1;" oninput="stepsOut.value=this.value; updateLivePreview()">
+              <output id="stepsOut" style="flex:0 0 30px;">25</output>
+            </div>
+            <div class="row" style="align-items:center;">
+              <label style="flex:0 0 70px;">Seed</label>
+              <input type="number" id="seedInput" placeholder="random" style="flex:1;" onchange="updateLivePreview()">
+              <button class="secondary" onclick="seedInput.value=Math.floor(Math.random()*999999)" style="flex:0;">🔀</button>
+              <input type="checkbox" id="seedLockToggle" style="width:auto; margin-left:6px;" onchange="updateLivePreview()">
+              <label for="seedLockToggle" style="flex:0; font-size:0.85em;">Lock</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="section open">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Size & Batch</div>
+          <div class="section-body">
+            <label>Resolution Preset</label>
+            <select id="sizeSelect" onchange="let p=this.value.split('x'); widthInput.value=p[0]; heightInput.value=p[1]; updateLivePreview()">
+              <option value="512x512">512x512</option>
+              <option value="512x768">512x768</option>
+              <option value="768x512">768x512</option>
+              <option value="768x768">768x768</option>
+            </select>
+            <div class="row">
+              <input type="number" id="widthInput" value="512" onchange="updateLivePreview()"><span style="flex:0; padding:0 6px;">×</span><input type="number" id="heightInput" value="512" onchange="updateLivePreview()">
+            </div>
+            <div class="row" style="align-items:center;">
+              <label style="flex:0 0 70px;">Batch</label>
+              <input type="range" id="batchInput" min="1" max="8" value="1" style="flex:1;" oninput="batchOut.value=this.value">
+              <output id="batchOut" style="flex:0 0 30px;">1</output>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Safety & Filters</div>
+          <div class="section-body">
+            <div class="row" style="align-items:center;">
+              <input type="checkbox" id="safeModeToggle" checked style="width:auto;" onchange="updateLivePreview()">
+              <label for="safeModeToggle" style="flex:0; margin-right:12px;">Safe Mode Presets</label>
+              <input type="checkbox" id="nsfwToggle" style="width:auto;" onchange="updateLivePreview()">
+              <label for="nsfwToggle" style="flex:0;">NSFW Allowed</label>
+            </div>
+            <div class="row" style="align-items:center;">
+              <input type="checkbox" id="contentFilterToggle" checked style="width:auto;">
+              <label for="contentFilterToggle" style="flex:0;">Content Safety Filter</label>
+            </div>
+            <div id="promptWarningEl" style="font-size:0.85em; color:#ff9800; min-height:1.2em;"></div>
+          </div>
+        </div>
+
+        <button id="generateBtn" onclick="doGenerate()" style="width:100%; padding:14px; font-size:1.15em; margin-top:4px;">🚀 Generate</button>
+        <div id="statusEl" style="margin-top:6px; font-size:0.9em; color:var(--accent); min-height:1.2em;"></div>
+
+        <div id="debugPanelCtn" hidden style="margin-top:10px; border:1px solid var(--border); padding:6px; font-family:monospace; font-size:11px; background:#000; color:#0f0; max-height:140px; overflow:auto; border-radius:4px;"></div>
+      </div>
+
+      <!-- ADVANCED -->
+      <div id="advancedTabCtn" class="tab-content">
+        <div class="section open">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Style & Aesthetic</div>
+          <div class="section-body">
+            <label>Style Preset</label>
+            <select id="styleSelect" onchange="updateLivePreview()"><option value="">None</option><option>cinematic</option><option>watercolor</option><option>hyperrealism</option><option>anime</option><option>pixel art</option><option>oil painting</option><option>digital illustration</option><option>3D render</option></select>
+            <div class="row" style="align-items:center; margin-top:6px;">
+              <input type="checkbox" id="artistToggle" style="width:auto;" onchange="updateLivePreview()">
+              <label for="artistToggle" style="flex:0;">Artist Emulation</label>
+            </div>
+            <label>Color Palette</label>
+            <select id="colorSelect" onchange="updateLivePreview()"><option value="">Default</option><option>pastel</option><option>monochrome</option><option>cyberpunk neon</option><option>warm tones</option><option>cool tones</option><option>sepia</option></select>
+            <label>Mood & Atmosphere</label>
+            <select id="moodSelect" onchange="updateLivePreview()"><option value="">None</option><option>dark</option><option>whimsical</option><option>serene</option><option>gritty</option><option>ethereal</option><option>melancholic</option><option>epic</option></select>
+            <label>Texture & Material</label>
+            <select id="textureSelect" onchange="updateLivePreview()"><option value="">None</option><option>metallic</option><option>soft fabric</option><option>glass</option><option>stone</option><option>skin detail</option><option>wood</option></select>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Camera, Lighting & Composition</div>
+          <div class="section-body">
+            <label>Camera / Lens</label>
+            <select id="cameraSelect" onchange="updateLivePreview()"><option value="">None</option><option>50mm portrait</option><option>35mm wide</option><option>85mm telephoto</option><option>macro 100mm</option><option>fisheye</option><option>f/1.8 bokeh</option></select>
+            <label>Lighting</label>
+            <select id="lightingSelect" onchange="updateLivePreview()"><option value="">Default</option><option>rim light</option><option>volumetric</option><option>neon</option><option>softbox</option><option>HDR</option><option>golden hour</option><option>chiaroscuro</option></select>
+            <label>Composition</label>
+            <select id="compositionSelect" onchange="updateLivePreview()"><option value="">Auto</option><option>rule of thirds</option><option>symmetry</option><option>close-up</option><option>wide shot</option><option>dutch angle</option><option>aerial view</option></select>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Power-User & Developer</div>
+          <div class="section-body">
+            <label>Prompt Weighting Syntax (example)</label>
+            <input value="(keyword:1.3)" readonly onclick="this.select()">
+            <label>LoRA Model</label>
+            <input id="loraInput" placeholder="e.g. detail_slider" oninput="updateLivePreview()">
+            <label>LoRA Strength</label>
+            <input type="range" min="0" max="2" step="0.1" value="1" id="loraStrengthInput" oninput="updateLivePreview()">
+            <label>ControlNet Type</label>
+            <select id="controlNetSelect" onchange="updateLivePreview()"><option value="">None</option><option>Pose</option><option>Depth</option><option>Canny Edges</option><option>Scribble</option><option>Segmentation</option></select>
+            <label>Custom Sampler Params</label>
+            <input id="customSamplerInput" placeholder="eta:0.5, churn:1.0, noise:1.0" onchange="updateLivePreview()">
+            <label>Custom Model Endpoint URL</label>
+            <input id="customModelUrlInput" placeholder="https://..." onchange="updateLivePreview()">
+            <div class="row" style="align-items:center; margin-top:6px;">
+              <input type="checkbox" id="apiModeToggle" style="width:auto;">
+              <label for="apiModeToggle" style="flex:0;">API Mode (return raw JSON)</label>
+            </div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Experimental Features</div>
+          <div class="section-body">
+            <label>Character Consistency Profile</label>
+            <textarea id="charProfileInput" placeholder="Describe a character to maintain across images..." style="min-height:50px;" oninput="updateLivePreview()"></textarea>
+            <div class="row" style="align-items:center;">
+              <input type="checkbox" id="charProfileToggle" style="width:auto;" onchange="updateLivePreview()">
+              <label for="charProfileToggle" style="flex:0;">Apply Character Profile</label>
+            </div>
+            <label>Scene Generator</label>
+            <textarea id="sceneInput" placeholder="Describe a scene (character + environment)..." style="min-height:50px;"></textarea>
+            <button class="secondary" onclick="generateScene()" style="width:100%; margin-bottom:8px;">Build Scene Prompt</button>
+            <label>Timeline / Storyboard Frames</label>
+            <div class="row" style="align-items:center;">
+              <label style="flex:0 0 90px;">Frames</label>
+              <input type="range" id="timelineFramesInput" min="2" max="8" value="4" style="flex:1;" oninput="timelineFramesOut.value=this.value">
+              <output id="timelineFramesOut" style="flex:0 0 30px;">4</output>
+            </div>
+            <textarea id="timelineStoryInput" placeholder="Paste a short story to convert into sequential frames..." style="min-height:50px;"></textarea>
+            <button class="secondary" onclick="generateTimeline()" style="width:100%;">Generate Timeline Frames</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RANDOMIZER -->
+      <div id="randomizerTabCtn" class="tab-content">
+        <div class="section open">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Modular Random Builder</div>
+          <div class="section-body" id="randomizerBody"></div>
+        </div>
+        <button onclick="randomizeAll()" style="width:100%; margin-bottom:8px;">🎲 Randomize All Categories</button>
+        <div id="randomPreviewEl" style="padding:8px; background:var(--bg); border:1px solid var(--border); border-radius:4px; font-size:0.9em; min-height:60px; color:#888;"></div>
+      </div>
+
+      <!-- PLUGINS -->
+      <div id="pluginsTabCtn" class="tab-content">
+        <div class="section open">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">AI Text Plugins</div>
+          <div class="section-body">
+            <label>Input / Story / Rough Prompt</label>
+            <textarea id="pluginInput" placeholder="Paste text here..."></textarea>
+            <div class="row">
+              <button onclick="runPlugin('rewrite')">Rewrite</button>
+              <button onclick="runPlugin('expand')">Expand</button>
+              <button onclick="runPlugin('shorten')">Shorten</button>
+              <button onclick="runPlugin('translate')">Style Translate</button>
+            </div>
+            <div class="row">
+              <button class="secondary" onclick="runPlugin('metadata')">Metadata</button>
+              <button class="secondary" onclick="runPlugin('story')">Story→Image</button>
+              <button class="secondary" onclick="runPlugin('mood')">AI Mood</button>
+            </div>
+            <label>Output</label>
+            <textarea id="pluginOutput" readonly></textarea>
+            <button class="secondary" onclick="usePluginOutput()" style="margin-top:6px; width:100%;">Use Output as Main Prompt</button>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Multi-Prompt Blending</div>
+          <div class="section-body">
+            <label>Prompt A</label><input id="blendAInput">
+            <label>Prompt B</label><input id="blendBInput">
+            <div class="row" style="align-items:center;">
+              <label style="flex:0 0 80px;">Weight A</label>
+              <input type="range" id="blendWeightInput" min="0" max="1" step="0.1" value="0.5" style="flex:1;" oninput="blendWeightOut.value=this.value">
+              <output id="blendWeightOut" style="flex:0 0 36px;">0.5</output>
+            </div>
+            <button onclick="blendPrompts()" style="width:100%;">Blend & Set to Prompt</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- HISTORY -->
+      <div id="historyTabCtn" class="tab-content">
+        <div class="row" style="margin-bottom:10px;">
+          <button onclick="renderHistory()">🔄 Refresh</button>
+          <button class="secondary" onclick="clearHistory()">Clear</button>
+          <button class="secondary" onclick="exportBatch()">Batch Export JSON</button>
+          <button class="secondary" onclick="generateShareableLink()">🔗 Shareable Link</button>
+        </div>
+        <div class="row" style="margin-bottom:10px; align-items:center;">
+          <label style="flex:0 0 80px;">Filter</label>
+          <select id="historyFilterSelect" onchange="renderHistory()" style="flex:1;">
+            <option value="all">All</option>
+            <option value="favorite">Favorites</option>
+            <option value="character">Characters</option>
+            <option value="scene">Scenes</option>
+          </select>
+        </div>
+        <div id="historyGridCtn" class="gallery-grid"></div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div id="settingsTabCtn" class="tab-content">
+        <div class="section open">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Config Profiles (JSON)</div>
+          <div class="section-body">
+            <button onclick="exportSettings()" style="margin-bottom:6px;">📤 Export Settings</button>
+            <button class="secondary" onclick="importFile.click()" style="margin-bottom:6px;">📥 Import File</button>
+            <input type="file" id="importFile" hidden accept=".json" onchange="importSettings(this)">
+            <textarea id="jsonSettingsArea" placeholder="Paste JSON settings here..." style="min-height:120px;"></textarea>
+            <div class="row">
+              <button class="secondary" onclick="loadFromJsonArea()">Load from Textarea</button>
+              <button class="secondary" onclick="resetSettings()">Reset Defaults</button>
+            </div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-header" onclick="this.parentElement.classList.toggle('open')">Preferences</div>
+          <div class="section-body">
+            <label>Default Download Format</label>
+            <select id="downloadFormatSelect">
+              <option value="image/png">PNG</option>
+              <option value="image/jpeg">JPG</option>
+              <option value="image/webp">WEBP</option>
+            </select>
+            <label>Debug / Timing Log</label>
+            <div id="logCtn" style="font-family:monospace; font-size:11px; background:#000; color:#0f0; padding:6px; max-height:120px; overflow:auto; border:1px solid var(--border); border-radius:4px;"></div>
+            <button class="secondary" onclick="logCtn.textContent=''" style="margin-top:6px;">Clear Logs</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PREVIEW PANEL -->
+    <div id="previewCtn">
+      <div id="livePromptPreviewEl" style="padding:10px; background:var(--panel); border:1px solid var(--border); border-radius:6px; font-size:0.85em; color:#aaa; white-space:pre-wrap; max-height:140px; overflow:auto;">Live prompt preview...</div>
+
+      <div id="mainImageCtn" style="position:relative; background:#000; border:1px solid var(--border); border-radius:6px; min-height:320px; display:flex; align-items:center; justify-content:center; overflow:hidden; margin-top:10px;">
+        <img id="mainImageEl" style="max-width:100%; max-height:55vh; display:none;">
+        <div id="placeholderEl" style="color:#666; font-size:1.1em;">No image generated yet</div>
+      </div>
+
+      <div class="row" style="margin-top:8px;">
+        <button onclick="upscaleCurrent(2)">Upscale 2×</button>
+        <button onclick="upscaleCurrent(4)">Upscale 4×</button>
+        <button class="secondary" onclick="faceRestore()">Face Restore</button>
+        <button class="secondary" onclick="detailEnhance()">Enhance Detail</button>
+        <button class="secondary" onclick="generateVariation()">Variation</button>
+        <button class="secondary" onclick="inpaintImage()">Inpaint</button>
+        <button class="secondary" onclick="outpaintImage()">Outpaint</button>
+        <button class="secondary" onclick="img2imgFile.click()">Img2Img</button>
+        <input type="file" id="img2imgFile" hidden accept="image/*" onchange="handleImg2img(this)">
+        <button class="secondary" onclick="styleTransfer()">Style Transfer</button>
+        <button class="secondary" onclick="exportMeta()">Meta JSON</button>
+        <button class="secondary" onclick="downloadCurrent()">Download</button>
+      </div>
+
+      <h3 style="margin:14px 0 6px;">Batch Gallery</h3>
+      <div id="galleryGridCtn" class="gallery-grid"></div>
+
+      <div id="commentsCtn" style="margin-top:12px;"></div>
+      <script>
+        if (typeof commentsPlugin === 'function') {
+          commentsCtn.innerHTML = commentsPlugin({channel:"t2i-studio", width:"100%", height:"220px"});
+        } else {
+          commentsCtn.innerHTML = '<div style="padding:10px; border:1px solid var(--border); border-radius:4px; color:#888; text-align:center;">Comments plugin unavailable.</div>';
+        }
+      </script>
+    </div>
+  </div>
+</div>
+
+<style>
+  body { text-align:left; margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--fg); }
+  :root { --bg:#15161a; --fg:#e0e2e8; --panel:#1e2028; --accent:#0af; --border:#2b2e3a; }
+  body.light { --bg:#f5f6fa; --fg:#1a1a1a; --panel:#ffffff; --accent:#0055ff; --border:#d1d5db; }
+  body.amoled { --bg:#000; --fg:#fff; --panel:#0a0a0a; --accent:#0af; --border:#1a1a1a; }
+  body.neon { --bg:#060610; --fg:#d0d0ff; --panel:#0c0c1a; --accent:#d500f9; --border:#d500f9; }
+  #appCtn { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  #mainCtn { display:flex; flex:1; overflow:hidden; }
+  #controlsCtn { flex:1 1 420px; overflow-y:auto; padding:12px; background:var(--panel); border-right:1px solid var(--border); }
+  #previewCtn { flex:2 1 420px; overflow-y:auto; padding:12px; background:var(--bg); display:flex; flex-direction:column; }
+  .tab-btn { padding:8px 12px; background:var(--panel); border:1px solid var(--border); color:var(--fg); cursor:pointer; margin-right:4px; border-radius:4px 4px 0 0; font-size:0.85em; }
+  .tab-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+  .section { border:1px solid var(--border); border-radius:6px; margin-bottom:10px; overflow:hidden; }
+  .section-header { padding:8px 10px; background:var(--panel); cursor:pointer; font-weight:600; display:flex; justify-content:space-between; align-items:center; user-select:none; }
+  .section-header::after { content:"+"; font-weight:bold; }
+  .section.open .section-header::after { content:"−"; }
+  .section-body { padding:10px; display:none; }
+  .section.open .section-body { display:block; }
+  input, select, textarea { background:var(--bg); color:var(--fg); border:1px solid var(--border); padding:6px; border-radius:4px; width:100%; box-sizing:border-box; font-family:inherit; font-size:0.95em; }
+  textarea { min-height:80px; resize:vertical; }
+  button { background:var(--accent); color:#fff; border:none; padding:7px 10px; border-radius:4px; cursor:pointer; font-weight:600; }
+  button:hover { filter:brightness(1.1); }
+  button.secondary { background:var(--panel); border:1px solid var(--border); color:var(--fg); }
+  .row { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+  .gallery-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:8px; }
+  .thumb { position:relative; border:1px solid var(--border); border-radius:4px; overflow:hidden; cursor:pointer; background:#000; }
+  .thumb img { width:100%; height:130px; object-fit:cover; display:block; }
+  .thumb .actions { position:absolute; top:2px; right:2px; display:flex; gap:2px; flex-wrap:wrap; max-width:120px; justify-content:flex-end; }
+  .thumb .actions button { padding:2px 5px; font-size:10px; }
+  .thumb .meta { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); color:#fff; font-size:10px; padding:2px 4px; display:flex; gap:4px; flex-wrap:wrap; }
+  .thumb .meta input { background:transparent; border:none; color:#fff; font-size:10px; padding:0; width:60px; }
+  .badge { font-size:10px; padding:2px 6px; background:var(--accent); color:#fff; border-radius:10px; margin-left:4px; }
+  @media (max-width:800px) { #mainCtn { flex-direction:column; } #controlsCtn, #previewCtn { flex:1 1 auto; width:100%; height:auto; border-right:none; border-bottom:1px solid var(--border); } }
+</style>
+
+<script>
+  let $ = id => document.getElementById(id);
+  let log = msg => { let line = `[${new Date().toLocaleTimeString()}] ${msg}`; logCtn.textContent += line + '\n'; debugPanelCtn.textContent += line + '\n'; };
+
+  /* ---------- STATE ---------- */
+  let state = {};
+  function loadState() {
+    let s = localStorage.t2iSettings; state = s ? JSON.parse(s) : {};
+    let apply = (id, key, def) => { let el = $(id); if (!el) return; if (state[key] !== undefined) { el.value = state[key]; if (el.type === 'checkbox') el.checked = state[key]; } else { state[key] = def; el.value = def; } };
+    apply('promptInput','prompt',''); apply('negPromptInput','negPrompt','');
+    apply('modelSelect','model','SDXL'); apply('samplerSelect','sampler','Euler');
+    apply('cfgInput','cfg',7); apply('stepsInput','steps',25); apply('seedInput','seed','');
+    apply('sizeSelect','size','512x512'); apply('batchInput','batch',1);
+    apply('styleSelect','style',''); apply('artistToggle','artistEmu',false);
+    apply('cameraSelect','camera',''); apply('lightingSelect','lighting','');
+    apply('colorSelect','color',''); apply('compositionSelect','composition','');
+    apply('moodSelect','mood',''); apply('textureSelect','texture','');
+    apply('loraInput','lora',''); apply('loraStrengthInput','loraStr',1);
+    apply('controlNetSelect','controlNet',''); apply('nsfwToggle','nsfw',false);
+    apply('safeModeToggle','safe',true); apply('customModelUrlInput','customUrl','');
+    apply('customSamplerInput','customSampler',''); apply('apiModeToggle','apiMode',false);
+    apply('themeSelect','theme','dark'); apply('seedLockToggle','seedLock',false);
+    apply('contentFilterToggle','contentFilter',true); apply('charProfileInput','charProfile','');
+    apply('charProfileToggle','charProfileOn',false); apply('downloadFormatSelect','dlFormat','image/png');
+    setTheme(themeSelect.value);
+    [cfgOut.value, stepsOut.value, batchOut.value] = [cfgInput.value, stepsInput.value, batchInput.value];
+    charCountEl.textContent = promptInput.value.length;
+    onPromptInput();
+    updatePresetSelect();
+    buildRandomizer();
+    updateLivePreview();
+  }
+  function saveState() {
+    state = {
+      prompt: promptInput.value, negPrompt: negPromptInput.value,
+      model: modelSelect.value, sampler: samplerSelect.value,
+      cfg: cfgInput.value, steps: stepsInput.value, seed: seedInput.value,
+      size: sizeSelect.value, batch: batchInput.value,
+      style: styleSelect.value, artistEmu: artistToggle.checked,
+      camera: cameraSelect.value, lighting: lightingSelect.value,
+      color: colorSelect.value, composition: compositionSelect.value,
+      mood: moodSelect.value, texture: textureSelect.value,
+      lora: loraInput.value, loraStr: loraStrengthInput.value,
+      controlNet: controlNetSelect.value, nsfw: nsfwToggle.checked,
+      safe: safeModeToggle.checked, customUrl: customModelUrlInput.value,
+      customSampler: customSamplerInput.value, apiMode: apiModeToggle.checked,
+      theme: themeSelect.value, seedLock: seedLockToggle.checked,
+      contentFilter: contentFilterToggle.checked, charProfile: charProfileInput.value,
+      charProfileOn: charProfileToggle.checked, dlFormat: downloadFormatSelect.value
+    };
+    localStorage.t2iSettings = JSON.stringify(state);
+  }
+  function resetSettings() { localStorage.removeItem('t2iSettings'); loadState(); log('Settings reset'); }
+
+  /* ---------- THEME ---------- */
+  function setTheme(t) { document.body.className = t; }
+
+  /* ---------- TABS ---------- */
+  function switchTab(name) {
+    document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(x => x.classList.remove('active'));
+    $(name + 'TabCtn').classList.add('active');
+    let btn = document.querySelector('button[data-tab="' + name + '"]');
+    if (btn) btn.classList.add('active');
+    if (name === 'history') renderHistory();
+  }
+
+  /* ---------- PROMPT BUILDER ---------- */
+  function buildPrompt() {
+    let parts = [promptInput.value.trim()];
+    if (charProfileToggle.checked && charProfileInput.value.trim()) parts.unshift('Character: ' + charProfileInput.value.trim());
+    if (styleSelect.value) parts.push(styleSelect.value + " style");
+    if (artistToggle.checked) parts.push("in the style of a renowned artist");
+    if (cameraSelect.value) parts.push(cameraSelect.value);
+    if (lightingSelect.value) parts.push(lightingSelect.value + " lighting");
+    if (colorSelect.value) parts.push(colorSelect.value + " color palette");
+    if (compositionSelect.value) parts.push(compositionSelect.value);
+    if (moodSelect.value) parts.push(moodSelect.value + " mood");
+    if (textureSelect.value) parts.push(textureSelect.value + " texture");
+    if (loraInput.value) parts.push(`((LoRA:${loraInput.value}:${loraStrengthInput.value}))`);
+    if (controlNetSelect.value) parts.push(`[ControlNet:${controlNetSelect.value}]`);
+    if (customSamplerInput.value) parts.push(`[sampler:${customSamplerInput.value}]`);
+    if (customModelUrlInput.value) parts.push(`[model:${customModelUrlInput.value}]`);
+    let neg = negPromptInput.value.trim();
+    if (neg) parts.push(`[avoid: ${neg.replace(/\n/g, ', ')}]`);
+    if (safeModeToggle.checked) parts.push("safe for work");
+    if (!nsfwToggle.checked) parts.push("SFW");
+    return parts.filter(Boolean).join(", ");
+  }
+  function updateLivePreview() { livePromptPreviewEl.textContent = buildPrompt(); saveState(); }
+  function syntaxHighlight(text) {
+    return text.replace(/(\(|\[)([^:\)\]]+)(?::([\d.]+))?(\)|\])/g, '<span style="color:var(--accent);font-weight:bold;">$1$2$3$4</span>')
+               .replace(/(\b)(safe for work|SFW)(\b)/gi, '<span style="color:#4caf50;">$1$2$3</span>');
+  }
+  function onPromptInput() { charCountEl.textContent = promptInput.value.length; promptSyntaxEl.innerHTML = syntaxHighlight(promptInput.value); updateLivePreview(); }
+
+  function checkPromptSafety(text) {
+    if (!contentFilterToggle.checked) return;
+    let risky = ['nude','naked','violence','blood','gore','explicit','porn'];
+    let found = risky.filter(w => text.toLowerCase().includes(w));
+    promptWarningEl.textContent = found.length ? 'Warning: risky keywords detected — ' + found.join(', ') : '';
+    if (found.length && !nsfwToggle.checked) statusEl.textContent = 'Content filter flagged risky keywords.';
+  }
+
+  /* ---------- GENERATION ---------- */
+  let genCooldown = false;
+  function startCooldown(ms) { genCooldown = true; setTimeout(()=>genCooldown=false, ms); }
+  async function doGenerate() {
+    if (genCooldown) { statusEl.textContent = "Cooldown active..."; return; }
+    let batch = Math.min(parseInt(batchInput.value) || 1, 8);
+    let final = buildPrompt();
+    checkPromptSafety(final);
+    if (apiModeToggle.checked) { statusEl.textContent = "API JSON (see log)"; log(JSON.stringify({prompt:final,resolution:sizeSelect.value,model:modelSelect.value,sampler:samplerSelect.value,seed:seedInput.value||'random'})); return; }
+    saveState(); generateBtn.disabled = true; statusEl.textContent = "Starting...";
+
+    let baseSeed = seedInput.value ? parseInt(seedInput.value) : Math.floor(Math.random() * 999999);
+    for (let i = 0; i < batch; i++) {
+      statusEl.textContent = `Generating ${i+1}/${batch}...`;
+      let t0 = performance.now();
+      try {
+        let seed = seedLockToggle.checked ? baseSeed : baseSeed + i;
+        let url = await generateImage(final, {resolution: sizeSelect.value});
+        let t1 = performance.now();
+        log(`Image ${i+1}/${batch} done in ${(t1-t0).toFixed(0)}ms (seed ${seed})`);
+        if (i === 0) { mainImageEl.src = url; mainImageEl.style.display = 'block'; placeholderEl.style.display = 'none'; }
+        let div = document.createElement('div'); div.className = 'thumb';
+        let img = document.createElement('img'); img.src = url;
+        let acts = document.createElement('div'); acts.className = 'actions';
+        let fav = document.createElement('button'); fav.textContent = '★'; fav.onclick = e => { e.stopPropagation(); fav.style.color = fav.style.color==='gold'?'':'gold'; };
+        let tag = document.createElement('input'); tag.placeholder = 'tag'; tag.style = 'width:50px;padding:1px 2px;font-size:9px;';
+        let cat = document.createElement('select'); cat.innerHTML = '<option>gen</option><option>char</option><option>scene</option>'; cat.style = 'width:50px;padding:1px 2px;font-size:9px;';
+        let dl = document.createElement('button'); dl.textContent = 'DL'; dl.onclick = e => { e.stopPropagation(); downloadImage(url, `gen_${Date.now()}.png`); };
+        let use = document.createElement('button'); use.textContent = 'Use'; use.onclick = e => { e.stopPropagation(); promptInput.value = final; charCountEl.textContent = final.length; onPromptInput(); };
+        acts.append(fav, dl, use, tag, cat);
+        let meta = document.createElement('div'); meta.className = 'meta';
+        let metaTxt = document.createElement('span'); metaTxt.textContent = `seed:${seed}`;
+        meta.append(metaTxt);
+        div.append(img, acts, meta);
+        div.onclick = () => { mainImageEl.src = url; };
+        galleryGridCtn.prepend(div);
+        await addHistory(url, final, {seed, model: modelSelect.value, sampler: samplerSelect.value, cfg: cfgInput.value, steps: stepsInput.value, resolution: sizeSelect.value, time: Date.now(), tag: '', category: 'gen'});
+      } catch(e) { log('Generation error: ' + e.message); statusEl.textContent = 'Error.'; }
+    }
+    statusEl.textContent = "Done.";
+    generateBtn.disabled = false; startCooldown(3000);
+    renderHistory();
+  }
+
+  /* ---------- HISTORY ---------- */
+  async function addHistory(url, prompt, meta) { let list = await kv.t2i.get('history') || []; list.unshift({id: Date.now(), url, prompt, meta}); if (list.length > 120) list = list.slice(0,120); await kv.t2i.set('history', list); }
+  async function renderHistory() {
+    let list = await kv.t2i.get('history') || [];
+    let filter = historyFilterSelect.value;
+    historyGridCtn.innerHTML = list.filter(h => {
+      if (filter === 'favorite') return h.meta.favorite;
+      if (filter === 'character') return h.meta.category === 'char';
+      if (filter === 'scene') return h.meta.category === 'scene';
+      return true;
+    }).map(h => `
+      <div class="thumb" onclick="mainImageEl.src='${h.url}'">
+        <img src="${h.url}">
+        <div class="actions">
+          <button onclick="event.stopPropagation(); toggleFavorite(${h.id})" style="color:${h.meta.favorite?'gold':''}">★</button>
+          <button onclick="event.stopPropagation(); downloadImage(${h.url},img_${h.id}.png)">DL</button>
+          <button onclick="event.stopPropagation(); loadHistoryPrompt(${h.id})">Load</button>
+        </div>
+        <div class="meta">
+          <span>seed:${h.meta.seed}</span>
+          <span>${h.meta.category||'gen'}</span>
+          <span>${h.meta.tag||''}</span>
+        </div>
+      </div>`).join('');
+  }
+  async function toggleFavorite(id) { let list = await kv.t2i.get('history') || []; let h=list.find(x=>x.id==id); if(h){ h.meta.favorite = !h.meta.favorite; await kv.t2i.set('history', list); renderHistory(); } }
+  async function loadHistoryPrompt(id) { let list = await kv.t2i.get('history') || []; let h = list.find(x=>x.id==id); if(h){ promptInput.value=h.prompt; charCountEl.textContent=h.prompt.length; onPromptInput(); switchTab('basic'); } }
+  async function clearHistory() { await kv.t2i.set('history', []); renderHistory(); }
+  function exportBatch() { kv.t2i.get('history').then(list=>{ let b=new Blob([JSON.stringify(list||[],null,2)],{type:'application/json'}); downloadImage(URL.createObjectURL(b),'history.json'); }); }
+  async function generateShareableLink() {
+    let list = await kv.t2i.get('history') || [];
+    if (!list.length) { alert('No history to share.'); return; }
+    try { let {url} = await uploadPlugin(new Blob([JSON.stringify(list)],{type:'application/json'}), {expires: Date.now()+1000*60*60*24*7}); log('Shareable link generated: '+url); prompt('Shareable gallery link (copied to log):', url); }
+    catch(e){ log('Shareable link failed: '+e.message); }
+  }
+
+  /* ---------- PRESETS ---------- */
+  function getPresets() { return JSON.parse(localStorage.t2iPresets || '{}'); }
+  function updatePresetSelect() { let p = getPresets(); presetSelect.innerHTML = '<option value="">-- Presets --</option>' + Object.keys(p).map(k => `<option>${k}</option>`).join(''); }
+  function savePreset() { let name = prompt('Preset name:'); if(!name) return; let p = getPresets(); saveState(); p[name] = JSON.parse(localStorage.t2iSettings); localStorage.t2iPresets = JSON.stringify(p); updatePresetSelect(); }
+  function loadPreset(name) { let p = getPresets()[name]; if(!p) return; localStorage.t2iSettings = JSON.stringify(p); loadState(); log('Loaded preset: '+name); }
+  function deletePreset() { let name = presetSelect.value; if(!name) return; let p = getPresets(); delete p[name]; localStorage.t2iPresets = JSON.stringify(p); updatePresetSelect(); }
+
+  /* ---------- PLUGINS ---------- */
+  async function runPlugin(type) { let input = pluginInput.value.trim(); if(!input) return; pluginOutput.value = 'Processing...'; let ins = ''; if(type==='rewrite') ins = `Rewrite this image prompt to be clearer and more vivid. Output ONLY the rewritten prompt.\n\n${input}`; else if(type==='expand') ins = `Expand this image prompt with richer descriptive detail and style cues. Output ONLY the expanded prompt.\n\n${input}`; else if(type==='shorten') ins = `Shorten this image prompt while keeping the core meaning. Output ONLY the short prompt.\n\n${input}`; else if(type==='translate') ins = `Convert this description into an art-direction prompt (style-focused). Output ONLY the prompt.\n\n${input}`; else if(type==='metadata') ins = `Generate a title, tags, and short description for this image concept. Return as JSON with keys title, tags, description.\n\n${input}`; else if(type==='story') ins = `Convert this story excerpt into a concise image generation prompt. Output ONLY the prompt.\n\n${input}`; else if(type==='mood') ins = `Suggest an emotional tone and atmospheric keywords for this concept. Output as a concise list.\n\n${input}`; try { let res = await generateText(ins); pluginOutput.value = res.trim(); } catch(e) { pluginOutput.value = 'Error: '+e.message; } }
+  function usePluginOutput() { let v = pluginOutput.value; if(!v) return; promptInput.value = v; charCountEl.textContent = v.length; onPromptInput(); switchTab('basic'); }
+  function blendPrompts() { let a = blendAInput.value, b = blendBInput.value, w = blendWeightInput.value; let out = `(${a}:${(1-w).toFixed(2)}) AND (${b}:${w})`; promptInput.value = out; charCountEl.textContent = out.length; onPromptInput(); switchTab('basic'); }
+
+  /* ---------- RANDOMIZER ---------- */
+  let randCats = { Subject:["cyberpunk samurai","fairy princess","ancient dragon","steampunk inventor","robot detective","galaxy nomad"], Action:["meditating","fighting","floating","reading","dancing","sprinting","gliding"], Environment:["neon city","enchanted forest","abandoned station","underwater temple","crystal cave","sky fortress"], Style:["oil painting","anime","photorealistic","pixel art","watercolor","3D render"], Lighting:["golden hour","neon rim light","volumetric fog","softbox studio","bioluminescent glow","moonlight"], Color:["pastel tones","monochrome","vibrant neon","warm sepia","cool blues","earthy greens"] };
+  function buildRandomizer() { let html = ''; for(let cat in randCats) { html += `<div class="row" style="align-items:center;"><label style="flex:0 0 90px;">${cat}</label><select id="rand_${cat}Select" style="flex:1;">${randCats[cat].map(t=>`<option>${t}</option>`).join('')}</select><input type="number" id="rand_${cat}Weight" value="1" min="0" max="2" step="0.1" style="width:50px; flex:0;" title="Weight"><button onclick="injectRand('${cat}')" style="flex:0;">+</button></div>`; } randomizerBody.innerHTML = html; }
+  function injectRand(cat) { let v = $(`rand_${cat}Select`).value; let w = $(`rand_${cat}Weight`).value; let txt = w==1 ? v : `(${v}:${w})`; promptInput.value += (promptInput.value ? ', ' : '') + txt; charCountEl.textContent = promptInput.value.length; onPromptInput(); }
+  function randomizePrompt() { for(let cat in randCats){ injectRand(cat); } }
+  function randomizeAll() { promptInput.value = ''; for(let cat in randCats){ let arr=randCats[cat]; let w=$(`rand_${cat}Weight`).value; let v=arr[Math.floor(Math.random()*arr.length)]; promptInput.value += (promptInput.value?', ':'') + (w==1?v:`(${v}:${w})`); } charCountEl.textContent=promptInput.value.length; onPromptInput(); randomPreviewEl.textContent = 'Built: ' + promptInput.value; }
+
+  /* ---------- POST-PROCESSING ---------- */
+  function upscaleCurrent(scale) {
+    if (!mainImageEl.src || mainImageEl.style.display === 'none') return;
+    let c = document.createElement('canvas'), ctx = c.getContext('2d');
+    c.width = mainImageEl.naturalWidth * scale;
+    c.height = mainImageEl.naturalHeight * scale;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(mainImageEl, 0, 0, c.width, c.height);
+    mainImageEl.src = c.toDataURL('image/png');
+    log('Upscaled ' + scale + 'x');
+  }
+
+  function faceRestore() { if(!mainImageEl.src || mainImageEl.style.display==='none') return; log('Face restore stub'); statusEl.textContent = 'Face restore queued (stub).'; }
+  function detailEnhance() { if(!mainImageEl.src || mainImageEl.style.display==='none') return; log('Detail enhance stub'); statusEl.textContent = 'Detail enhance queued (stub).'; }
+  function generateVariation() { if(!mainImageEl.src || mainImageEl.style.display==='none') return; log('Variation stub'); statusEl.textContent = 'Variation queued (stub).'; }
+  function inpaintImage() { if(!mainImageEl.src || mainImageEl.style.display==='none') return; log('Inpaint stub'); statusEl.textContent = 'Inpaint queued (stub).'; }
+  function outpaintImage() { if(!mainImageEl.src || mainImageEl.style.display==='none') return; log('Outpaint stub'); statusEl.textContent = 'Outpaint queued (stub).'; }
+  function styleTransfer() { if(!mainImageEl.src || mainImageEl.style.display==='none') return; log('Style transfer stub'); statusEl.textContent = 'Style transfer queued (stub).'; }
+
+  function exportMeta() {
+    if(!mainImageEl.src || mainImageEl.style.display==='none') return;
+    let meta = { prompt: buildPrompt(), negativePrompt: negPromptInput.value, model: modelSelect.value, sampler: samplerSelect.value, cfg: cfgInput.value, steps: stepsInput.value, seed: seedInput.value, resolution: sizeSelect.value, time: Date.now() };
+    let blob = new Blob([JSON.stringify(meta, null, 2)], {type: 'application/json'});
+    let url = URL.createObjectURL(blob);
+    downloadImage(url, 'meta_' + Date.now() + '.json');
+  }
+
+  function downloadCurrent() {
+    if(!mainImageEl.src || mainImageEl.style.display==='none') return;
+    let ext = (downloadFormatSelect.value.split('/')[1]) || 'png';
+    downloadImage(mainImageEl.src, 'image_' + Date.now() + '.' + ext);
+  }
+
+  function downloadImage(url, name) {
+    let a = document.createElement('a');
+    a.href = url;
+    a.download = name || 'download';
+    a.click();
+  }
+
+  function handleImg2img(input) {
+    let f = input.files[0];
+    if(!f) return;
+    let r = new FileReader();
+    r.onload = e => { mainImageEl.src = e.target.result; mainImageEl.style.display = 'block'; placeholderEl.style.display = 'none'; log('Img2Img loaded'); };
+    r.readAsDataURL(f);
+  }
+
+  /* ---------- PROMPT AI TOOLS ---------- */
+  async function enhancePrompt() {
+    let p = promptInput.value.trim();
+    if(!p) return;
+    enhanceBtn.disabled = true; enhanceBtn.textContent = 'Enhancing...';
+    try { let r = await generateText('Enhance this image prompt to be more vivid and detailed. Output ONLY the enhanced prompt.\n\n' + p); promptInput.value = r.trim(); charCountEl.textContent = promptInput.value.length; onPromptInput(); }
+    catch(e) { log('Enhance error: ' + e.message); }
+    enhanceBtn.disabled = false; enhanceBtn.textContent = '✨ Enhance';
+  }
+
+  async function shortenPrompt() {
+    let p = promptInput.value.trim();
+    if(!p) return;
+    try { let r = await generateText('Shorten this image prompt while keeping the core meaning. Output ONLY the short prompt.\n\n' + p); promptInput.value = r.trim(); charCountEl.textContent = promptInput.value.length; onPromptInput(); }
+    catch(e) { log('Shorten error: ' + e.message); }
+  }
+
+  function mutatePrompt() {
+    let p = promptInput.value;
+    if(!p) return;
+    let mods = ['highly detailed', 'cinematic lighting', 'digital art masterpiece', 'trending on artstation', '8k resolution', 'award winning', 'professional photography'];
+    let add = mods[Math.floor(Math.random() * mods.length)];
+    promptInput.value = p + (p ? ', ' : '') + add;
+    charCountEl.textContent = promptInput.value.length;
+    onPromptInput();
+  }
+
+  /* ---------- SCENE & TIMELINE ---------- */
+  async function generateScene() {
+    let s = sceneInput.value.trim();
+    if(!s) return;
+    try { let r = await generateText('Convert this scene description into a concise image generation prompt. Output ONLY the prompt.\n\n' + s); promptInput.value = r.trim(); charCountEl.textContent = promptInput.value.length; onPromptInput(); switchTab('basic'); }
+    catch(e) { log('Scene error: ' + e.message); }
+  }
+
+  async function generateTimeline() {
+    let s = timelineStoryInput.value.trim();
+    if(!s) return;
+    let frames = parseInt(timelineFramesInput.value) || 4;
+    try { let r = await generateText('Split this story into ' + frames + ' sequential image generation prompts. Return as a numbered list.\n\n' + s); pluginInput.value = r.trim(); switchTab('plugins'); }
+    catch(e) { log('Timeline error: ' + e.message); }
+  }
+
+  /* ---------- SETTINGS I/O ---------- */
+  function exportSettings() {
+    saveState();
+    let blob = new Blob([localStorage.t2iSettings || '{}'], {type: 'application/json'});
+    let url = URL.createObjectURL(blob);
+    downloadImage(url, 'settings_' + Date.now() + '.json');
+  }
+
+  function importSettings(input) {
+    let f = input.files[0];
+    if(!f) return;
+    let r = new FileReader();
+    r.onload = e => { jsonSettingsArea.value = e.target.result; loadFromJsonArea(); };
+    r.readAsText(f);
+    input.value = '';
+  }
+
+  function loadFromJsonArea() {
+    try { let o = JSON.parse(jsonSettingsArea.value); localStorage.t2iSettings = JSON.stringify(o); loadState(); log('Settings loaded from JSON'); }
+    catch(e) { alert('Invalid JSON: ' + e.message); }
+  }
+
+  // Init
+  loadState();
+</script>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>character-metadata-tools — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Character Metadata Plugin for Perchance
+Features:
+  - URL Fetcher: Fetches content from URLs; parses JSON directly or uses AI for unstructured text.
+  - JSON Editor: Full JSON editing in the output textarea.
+  - JSON Formatter: Pretty-prints the current JSON.
+  - JSON Validator: Structural validation against the selected Normal or NSFW schema.
+-->
+
+<div id="mainCtn" style="max-width:1200px; margin:0 auto; padding:20px; text-align:left;">
+  <h2>Character Metadata Tools</h2>
+
+  <div id="controlsCtn" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+    <textarea id="urlsInput" placeholder="Enter URLs (one per line)..." style="flex:1 1 300px; min-height:60px; font-family:monospace;"></textarea>
+    <div id="buttonsCtn" style="display:flex; flex-direction:column; gap:6px; min-width:160px;">
+      <select id="schemaSelect" style="padding:6px;">
+        <option value="normal">Normal Schema</option>
+        <option value="nsfw">NSFW Schema</option>
+      </select>
+      <button id="fetchBtn" onclick="fetchData()">Fetch & Parse URLs</button>
+      <button id="formatBtn" onclick="formatJson()">Format JSON</button>
+      <button id="validateBtn" onclick="validateJson()">Validate JSON</button>
+      <button id="copyBtn" onclick="copyJson()">Copy JSON</button>
+    </div>
+  </div>
+
+  <div id="loadingEl" hidden style="margin-bottom:8px; color:#555; font-size:14px;">⏳ Loading...</div>
+  <textarea id="jsonEditor" placeholder="JSON output will appear here..." style="width:100%; min-height:500px; font-family:monospace; font-size:13px; box-sizing:border-box;"></textarea>
+  <pre id="statusEl" style="margin-top:8px; white-space:pre-wrap; font-size:13px;"></pre>
+</div>
+
+<style>
+  button { padding:6px 12px; cursor:pointer; }
+  button:hover { background-color:#e0e0e0; }
+  select { cursor:pointer; }
+</style>
+
+<script>
+  let normalSchema = {
+    "$schema":"ultra-detailed-character-metadata-v2.schema.json",
+    "$id":"Enhanced_Ultra_Detailed_Character_Metadata_Schema",
+    "description":"An enhanced schema for ultra-detailed character metadata, version 2.3, with expanded fields for comprehensive character profiling.",
+    "version":"2.3",
+    "character":[{
+      "identity":{"name":"","aliases":[],"universe":"","origin":"","type":"","pronouns":[],"title":"","birth_date":"","death_date":"","languages":[],"voice_actor":"","concept_artist":""},
+      "appearance":{"species":"","subspecies":"","gender":"","sex":"","age":"","height":"","weight":"","build":"","posture":"","hair":{"color":"","length":"","style":"","texture":""},"eyes":{"color":"","shape":"","expression":""},"skin":{"color":"","texture":"","temperature":"","scars":[]},"distinctive_features":[],"markings":[],"mutations":[],"body_modifications":[],"clothing_style":[],"scent":"","voice":""},
+      "personality":{"traits_positive":[],"traits_negative":[],"traits_neutral":[],"archetype":"","temperament":"","moral_alignment":"","motivations":[],"fears":[],"values":[],"quirks":[],"cognitive_biases":[],"emotional_triggers":[],"mental_illnesses":[],"coping_mechanisms":[]},
+      "background":{"role":"","alignment":"","occupation":"","previous_occupations":[],"education":"","faction":"","homeworld":"","current_residence":"","economic_status":"","notable_events":[],"backstory_summary":"","secrets":[]},
+      "skills":{"combat_style":[],"abilities":[],"magic_type":"","power_level":"","specializations":[],"weaknesses":[],"training":[],"learning_style":"","iq":"","eq":"","adaptability":""},
+      "relationships":{"allies":[],"rivals":[],"enemies":[],"family":[],"romantic_history":[],"current_partners":[],"friends":[],"acquaintances":[],"mentors":[],"students":[],"favor_status":"","trust_level":""},
+      "equipment":{"weapons":[],"items":[],"armor":[],"signature_item":"","inventory":[],"wealth":"","technology_access":""},
+      "meta":{"genre":[],"tags":[],"inspiration":[],"tropes":[],"archetypes":[],"symbolism":[],"leith_motif":"","themes":[]},
+      "physiology":{"metabolism":"","sleep_patterns":"","eating_habits":"","immune_system":"","healing_factor":"","pain_tolerance":"","drug_resistance":"","poison_resistance":"","disease_resistance":"","temperature_tolerance":"","radiation_resistance":"","biological_rhythms":[]},
+      "psychology":{"intelligence_type":"","memory_capacity":"","attention_span":"","learning_rate":"","decision_making_style":"","problem_solving_approach":"","creativity_level":"","empathy_level":"","psychic_defenses":[]},
+      "game_stats":{"charisma":"","strength":"","intelligence":"","dexterity":"","constitution":"","wisdom":"","luck":"","perception":"","willpower":""},
+      "misc":{"theme_song":"","catchphrase":"","signature_move":"","hobbies":[],"pet_peeves":[],"guilty_pleasures":[],"bucket_list":[],"unusual_habits":[],"collection":[]}
+    }]
+  };
+
+  let nsfwSchema = JSON.parse(JSON.stringify(normalSchema));
+  nsfwSchema.$schema = "ultra-detailed-character-metadata-nsfw-v2.schema.json";
+  nsfwSchema.$id = "Enhanced_Ultra_Detailed_Character_Metadata_NSFW_Schema";
+  nsfwSchema.description = "An enhanced schema for ultra-detailed character metadata, version 2.3, with expanded fields for comprehensive character profiling, including NSFW content.";
+  nsfwSchema.character[0].nsfw = [{
+    "sexual_orientation":"",
+    "relationship_status":"",
+    "partner_preferences":{"gender":[],"species":[],"personality_traits":[],"physical_traits":[]},
+    "kinks":[],
+    "fetishes":[],
+    "turn_offs":[],
+    "sexual_experience":"",
+    "libido":"",
+    "attitude_toward_sex":"",
+    "sexual_health":{"std_status":"","contraception":"","fertility":""},
+    "explicit_content":{"allowed_scenarios":[],"limits":[],"aftercare_preferences":[]},
+    "bodily_fluids":{"blood":"","sweat":"","saliva":"","semen":"","vaginal_fluids":"","urine":"","feces":""},
+    "consent_dynamics":{"initiation_style":"","power_exchange":"","safeword":""}
+  }];
+
+  function extractJsonBlock(str) {
+    str = str.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    let firstBrace = str.indexOf("{");
+    let lastBrace = str.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) return str.slice(firstBrace, lastBrace + 1);
+    let firstBracket = str.indexOf("[");
+    let lastBracket = str.lastIndexOf("]");
+    if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) return str.slice(firstBracket, lastBracket + 1);
+    return str;
+  }
+
+  function cleanJson(str) {
+    return str
+      .replace(/\/\/.*$/gm, "") // remove single-line comments
+      .replace(/\/\*[\s\S]*?\*\//g, "") // remove multi-line comments
+      .replace(/,\s*([}\]])/g, "$1"); // remove trailing commas
+  }
+
+  async function fetchData() {
+    let urls = urlsInput.value.split("\n").map(s => s.trim()).filter(Boolean);
+    if (!urls.length) { statusEl.textContent = "Enter at least one URL."; statusEl.style.color = "red"; return; }
+    loadingEl.hidden = false;
+    statusEl.textContent = "Fetching...";
+    statusEl.style.color = "";
+    let combined = "";
+    let parsedJson = null;
+
+    try {
+      for (let url of urls) {
+        let res = await superFetch(url);
+        let text = await res.text();
+        try {
+          parsedJson = JSON.parse(text);
+          break;
+        } catch (e) {
+          combined += "\n\n" + text;
+        }
+      }
+
+      if (parsedJson) {
+        jsonEditor.value = JSON.stringify(parsedJson, null, 2);
+        statusEl.textContent = "Fetched and parsed JSON.";
+        statusEl.style.color = "green";
+      } else if (combined.trim()) {
+        statusEl.textContent = "Parsing unstructured text with AI...";
+        let template = schemaSelect.value === "nsfw" ? nsfwSchema.character[0] : normalSchema.character[0];
+        let prompt = `Parse the following text into a JSON object that matches this schema exactly. Use empty strings or empty arrays for unknown fields. Return ONLY the JSON object with double-quoted property names, no markdown, no explanation.\n\nSchema Template:\n${JSON.stringify(template, null, 2)}\n\nText:\n${combined.slice(0, 8000)}`;
+        let result = await generateText(prompt);
+        let extracted = extractJsonBlock(result);
+        let aiParsed = null;
+        try {
+          aiParsed = JSON.parse(extracted);
+        } catch (firstErr) {
+          try {
+            aiParsed = JSON.parse(cleanJson(extracted));
+          } catch (secondErr) {
+            throw new Error("AI returned invalid JSON. You may need to paste/adjust manually.\n\nRaw snippet:\n" + result.slice(0, 600));
+          }
+        }
+        jsonEditor.value = JSON.stringify(aiParsed, null, 2);
+        statusEl.textContent = "AI parsing complete.";
+        statusEl.style.color = "green";
+      } else {
+        statusEl.textContent = "No content fetched.";
+        statusEl.style.color = "red";
+      }
+    } catch (err) {
+      statusEl.textContent = "Error: " + err.message;
+      statusEl.style.color = "red";
+    } finally {
+      loadingEl.hidden = true;
+    }
+  }
+
+  function formatJson() {
+    try {
+      let obj = JSON.parse(jsonEditor.value);
+      jsonEditor.value = JSON.stringify(obj, null, 2);
+      statusEl.textContent = "JSON formatted.";
+      statusEl.style.color = "green";
+    } catch (e) {
+      statusEl.textContent = "Format error: " + e.message;
+      statusEl.style.color = "red";
+    }
+  }
+
+  function validateJson() {
+    try {
+      let data = JSON.parse(jsonEditor.value);
+      let template = schemaSelect.value === "nsfw" ? nsfwSchema.character[0] : normalSchema.character[0];
+      let target = data;
+      if (data.character && Array.isArray(data.character)) target = data.character[0];
+      let errors = validateObject(target, template, "");
+      if (!errors.length) {
+        statusEl.textContent = "Validation passed.";
+        statusEl.style.color = "green";
+      } else {
+        statusEl.textContent = "Validation errors:\n" + errors.join("\n");
+        statusEl.style.color = "red";
+      }
+    } catch (e) {
+      statusEl.textContent = "Validation error: " + e.message;
+      statusEl.style.color = "red";
+    }
+  }
+
+  function validateObject(data, template, path) {
+    let errors = [];
+    if (typeof data !== "object" || data === null) return [path + " should be an object"];
+    for (let key in template) {
+      let expected = template[key];
+      let actual = data[key];
+      let curPath = path ? path + "." + key : key;
+      if (actual === undefined) { errors.push(curPath + " is missing"); continue; }
+      let expType = Array.isArray(expected) ? "array" : typeof expected;
+      let actType = Array.isArray(actual) ? "array" : typeof actual;
+      if (expType !== actType) { errors.push(curPath + " should be " + expType + ", got " + actType); continue; }
+      if (expType === "object" && expected !== null) {
+        errors = errors.concat(validateObject(actual, expected, curPath));
+      } else if (expType === "array" && expected.length > 0 && actual.length > 0) {
+        let itemTemplate = expected[0];
+        let itemType = Array.isArray(itemTemplate) ? "array" : typeof itemTemplate;
+        for (let i = 0; i < actual.length; i++) {
+          let item = actual[i];
+          let actItemType = Array.isArray(item) ? "array" : typeof item;
+          if (itemType !== actItemType) {
+            errors.push(curPath + "[" + i + "] should be " + itemType);
+          } else if (itemType === "object" && item !== null) {
+            errors = errors.concat(validateObject(item, itemTemplate, curPath + "[" + i + "]"));
+          }
+        }
+      }
+    }
+    return errors;
+  }
+
+  function copyJson() {
+    navigator.clipboard.writeText(jsonEditor.value).then(() => {
+      statusEl.textContent = "Copied to clipboard.";
+      statusEl.style.color = "blue";
+    }).catch(err => {
+      statusEl.textContent = "Copy failed: " + err.message;
+      statusEl.style.color = "red";
+    });
+  }
+</script>
+</body>
+</html>

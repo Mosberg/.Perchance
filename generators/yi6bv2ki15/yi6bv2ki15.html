@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>yi6bv2ki15 — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div style="font-family:sans-serif; padding:10px; user-select:none;">
+  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; justify-content:center;">
+    <div id="paletteCtn" style="display:flex; gap:4px;"></div>
+    <button id="eraserBtn" onclick="setTool('eraser')" style="padding:4px 8px;">Eraser</button>
+    <button id="bucketBtn" onclick="setTool('bucket')" style="padding:4px 8px;">Bucket</button>
+    <button id="clearBtn" onclick="clearGrid()" style="padding:4px 8px;">Clear</button>
+    <button id="saveBtn" onclick="saveImage()" style="padding:4px 8px;">Save</button>
+    <label>Size: <input id="sizeInput" type="number" value="15" min="1" max="100" style="width:50px;"></label>
+    <button id="resizeBtn" onclick="resizeGrid()" style="padding:4px 8px;">Resize</button>
+    <button id="cameraBtn" onclick="openCamera()" style="padding:4px 8px;">📷 Camera</button>
+    <button id="shareBtn" onclick="sharePainting()" style="padding:4px 8px;">🎨 Share to Gallery</button>
+    <input id="captionInput" type="text" placeholder="caption (optional)" maxlength="60" style="padding:4px 6px; width:140px;">
+    <label style="display:flex; align-items:center; gap:4px;">👤 <input id="usernameInput" type="text" placeholder="username" maxlength="40" style="padding:4px 6px; width:110px;"></label>
+  </div>
+  <div id="gridCtn" style="display:grid; gap:1px; background:#bbb; border:1px solid #999; width:fit-content; margin:0 auto;"></div>
+
+  <div style="max-width:900px; margin:18px auto 0; padding:0 10px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <h3 style="margin:0; font-family:sans-serif;">🌍 Public Gallery <span id="galleryCountEl" style="font-weight:normal; color:#888; font-size:14px;"></span></h3>
+      <button id="refreshGalleryBtn" onclick="refreshGallery()" style="padding:4px 8px;">↻ Refresh</button>
+    </div>
+    <div id="galleryStatusEl" style="font-family:sans-serif; color:#888; font-size:13px; padding:8px 0;">Loading gallery…</div>
+    <div id="galleryCtn" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:10px;"></div>
+  </div>
+</div>
+
+<script type="text/x-server-plugin">
+  // Gallery state layout in `state` (Uint8Array):
+  //   bytes 0-3: big-endian uint32 = length of UTF-8 JSON payload
+  //   bytes 4..: UTF-8 JSON of an array of {u: url, c: caption, n: nick, t: timestamp}
+  // Zero-initialized state => length 0 => empty gallery.
+
+  const MAX_ENTRIES = 5000;
+  const MAX_URL_LEN = 200;
+  const MAX_CAP_LEN = 160;
+  const MAX_NICK_LEN = 40;
+  const MAX_STATE_BYTES = 4 * 1024 * 1024; // 4 MiB cap for gallery JSON
+
+  function isCountryCode(cc) {
+    return typeof cc === "string" && /^[A-Za-z]{2}$/.test(cc);
+  }
+
+  function readLen() {
+    return (state[0] << 24) | (state[1] << 16) | (state[2] << 8) | state[3];
+  }
+  function writeLen(n) {
+    state[0] = (n >>> 24) & 255;
+    state[1] = (n >>> 16) & 255;
+    state[2] = (n >>> 8) & 255;
+    state[3] = n & 255;
+  }
+
+  // Minimal UTF-8 decode/encode (TextEncoder/Decoder unavailable on server).
+  function utf8Decode(bytes, off, len) {
+    let s = "", i = off, end = off + len;
+    while (i < end) {
+      let b = bytes[i++];
+      if (b < 0x80) s += String.fromCharCode(b);
+      else if (b < 0xE0) { s += String.fromCharCode(((b & 0x1F) << 6) | (bytes[i++] & 0x3F)); }
+      else if (b < 0xF0) { s += String.fromCharCode(((b & 0x0F) << 12) | ((bytes[i++] & 0x3F) << 6) | (bytes[i++] & 0x3F)); }
+      else { let cp = ((b & 0x07) << 18) | ((bytes[i++] & 0x3F) << 12) | ((bytes[i++] & 0x3F) << 6) | (bytes[i++] & 0x3F); cp -= 0x10000; s += String.fromCharCode(0xD800 + (cp >> 10), 0xDC00 + (cp & 0x3FF)); }
+    }
+    return s;
+  }
+
+  function loadGallery() {
+    let len = readLen();
+    if (len <= 0 || len > MAX_STATE_BYTES) return [];
+    let json = utf8Decode(state, 4, len);
+    try { let arr = JSON.parse(json); return Array.isArray(arr) ? arr : []; }
+    catch (e) { return []; }
+  }
+
+  function saveGallery(arr) {
+    let json = JSON.stringify(arr);
+    // encode UTF-8 manually
+    let bytes = [];
+    for (let i = 0; i < json.length; i++) {
+      let c = json.charCodeAt(i);
+      if (c < 0x80) bytes.push(c);
+      else if (c < 0x800) { bytes.push(0xC0 | (c >> 6), 0x80 | (c & 0x3F)); }
+      else if (c < 0xD800 || c >= 0xE000) { bytes.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F)); }
+      else { i++; let c2 = json.charCodeAt(i); let cp = 0x10000 + (((c & 0x3FF) << 10) | (c2 & 0x3FF)); bytes.push(0xF0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3F), 0x80 | ((cp >> 6) & 0x3F), 0x80 | (cp & 0x3F)); }
+    }
+    if (bytes.length > MAX_STATE_BYTES) bytes = bytes.slice(0, MAX_STATE_BYTES);
+    writeLen(bytes.length);
+    for (let i = 0; i < bytes.length; i++) state[4 + i] = bytes[i];
+  }
+
+  function isValidUploadUrl(u) {
+    return typeof u === "string" && u.length <= MAX_URL_LEN && /^https:\/\/[\w.-]*user\.uploads\.dev\//.test(u);
+  }
+  function clamp(s, n) { s = typeof s === "string" ? s : ""; return s.length > n ? s.slice(0, n) : s; }
+
+  self.onopen = ({ conn }) => { conn.subscribe("gallery"); };
+
+  self.onclose = ({ conn }) => {};
+
+  self.rpc = {
+    getGallery({ conn }, data) {
+      let arr = loadGallery();
+      return JSON.stringify({ type: "gallery", items: arr });
+    },
+    addPainting({ conn }, data) {
+      let parsed = {};
+      try { parsed = JSON.parse(typeof data === "string" ? data : ""); } catch (e) { return JSON.stringify({ type: "error", msg: "bad data" }); }
+      let url = clamp(parsed.u, MAX_URL_LEN);
+      if (!isValidUploadUrl(url)) return JSON.stringify({ type: "error", msg: "invalid image url" });
+      let entry = { u: url, c: clamp(parsed.c, MAX_CAP_LEN), n: clamp(parsed.n, MAX_NICK_LEN), t: Date.now(), cc: isCountryCode(parsed.cc) ? parsed.cc.toUpperCase() : "" };
+      let arr = loadGallery();
+      arr.push(entry);
+      if (arr.length > MAX_ENTRIES) arr = arr.slice(arr.length - MAX_ENTRIES);
+      saveGallery(arr);
+      let payload = JSON.stringify({ type: "art", item: entry });
+      pubsub.publish("gallery", payload);
+      return JSON.stringify({ type: "ok" });
+    },
+  };
+
+  self.onmessage = ({ conn, data }) => {};
+</script>
+
+<div id="shareLoadingEl" hidden style="position:fixed; inset:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:9999;">
+  <div style="background:#fff; padding:20px 28px; border-radius:10px; font-family:sans-serif; font-size:15px;">⏳ Uploading painting…</div>
+</div>
+
+<style>
+  .cell { width:30px; height:30px; background:#fff; cursor:pointer; }
+</style>
+
+<script>
+  let colors = ['#FF9900','#3B82F6','#FFFFFF','#8B4513','#FFFF00','#9333EA','#EF4444','#000000','#22C55E','#EC4899']; // 🟧🟦⬜🟫🟨🟪🟥⬛🟩🩷
+  let emojis = ['🟧','🟦','⬜️','🟫','🟨','🟪','🟥','⬛️','🟩','🩷'];
+  let currentColor = colors[0];
+  let currentTool = 'pen';
+  let size = 15;
+  let gridEls = [];
+  let isDrawing = false;
+
+  emojis.forEach((e,i) => {
+    let b = document.createElement('button');
+    b.textContent = e;
+    b.style.cssText = 'font-size:18px; padding:2px 6px; cursor:pointer; border:2px solid transparent; background:#f0f0f0;';
+    b.onclick = () => { currentTool='pen'; currentColor=colors[i]; highlightTool(b); };
+    paletteCtn.appendChild(b);
+  });
+
+  function highlightTool(btn) {
+    [...paletteCtn.children].forEach(b => b.style.border='2px solid transparent');
+    eraserBtn.style.border='2px solid transparent';
+    bucketBtn.style.border='2px solid transparent';
+    if(btn) btn.style.border='2px solid #000';
+  }
+
+  function setTool(t) {
+    currentTool = t;
+    highlightTool(t==='eraser'?eraserBtn:(t==='bucket'?bucketBtn:null));
+  }
+
+  function makeGrid() {
+    gridCtn.innerHTML='';
+    gridCtn.style.gridTemplateColumns = `repeat(${size}, 30px)`;
+    gridEls = [];
+    for(let y=0; y<size; y++) {
+      let row = [];
+      for(let x=0; x<size; x++) {
+        let cell = document.createElement('div');
+        cell.className='cell';
+        cell.onmousedown = (e) => { e.preventDefault(); startDraw(x,y); };
+        cell.onmouseenter = () => { if(isDrawing) drawCell(x,y); };
+        gridCtn.appendChild(cell);
+        row.push(cell);
+      }
+      gridEls.push(row);
+    }
+  }
+  document.addEventListener('mouseup', () => isDrawing=false);
+
+  function startDraw(x,y) {
+    isDrawing = true;
+    if(currentTool==='bucket') { floodFill(x,y); isDrawing=false; }
+    else drawCell(x,y);
+  }
+
+  function drawCell(x,y) {
+    if(currentTool==='eraser') gridEls[y][x].style.backgroundColor='#fff';
+    else gridEls[y][x].style.backgroundColor=currentColor;
+  }
+
+  function rgbToHex(s) {
+    if(!s) return '#ffffff';
+    if(s[0]==='#') return s.toLowerCase();
+    let m = s.match(/\d+/g);
+    if(!m) return '#ffffff';
+    return '#' + m.slice(0,3).map(v => (+v).toString(16).padStart(2,'0')).join('');
+  }
+
+  function floodFill(sx,sy) {
+    let target = rgbToHex(gridEls[sy][sx].style.backgroundColor);
+    let fill = currentColor.toLowerCase();
+    if(target===fill) return;
+    let stack = [[sx,sy]];
+    while(stack.length) {
+      let [x,y] = stack.pop();
+      if(x<0 || x>=size || y<0 || y>=size) continue;
+      if(rgbToHex(gridEls[y][x].style.backgroundColor)!==target) continue;
+      gridEls[y][x].style.backgroundColor = currentColor;
+      stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
+    }
+  }
+
+  function clearGrid() {
+    for(let y=0; y<size; y++) for(let x=0; x<size; x++) gridEls[y][x].style.backgroundColor='#fff';
+  }
+
+  function resizeGrid() {
+    let v = parseInt(sizeInput.value);
+    if(v && v>0 && v<=100) { size=v; makeGrid(); }
+  }
+
+  function saveImage() {
+    let cvs = document.createElement('canvas');
+    cvs.width = size*30; cvs.height = size*30;
+    let ctx = cvs.getContext('2d');
+    for(let y=0; y<size; y++) {
+      for(let x=0; x<size; x++) {
+        ctx.fillStyle = gridEls[y][x].style.backgroundColor || '#fff';
+        ctx.fillRect(x*30, y*30, 30, 30);
+      }
+    }
+    let a = document.createElement('a');
+    a.download = 'pixel-art.png';
+    a.href = cvs.toDataURL();
+    a.click();
+  }
+
+  makeGrid();
+  highlightTool(paletteCtn.children[0]);
+
+  // ---- Username (persisted) ----
+  try { usernameInput.value = localStorage.getItem('pixel_art_username') || ''; } catch (e) {}
+  usernameInput.addEventListener('input', () => {
+    try { localStorage.setItem('pixel_art_username', usernameInput.value.trim().slice(0, 40)); } catch (e) {}
+  });
+
+  // ---- Country detection (for gallery flags) ----
+  let userCountryCode = '';
+  try { userCountryCode = localStorage.getItem('pixel_art_country') || ''; } catch (e) {}
+  if (!userCountryCode) {
+    fetch('https://get.geojs.io/v1/ip/country.json')
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.country && /^[A-Za-z]{2}$/.test(d.country)) {
+          userCountryCode = d.country.toUpperCase();
+          try { localStorage.setItem('pixel_art_country', userCountryCode); } catch (e) {}
+        }
+      })
+      .catch(() => {});
+  }
+  function countryCodeToFlag(cc) {
+    if (!cc || cc.length !== 2) return '';
+    return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+  }
+
+  // ---- Camera -> pixel art ----
+  let camStream = null;
+  let camModal = null;
+
+  function openCamera() {
+    if (camModal) return;
+    (async () => {
+      try {
+        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      } catch (err) {
+        alert('Could not access camera: ' + err.message);
+        return;
+      }
+      camModal = document.createElement('div');
+      camModal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.8); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:9999; gap:12px;';
+      let mediaRow = document.createElement('div');
+      mediaRow.style.cssText = 'display:flex; gap:14px; align-items:center; flex-wrap:wrap; justify-content:center;';
+      let video = document.createElement('video');
+      video.srcObject = camStream;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.style.cssText = 'max-width:45vw; max-height:70vh; border:3px solid #fff;';
+      let prevCvs = document.createElement('canvas');
+      prevCvs.width = size; prevCvs.height = size;
+      let prevCss = Math.min(45 * window.innerWidth / 100, 320);
+      prevCvs.style.cssText = `width:${prevCss}px; height:${prevCss}px; image-rendering:pixelated; border:3px solid #EC4899; background:#000;`;
+      let prevLabel = document.createElement('div');
+      prevLabel.textContent = 'pixel preview';
+      prevLabel.style.cssText = 'color:#fff; font-size:12px; text-align:center;';
+      let prevWrap = document.createElement('div');
+      prevWrap.style.cssText = 'display:flex; flex-direction:column; align-items:center; gap:4px;';
+      prevWrap.appendChild(prevCvs);
+      prevWrap.appendChild(prevLabel);
+      mediaRow.appendChild(video);
+      mediaRow.appendChild(prevWrap);
+      camModal.appendChild(mediaRow);
+      let pctx = prevCvs.getContext('2d');
+      let rafId = null;
+      function tick() {
+        if (!camStream) return;
+        drawToCtx(pctx, video);
+        rafId = requestAnimationFrame(tick);
+      }
+      let row = document.createElement('div');
+      row.style.cssText = 'display:flex; gap:10px;';
+      let snapBtn = document.createElement('button');
+      snapBtn.textContent = '📸 Capture';
+      snapBtn.style.cssText = 'padding:8px 16px; font-size:16px;';
+      let closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕ Close';
+      closeBtn.style.cssText = 'padding:8px 16px; font-size:16px;';
+      row.appendChild(snapBtn);
+      row.appendChild(closeBtn);
+      camModal.appendChild(row);
+      document.body.appendChild(camModal);
+
+      snapBtn.onclick = () => { captureFrame(video); closeCamera(); };
+      closeBtn.onclick = closeCamera;
+      video.onloadedmetadata = () => tick();
+    })();
+  }
+
+  function closeCamera() {
+    if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+    if (camModal) { camModal.remove(); camModal = null; }
+  }
+
+  function drawToCtx(ctx, video) {
+    let vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return;
+    let side = Math.min(vw, vh);
+    let sx = (vw - side) / 2, sy = (vh - side) / 2;
+    ctx.drawImage(video, sx, sy, side, side, 0, 0, size, size);
+  }
+
+  function captureFrame(video) {
+    let tmp = document.createElement('canvas');
+    tmp.width = size; tmp.height = size;
+    let tctx = tmp.getContext('2d');
+    drawToCtx(tctx, video);
+    let data = tctx.getImageData(0, 0, size, size).data;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        let i = (y * size + x) * 4;
+        let r = data[i], g = data[i+1], b = data[i+2];
+        gridEls[y][x].style.backgroundColor = nearestColor(r, g, b);
+      }
+    }
+  }
+
+  function nearestColor(r, g, b) {
+    let best = colors[0], bestD = Infinity;
+    for (let c of colors) {
+      let cr = parseInt(c.slice(1,3),16), cg = parseInt(c.slice(3,5),16), cb = parseInt(c.slice(5,7),16);
+      let d = (cr-r)**2 + (cg-g)**2 + (cb-b)**2;
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    return best;
+  }
+  window.openCamera = openCamera;
+
+  // ---- Shared gallery (server-plugin transport) ----
+  let socket = null;
+  let galleryItems = [];
+  let galleryJoined = false;
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderGallery() {
+    galleryCountEl.textContent = galleryItems.length ? '(' + galleryItems.length + ')' : '';
+    galleryCtn.innerHTML = '';
+    if (!galleryItems.length) {
+      galleryStatusEl.textContent = 'No paintings shared yet — be the first to share!';
+      return;
+    }
+    galleryStatusEl.textContent = '';
+    // newest first
+    let ordered = galleryItems.slice().reverse();
+    for (let item of ordered) {
+      let card = document.createElement('div');
+      card.style.cssText = 'border:1px solid #ddd; border-radius:8px; overflow:hidden; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.08);';
+      let img = document.createElement('img');
+      img.src = item.u;
+      img.loading = 'lazy';
+      img.style.cssText = 'width:100%; display:block; image-rendering:pixelated; aspect-ratio:1; object-fit:contain; background:#fff; cursor:zoom-in;';
+      img.onclick = () => window.open(item.u, '_blank');
+      card.appendChild(img);
+      let meta = document.createElement('div');
+      meta.style.cssText = 'padding:5px 8px; font-size:12px; color:#555; font-family:sans-serif;';
+      let nick = item.n ? escapeHtml(item.n) : 'anonymous';
+      let cap = item.c ? '<div style="margin-bottom:2px; color:#222;">' + escapeHtml(item.c) + '</div>' : '';
+      let flag = item.cc ? countryCodeToFlag(item.cc) + ' ' : '';
+      let dateStr = item.t ? new Date(item.t).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) : '';
+      meta.innerHTML = cap + '<div style="margin-bottom:2px;">by ' + nick + '</div><div style="color:#888;">' + flag + escapeHtml(dateStr) + '</div>';
+      card.appendChild(meta);
+      galleryCtn.appendChild(card);
+    }
+  }
+
+  function setGalleryStatus(s) { galleryStatusEl.textContent = s; }
+
+  function handleSocketMessage(data) {
+    if (typeof data !== 'string') return;
+    let msg;
+    try { msg = JSON.parse(data); } catch (e) { return; }
+    if (msg.type === 'gallery') {
+      galleryItems = Array.isArray(msg.items) ? msg.items : [];
+      renderGallery();
+      if (!galleryJoined) { galleryJoined = true; }
+    } else if (msg.type === 'art' && msg.item) {
+      // avoid duplicates if we already have it
+      if (!galleryItems.some(g => g.u === msg.item.u && g.t === msg.item.t)) {
+        galleryItems.push(msg.item);
+        renderGallery();
+      }
+    }
+  }
+
+  function connectGallery() {
+    if (!root.createServerSocket) { setGalleryStatus('Gallery unavailable (server plugin not loaded).'); return; }
+    try {
+      socket = root.createServerSocket();
+      socket.binaryType = 'arraybuffer';
+    } catch (e) {
+      setGalleryStatus('Gallery unavailable: ' + e.message);
+      return;
+    }
+    setGalleryStatus('Connecting to gallery…');
+    socket.addEventListener('open', async () => {
+      setGalleryStatus('Loading gallery…');
+      try {
+        let reply = await socket.rpc.getGallery('');
+        handleSocketMessage(reply);
+      } catch (e) {
+        setGalleryStatus('Could not load gallery: ' + (e.message || e));
+      }
+    });
+    socket.addEventListener('message', (ev) => handleSocketMessage(ev.data));
+    socket.addEventListener('close', (ev) => {
+      setGalleryStatus(galleryItems.length ? '' : 'Gallery disconnected. Press Refresh to retry.');
+      // auto-reconnect with backoff
+      setTimeout(() => { if (socket && socket.readyState > 1) connectGallery(); }, 2500);
+    });
+  }
+
+  function refreshGallery() {
+    if (!socket || socket.readyState > 1) { connectGallery(); return; }
+    if (socket.readyState === 1) {
+      setGalleryStatus('Refreshing…');
+      socket.rpc.getGallery('').then(handleSocketMessage).catch(e => setGalleryStatus('Refresh failed: ' + (e.message||e)));
+    } else {
+      setGalleryStatus('Connecting…');
+    }
+  }
+
+  function isCanvasEmpty() {
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      if (rgbToHex(gridEls[y][x].style.backgroundColor) !== '#ffffff') return false;
+    }
+    return true;
+  }
+
+  async function sharePainting() {
+    if (!root.uploadPlugin) { alert('Upload plugin still loading — try again in a moment.'); return; }
+    if (!socket || socket.readyState !== 1) { alert('Gallery is not connected yet — try again in a moment.'); return; }
+    if (isCanvasEmpty()) { alert('Your canvas is empty — paint something first!'); return; }
+    shareBtn.disabled = true;
+    shareLoadingEl.hidden = false;
+    try {
+      let scale = 16;
+      let cvs = document.createElement('canvas');
+      cvs.width = size * scale; cvs.height = size * scale;
+      let ctx = cvs.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          ctx.fillStyle = gridEls[y][x].style.backgroundColor || '#fff';
+          ctx.fillRect(x * scale, y * scale, scale, scale);
+        }
+      }
+      let blob = await new Promise(r => cvs.toBlob(r, 'image/png'));
+      if (!blob) throw new Error('could not render painting');
+      let up = await root.uploadPlugin(blob);
+      if (up.error) throw new Error(up.error);
+      let url = up.url;
+      // optional NSFW check (public gallery)
+      try {
+        let info = await fetch('https://upload.perchance.org/api/fileInfo?url=' + encodeURIComponent(url)).then(r => r.json());
+        if (info && info.tags && info.tags.includes('nsfw')) {
+          alert('Sorry, the painting was flagged as inappropriate and was not shared.');
+          return;
+        }
+      } catch (_) {}
+      let caption = captionInput.value.trim().slice(0, 160);
+      let nick = (usernameInput.value || '').trim().slice(0, 40);
+      let payload = JSON.stringify({ u: url, c: caption, n: nick, cc: userCountryCode });
+      let reply = await socket.rpc.addPainting(payload);
+      let r;
+      try { r = JSON.parse(reply); } catch (e) { r = {}; }
+      if (r.type === 'error') throw new Error(r.msg || 'server rejected painting');
+      captionInput.value = '';
+      setGalleryStatus('✓ Shared! Your painting is now in the gallery.');
+    } catch (e) {
+      alert('Share failed: ' + (e.message || e));
+    } finally {
+      shareBtn.disabled = false;
+      shareLoadingEl.hidden = true;
+    }
+  }
+
+  window.sharePainting = sharePainting;
+  window.refreshGallery = refreshGallery;
+
+  // init gallery once the server plugin is ready
+  (async () => {
+    for (let i = 0; i < 60; i++) {
+      if (root.createServerSocket && root.uploadPlugin) { connectGallery(); return; }
+      await new Promise(r => setTimeout(r, 200));
+    }
+    setGalleryStatus('Gallery failed to load (plugins unavailable).');
+  })();
+</script>
+</body>
+</html>

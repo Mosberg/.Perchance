@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>hero-arena-pvp-multiverse — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  /* === LOBBY / GAME UI REVAMP === */
+  .lobby-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:10px; margin-bottom:10px; }
+  .lobby-main { display:flex; flex-direction:column; gap:10px; }
+  .lobby-side { display:flex; flex-direction:column; gap:10px; }
+  .hero-banner { position:relative; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); background:linear-gradient(135deg,var(--card),var(--card2)); padding:18px 16px; min-height:120px; display:flex; align-items:center; gap:14px; }
+  .hero-banner::before { content:''; position:absolute; inset:0; background:radial-gradient(circle at 20% 30%,rgba(139,92,246,0.18),transparent 55%),radial-gradient(circle at 80% 70%,rgba(240,192,64,0.12),transparent 55%); pointer-events:none; }
+  .hero-banner-content { position:relative; z-index:1; flex:1; }
+  .hero-banner-emoji { position:relative; z-index:1; font-size:3rem; }
+  .lobby-menu-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; }
+  .lobby-menu-card { padding:14px 8px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; transition:var(--transition); text-align:center; }
+  .lobby-menu-card:hover { border-color:var(--accent); transform:translateY(-2px); box-shadow:0 4px 14px rgba(0,0,0,0.3); }
+  .lobby-menu-card .lm-icon { font-size:1.7rem; margin-bottom:4px; }
+  .lobby-menu-card .lm-title { font-weight:700; font-size:0.85rem; color:var(--gold); }
+  .lobby-menu-card .lm-sub { font-size:0.68rem; color:var(--text2); margin-top:2px; }
+
+  /* === FULL-SCREEN FIGHT OVERLAY === */
+  .fight-overlay { position:fixed; inset:0; z-index:500; background:var(--bg); display:none; flex-direction:column; animation:fadeIn 0.25s; }
+  .fight-overlay.active { display:flex; }
+  .fight-overlay-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--card); border-bottom:1px solid var(--border); flex-shrink:0; }
+  .fight-overlay-title { font-weight:800; font-size:1rem; color:var(--gold); }
+  .fight-overlay-close { background:none; border:none; color:var(--text2); font-size:1.6rem; cursor:pointer; line-height:1; }
+  .fight-overlay-close:hover { color:var(--red); }
+  .fight-overlay-body { flex:1; overflow-y:auto; display:flex; flex-direction:column; align-items:center; padding:12px; gap:12px; }
+
+  /* Landscape battle scene box */
+  .battle-scene { width:100%; max-width:760px; aspect-ratio:16/9; border-radius:var(--radius); overflow:hidden; position:relative; background:var(--bg2); border:1px solid var(--border); }
+  .battle-scene-img { width:100%; height:100%; object-fit:cover; display:block; }
+  .battle-scene-loading { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; background:var(--bg2); color:var(--text2); }
+  .battle-scene-arena-label { position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,0.65); padding:4px 10px; border-radius:6px; font-size:0.78rem; color:#fff; font-weight:600; }
+  .battle-scene-vs { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); display:flex; align-items:center; gap:16px; background:rgba(0,0,0,0.55); padding:10px 18px; border-radius:var(--radius); }
+  .bs-fighter { text-align:center; }
+  .bs-name { font-weight:800; font-size:0.95rem; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,0.9); }
+  .bs-class { font-size:0.68rem; margin-top:2px; }
+  .bs-vs { font-size:1.2rem; font-weight:900; color:var(--red); }
+  .battle-scene-regen { position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.65); border:1px solid var(--border2); border-radius:6px; padding:4px 8px; font-size:0.7rem; color:#fff; cursor:pointer; }
+  .battle-scene-regen:hover { background:var(--accent); }
+
+  /* Narration card under the scene */
+  .battle-narration-card { width:100%; max-width:760px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; }
+  .battle-narration-card .fight-narration { max-height:50vh; overflow-y:auto; padding-right:6px; }
+
+  /* === SKILL NAME HIGHLIGHTING IN NARRATION === */
+  .skill-highlight { color:var(--gold); font-weight:700; text-shadow:0 0 6px rgba(240,192,64,0.4); }
+  .skill-highlight.passive { color:var(--blue); text-shadow:0 0 6px rgba(59,130,246,0.4); }
+
+  /* === HISTORY TABS === */
+  .history-tabs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+  .history-tab { padding:10px; background:var(--bg2); border:2px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; text-align:center; transition:var(--transition); }
+  .history-tab.active { border-color:var(--gold); background:rgba(240,192,64,0.08); }
+  .history-tab .ht-icon { font-size:1.3rem; }
+  .history-tab .ht-title { font-weight:700; font-size:0.82rem; margin-top:2px; }
+  .history-tab .ht-count { font-size:0.68rem; color:var(--text2); }
+
+  .fav-star { background:none; border:none; font-size:1rem; cursor:pointer; color:var(--border2); flex-shrink:0; }
+  .fav-star.on { color:var(--gold); }
+  .fav-star:hover { color:var(--gold); }
+
+  @media(max-width:768px){
+    .lobby-grid { grid-template-columns:1fr; }
+    .battle-scene { aspect-ratio:4/3; }
+    .battle-narration-card { padding:12px; }
+  }
+  @media(max-width:480px){
+    .lobby-menu-grid { grid-template-columns:repeat(2,1fr); }
+    .bs-name { font-size:0.8rem; }
+    .bs-vs { font-size:1rem; }
+  }
+  /* hide the in-page arena-hero banner when fight overlay is active to avoid duplication */
+
+  :root { --radius: 12px; --radius-sm: 8px; --transition: 0.2s ease; }
+  [data-theme="dark"] { --bg:#0e0e16;--bg2:#161624;--card:#1a1a2e;--card2:#22223a;--border:#2d2d4a;--border2:#3a3a5c;--gold:#f0c040;--gold2:#d4a020;--purple:#8b5cf6;--purple2:#6d28d9;--red:#ef4444;--green:#22c55e;--blue:#3b82f6;--text:#e0e0f0;--text2:#8888aa;--accent:var(--purple); }
+  [data-theme="midnight"] { --bg:#0a0e1a;--bg2:#111827;--card:#1e293b;--card2:#283548;--border:#334155;--border2:#475569;--gold:#fbbf24;--gold2:#d97706;--purple:#818cf8;--purple2:#4f46e5;--red:#f87171;--green:#4ade80;--blue:#60a5fa;--text:#e2e8f0;--text2:#94a3b8;--accent:#60a5fa; }
+  [data-theme="royal"] { --bg:#120a1a;--bg2:#1a1028;--card:#251540;--card2:#2d1a4d;--border:#3d2566;--border2:#4d3079;--gold:#fbbf24;--gold2:#d97706;--purple:#c084fc;--purple2:#9333ea;--red:#fb7185;--green:#4ade80;--blue:#60a5fa;--text:#e9d5ff;--text2:#a78bfa;--accent:#c084fc; }
+  [data-theme="forest"] { --bg:#0a140e;--bg2:#0f1c14;--card:#143020;--card2:#1a3d28;--border:#1f4a30;--border2:#2a5a3e;--gold:#fbbf24;--gold2:#d97706;--purple:#a78bfa;--purple2:#7c3aed;--red:#f87171;--green:#4ade80;--blue:#60a5fa;--text:#d1e7d5;--text2:#7a9a82;--accent:#4ade80; }
+  [data-theme="crimson"] { --bg:#140a0e;--bg2:#1c0f14;--card:#2a1518;--card2:#351c20;--border:#4a2228;--border2:#5c2c33;--gold:#fbbf24;--gold2:#d97706;--purple:#c084fc;--purple2:#9333ea;--red:#f87171;--green:#4ade80;--blue:#60a5fa;--text:#f0d5d8;--text2:#a87a7e;--accent:#f87171; }
+  [data-theme="slate"] { --bg:#1a1a2e;--bg2:#20203a;--card:#2a2a48;--card2:#34345a;--border:#3e3e62;--border2:#4a4a72;--gold:#fbbf24;--gold2:#d97706;--purple:#a78bfa;--purple2:#7c3aed;--red:#f87171;--green:#4ade80;--blue:#60a5fa;--text:#e8e8f5;--text2:#a0a0c0;--accent:#a78bfa; }
+
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { scroll-behavior:smooth; }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,-apple-system,sans-serif; text-align:left; min-height:100vh; line-height:1.5; padding-bottom:70px; transition:background 0.3s,color 0.3s; }
+  #app { max-width:1100px; margin:0 auto; padding:10px 12px; }
+
+  .header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:linear-gradient(135deg,var(--card),var(--card2)); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:10px; position:sticky; top:0; z-index:50; }
+  .header-left { display:flex; flex-direction:column; gap:2px; }
+  .header h1 { font-size:1.15rem; background:linear-gradient(90deg,var(--gold),var(--accent)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; white-space:nowrap; }
+  .header-guide-btn { font-size:0.7rem; color:var(--text2); cursor:pointer; text-decoration:underline; }
+  .header-right { display:flex; align-items:center; gap:10px; }
+  .gems-display { display:flex; align-items:center; gap:4px; font-size:1rem; font-weight:bold; color:var(--gold); white-space:nowrap; }
+  .gems-display::before { content:"💎"; font-size:1.1rem; }
+  .icon-btn { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); width:36px; height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:1.1rem; color:var(--text); transition:var(--transition); }
+  .icon-btn:hover { border-color:var(--accent); background:var(--card2); }
+
+  .bottom-nav { position:fixed; bottom:0; left:0; right:0; z-index:100; background:var(--card); border-top:1px solid var(--border); display:flex; justify-content:center; padding:4px 0 max(4px,env(safe-area-inset-bottom)); max-height:66px; }
+  .bottom-nav-inner { display:flex; width:100%; max-width:500px; }
+  .nav-btn { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 2px; background:none; border:none; color:var(--text2); font-size:0.68rem; font-weight:600; cursor:pointer; transition:var(--transition); font-family:inherit; }
+  .nav-btn .nav-icon { font-size:1.3rem; line-height:1; }
+  .nav-btn:hover { color:var(--text); }
+  .nav-btn.active { color:var(--accent); }
+  .nav-btn.active .nav-icon { transform:scale(1.1); }
+  .nav-btn.locked { opacity:0.35; cursor:not-allowed; }
+
+  .view { display:none; animation:fadeIn 0.2s; }
+  .view.active { display:block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px);} to{opacity:1;transform:none;} }
+
+  .section { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:10px; }
+  .section h2 { font-size:1.1rem; margin-bottom:10px; color:var(--gold); }
+  .section h3 { font-size:0.95rem; margin-bottom:8px; color:var(--text); }
+
+  .menu-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; }
+  .menu-card { padding:18px 12px; background:linear-gradient(135deg,var(--card),var(--card2)); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; transition:var(--transition); text-align:center; }
+  .menu-card:hover { border-color:var(--accent); transform:translateY(-2px); box-shadow:0 4px 16px rgba(0,0,0,0.3); }
+  .menu-card .icon { font-size:2rem; margin-bottom:8px; }
+  .menu-card h3 { font-size:1rem; margin-bottom:4px; color:var(--gold); }
+  .menu-card p { font-size:0.78rem; color:var(--text2); line-height:1.3; }
+
+  .form-group { margin-bottom:14px; }
+  .form-group>label { display:block; font-size:0.85rem; color:var(--text2); margin-bottom:5px; font-weight:600; }
+  .form-group input,.form-group textarea,.form-group select { width:100%; padding:9px 11px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:0.9rem; font-family:inherit; }
+  .form-group input:focus,.form-group textarea:focus,.form-group select:focus { outline:none; border-color:var(--accent); }
+  .form-group textarea { resize:vertical; min-height:70px; }
+  .char-count { text-align:right; font-size:0.75rem; color:var(--text2); margin-top:3px; }
+
+  .select-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; }
+  .select-card { padding:12px 10px; background:var(--bg2); border:2px solid var(--border); border-radius:var(--radius); cursor:pointer; transition:var(--transition); text-align:center; display:flex; flex-direction:column; gap:4px; }
+  .select-card:hover { border-color:var(--accent); background:var(--card2); }
+  .select-card.selected { border-color:var(--gold); background:rgba(240,192,64,0.08); }
+  .sc-title { font-weight:700; font-size:0.9rem; }
+  .sc-desc { font-size:0.72rem; color:var(--text2); line-height:1.35; text-align:left; }
+
+  .btn { padding:10px 20px; border:none; border-radius:var(--radius-sm); font-size:0.9rem; font-weight:700; cursor:pointer; transition:var(--transition); font-family:inherit; display:inline-flex; align-items:center; gap:5px; justify-content:center; }
+  .btn-gold { background:linear-gradient(135deg,var(--gold),var(--gold2)); color:#000; }
+  .btn-gold:hover { filter:brightness(1.1); }
+  .btn-gold:disabled { opacity:0.4; cursor:not-allowed; filter:none; }
+  .btn-purple { background:linear-gradient(135deg,var(--accent),var(--purple2)); color:#fff; }
+  .btn-purple:hover { filter:brightness(1.15); }
+  .btn-purple:disabled { opacity:0.4; cursor:not-allowed; filter:none; }
+  .btn-red { background:var(--red); color:#fff; }
+  .btn-red:hover { filter:brightness(1.1); }
+  .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--text); }
+  .btn-ghost:hover { border-color:var(--accent); background:var(--card2); }
+  .btn-green { background:var(--green); color:#000; }
+  .btn-green:hover { filter:brightness(1.1); }
+  .btn-sm { padding:6px 12px; font-size:0.8rem; }
+  .btn-block { width:100%; }
+
+  .hero-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+  .hero-card { padding:12px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; transition:var(--transition); position:relative; }
+  .hero-card:hover { border-color:var(--accent); transform:translateY(-2px); }
+  .hc-name { font-weight:700; font-size:0.95rem; color:var(--gold); margin-bottom:3px; }
+  .hc-meta { font-size:0.75rem; color:var(--text2); }
+  .hc-registered { position:absolute; top:6px; right:6px; font-size:0.65rem; color:var(--green); }
+  .hc-books { position:absolute; top:6px; left:6px; font-size:0.65rem; color:var(--blue); }
+
+  .class-badge { display:inline-block; padding:2px 7px; border-radius:4px; font-size:0.7rem; font-weight:600; }
+  .class-fighter { background:#dc2626; color:#fff; } .class-marksman { background:#0891b2; color:#fff; }
+  .class-mage { background:#7c3aed; color:#fff; } .class-tank { background:#4d7c0f; color:#fff; }
+  .class-assassin { background:#1e1b2e; color:var(--red); border:1px solid var(--red); } .class-support { background:#be185d; color:#fff; }
+
+  .stat-bar { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
+  .sb-label { width:60px; font-size:0.75rem; color:var(--text2); cursor:help; position:relative; text-decoration:underline dotted var(--text2); }
+  .sb-track { flex:1; height:7px; background:var(--bg2); border-radius:4px; overflow:hidden; }
+  .sb-fill { height:100%; border-radius:4px; transition:width 0.3s; }
+  .sb-val { width:26px; text-align:right; font-size:0.75rem; font-weight:600; }
+  .stat-tooltip { position:absolute; bottom:100%; left:0; background:var(--card2); border:1px solid var(--border2); border-radius:var(--radius-sm); padding:8px 10px; font-size:0.72rem; color:var(--text); width:200px; z-index:10; display:none; pointer-events:none; line-height:1.4; box-shadow:0 4px 12px rgba(0,0,0,0.4); }
+  .sb-label:hover .stat-tooltip { display:block; }
+
+  .skill-item { padding:10px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:7px; }
+  .si-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:3px; }
+  .si-name { font-weight:700; font-size:0.88rem; color:var(--gold); }
+  .si-level { font-size:0.75rem; color:var(--accent); font-weight:600; }
+  .si-tags { display:flex; gap:4px; flex-wrap:wrap; margin:3px 0; }
+  .si-tag { padding:1px 6px; border-radius:4px; font-size:0.68rem; background:var(--card2); color:var(--text2); }
+  .si-tag.type-active { background:var(--purple2); color:#fff; }
+  .si-tag.type-passive { background:var(--blue); color:#fff; }
+  .si-desc { font-size:0.78rem; color:var(--text2); line-height:1.4; }
+  .si-upgrade { margin-top:7px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .level-dots { display:flex; gap:2px; flex-wrap:wrap; }
+  .level-dot { width:7px; height:7px; border-radius:50%; background:var(--border); }
+  .level-dot.filled { background:var(--gold); }
+
+  .modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.75); display:flex; align-items:flex-start; justify-content:center; z-index:200; padding:16px; overflow-y:auto; backdrop-filter:blur(4px); }
+  .modal { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); max-width:600px; width:100%; padding:20px; margin:auto; }
+  .modal h2 { color:var(--gold); margin-bottom:10px; }
+  .modal-close { float:right; cursor:pointer; font-size:1.4rem; color:var(--text2); background:none; border:none; line-height:1; }
+  .modal-close:hover { color:var(--text); }
+
+  .inline-loading { display:flex; flex-direction:column; align-items:center; padding:30px 20px; gap:12px; }
+  .inline-spinner { width:44px; height:44px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg);} }
+  .inline-loading-text { font-size:0.9rem; color:var(--text); text-align:center; }
+  .inline-loading-sub { font-size:0.8rem; color:var(--text2); }
+
+  .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%); padding:10px 20px; background:var(--card2); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); z-index:300; animation:fadeUp 0.3s; max-width:90%; text-align:center; font-size:0.85rem; }
+  .toast.success { border-color:var(--green); } .toast.error { border-color:var(--red); }
+  @keyframes fadeUp { from{opacity:0;transform:translate(-50%,15px);} to{opacity:1;transform:translate(-50%,0);} }
+
+  .tabs { display:flex; gap:3px; margin-bottom:10px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .tab { padding:7px 14px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; font-size:0.85rem; color:var(--text2); white-space:nowrap; transition:var(--transition); }
+  .tab:hover { color:var(--text); }
+  .tab.active { background:var(--card2); color:var(--gold); border-color:var(--accent); }
+
+  .fight-narration { white-space:pre-wrap; line-height:1.8; color:var(--text); }
+  .fight-narration p { margin-bottom:10px; }
+  .fight-narration .dialogue { color:var(--gold); font-style:italic; }
+  .fight-narration .dialogue-dim { color:var(--text2); }
+  .fight-narration .narration-dim { color:var(--text2); }
+  .fight-narration .narration-highlight { color:var(--text); }
+  .fight-vs { display:flex; align-items:center; justify-content:center; gap:14px; margin:10px 0; }
+  .fv-fighter { text-align:center; flex:1; }
+  .fv-name { font-size:1rem; font-weight:700; }
+  .fv-class { font-size:0.75rem; margin-top:2px; }
+  .fv-vs { font-size:1.3rem; font-weight:900; color:var(--red); }
+  .fight-result { text-align:center; font-size:1.1rem; font-weight:700; padding:10px; border-radius:var(--radius-sm); margin:8px 0; }
+  .fight-result.win { background:rgba(34,197,94,0.15); color:var(--green); }
+  .fight-result.lose { background:rgba(239,68,68,0.15); color:var(--red); }
+  .fight-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .fight-actions .btn { flex:1; min-width:120px; }
+
+  .rank-row { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:5px; }
+  .rr-pos { font-weight:700; font-size:1rem; width:26px; text-align:center; color:var(--gold); }
+  .rr-name { flex:1; font-weight:600; font-size:0.88rem; }
+  .rr-meta { font-size:0.72rem; color:var(--text2); }
+  .rank-row.mine { border-color:var(--accent); background:rgba(139,92,246,0.08); }
+  .rank-badge { display:inline-block; padding:2px 7px; border-radius:4px; font-size:0.7rem; font-weight:600; }
+  .rank-beginner{background:#666;color:#fff;} .rank-adept{background:#0891b2;color:#fff;} .rank-veteran{background:#7c3aed;color:#fff;} .rank-apex_veteran{background:#be185d;color:#fff;} .rank-ranker{background:#dc2626;color:#fff;} .rank-apex_ranker{background:linear-gradient(90deg,#f0c040,#dc2626);color:#000;} .rank-champion{background:linear-gradient(90deg,#f0c040,#fff,#f0c040);color:#000;animation:shimmer 2s infinite;}
+  @keyframes shimmer { 0%,100%{filter:brightness(1);} 50%{filter:brightness(1.3);} }
+
+  .skill-select-item { padding:10px; background:var(--bg2); border:2px solid var(--border); border-radius:var(--radius-sm); margin-bottom:6px; cursor:pointer; transition:var(--transition); }
+  .skill-select-item:hover { border-color:var(--accent); }
+  .skill-select-item.selected { border-color:var(--gold); background:rgba(240,192,64,0.08); }
+  .ssi-header { display:flex; justify-content:space-between; align-items:center; }
+  .ssi-name { font-weight:700; font-size:0.85rem; color:var(--gold); }
+  .ssi-check { font-size:1.1rem; color:var(--gold); }
+
+  .setting-row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); gap:12px; }
+  .setting-row:last-child { border-bottom:none; }
+  .setting-label { font-size:0.9rem; }
+  .setting-desc { font-size:0.75rem; color:var(--text2); margin-top:2px; }
+  .toggle { position:relative; width:44px; height:24px; background:var(--bg2); border:1px solid var(--border); border-radius:12px; cursor:pointer; transition:var(--transition); flex-shrink:0; }
+  .toggle.on { background:var(--accent); }
+  .toggle::after { content:''; position:absolute; top:2px; left:2px; width:18px; height:18px; background:#fff; border-radius:50%; transition:var(--transition); }
+  .toggle.on::after { left:22px; }
+  .theme-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(80px,1fr)); gap:8px; }
+  .theme-card { padding:14px 8px; border:2px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; text-align:center; transition:var(--transition); }
+  .theme-card:hover { border-color:var(--accent); }
+  .theme-card.selected { border-color:var(--gold); }
+  .theme-swatch { width:100%; height:24px; border-radius:4px; margin-bottom:4px; }
+  .theme-name { font-size:0.75rem; font-weight:600; }
+  .select-sm { padding:5px 8px; font-size:0.8rem; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); }
+
+  .empty-state { text-align:center; padding:30px 16px; color:var(--text2); }
+
+  .arena-hero { background:linear-gradient(135deg,var(--card),var(--card2)); border:1px solid var(--border); border-radius:var(--radius); padding:18px 16px; margin-bottom:10px; text-align:center; position:relative; overflow:hidden; }
+  .arena-hero::before { content:''; position:absolute; inset:0; background:radial-gradient(circle at 30% 20%,rgba(139,92,246,0.15),transparent 60%),radial-gradient(circle at 70% 80%,rgba(240,192,64,0.10),transparent 60%); pointer-events:none; }
+  .arena-hero-title { font-size:1.4rem; font-weight:900; background:linear-gradient(90deg,var(--gold),var(--accent)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; position:relative; }
+  .arena-hero-sub { font-size:0.8rem; color:var(--text2); margin-top:3px; position:relative; }
+  .arena-tabs .tab { display:flex; align-items:center; gap:5px; }
+  .atab-icon { font-size:0.95rem; }
+  .mode-cards { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .mode-card { padding:14px; background:var(--bg2); border:2px solid var(--border); border-radius:var(--radius); cursor:pointer; transition:var(--transition); text-align:center; }
+  .mode-card:hover { border-color:var(--accent); }
+  .mode-card.selected { border-color:var(--gold); background:rgba(240,192,64,0.08); }
+  .mc-icon { font-size:1.6rem; margin-bottom:4px; }
+  .mc-title { font-weight:800; font-size:0.95rem; color:var(--gold); }
+  .mc-desc { font-size:0.72rem; color:var(--text2); margin-top:3px; line-height:1.3; }
+  @media(max-width:600px){ .mode-cards{grid-template-columns:1fr;} }
+
+  .header-sub { font-size:0.68rem; color:var(--text2); letter-spacing:0.5px; text-transform:uppercase; }
+  .dash-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:4px; }
+  .dash-stat { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 6px; text-align:center; }
+  .ds-icon { font-size:1.1rem; }
+  .ds-value { font-size:1.15rem; font-weight:800; color:var(--gold); line-height:1.2; }
+  .ds-label { font-size:0.65rem; color:var(--text2); text-transform:uppercase; letter-spacing:0.4px; }
+  .dash-best { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px; background:linear-gradient(135deg,var(--card2),var(--bg2)); border:1px solid var(--accent); border-radius:var(--radius); cursor:pointer; transition:var(--transition); }
+  .dash-best:hover { border-color:var(--gold); transform:translateY(-2px); box-shadow:0 4px 16px rgba(0,0,0,0.3); }
+  .dash-best-left { display:flex; flex-direction:column; gap:4px; }
+  .db-name { font-size:1.1rem; font-weight:800; color:var(--gold); }
+  .db-meta { font-size:0.75rem; color:var(--text2); }
+  .dash-best-right { text-align:right; }
+  .db-rp { font-size:1.5rem; font-weight:900; color:var(--accent); line-height:1; }
+  .db-rp-label { font-size:0.6rem; color:var(--text2); display:block; text-transform:uppercase; }
+  .db-record { font-size:0.75rem; color:var(--text2); margin-top:3px; }
+  .dash-cta { display:flex; align-items:center; gap:12px; padding:16px; background:linear-gradient(135deg,var(--card2),var(--bg2)); border:1px dashed var(--accent); border-radius:var(--radius); cursor:pointer; transition:var(--transition); }
+  .dash-cta:hover { border-color:var(--gold); border-style:solid; transform:translateY(-2px); }
+  .dash-cta-icon { font-size:1.8rem; }
+  .dash-cta-title { font-size:1rem; font-weight:700; color:var(--gold); }
+  .dash-cta-sub { font-size:0.78rem; color:var(--text2); margin-top:2px; }
+  @media(max-width:600px){ .dash-stats{grid-template-columns:repeat(2,1fr);} }
+  .es-icon { font-size:2.5rem; margin-bottom:10px; }
+  .flex-between { display:flex; justify-content:space-between; align-items:center; }
+  .flex-center { display:flex; align-items:center; gap:8px; }
+  .mb8{margin-bottom:8px;} .mb12{margin-bottom:12px;} .mb16{margin-bottom:16px;}
+  .text-sm{font-size:0.82rem;} .text-muted{color:var(--text2);} .text-xs{font-size:0.72rem;}
+  .hidden{display:none!important;}
+  .skill-points-display { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; background:var(--bg2); border:1px solid var(--accent); border-radius:6px; font-size:0.8rem; color:var(--accent); font-weight:600; }
+  .sp-convert { display:inline-flex; align-items:center; gap:3px; cursor:pointer; color:var(--gold); font-size:0.85rem; font-weight:700; background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:2px 8px; transition:var(--transition); }
+  .sp-convert:hover { border-color:var(--gold); }
+  .fight-history-item { padding:8px 10px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:5px; cursor:pointer; transition:var(--transition); }
+  .fight-history-item:hover { border-color:var(--accent); }
+  .fhi-header { display:flex; justify-content:space-between; align-items:center; }
+  .fhi-title { font-size:0.82rem; font-weight:600; }
+  .fhi-meta { font-size:0.7rem; color:var(--text2); }
+
+  .hero-image-box { position:relative; width:220px; height:220px; margin:0 auto 14px; border-radius:var(--radius); border:2px solid var(--border); overflow:hidden; background:var(--bg2); }
+  .hero-image-box img { width:100%; height:100%; object-fit:cover; display:block; }
+  .hero-image-placeholder { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--text2); font-size:0.8rem; }
+  .hero-image-placeholder .ph-icon { font-size:3rem; opacity:0.5; }
+  .hero-image-switch { position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.7); border:1px solid var(--border2); border-radius:6px; padding:4px 8px; font-size:0.72rem; color:var(--text); cursor:pointer; transition:var(--transition); display:flex; align-items:center; gap:3px; }
+  .hero-image-switch:hover { background:var(--accent); border-color:var(--accent); }
+  .hero-image-nav { position:absolute; bottom:6px; left:50%; transform:translateX(-50%); display:flex; gap:4px; background:rgba(0,0,0,0.7); padding:4px 8px; border-radius:6px; }
+  .hero-image-dot { width:8px; height:8px; border-radius:50%; background:var(--border2); cursor:pointer; }
+  .hero-image-dot.active { background:var(--gold); }
+  .hero-image-actions { position:absolute; bottom:6px; right:6px; display:flex; gap:4px; }
+  .hero-image-actions button { background:rgba(0,0,0,0.7); border:1px solid var(--border2); border-radius:4px; padding:3px 6px; font-size:0.68rem; color:var(--text); cursor:pointer; }
+  .hero-image-actions button:hover { background:var(--red); }
+  .hero-card-img { width:100%; height:80px; object-fit:cover; border-radius:var(--radius-sm) var(--radius-sm) 0 0; margin-bottom:4px; }
+  .hero-card-img-placeholder { width:100%; height:80px; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-sm) var(--radius-sm) 0 0; background:var(--bg); margin-bottom:4px; font-size:1.8rem; opacity:0.4; }
+  .hero-card { overflow:hidden; }
+  .rank-row-img { width:36px; height:36px; border-radius:6px; object-fit:cover; }
+  .rank-row-img-placeholder { width:36px; height:36px; border-radius:6px; background:var(--bg2); display:flex; align-items:center; justify-content:center; font-size:1rem; opacity:0.4; }
+  .img-gen-loading { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:var(--text2); }
+
+  .book-grid { display:grid; grid-template-columns:1fr; gap:8px; }
+  .book-item { padding:12px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); display:flex; align-items:center; gap:10px; }
+  .book-item.locked { opacity:0.6; }
+  .book-item.unlocked { border-color:var(--gold); }
+  .book-icon { font-size:1.5rem; }
+  .book-info { flex:1; }
+  .book-title { font-weight:700; font-size:0.85rem; color:var(--gold); }
+  .book-meta { font-size:0.72rem; color:var(--text2); }
+  .book-content { padding:12px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); margin-top:6px; font-size:0.85rem; line-height:1.7; white-space:pre-wrap; }
+
+  .chat-msg { padding:8px 12px; border-radius:var(--radius-sm); margin-bottom:6px; max-width:85%; font-size:0.85rem; line-height:1.5; }
+  .chat-msg.hero { background:var(--card2); border:1px solid var(--border); align-self:flex-start; }
+  .chat-msg.user { background:var(--purple2); color:#fff; align-self:flex-end; margin-left:auto; }
+  .chat-msg-name { font-size:0.7rem; color:var(--text2); margin-bottom:2px; }
+  .chat-logs { display:flex; flex-direction:column; max-height:400px; overflow-y:auto; padding:8px; background:var(--bg); border-radius:var(--radius-sm); margin-bottom:8px; }
+  .chat-input-row { display:flex; gap:6px; }
+  .chat-input-row input { flex:1; padding:8px 10px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:0.85rem; font-family:inherit; }
+
+  .skill-compare { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .skill-compare-col { padding:10px; background:var(--bg2); border:2px solid var(--border); border-radius:var(--radius-sm); }
+  .skill-compare-col.current { border-color:var(--blue); }
+  .skill-compare-col.new { border-color:var(--gold); }
+  .scc-label { font-size:0.75rem; font-weight:600; color:var(--text2); margin-bottom:6px; text-transform:uppercase; }
+
+  .quest-list { display:flex; flex-direction:column; gap:8px; }
+  .quest-item { display:flex; align-items:center; gap:10px; padding:10px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm); }
+  .quest-item.claimed { opacity:0.55; }
+  .quest-icon { font-size:1.4rem; flex-shrink:0; }
+  .quest-info { flex:1; min-width:0; }
+  .quest-title { font-weight:700; font-size:0.85rem; color:var(--gold); display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  .quest-reward { font-size:0.72rem; color:var(--accent); font-weight:600; white-space:nowrap; }
+  .quest-desc { font-size:0.74rem; color:var(--text2); margin:2px 0 5px; }
+  .quest-bar { height:6px; background:var(--bg); border-radius:4px; overflow:hidden; }
+  .quest-bar-fill { height:100%; background:linear-gradient(90deg,var(--gold),var(--accent)); border-radius:4px; transition:width 0.3s; }
+  .quest-done { font-size:1.3rem; color:var(--green); font-weight:900; flex-shrink:0; }
+  .quest-nav-badge { position:absolute; top:-2px; right:-2px; background:var(--red); color:#fff; font-size:0.6rem; font-weight:700; border-radius:50%; width:16px; height:16px; display:flex; align-items:center; justify-content:center; }
+
+  .podium { display:grid; grid-template-columns:1fr 1.15fr 1fr; gap:8px; align-items:flex-end; margin-bottom:14px; }
+  .podium-col { text-align:center; padding:14px 6px 10px; background:linear-gradient(160deg,var(--card),var(--card2)); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; transition:var(--transition); overflow:hidden; }
+  .podium-col:hover { border-color:var(--accent); transform:translateY(-3px); }
+  .podium-col.first { border-color:var(--gold); background:linear-gradient(160deg,rgba(240,192,64,0.15),var(--card2)); }
+  .podium-col.second { border-color:#94a3b8; }
+  .podium-col.third { border-color:#b45309; }
+  .podium-medal { font-size:1.8rem; }
+  .podium-name { font-weight:800; font-size:0.92rem; color:var(--gold); margin:4px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .podium-rp { font-size:1.3rem; font-weight:900; color:var(--accent); }
+  .podium-meta { font-size:0.7rem; color:var(--text2); margin-top:2px; line-height:1.3; }
+  .podium-col.first .podium-name { font-size:1.05rem; }
+  @media(max-width:480px){
+    .podium{grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:10px;}
+    .podium-col{padding:10px 3px 8px;}
+    .podium-medal{font-size:1.4rem;}
+    .podium-name{font-size:0.72rem;margin:3px 0;}
+    .podium-col.first .podium-name{font-size:0.8rem;}
+    .podium-rp{font-size:1rem;}
+    .podium-meta{font-size:0.58rem;}
+    .podium-meta .class-badge{font-size:0.58rem;padding:1px 4px;}
+  }
+  .rank-row { cursor:pointer; }
+  .rank-row:hover { border-color:var(--accent); background:var(--card2); }
+
+  .guide-section { margin-bottom:16px; }
+  .guide-section h3 { color:var(--gold); margin-bottom:6px; font-size:0.95rem; }
+  .guide-section p { font-size:0.82rem; color:var(--text2); line-height:1.6; margin-bottom:4px; }
+  .guide-section ul { padding-left:18px; font-size:0.82rem; color:var(--text2); line-height:1.6; }
+
+  @media(max-width:600px){
+    .header h1{font-size:0.95rem;} .section{padding:12px;}
+    .select-grid{grid-template-columns:repeat(2,1fr);} .menu-grid{grid-template-columns:repeat(2,1fr);} .hero-grid{grid-template-columns:repeat(2,1fr);}
+    .fight-vs{gap:8px;} .fv-name{font-size:0.85rem;} .nav-btn{font-size:0.62rem;} .nav-btn .nav-icon{font-size:1.1rem;}
+    #app{padding:8px;} .skill-compare{grid-template-columns:1fr;}
+  }
+  @media(min-width:768px){ .select-grid{grid-template-columns:repeat(3,1fr);} .hero-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));} }
+</style>
+
+<div id="app">
+  <div class="header">
+    <div class="header-left">
+      <h1>⚔️ Hero Arena</h1>
+      <span class="header-sub" id="headerSub">Multiverse PvP</span>
+    </div>
+    <div class="header-right">
+      <div class="gems-display" id="gemsDisplay">50</div>
+      <button class="icon-btn" title="Guide & Lore" onclick="window.navigate('guide')">📖</button>
+      <button class="icon-btn" title="Community" onclick="window.navigate('community')">💬</button>
+      <button class="icon-btn" title="Settings" onclick="window.navigate('settings')">⚙️</button>
+    </div>
+  </div>
+
+  <div class="view active" id="menuView">
+    <div class="lobby-grid">
+      <div class="lobby-main">
+        <div class="section" id="menuDashboard">
+          <div id="menuStats" class="mb12"></div>
+        </div>
+        <div class="section" id="menuChampionPanel"></div>
+        <div class="section" id="menuRecentPanel"></div>
+      </div>
+      <div class="lobby-side">
+        <div class="section" id="menuLobbyMenu">
+          <h2 style="margin-bottom:10px;">⚔️ Enter the Arena</h2>
+          <div class="lobby-menu-grid" id="lobbyMenuGrid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="view" id="communityView">
+    <div class="section">
+      <div class="tabs">
+        <div class="tab active" data-ctab="general" onclick="window.communityTab('general')">General</div>
+        <div class="tab" data-ctab="strategy" onclick="window.communityTab('strategy')">Strategy</div>
+        <div class="tab" data-ctab="lore" onclick="window.communityTab('lore')">Lore</div>
+      </div>
+      <div id="communityContent" style="min-height:400px;"></div>
+    </div>
+  </div>
+
+  <div class="view" id="forgeView">
+    <div class="section" id="forgeForm">
+      <h2>⚒️ Hero Forge</h2>
+      <div class="form-group"><label>Hero Name</label><input type="text" id="heroNameInput" placeholder="Enter name..." maxlength="40"></div>
+      <div class="form-group"><label>Gender</label><select id="heroGenderSelect"><option value="male">Male</option><option value="female">Female</option><option value="custom">Custom</option></select>
+        <input type="text" id="heroCustomGenderInput" class="hidden" style="margin-top:6px;" placeholder="Specify..." maxlength="30"></div>
+      <div class="form-group"><label>Class</label><div class="select-grid" id="classGrid"></div></div>
+      <div class="form-group"><label>Genre / Universe</label><div class="select-grid" id="genreGrid"></div></div>
+      <div class="form-group"><label>Description (Optional)</label><textarea id="heroDescInput" placeholder="Describe appearance, abilities, backstory..." maxlength="1500"></textarea><div class="char-count"><span id="descCharCount">0</span> / 1500</div></div>
+      <button class="btn btn-gold btn-block" id="createHeroBtn">⚒️ Create Hero — 25 💎</button>
+    </div>
+    <div class="section hidden" id="forgeResult"></div>
+  </div>
+
+  <div class="view" id="inventoryView">
+    <div class="section">
+      <div class="flex-between mb12">
+        <h2>🎒 Heroes</h2>
+        <div class="flex-center">
+          <span class="text-sm text-muted" id="inventoryCount">0 / 20</span>
+          <button class="btn btn-ghost btn-sm" onclick="window.upgradeInventory()">+Slots 50💎</button>
+        </div>
+      </div>
+      <div class="hero-grid" id="heroGrid"></div>
+      <div class="empty-state hidden" id="inventoryEmpty"><div class="es-icon">🎒</div><p>No heroes yet. Forge your first!</p><button class="btn btn-purple btn-sm" style="margin-top:10px;" onclick="window.navigate('forge')">Go to Forge</button></div>
+    </div>
+  </div>
+
+  <div class="view" id="arenaView">
+    <div class="arena-hero">
+      <div class="arena-hero-title">⚔️ The Arena</div>
+      <div class="arena-hero-sub" id="arenaHeroSub">Forge glory in combat</div>
+    </div>
+    <div class="tabs arena-tabs">
+      <div class="tab active" data-atab="battle" onclick="window.arenaTab('battle')"><span class="atab-icon">⚔️</span>Battle</div>
+      <div class="tab" data-atab="register" onclick="window.arenaTab('register')"><span class="atab-icon">🦸</span>Heroes</div>
+      <div class="tab" data-atab="rankings" onclick="window.arenaTab('rankings')"><span class="atab-icon">🏆</span>Rankings</div>
+      <div class="tab" data-atab="history" onclick="window.arenaTab('history')"><span class="atab-icon">📜</span>History</div>
+    </div>
+    <div id="arenaBattle"></div><div id="arenaRegister" class="hidden"></div><div id="arenaRankings" class="hidden"></div><div id="arenaHistory" class="hidden"></div>
+  </div>
+
+  <div class="view" id="guideView">
+    <div class="section">
+      <h2>📖 Guide & Lore</h2>
+      <div class="tabs">
+        <div class="tab active" data-gtab="how" onclick="window.guideTab('how')">How to Play</div>
+        <div class="tab" data-gtab="heroes" onclick="window.guideTab('heroes')">Heroes & Skills</div>
+        <div class="tab" data-gtab="arena" onclick="window.guideTab('arena')">Arena & Combat</div>
+        <div class="tab" data-gtab="books" onclick="window.guideTab('books')">Hero Books</div>
+        <div class="tab" data-gtab="lore" onclick="window.guideTab('lore')">Lore</div>
+      </div>
+      <div id="guideContent"></div>
+    </div>
+  </div>
+
+  <div class="view" id="settingsView">
+    <div class="section">
+      <h2>⚙️ Settings</h2>
+      <div class="setting-row"><div><div class="setting-label">Show Victory/Defeat Banner</div><div class="setting-desc">Reveal fight result before narration</div></div><div class="toggle" id="resultBannerToggle" onclick="window.toggleSetting('showResultBanner',this)"></div></div>
+      <div class="setting-row"><div><div class="setting-label">Dialogue Style</div><div class="setting-desc">How dialogue (text in quotes) appears in fight narration</div></div><select class="select-sm" id="dialogueStyleSelect" onchange="window.changeDialogueStyle(this.value)"><option value="highlight">Highlight dialogue</option><option value="dim">Dim narration</option><option value="none">No styling</option></select></div>
+      <div class="setting-row"><div><div class="setting-label">Fight Text Size</div><div class="setting-desc">Font size for fight narration</div></div><select class="select-sm" id="fightFontSelect" onchange="window.changeFightFont(this.value)"><option value="small">Small</option><option value="medium" selected>Medium</option><option value="large">Large</option></select></div>
+      <div class="setting-row"><div><div class="setting-label">🎨 Arena Images</div><div class="setting-desc">Generate an AI arena scene image for each battle (takes a few seconds)</div></div><div class="toggle" id="arenaImagesToggle" onclick="window.toggleSetting('arenaImages',this)"></div></div>
+      <div class="setting-row"><div><div class="setting-label">✨ Skill Name Highlights</div><div class="setting-desc">Highlight skill names mentioned in fight narration</div></div><div class="toggle" id="skillHighlightToggle" onclick="window.toggleSetting('skillHighlight',this)"></div></div>
+    </div>
+    <div class="section"><h2>🎨 Theme</h2><div class="theme-grid" id="themeGrid"></div></div>
+  </div>
+</div>
+
+<div class="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="nav-btn active" data-view="menu" onclick="window.navigate('menu')"><span class="nav-icon">🏰</span>Menu</button>
+    <button class="nav-btn" data-view="forge" onclick="window.navigate('forge')"><span class="nav-icon">⚒️</span>Forge</button>
+    <button class="nav-btn" data-view="inventory" onclick="window.navigate('inventory')"><span class="nav-icon">🎒</span>Heroes</button>
+    <button class="nav-btn locked" data-view="arena" id="arenaNavBtn" onclick="window.navigate('arena')"><span class="nav-icon">⚔️</span>Arena</button>
+  </div>
+</div>
+
+<div class="fight-overlay" id="fightOverlay">
+  <div class="fight-overlay-header">
+    <span class="fight-overlay-title" id="fightOverlayTitle">⚔️ Battle</span>
+    <button class="fight-overlay-close" onclick="window.closeFightOverlay()">&times;</button>
+  </div>
+  <div class="fight-overlay-body" id="fightOverlayBody"></div>
+</div>
+
+<div class="modal-overlay hidden" id="modalOverlay" onclick="if(event.target===this)window.closeModal()"><div class="modal" id="modalContent"></div></div>
+<div id="toastCtn"></div>
+
+<script type="text/x-server-plugin">
+function loadState(){var len=(state[0]<<24)|(state[1]<<16)|(state[2]<<8)|state[3];if(len===0||len>state.length-4)return{champions:[]};var p=[];for(var i=0;i<len;i++)p[i]=String.fromCharCode(state[4+i]);try{return JSON.parse(p.join(''));}catch(e){return{champions:[]};}}
+function saveState(data){var str=JSON.stringify(data).replace(/[\u0080-\uFFFF]/g,function(c){return'\\u'+('0000'+c.charCodeAt(0).toString(16)).slice(-4);});var len=str.length;state[0]=(len>>24)&0xFF;state[1]=(len>>16)&0xFF;state[2]=(len>>8)&0xFF;state[3]=len&0xFF;for(var i=0;i<len;i++)state[4+i]=str.charCodeAt(i);}
+function parseData(data){var str;if(typeof data==='string')str=data;else if(data instanceof ArrayBuffer){var b=new Uint8Array(data);str='';for(var i=0;i<b.length;i++)str+=String.fromCharCode(b[i]);}else if(data&&typeof data.length==='number'){str='';for(var i=0;i<data.length;i++)str+=String.fromCharCode(data[i]);}else str=String(data);var s=str.trim();var a=s.indexOf('{'),b=s.lastIndexOf('}');if(a>=0&&b>a)s=s.slice(a,b+1);return JSON.parse(s);}
+
+var MATCHUPS={'assassin-mage':1.18,'mage-tank':1.18,'tank-assassin':1.18,'fighter-marksman':1.12,'marksman-tank':1.15,'support-mage':1.08,'tank-marksman':1.10,'assassin-support':1.12,'mage-fighter':1.08,'fighter-assassin':1.06};
+function getMatchup(a,b){var k=a+'-'+b;if(MATCHUPS[k])return MATCHUPS[k];var r=b+'-'+a;if(MATCHUPS[r])return 1/MATCHUPS[r];return 1.0;}
+function computePower(c){var s=c.stats;var sp=(s.attack||0)+(s.defense||0)+(s.speed||0)+(s.health||0)+(s.energy||0);var skp=0;for(var i=0;i<c.skills.length;i++){skp+=(c.skills[i].basePower||0)*(c.skills[i].level||1);}return sp+skp;}
+var DEFAULT_BANNED=['fuck','fucker','fucking','fucked','shit','shitty','dick','dickhead','pussy','cunt','cock','cocksucker','bitch','slut','whore','nigger','nigga','retard','rape','raped','rapist','porn','porno','nude','naked','boob','boobs','titty','titties','cum','cumshot','ejaculat','orgasm','fetish','bdsm','hentai','anal','genital','genitals','vagina','penis','masturbat','asshole','douche','wank','wanking','jizz','milf','dildo','fag','faggot','skank','twat','prick','knob','slutty','horny'];
+var BANNED_WORDS=DEFAULT_BANNED.slice();
+var NSFW_RE=new RegExp('\\b('+BANNED_WORDS.join('|')+')\\b','i');
+function rebuildNsfwRegex(words){BANNED_WORDS=words.slice();NSFW_RE=new RegExp('\\b('+BANNED_WORDS.join('|')+')\\b','i');}
+function isNsfw(c){var t=((c.name||'')+' '+(c.description||'')+' '+(c.gender||''));if(c.skills){for(var i=0;i<c.skills.length;i++){t+=' '+(c.skills[i].name||'')+' '+(c.skills[i].description||'');}}return NSFW_RE.test(t);}
+function computeOutcome(a,b){var pa=a.powerScore*getMatchup(a.class,b.class);var pb=b.powerScore*getMatchup(b.class,a.class);var ratio=pa/(pa+pb);if(ratio<0.18)ratio=0.18;if(ratio>0.82)ratio=0.82;var roll=Math.random();var aWins=roll<ratio;var winRatio=aWins?ratio:(1-ratio);var diff=Math.abs(ratio-roll);var pace;if(winRatio<0.32)pace='upset';else if(diff<0.12)pace='nail-biter';else if(winRatio>0.72)pace='dominant';else pace='contested';return{winnerId:aWins?a.id:b.id,loserId:aWins?b.id:a.id,winnerName:aWins?a.name:b.name,loserName:aWins?b.name:a.name,aPower:Math.round(pa),bPower:Math.round(pb),ratio:Math.round(ratio*100)/100,upset:aWins?ratio<0.4:(1-ratio)<0.4,pace:pace};}
+function findOpponent(champs,my,mode,allowNsfw){var others=[];for(var i=0;i<champs.length;i++){if(champs[i].id!==my.id&&champs[i].ownerId!==my.ownerId)others.push(champs[i]);}if(!allowNsfw)others=others.filter(function(c){return !isNsfw(c);});if(others.length===0){for(var i=0;i<champs.length;i++){if(champs[i].id!==my.id)others.push(champs[i]);}if(!allowNsfw)others=others.filter(function(c){return c.ownerId===my.ownerId||!isNsfw(c);});}if(others.length===0)return null;var recent=my.recentOppIds||[];var fresh=others.filter(function(c){return recent.indexOf(c.id)===-1;});if(fresh.length===0)fresh=others;if(mode==='ranked'){var rp=my.rankingPoints||0;var bands=[25,50,100,200,999999];for(var b=0;b<bands.length;b++){var pool=fresh.filter(function(c){return Math.abs((c.rankingPoints||0)-rp)<=bands[b];});if(pool.length>0){pool.sort(function(a,b){return Math.abs((a.rankingPoints||0)-rp)-Math.abs((b.rankingPoints||0)-rp);});var n=Math.min(3,pool.length);return pool[Math.floor(Math.random()*n)];}}return fresh[Math.floor(Math.random()*fresh.length)];}var myP=computePower(my);fresh.sort(function(a,b){return Math.abs(computePower(a)-myP)-Math.abs(computePower(b)-myP);});var n=Math.min(4,fresh.length);return fresh[Math.floor(Math.random()*n)];}
+
+self.rpc={
+  list:function({conn},data){try{return JSON.stringify({champions:loadState().champions});}catch(e){return JSON.stringify({error:'server_error',msg:e.message});}},
+  register:function({conn},data){try{var st=loadState();var champ=parseData(data);var mc=0;for(var i=0;i<st.champions.length;i++){if(st.champions[i].ownerId===champ.ownerId)mc++;}if(mc>=5)return JSON.stringify({error:'max_registrations'});st.champions=st.champions.filter(function(c){return c.heroId!==champ.heroId;});champ.powerScore=computePower(champ);st.champions.push(champ);saveState(st);return JSON.stringify({success:true});}catch(e){return JSON.stringify({error:'server_error',msg:e.message});}},
+  unregister:function({conn},data){try{var st=loadState();var req=parseData(data);var mc=0;for(var i=0;i<st.champions.length;i++){if(st.champions[i].ownerId===req.ownerId)mc++;}if(mc<=1)return JSON.stringify({error:'must_keep_one'});var champ=null;for(var i=0;i<st.champions.length;i++){if(st.champions[i].id===req.championId)champ=st.champions[i];}if(champ&&(champ.rankingPoints||0)>=50)return JSON.stringify({error:'rank_locked'});st.champions=st.champions.filter(function(c){return c.id!==req.championId;});saveState(st);return JSON.stringify({success:true});}catch(e){return JSON.stringify({error:'server_error',msg:e.message});}},
+  updateChampion:function({conn},data){try{var st=loadState();var req=parseData(data);for(var i=0;i<st.champions.length;i++){if(st.champions[i].id===req.championId&&st.champions[i].ownerId===req.ownerId){if(req.skills)st.champions[i].skills=req.skills;if(req.selectedSkills!==undefined)st.champions[i].selectedSkills=req.selectedSkills;if(req.imageUrl!==undefined)st.champions[i].imageUrl=req.imageUrl;st.champions[i].powerScore=req.powerScore!==undefined?req.powerScore:computePower(st.champions[i]);saveState(st);return JSON.stringify({success:true});}}return JSON.stringify({error:'not_found'});}catch(e){return JSON.stringify({error:'server_error',msg:e.message});}},
+  findMatch:function({conn},data){try{var st=loadState();var req=parseData(data);var my=null;for(var i=0;i<st.champions.length;i++){if(st.champions[i].id===req.championId){my=st.champions[i];break;}}if(!my)return JSON.stringify({error:'not_found'});var allowNsfw=req.allowNsfw?true:false;var opp=findOpponent(st.champions,my,req.mode,allowNsfw);if(!opp)return JSON.stringify({error:'no_opponents'});if(!my.recentOppIds)my.recentOppIds=[];my.recentOppIds.unshift(opp.id);if(my.recentOppIds.length>6)my.recentOppIds=my.recentOppIds.slice(0,6);my.powerScore=computePower(my);opp.powerScore=computePower(opp);var outcome=computeOutcome(my,opp);var winner=outcome.winnerId===my.id?my:opp;var loser=outcome.winnerId===my.id?opp:my;winner.wins=(winner.wins||0)+1;loser.losses=(loser.losses||0)+1;if(req.mode==='ranked'){var wp,lp;var wRank=winner.rankingPoints||0,lRank=loser.rankingPoints||0;if(wRank<50){wp=2;}else{var margin=Math.abs(wRank-lRank);if(winner===my){wp=margin>=100?2:1;}else{wp=margin>=100?1:2;}}winner.rankingPoints=(winner.rankingPoints||0)+wp;if(lRank>=50){var lpAmt=(lRank-margin>=100)?2:1;loser.rankingPoints=Math.max(0,(loser.rankingPoints||0)-lpAmt);}}saveState(st);return JSON.stringify({myChampionId:my.id,opponentId:opp.id,outcome:outcome,mode:req.mode,myWins:my.wins,myLosses:my.losses,myRanking:my.rankingPoints,oppNsfw:isNsfw(opp)});}catch(e){return JSON.stringify({error:'server_error',msg:e.message,stack:e.stack});}},
+  getMyChampions:function({conn},data){try{var st=loadState();var req=parseData(data);var mine=st.champions.filter(function(c){return c.ownerId===req.ownerId;});return JSON.stringify({champions:mine});}catch(e){return JSON.stringify({error:'server_error',msg:e.message});}},
+  setBannedWords:function({conn},data){try{var req=parseData(data);if(req.words&&req.words.length){rebuildNsfwRegex(req.words);}return JSON.stringify({success:true});}catch(e){return JSON.stringify({error:'server_error',msg:e.message});}},
+  logDefend:function({conn},data){try{var req=parseData(data);var st=loadState();if(!st.defends)st.defends=[];var rec={id:'d'+Date.now()+'_'+Math.random().toString(36).slice(2,8),timestamp:Date.now(),defenderId:req.defenderId,attackerName:req.attackerName,defenderName:req.defenderName,attackerClass:req.attackerClass,defenderClass:req.defenderClass,arena:req.arena,defenderWon:req.defenderWon,narration:(req.narration||'').slice(0,8000),mode:req.mode};st.defends.unshift(rec);if(st.defends.length>200)st.defends=st.defends.slice(0,200);saveState(st);return JSON.stringify({success:true});}catch(e){return JSON.stringify({error:'server_error',msg:e.message});}},
+  getMyDefends:function({conn},data){try{var req=parseData(data);var st=loadState();var myChampIds=[];for(var i=0;i<st.champions.length;i++){if(st.champions[i].ownerId===req.ownerId)myChampIds.push(st.champions[i].id);}var defends=st.defends||[];var mine=defends.filter(function(d){return myChampIds.indexOf(d.defenderId)>=0;});return JSON.stringify({defends:mine});}catch(e){return JSON.stringify({error:'server_error',msg:e.message});}}
+};
+</script>
+
+<script type="module">
+const CLASS_KEYS=['fighter','marksman','mage','tank','assassin','support'];
+const GENRE_KEYS=['high_fantasy','futuristic','apocalyptic','galactic','martial_arts','dark_fantasy','holy_war'];
+const SUBTYPE_KEYS=['offense','defense','buff','debuff','summon','control','mobility'];
+const RANK_KEYS=['beginner','adept','veteran','apex_veteran','ranker','apex_ranker','champion'];
+const STAT_KEYS=['attack','defense','speed','health','energy'];
+
+const CONFIG={
+  startingGems:Number(root.config.startingGems.evaluateItem),heroForgeCost:Number(root.config.heroForgeCost.evaluateItem),
+  inventoryLimit:Number(root.config.inventoryLimit.evaluateItem),inventoryUpgradeCost:Number(root.config.inventoryUpgradeCost.evaluateItem),
+  inventoryUpgradeAmount:Number(root.config.inventoryUpgradeAmount.evaluateItem),maxRegistrations:Number(root.config.maxRegistrations.evaluateItem),
+  maxSkillLevel:Number(root.config.maxSkillLevel.evaluateItem),skillsPerHero:Number(root.config.skillsPerHero.evaluateItem),
+  skillsInBattle:Number(root.config.skillsInBattle.evaluateItem),descCharLimit:Number(root.config.descCharLimit.evaluateItem),
+  gemsToSkillPointCost:Number(root.config.gemsToSkillPointCost.evaluateItem),skillRegenCostSP:Number(root.config.skillRegenCostSP.evaluateItem),
+  minHeroesToDelete:Number(root.config.minHeroesToDelete.evaluateItem),fightHistoryLimit:Number(root.config.fightHistoryLimit.evaluateItem),
+  fightFavoritesLimit:Number(root.config.fightFavoritesLimit.evaluateItem),heroBookCount:Number(root.config.heroBookCount.evaluateItem),
+  heroBookCost:Number(root.config.heroBookCost.evaluateItem),
+  unregisterLockRank:Number(root.config.unregisterLockRank.evaluateItem),
+  skillLevelWeight:Number(root.config.skillLevelWeight.evaluateItem),statWeight:Number(root.config.statWeight.evaluateItem),
+  botMaxRP:Number(root.config.botMaxRP.evaluateItem),botMaxWins:Number(root.config.botMaxWins.evaluateItem),botMaxLosses:Number(root.config.botMaxLosses.evaluateItem),
+};
+
+const CLASSES=CLASS_KEYS.map(k=>({key:k,name:root.classes[k].name.evaluateItem,desc:root.classes[k].desc.evaluateItem,statBias:root.classes[k].statBias.evaluateItem}));
+const GENRES=GENRE_KEYS.map(k=>({key:k,name:root.genres[k].name.evaluateItem,desc:root.genres[k].desc.evaluateItem}));
+const SUBTYPES=SUBTYPE_KEYS.map(k=>({key:k,name:root.skillSubtypes[k].name.evaluateItem,desc:root.skillSubtypes[k].desc.evaluateItem}));
+const RANK_TIERS=RANK_KEYS.map(k=>({key:k,name:root.rankTiers[k].name.evaluateItem,min:Number(root.rankTiers[k].min.evaluateItem),max:Number(root.rankTiers[k].max.evaluateItem)}));
+const ARENAS=root.arenas.selectAll.map(a=>a.evaluateItem);
+const BANNED_WORDS=root.bannedWords.selectAll.map(a=>a.evaluateItem);
+const STAT_INFO=STAT_KEYS.map(k=>({key:k,name:root.statInfo[k].name.evaluateItem,desc:root.statInfo[k].desc.evaluateItem}));
+
+const THEMES=[
+  {key:'dark',name:'Dark',bg:'#0e0e16',card:'#1a1a2e',accent:'#8b5cf6'},
+  {key:'midnight',name:'Midnight',bg:'#0a0e1a',card:'#1e293b',accent:'#60a5fa'},
+  {key:'royal',name:'Royal',bg:'#120a1a',card:'#251540',accent:'#c084fc'},
+  {key:'forest',name:'Forest',bg:'#0a140e',card:'#143020',accent:'#4ade80'},
+  {key:'crimson',name:'Crimson',bg:'#140a0e',card:'#2a1518',accent:'#f87171'},
+  {key:'slate',name:'Slate',bg:'#1a1a2e',card:'#2a2a48',accent:'#a78bfa'},
+];
+
+const CLASS_FOCUS={fighter:'melee damage, survivability, and close-range pressure',marksman:'ranged damage, positioning, and sustained DPS',mage:'spell damage, area effects, and energy management',tank:'damage mitigation, crowd control, and frontline presence',assassin:'burst damage, mobility, and target elimination',support:'healing, buffs, debuffs, and team utility'};
+const STAT_COLORS={attack:'#ef4444',defense:'#3b82f6',speed:'#22c55e',health:'#f0c040',energy:'#8b5cf6'};
+
+const BOT_CHAMPIONS=[
+  {name:'Ironclad Golem',class:'tank',genre:'high_fantasy',gender:'none',description:'A massive golem carved from ancient granite, inscribed with forgotten runes. It towers over the battlefield, an immovable monument of war.',stats:{attack:30,defense:90,speed:20,health:95,energy:15},skills:[{name:'Stone Fist',type:'active',subtypes:['offense'],description:'A devastating punch that cracks armor and bone, dealing heavy blunt force to a single target. The impact sends shockwaves through the ground.',basePower:35,level:3},{name:'Bulwark',type:'active',subtypes:['defense'],description:'Raises a stone shield from the earth, blocking incoming damage for several seconds. The shield glows with ancient protective runes.',basePower:30,level:3},{name:'Tremor Stomp',type:'active',subtypes:['control','offense'],description:'Slams the ground with titanic force, stunning nearby enemies and cracking the arena floor. Debris flies in all directions.',basePower:25,level:2},{name:'Adamant Skin',type:'passive',subtypes:['defense'],description:'Reduces all incoming damage by 20%% passively through its dense crystalline structure. Blows that would shatter steel merely chip its surface.',basePower:40,level:3},{name:'Earthen Regeneration',type:'passive',subtypes:['buff'],description:'Slowly draws health from the earth beneath it, regenerating over time while standing on ground. Roots of energy pulse through the stone.',basePower:20,level:2}]},
+  {name:'Lady Veilshade',class:'mage',genre:'dark_fantasy',gender:'female',description:'A centuries-old vampire sorceress draped in shadow silk. Her eyes glow crimson as she weaves blood magic and dark incantations.',stats:{attack:85,defense:25,speed:45,health:30,energy:90},skills:[{name:'Crimson Lance',type:'active',subtypes:['offense'],description:'Fires a spear of crystallized blood that pierces through magical barriers to strike the target. It leaves a trail of crimson mist.',basePower:45,level:3},{name:'Veil of Shadows',type:'active',subtypes:['defense','mobility'],description:'Wraps herself in living shadow, becoming briefly untouchable while repositioning across the field. The darkness bends light around her.',basePower:30,level:2},{name:'Blood Siphon',type:'active',subtypes:['offense','buff'],description:'Drains life force from a target through crimson tendrils, healing herself while dealing damage over time. The stolen vitality visibly flows into her.',basePower:35,level:3},{name:'Dark Pact',type:'passive',subtypes:['buff'],description:'Her spell damage increases proportionally as her energy reserves deplete, growing more dangerous when cornered. Desperation fuels her magic.',basePower:30,level:2},{name:'Eternal Thirst',type:'passive',subtypes:['buff'],description:'Killing blows restore a portion of her energy, fueling her endless hunger for combat. Each fallen foe strengthens her resolve.',basePower:25,level:2}]},
+  {name:'Vex-7 Striker',class:'assassin',genre:'futuristic',gender:'none',description:'A sleek combat android with optical camouflage and mono-molecular blades. Built for one purpose: silent, perfect elimination.',stats:{attack:90,defense:20,speed:85,health:25,energy:30},skills:[{name:'Phase Blade',type:'active',subtypes:['offense','mobility'],description:'Teleports behind the target in a blink of light, striking with a mono-molecular blade before they can react. The air crackles with displaced energy.',basePower:50,level:3},{name:'Cloak Field',type:'active',subtypes:['mobility','defense'],description:'Activates optical camouflage, becoming invisible for a brief window to set up the next strike. Light bends around its chassis seamlessly.',basePower:25,level:2},{name:'Neural Disruptor',type:'active',subtypes:['control','debuff'],description:'Overloads the targets nervous system with electromagnetic pulses, slowing their movements and reactions. Blue lightning arcs from its fingertips.',basePower:30,level:2},{name:'Overclock',type:'passive',subtypes:['buff'],description:'When below 30%% health, its core overclocks and attack speed doubles in a desperate burst of lethality. Warning lights flash across its frame.',basePower:35,level:3},{name:'Nanite Repair',type:'passive',subtypes:['buff'],description:'Nanobots slowly repair structural damage out of combat, restoring health over time when not engaged. Microscopic swarms seal wounds silently.',basePower:20,level:1}]},
+  {name:'Captain Orion',class:'marksman',genre:'galactic',gender:'male',description:'A legendary space marine wielding a plasma sniper rifle. His visor reflects a thousand battlefields across a hundred worlds.',stats:{attack:80,defense:25,speed:50,health:35,energy:40},skills:[{name:'Plasma Snipe',type:'active',subtypes:['offense'],description:'Fires a charged plasma round from extreme range that pierces armor and leaves a burning wound. The shot traces a blue-white streak across the field.',basePower:45,level:3},{name:'Orbital Strike',type:'active',subtypes:['offense','control'],description:'Calls down a devastating satellite bombardment on a target zone, stunning and damaging all caught in it. Pillars of light descend from the sky.',basePower:40,level:2},{name:'Grapple Dash',type:'active',subtypes:['mobility'],description:'Uses a magnetic grapple to reposition instantly to any vantage point, escaping danger or gaining line of sight. A cable of blue energy yanks him forward.',basePower:20,level:2},{name:'Targeting Matrix',type:'passive',subtypes:['buff'],description:'Each consecutive hit on the same target increases damage by 10%%, rewarding sustained focus fire. His visor locks on with increasing intensity.',basePower:30,level:3},{name:'Energy Shields',type:'passive',subtypes:['defense'],description:'A regenerating energy shield absorbs incoming damage before it reaches his body, recharging out of combat. A shimmering barrier flickers around him.',basePower:25,level:2}]},
+  {name:'Master Shen Wu',class:'fighter',genre:'martial_arts',gender:'male',description:'An aged but legendary martial arts master. His fists carry the weight of a thousand battles and the wisdom of the ancient dragon style.',stats:{attack:65,defense:60,speed:55,health:70,energy:35},skills:[{name:'Dragon Palm',type:'active',subtypes:['offense'],description:'A devastating palm strike infused with explosive chi energy that sends shockwaves through the target. Golden light trails his hand.',basePower:40,level:3},{name:'Iron Body',type:'active',subtypes:['defense','buff'],description:'Hardens his muscles to tempered steel for several seconds, drastically reducing incoming damage. His skin takes on a metallic sheen.',basePower:30,level:3},{name:'Whirling Tempest',type:'active',subtypes:['offense','mobility'],description:'A spinning kick combo that strikes all nearby foes while repositioning through the battlefield. Wind swirls around him in a vortex.',basePower:35,level:2},{name:'Inner Balance',type:'passive',subtypes:['buff'],description:'Chi flows through his body constantly, granting a small boost to all physical attributes at all times. His presence radiates calm power.',basePower:25,level:2},{name:'Counter Stance',type:'passive',subtypes:['defense','offense'],description:'When struck, has a chance to instantly counterattack with a reflexive strike, turning defense into offense. His body moves before his mind registers the blow.',basePower:35,level:3}]},
+  {name:'Brother Cassiel',class:'support',genre:'holy_war',gender:'male',description:'A divine paladin channeling the light of a forgotten god. His prayers mend wounds and his wrath smites the wicked.',stats:{attack:35,defense:55,speed:40,health:60,energy:80},skills:[{name:'Smite',type:'active',subtypes:['offense'],description:'Calls down a pillar of blinding divine light on a target, dealing holy damage that bypasses physical armor. The heavens split with radiance.',basePower:35,level:3},{name:'Lay on Hands',type:'active',subtypes:['buff'],description:'Channels divine energy through touch, restoring a large amount of health to himself or an ally. Golden light flows from his palms.',basePower:40,level:3},{name:'Blessing of Might',type:'active',subtypes:['buff'],description:'Blesses himself with increased attack power and speed for a moderate duration, channeling divine fury. A halo of light surrounds him.',basePower:25,level:2},{name:'Aura of Warding',type:'passive',subtypes:['defense','buff'],description:'A protective aura radiates from him, reducing damage taken by himself and nearby allies passively. The air shimmers with holy protection.',basePower:30,level:2},{name:'Divine Wrath',type:'passive',subtypes:['offense','debuff'],description:'Enemies near him are continually weakened by holy fire, reducing their attack power passively. Sacred flames lick at their heels.',basePower:25,level:2}]},
+];
+
+let G={gems:CONFIG.startingGems,heroes:[],inventoryLimit:CONFIG.inventoryLimit,ownerId:null,socket:null,serverReady:false,allChampions:[],myChampions:[],forgeSelection:{class:null,genre:null},settings:{theme:'dark',showResultBanner:false,dialogueStyle:'highlight',fightFont:'medium',arenaImages:true,skillHighlight:true},attackHistory:[],defendHistory:[],attackFavorites:[],defendFavorites:[],fightHistory:[],fightFavorites:[],currentBattle:null,allowNsfw:false,lastDefendPoll:0};
+
+function uuid(){return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{let r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);});}
+function $(id){return document.getElementById(id);}
+function el(t,c,h){let e=document.createElement(t);if(c)e.className=c;if(h!==undefined)e.innerHTML=h;return e;}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function buildNsfwRegex(words){return new RegExp('\\b('+words.join('|')+')\\b','i');}
+const NSFW_RE_CLIENT=buildNsfwRegex(BANNED_WORDS);
+function isHeroNsfw(hero){let t=((hero.name||'')+' '+(hero.description||'')+' '+(hero.gender||''));if(hero.skills){for(let s of hero.skills)t+=' '+(s.name||'')+' '+(s.description||'');}return NSFW_RE_CLIENT.test(t);}
+
+function computePower(hero){let s=hero.stats;let sp=(s.attack||0)+(s.defense||0)+(s.speed||0)+(s.health||0)+(s.energy||0);let skp=hero.skills.reduce((sum,sk)=>sum+(sk.basePower||0)*(sk.level||1),0);return sp+skp;}
+function getRankTier(p){for(let t of RANK_TIERS){if(p>=t.min&&p<=t.max)return t;}return RANK_TIERS[RANK_TIERS.length-1];}
+function skillPointsForWins(w){if(w<5)return 0;if(w<15)return 1;if(w<30)return 2;if(w<50)return 3;return 4+Math.floor((w-50)/20);}
+function gemsForSkillPoint(sp){return Math.min(5*sp,20);}
+function cumulativeWinsForSP(sp){if(sp<=0)return 0;if(sp===1)return 5;if(sp===2)return 15;if(sp===3)return 30;return 50+(sp-4)*20;}
+
+async function loadSave(){let s=await root.kv.arena.get('save');let st=await root.kv.arena.get('settings');if(st)G.settings={...G.settings,...st};if(!s){G.ownerId=uuid();G.gems=CONFIG.startingGems;G.heroes=[];G.inventoryLimit=CONFIG.inventoryLimit;await saveSave();}else{G.ownerId=s.ownerId||uuid();G.gems=s.gems??CONFIG.startingGems;G.heroes=s.heroes||[];G.inventoryLimit=s.inventoryLimit||CONFIG.inventoryLimit;G.attackHistory=s.attackHistory||[];G.defendHistory=s.defendHistory||[];G.attackFavorites=s.attackFavorites||[];G.defendFavorites=s.defendFavorites||[];G.fightHistory=s.fightHistory||[];G.fightFavorites=s.fightFavorites||[];G.allowNsfw=s.allowNsfw===true;}applyTheme(G.settings.theme);applyDialogueStyle();applyFightFont();}
+async function saveSave(){await root.kv.arena.set('save',{ownerId:G.ownerId,gems:G.gems,heroes:G.heroes,inventoryLimit:G.inventoryLimit,attackHistory:G.attackHistory,defendHistory:G.defendHistory,attackFavorites:G.attackFavorites,defendFavorites:G.defendFavorites,fightHistory:G.fightHistory,fightFavorites:G.fightFavorites,allowNsfw:G.allowNsfw});}
+async function saveSettings(){await root.kv.arena.set('settings',G.settings);}
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t);G.settings.theme=t;document.querySelectorAll('.theme-card').forEach(c=>c.classList.toggle('selected',c.dataset.theme===t));}
+function applyDialogueStyle(){document.documentElement.setAttribute('data-dialogue-style',G.settings.dialogueStyle);}
+function applyFightFont(){let sizes={small:'0.82rem',medium:'0.9rem',large:'1rem'};let el=$('narrationStyle');if(!el){el=document.createElement('style');el.id='narrationStyle';document.head.appendChild(el);}el.textContent=`.fight-narration{font-size:${sizes[G.settings.fightFont]||sizes.medium};}`;}
+
+function toast(msg,type){let t=el('div','toast '+(type||''),msg);$('toastCtn').appendChild(t);setTimeout(()=>t.remove(),3500);}
+function showModal(html){$('modalContent').innerHTML=html;$('modalOverlay').classList.remove('hidden');}
+function closeModal(){$('modalOverlay').classList.add('hidden');}
+window.closeModal=closeModal;
+function updateGemsDisplay(){$('gemsDisplay').textContent=G.gems;}
+function updateArenaLock(){let l=G.heroes.length===0;$('arenaNavBtn').classList.toggle('locked',l);}
+
+window.navigate=function(view){if(view==='arena'&&G.heroes.length===0){toast('Forge at least 1 hero first!','error');return;}document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));$(view+'View').classList.add('active');document.querySelector(`.nav-btn[data-view="${view}"]`)?.classList.add('active');if(view==='menu')renderMenuStats();if(view==='inventory')renderInventory();if(view==='arena')renderArena();if(view==='forge')renderForge();if(view==='settings')renderSettings();if(view==='guide')renderGuide();if(view==='community')renderCommunity();window.scrollTo(0,0);};
+
+function renderMenuStats(){
+  let statsEl=$('menuStats'); if(!statsEl) return;
+  let heroCount=G.heroes.length;
+  let regCount=G.myChampions.length;
+  let totalWins=G.heroes.reduce((s,h)=>s+(h.wins||0),0);
+  let stats=[{icon:'💎',label:'Gems',value:G.gems},{icon:'🎒',label:'Heroes',value:heroCount},{icon:'🦸',label:'Reg.',value:regCount},{icon:'🏆',label:'Wins',value:totalWins}];
+  statsEl.innerHTML='<div class="dash-stats">'+stats.map(s=>'<div class="dash-stat"><div class="ds-icon">'+s.icon+'</div><div class="ds-value">'+s.value+'</div><div class="ds-label">'+s.label+'</div></div>').join('')+'</div>';
+  let champPanel=$('menuChampionPanel');
+  if(regCount>0){
+    let best=G.myChampions.slice().sort((a,b)=>(b.rankingPoints||0)-(a.rankingPoints||0))[0];
+    let tier=getRankTier(best.rankingPoints||0);
+    let cls=CLASSES.find(c=>c.key===best.class);
+    champPanel.hidden=false;
+    champPanel.innerHTML='<div class="dash-best" onclick="window.navigate(\'arena\')"><div class="dash-best-left"><div class="db-rank"><span class="rank-badge rank-'+tier.key+'">'+tier.name+'</span></div><div class="db-name">'+esc(best.name)+'</div><div class="db-meta"><span class="class-badge class-'+best.class+'">'+cls.name+'</span> · '+GENRES.find(g=>g.key===best.genre).name+'</div></div><div class="dash-best-right"><div class="db-rp">'+(best.rankingPoints||0)+'<span class="db-rp-label">RP</span></div><div class="db-record">'+(best.wins||0)+'W · '+(best.losses||0)+'L</div></div></div>';
+  } else if(heroCount>0){
+    champPanel.hidden=false;
+    champPanel.innerHTML='<div class="dash-cta" onclick="window.navigate(\'arena\')"><div class="dash-cta-icon">⚔️</div><div><div class="dash-cta-title">Enter the Arena</div><div class="dash-cta-sub">Register a hero and start climbing the ranks</div></div></div>';
+  } else {
+    champPanel.hidden=false;
+    champPanel.innerHTML='<div class="dash-cta" onclick="window.navigate(\'forge\')"><div class="dash-cta-icon">⚒️</div><div><div class="dash-cta-title">Forge Your First Hero</div><div class="dash-cta-sub">Cost: 25 💎 · Choose class, genre & lore</div></div></div>';
+  }
+  let recentPanel=$('menuRecentPanel');
+  let recent=G.attackHistory.slice(0,3);
+  if(recent.length>0){
+    recentPanel.hidden=false;
+    recentPanel.innerHTML='<div class="flex-between mb8"><h3 style="margin:0;">⚔️ Recent Attacks</h3><button class="btn btn-ghost btn-sm" onclick="window.navigate(\'arena\');window.arenaTab(\'history\')">View All</button></div>'+recent.map(f=>'<div class="fight-history-item" onclick="window.navigate(\'arena\');window.arenaTab(\'history\');window.viewFight(\''+f.id+'\',\'attack\')"><div class="fhi-header"><span class="fhi-title">'+esc(f.myName)+' vs '+esc(f.oppName)+'</span><span class="text-sm" style="color:'+(f.myWon?'var(--green)':'var(--red)')+'">'+(f.myWon?'WIN':'LOSS')+'</span></div><div class="fhi-meta">'+esc(f.arena)+' · '+new Date(f.timestamp).toLocaleDateString()+'</div></div>').join('');
+  } else {
+    recentPanel.hidden=true;
+  }
+  // Lobby menu (game-like quick actions)
+  let lm=$('lobbyMenuGrid');
+  if(lm){
+    let items=[
+      {icon:'⚔️',title:'Battle',sub:'Find a match',view:'arena',tab:'battle',show:regCount>0},
+      {icon:'🦸',title:'Heroes',sub:'Manage registrations',view:'arena',tab:'register',show:heroCount>0},
+      {icon:'🏆',title:'Rankings',sub:'Leaderboard',view:'arena',tab:'rankings',show:true},
+      {icon:'📜',title:'History',sub:'Attack & defend logs',view:'arena',tab:'history',show:true},
+      {icon:'💬',title:'Community',sub:'Chat & strategy',view:'community',tab:'',show:true},
+      {icon:'📖',title:'Guide',sub:'How to play',view:'guide',tab:'',show:true},
+    ].filter(i=>i.show);
+    lm.innerHTML=items.map(i=>'<div class="lobby-menu-card" onclick="window.navigate(\''+i.view+'\')'+(i.tab?(';window.arenaTab(\''+i.tab+'\')'):'')+'"><div class="lm-icon">'+i.icon+'</div><div class="lm-title">'+i.title+'</div><div class="lm-sub">'+i.sub+'</div></div>').join('');
+  }
+}
+window.toggleSetting=async function(key,el){G.settings[key]=!G.settings[key];el.classList.toggle('on',G.settings[key]);await saveSettings();};
+window.changeDialogueStyle=async function(v){G.settings.dialogueStyle=v;applyDialogueStyle();await saveSettings();};
+window.changeFightFont=async function(v){G.settings.fightFont=v;applyFightFont();await saveSettings();};
+
+function renderSettings(){$('resultBannerToggle').classList.toggle('on',G.settings.showResultBanner);$('arenaImagesToggle').classList.toggle('on',G.settings.arenaImages!==false);$('skillHighlightToggle').classList.toggle('on',G.settings.skillHighlight!==false);$('dialogueStyleSelect').value=G.settings.dialogueStyle;$('fightFontSelect').value=G.settings.fightFont;let tg=$('themeGrid');tg.innerHTML='';THEMES.forEach(t=>{let c=el('div','theme-card'+(G.settings.theme===t.key?' selected':''));c.dataset.theme=t.key;c.innerHTML=`<div class="theme-swatch" style="background:linear-gradient(135deg,${t.bg},${t.card});"></div><div class="theme-name">${t.name}</div>`;c.onclick=async()=>{applyTheme(t.key);await saveSettings();renderSettings();};tg.appendChild(c);});}
+
+// === GUIDE ===
+window.guideTab=function(tab){document.querySelectorAll('[data-gtab]').forEach(t=>t.classList.remove('active'));document.querySelector(`[data-gtab="${tab}"]`).classList.add('active');renderGuideContent(tab);};
+function renderGuide(){renderGuideContent('how');}
+
+window.communityTab=function(tab){document.querySelectorAll('[data-ctab]').forEach(t=>t.classList.remove('active'));document.querySelector(`[data-ctab="${tab}"]`).classList.add('active');let c=$('communityContent');let channelName='hero-arena-'+tab;c.innerHTML=root.commentsPlugin({channel:channelName,width:'100%',height:'450px'});};
+function renderCommunity(){communityTab('general');}
+function renderGuideContent(tab){let c=$('guideContent');
+if(tab==='how'){c.innerHTML=`<div class="guide-section"><h3>🚀 Getting Started</h3><ul><li>You start with <strong>50 gems</strong>. Forge your first hero for 25 gems.</li><li>Once you have at least 1 hero, the Arena unlocks.</li><li>Register a champion in the Arena (pick 3 of 5 skills for battle).</li><li>Fight AI-narrated battles to earn wins and ranking points.</li></ul></div><div class="guide-section"><h3>💎 Gems</h3><p>Gems are your main currency. Earn them through skill point rewards (5/10/15/20 gems per SP milestone). Spend them on:</p><ul><li>Hero Forge — 25 gems per hero</li><li>Inventory upgrade — 50 gems for +10 slots</li><li>Hero background books — 10 gems each</li><li>Gem-to-SP conversion — 30 gems = 1 skill point</li></ul></div><div class="guide-section"><h3>⚡ Skill Points</h3><p>Earned from arena wins. The first SP requires 5 wins, then 10, 15, and 20 (capped at 20). Each SP also rewards gems. Use SP to:</p><ul><li>Upgrade skills (+1 level, costs 1 SP)</li><li>Regenerate a skill (replace with new AI skill, costs 1 SP, resets to Lv.1)</li></ul></div></div>`;}
+else if(tab==='heroes'){c.innerHTML=`<div class="guide-section"><h3>⚒️ Hero Forge</h3><p>Choose a name, gender, class, and genre. Optionally describe your hero (up to 1500 chars). The AI generates stats, a vivid description, 5 skills, and 5 background book titles.</p><p>The user description is the primary creative guide — it shapes skills, personality, and appearance. Class and genre provide the framework.</p></div><div class="guide-section"><h3>📷 Hero Images</h3><p>Each hero has a big image box at the top of their detail view. Click "📷 Generate" to create an AI portrait — the art style adapts to the hero's genre (painterly for fantasy, VN CG for futuristic, cel animation for martial arts, etc.).</p><ul><li>Up to 3 images per hero</li><li>Equip/unequip images — the equipped image shows on hero cards, arena, and rankings</li><li>Delete images you don't like and generate new ones</li><li>Images are not generated during forge — you generate them manually after</li></ul></div><div class="guide-section"><h3>📊 Classes</h3><ul><li><strong>Fighter</strong> — Balanced melee, high HP</li><li><strong>Marksman</strong> — Ranged DPS, fragile</li><li><strong>Mage</strong> — High damage & energy, low HP</li><li><strong>Tank</strong> — Very high defense & HP, slow</li><li><strong>Assassin</strong> — Burst damage & speed, very fragile</li><li><strong>Support</strong> — Healing, buffs, utility</li></ul></div><div class="guide-section"><h3>🛡️ Stats</h3><p>Hover over stat names in hero details for descriptions. Stats are fixed per class bias. Energy powers active skills.</p></div><div class="guide-section"><h3>⚔️ Skills</h3><p>Each hero has 5 skills. Each skill is <strong>active</strong> or <strong>passive</strong>, with 1-2 subtypes (offense, defense, buff, debuff, summon, control, mobility).</p><ul><li>Skills max at level 10</li><li>Only 3 skills are used in battle (selected at registration)</li><li>Skill levels increase power — each level adds basePower to the hero's combat score</li><li>Regenerating a skill creates a new one but resets it to level 1. You see a side-by-side comparison and choose which to keep.</li></ul></div><div class="guide-section"><h3>🗑️ Deleting Heroes</h3><p>You need at least 3 heroes to delete one. Registered heroes must be unregistered first (and only if below Adept rank).</p></div></div>`}
+else if(tab==='arena'){c.innerHTML=`<div class="guide-section"><h3>⚔️ Arena Registration</h3><p>Register up to 5 heroes as champions. When registering, select exactly 3 of your hero's 5 skills for battle. You must keep at least 1 champion registered at all times.</p><p><strong>Rank lock:</strong> Once a champion reaches Adept (50+ RP), they cannot be unregistered. This prevents players from withdrawing strong heroes to protect them.</p></div><div class="guide-section"><h3>🏆 Ranking System</h3><ul><li>Beginner: 0-49 RP</li><li>Adept: 50-99 RP</li><li>Veteran: 100-149 RP</li><li>Apex Veteran: 150-199 RP</li><li>Ranker: 200-249 RP</li><li>Apex Ranker: 250-499 RP</li><li>Champion: 500+ RP</li></ul><p>Ranked wins give +1 RP. Ranked losses cost -1 RP (minimum 0). Classic mode gives wins only, no RP change.</p></div><div class="guide-section"><h3>🤝 Matchmaking</h3><p><strong>Ranked:</strong> Finds opponents closest to your ranking points (top 3 nearest, randomly selected). Falls back to any champion if needed.</p><p><strong>Classic:</strong> Random opponent from all registered champions.</p></div><div class="guide-section"><h3>⚔️ Battle Balance</h3><p>Combat outcome is determined by:</p><ul><li>Base stats (attack, defense, speed, health, energy)</li><li>Skill power (basePower × level for each skill)</li><li>Class matchups (some classes counter others)</li><li>A randomness factor — upsets can happen!</li></ul><p>Skill levels matter — a level 10 skill contributes 10× its basePower, vs 1× at level 1. Higher-level skills give a significant edge but don't guarantee victory.</p></div><div class="guide-section"><h3>📜 Fight History</h3><p>Last 10 fights are saved automatically. Star up to 10 favorites for permanent keeping. View and re-read anytime.</p></div></div>`;}
+else if(tab==='books'){c.innerHTML=`<div class="guide-section"><h3>📚 Hero Background Books</h3><p>Each hero has 5 background books that reveal their past. Books are generated with titles during hero creation, but content is unlocked sequentially.</p><ul><li>Book 1: The beginning of the hero's life</li><li>Books 2-4: Their journey, trials, and growth</li><li>Book 5: The end — leading to their present, ending with their summoning</li></ul><p>Each book costs 10 gems to unlock. You must unlock Book 1 before Book 2's price appears, and so on.</p></div><div class="guide-section"><h3>⚔️ Combat Boost</h3><p>Unlocking books can slightly influence fight dialogue and hero behavior — their background shapes how they fight and speak.</p></div><div class="guide-section"><h3>💬 Hero Chat</h3><p>Unlock all 5 books to unlock the ability to talk directly to your hero. The hero doesn't know who you are — they perceive you as a mysterious presence. Describe your appearance in the chat to reveal your identity to them.</p><p>Chat logs are saved per hero. You can clear them anytime.</p></div></div>`;}
+else if(tab==='lore'){c.innerHTML=`<div class="guide-section"><h3>🌍 The Multiverse Arena</h3><p>Beyond the boundaries of any single world lies the Arena — a cosmic construct where champions from every reality are summoned to do battle. No one knows who built it, or why. Some say it's a test arranged by ancient gods. Others believe it's a living entity that feeds on conflict.</p></div><div class="guide-section"><h3>👁️ The Audience</h3><p>The stands are always full, but the audience is never clearly seen. Shadowy figures watch from the darkness, their eyes glowing in various colors — crimson, gold, emerald, violet. Some whisper that these are former champions who never left. Others say they are the Arena itself, watching its endless cycle of combat.</p></div><div class="guide-section"><h3>📣 The Announcer</h3><p>A disembodied voice echoes through every arena, introducing fighters with dramatic flair. No one has ever seen the announcer. The voice changes tone and style depending on the arena, but it's always the same entity — ancient, theatrical, and utterly mysterious.</p></div><div class="guide-section"><h3>🔮 The Summoning</h3><p>When you forge a hero, you are pulling them from their reality into the Arena. They arrive confused, disoriented, but ready to fight — as if the Arena itself compels them. Their past lives, their goals, their very identity — all become fuel for the spectacle. The books they carry are fragments of who they were before the summoning.</p></div><div class="guide-section"><h3>⚔️ The Cycle</h3><p>Win or lose, champions remain in the Arena. Even defeated fighters return to fight again, their wounds healed, their memories intact. Death in the Arena is not permanent — it's merely a pause. Some champions have fought thousands of battles. The oldest among them have forgotten their original worlds entirely.</p></div></div>`;}
+}
+
+// === FORGE ===
+function renderForge(){let cg=$('classGrid');cg.innerHTML='';CLASSES.forEach(c=>{let card=el('div','select-card');card.innerHTML=`<div class="sc-title">${c.name}</div><div class="sc-desc">${c.desc}</div>`;card.onclick=()=>{G.forgeSelection.class=c.key;cg.querySelectorAll('.select-card').forEach(e=>e.classList.remove('selected'));card.classList.add('selected');};cg.appendChild(card);});let gg=$('genreGrid');gg.innerHTML='';GENRES.forEach(g=>{let card=el('div','select-card');card.innerHTML=`<div class="sc-title">${g.name}</div><div class="sc-desc">${g.desc}</div>`;card.onclick=()=>{G.forgeSelection.genre=g.key;gg.querySelectorAll('.select-card').forEach(e=>e.classList.remove('selected'));card.classList.add('selected');};gg.appendChild(card);});}
+$('heroGenderSelect').addEventListener('change',e=>{$('heroCustomGenderInput').classList.toggle('hidden',e.target.value!=='custom');});
+$('heroDescInput').addEventListener('input',e=>{$('descCharCount').textContent=e.target.value.length;});
+
+$('createHeroBtn').onclick=async()=>{let name=$('heroNameInput').value.trim();let gender=$('heroGenderSelect').value;let customGender=$('heroCustomGenderInput').value.trim();let cls=G.forgeSelection.class;let genre=G.forgeSelection.genre;let userDesc=$('heroDescInput').value.trim();if(!name){toast('Enter a name!','error');return;}if(!cls){toast('Select a class!','error');return;}if(!genre){toast('Select a genre!','error');return;}if(G.gems<CONFIG.heroForgeCost){toast(`Need ${CONFIG.heroForgeCost} gems!`,'error');return;}if(G.heroes.length>=G.inventoryLimit){toast('Inventory full!','error');return;}let gd=gender==='custom'?(customGender||'unspecified'):gender;let cd=CLASSES.find(c=>c.key===cls);let gend=GENRES.find(g=>g.key===genre);$('createHeroBtn').disabled=true;$('forgeForm').innerHTML+=`<div class="inline-loading" id="forgeLoading"><div class="inline-spinner"></div><div class="inline-loading-text">⚒️ Forging hero...</div><div class="inline-loading-sub">Summoning from ${gend.name}</div></div>`;try{let prompt=buildHeroPrompt({name,gender:gd,className:cd.name,classDesc:cd.desc,classStatBias:cd.statBias,genreName:gend.name,genreDesc:gend.desc,userDesc,classFocus:CLASS_FOCUS[cls]});let result=await root.generateText({instruction:prompt,startWith:'{'});let jt=result.text.trim();let s=jt.indexOf('{'),e=jt.lastIndexOf('}');if(s>=0&&e>s)jt=jt.slice(s,e+1);let hd=JSON.parse(jt);let hero={id:uuid(),name:hd.name||name,gender:gd,class:cls,genre:genre,userDesc:userDesc,description:hd.description||'',stats:hd.stats,skills:hd.skills.map(s=>({name:s.name,type:s.type,subtypes:s.subtypes,description:s.description,basePower:s.basePower,level:1})),bookTitles:hd.bookTitles||['Book One','Book Two','Book Three','Book Four','Book Five'],books:[],wins:0,losses:0,skillPointsSpent:0,lastRewardedSP:0,createdAt:Date.now(),chatLog:[]};G.heroes.push(hero);G.gems-=CONFIG.heroForgeCost;await saveSave();updateGemsDisplay();updateArenaLock();showForgeResult(hero);toast('Hero forged!','success');}catch(err){toast('Forge failed: '+err.message,'error');console.error(err);$('forgeLoading')?.remove();}finally{$('createHeroBtn').disabled=false;}};
+
+function buildHeroPrompt(d){return `You are a master hero designer for a PvP arena game. Create a hero based on these specifications:
+
+HERO NAME: ${d.name}
+GENDER: ${d.gender}
+CLASS: ${d.className} — ${d.classDesc}
+GENRE: ${d.genreName} — ${d.genreDesc}
+USER DESCRIPTION: ${d.userDesc||'(none provided — create freely within the class and genre)'}
+
+The hero's name, gender, class, genre, and especially the user description all influence the hero's flavor, skills, and personality. The user description is the PRIMARY creative guide when provided.
+
+Return ONLY valid JSON (no markdown fences) with this EXACT structure:
+{
+  "name": "the hero's name",
+  "description": "2-3 paragraphs describing appearance, backstory, personality, and fighting style. Rich and vivid, fitting the genre.",
+  "stats": { "attack": <1-100>, "defense": <1-100>, "speed": <1-100>, "health": <1-100>, "energy": <1-100> },
+  "skills": [
+    { "name": "<name>", "type": "active" or "passive", "subtypes": ["<subtype1>"] or ["<subtype1>","<subtype2>"], "description": "<2-3 sentences: how the skill looks visually, how it works mechanically, and what it does to the target>", "basePower": <10-50> }
+  ],
+  "bookTitles": ["<title for book 1: the hero's origin/beginning>", "<title for book 2>", "<title for book 3>", "<title for book 4>", "<title for book 5: leads to present/summoning>"]
+}
+
+RULES:
+- Stats MUST follow the class bias: ${d.classStatBias}
+- Exactly 5 skills. At least 1 passive and at least 3 active.
+- Each skill has 1 or 2 subtypes from: offense, defense, buff, debuff, summon, control, mobility.
+- Buff includes healing and enhancement. Debuff can weaken enemies OR self/allies in exchange for power (curse-type).
+- Skills should fit the class identity. ${d.className}s focus on: ${d.classFocus}
+- Skill descriptions must describe: visual appearance, mechanical effect, and impact. 2-3 sentences each.
+- basePower 10-50. Balanced across all 5.
+- Book titles should be evocative and tell a 5-chapter life story: origin → journey → trials → climax → present/summoning.
+- All text fits the ${d.genreName} genre.
+- Return ONLY the JSON.`;}
+
+function showForgeResult(hero){$('forgeForm').classList.add('hidden');$('forgeResult').classList.remove('hidden');$('forgeResult').innerHTML=`<h2>✨ Hero Forged!</h2>${renderHeroDetailHTML(hero)}<div class="fight-actions"><button class="btn btn-purple" onclick="window.navigate('inventory')">View in Heroes</button><button class="btn btn-ghost" onclick="window.forgeAnother()">Forge Another</button></div>`;}
+window.forgeAnother=function(){$('forgeForm').classList.remove('hidden');$('forgeResult').classList.add('hidden');$('heroNameInput').value='';$('heroDescInput').value='';$('descCharCount').textContent='0';G.forgeSelection={class:null,genre:null};renderForge();};
+
+// === HERO DETAIL ===
+function getClassEmoji(cls){return{fighter:'⚔️',marksman:'🏹',mage:'🔮',tank:'🛡️',assassin:'🗡️',support:'✨'}[cls]||'🎭';}
+function renderHeroDetailHTML(hero,opts={}){let cls=CLASSES.find(c=>c.key===hero.class);let genre=GENRES.find(g=>g.key===hero.genre);let power=computePower(hero);let earnedSP=skillPointsForWins(hero.wins);let availableSP=earnedSP-hero.skillPointsSpent;let nextReq=cumulativeWinsForSP(earnedSP+1)-cumulativeWinsForSP(earnedSP);let isReg=G.myChampions.some(c=>c.heroId===hero.id);let canDelete=!isReg&&G.heroes.length>=CONFIG.minHeroesToDelete;let unlockedBooks=(hero.books||[]).length;let allBooksUnlocked=unlockedBooks>=CONFIG.heroBookCount;
+
+let statsHTML=STAT_KEYS.map(k=>{let v=hero.stats[k]||0;let info=STAT_INFO.find(s=>s.key===k);return `<div class="stat-bar"><span class="sb-label">${info.name}<div class="stat-tooltip">${esc(info.desc)}</div></span><div class="sb-track"><div class="sb-fill" style="width:${v}%;background:${STAT_COLORS[k]||'#888'}"></div></div><span class="sb-val">${v}</span></div>`;}).join('');
+
+let skillsHTML=hero.skills.map((s,i)=>`<div class="skill-item"><div class="si-header"><span class="si-name">${esc(s.name)}</span><span class="si-level">Lv. ${s.level}/${CONFIG.maxSkillLevel}</span></div><div class="si-tags"><span class="si-tag type-${s.type}">${s.type}</span>${s.subtypes.map(st=>`<span class="si-tag">${st}</span>`).join('')}</div><div class="si-desc">${esc(s.description)}</div><div class="si-upgrade"><div class="level-dots">${Array.from({length:CONFIG.maxSkillLevel},(_,j)=>`<div class="level-dot ${j<s.level?'filled':''}"></div>`).join('')}</div>${availableSP>0&&s.level<CONFIG.maxSkillLevel?`<button class="btn btn-gold btn-sm" onclick="window.confirmUpgradeSkill('${hero.id}',${i})">+1 (1SP)</button>`:''}${availableSP>=CONFIG.skillRegenCostSP?`<button class="btn btn-ghost btn-sm" onclick="window.regenSkill('${hero.id}',${i})">🔄 Regen (${CONFIG.skillRegenCostSP}SP)</button>`:''}${s.level>=CONFIG.maxSkillLevel?'<span class="text-sm" style="color:var(--gold)">MAX</span>':''}</div></div>`).join('');
+
+let booksHTML=renderBooksHTML(hero);
+let chatHTML=allBooksUnlocked?`<button class="btn btn-purple btn-block" style="margin-top:8px;" onclick="window.openHeroChat('${hero.id}')">💬 Talk to ${esc(hero.name)}</button>`:'';
+let deleteHTML=opts.showDelete!==false?`${isReg?'<p class="text-xs text-muted mb8">⚠️ Unregister from arena to delete.</p>':''}${canDelete?`<button class="btn btn-red btn-sm btn-block" style="margin-top:8px;" onclick="window.deleteHero('${hero.id}')">🗑️ Delete Hero</button>`:''}${!canDelete&&!isReg?`<p class="text-xs text-muted">Need ${CONFIG.minHeroesToDelete}+ heroes to delete (you have ${G.heroes.length}).</p>`:''}`:'';
+
+return `<div class="flex-between mb12"><div><span class="class-badge class-${hero.class}">${cls.name}</span><span style="margin-left:6px;font-size:0.8rem;color:var(--text2)">${genre.name}</span></div><div class="flex-center"><span class="skill-points-display">⚡ ${availableSP} SP</span><span class="sp-convert" onclick="window.convertGemsToSP('${hero.id}')">+SP (${CONFIG.gemsToSkillPointCost}💎)</span></div></div><h3 style="color:var(--gold);font-size:1.3rem;margin-bottom:3px;">${esc(hero.name)}</h3><p class="text-sm text-muted mb12">${esc(hero.gender)} · Power: ${power} · Wins: ${hero.wins} · Losses: ${hero.losses}</p><p class="text-sm mb12" style="line-height:1.6;">${esc(hero.description)}</p><h3>Stats</h3><div class="mb16">${statsHTML}</div><h3>Skills</h3><div>${skillsHTML}</div>${availableSP===0?`<p class="text-sm text-muted" style="margin-top:8px;">Next SP in ${nextReq} more win(s).</p>`:''}<div style="margin-top:16px;"><h3>📚 Background Books</h3>${booksHTML}</div>${chatHTML}${deleteHTML}`;}
+
+// === BOOKS ===
+function renderBooksHTML(hero){let titles=hero.bookTitles||[];let books=hero.books||[];let html='<div class="book-grid">';for(let i=0;i<CONFIG.heroBookCount;i++){let unlocked=books.some(b=>b.index===i);let canUnlock=i===0||books.some(b=>b.index===i-1);let title=unlocked?books.find(b=>b.index===i).title:(canUnlock?titles[i]:'??? Locked');html+=`<div class="book-item ${unlocked?'unlocked':'locked'}"><div class="book-icon">${unlocked?'📖':(canUnlock?'🔒':'🔒')}</div><div class="book-info"><div class="book-title">${esc(title)}</div><div class="book-meta">${unlocked?'Unlocked':(canUnlock?`Unlock for ${CONFIG.heroBookCost} 💎`:'Unlock previous book first')}</div></div>${canUnlock&&!unlocked?`<button class="btn btn-gold btn-sm" onclick="window.unlockBook('${hero.id}',${i})">Unlock</button>`:''}</div>`;if(unlocked){let bk=books.find(b=>b.index===i);html+=`<div class="book-content">${esc(bk.content)}</div>`;}}html+='</div>';return html;}
+
+window.unlockBook=async function(heroId,bookIdx){let hero=G.heroes.find(h=>h.id===heroId);if(!hero)return;if(G.gems<CONFIG.heroBookCost){toast(`Need ${CONFIG.heroBookCost} gems!`,'error');return;}if(!hero.books)hero.books=[];if(hero.books.some(b=>b.index===bookIdx)){toast('Already unlocked!','error');return;}if(bookIdx>0&&!hero.books.some(b=>b.index===bookIdx-1)){toast('Unlock previous book first!','error');return;}showModal(`<div class="inline-loading"><div class="inline-spinner"></div><div class="inline-loading-text">📖 ${esc(hero.name)} is recalling memories...</div><div class="inline-loading-sub">Unlocking Book ${bookIdx+1}: ${esc(hero.bookTitles[bookIdx])}</div></div>`);try{let prompt=buildBookPrompt(hero,bookIdx);let result=await root.generateText({instruction:prompt});let content=result.text.trim();if(!hero.books)hero.books=[];hero.books.push({index:bookIdx,title:hero.bookTitles[bookIdx],content:content,unlockedAt:Date.now()});G.gems-=CONFIG.heroBookCost;await saveSave();updateGemsDisplay();showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button>${renderHeroDetailHTML(hero)}`);toast('Book unlocked!','success');}catch(err){toast('Failed: '+err.message,'error');closeModal();}};
+
+function buildBookPrompt(hero,bookIdx){let cls=CLASSES.find(c=>c.key===hero.class);let genre=GENRES.find(g=>g.key===hero.genre);let prevBooks=(hero.books||[]).sort((a,b)=>a.index-b.index).map(b=>`Book ${b.index+1} (${b.title}): ${b.content.slice(0,300)}...`).join('\n\n');let phaseDesc=bookIdx===0?'the very BEGINNING of their life — origin, childhood, early experiences that shaped them.':bookIdx===4?'the END of their story — how they reached their present state, their final goals, and ultimately being SUMMONED to the Arena by an unknown force. End with the summoning.':`the next chapter of their journey (book ${bookIdx+1} of 5). This should advance their story significantly.`;return `You are writing a background story chapter for a PvP arena hero. Write in a vivid, literary style — NOT generic AI prose. Use strong verbs, specific details, and avoid clichés.
+
+HERO: ${hero.name}
+CLASS: ${cls.name}
+GENRE: ${genre.name}
+DESCRIPTION: ${hero.description}
+${prevBooks?`PREVIOUS BOOKS:\n${prevBooks}`:''}
+
+BOOK ${bookIdx+1} TITLE: ${hero.bookTitles[bookIdx]}
+This book covers: ${phaseDesc}
+
+RULES:
+- Write 3-5 paragraphs. Rich and important content — no filler, no padding.
+- Be specific and vivid. Show don't tell. Use sensory details.
+- Fit the ${genre.name} genre and the hero's class/personality.
+- ${bookIdx===4?'End with the hero being pulled from their world into the Arena by an unseen summoning force. They don\'t know who summoned them.':'Leave hooks for the next chapter.'}
+- Do NOT include a title header. Start directly with the story.
+- Write in third person, past tense.
+- Avoid AI-sounding phrases like "a testament to", "a symphony of", "the weight of", "echoes through time", etc. Be original and direct.`;}
+
+// === HERO CHAT ===
+window.openHeroChat=async function(heroId){let hero=G.heroes.find(h=>h.id===heroId);if(!hero)return;if(!hero.chatLog)hero.chatLog=[];let cls=CLASSES.find(c=>c.key===hero.class);let genre=GENRES.find(g=>g.key===hero.genre);let allBooks=(hero.books||[]).sort((a,b)=>a.index-b.index);let bookContent=allBooks.map(b=>b.content).join('\n\n');showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button><h2>💬 Talk to ${esc(hero.name)}</h2><p class="text-sm text-muted mb8">They can't see you clearly. Describe yourself to reveal your identity.</p><div class="chat-logs" id="chatLogs">${hero.chatLog.map(m=>`<div class="chat-msg ${m.role==='hero'?'hero':'user'}"><div class="chat-msg-name">${m.role==='hero'?esc(hero.name):'You'}</div>${esc(m.text)}</div>`).join('')||'<p class="text-muted text-sm" style="text-align:center;padding:20px;">Start the conversation...</p>'}</div><div class="chat-input-row"><input type="text" id="chatInput" placeholder="Say something..." maxlength="500"><button class="btn btn-purple btn-sm" onclick="window.sendChatMsg('${heroId}')">Send</button></div><button class="btn btn-ghost btn-sm btn-block" style="margin-top:6px;" onclick="window.clearChatLog('${heroId}')">Clear Chat</button>`);let cl=$('chatLogs');if(cl)cl.scrollTop=cl.scrollHeight;$('chatInput')?.addEventListener('keydown',e=>{if(e.key==='Enter')window.sendChatMsg(heroId);});};
+
+window.sendChatMsg=async function(heroId){let hero=G.heroes.find(h=>h.id===heroId);let inp=$('chatInput');let msg=inp.value.trim();if(!msg)return;inp.value='';if(!hero.chatLog)hero.chatLog=[];hero.chatLog.push({role:'user',text:msg,id:uuid()});let cl=$('chatLogs');cl.innerHTML+=`<div class="chat-msg user"><div class="chat-msg-name">You</div>${esc(msg)}</div>`;cl.scrollTop=cl.scrollHeight;let typingEl=document.createElement('div');typingEl.className='chat-msg hero';typingEl.innerHTML='<div class="chat-msg-name">'+esc(hero.name)+'</div><span class="text-muted">typing...</span>';cl.appendChild(typingEl);cl.scrollTop=cl.scrollHeight;try{let cls=CLASSES.find(c=>c.key===hero.class);let genre=GENRES.find(g=>g.key===hero.genre);let allBooks=(hero.books||[]).sort((a,b)=>a.index-b.index);let bookContent=allBooks.map(b=>`Book ${b.index+1} (${b.title}): ${b.content.slice(0,500)}`).join('\n');let chatHistory=hero.chatLog.slice(-10).map(m=>`${m.role==='hero'?hero.name:'Summoner'}: ${m.text}`).join('\n');let prompt=`You are roleplaying as ${hero.name}, a hero in the Arena. Stay in character at ALL TIMES. Respond as ${hero.name} would, based on their personality, background, class, and genre.
+
+HERO: ${hero.name}
+CLASS: ${cls.name}
+GENRE: ${genre.name}
+DESCRIPTION: ${hero.description}
+BACKGROUND BOOKS:
+${bookContent}
+
+IMPORTANT RULES:
+- You are ${hero.name}. The person talking to you is your Summoner — the one who pulled you into the Arena.
+- You CANNOT see the Summoner's true form or identity. They are a mysterious presence to you. Only if they describe themselves do you learn what they look like.
+- Stay in character. Use the hero's personality, speech patterns, and knowledge from their background books.
+- The hero does NOT know meta-game information (skill points, gems, etc.) unless the summoner tells them.
+- Keep responses concise (1-4 sentences) unless asked for detail.
+- Do NOT use quotes around your dialogue. Speak directly.
+
+CHAT HISTORY:
+${chatHistory}
+
+Respond as ${hero.name}:`;let result=await root.generateText({instruction:prompt,startWith:''});let reply=result.text.trim();hero.chatLog.push({role:'hero',text:reply,id:uuid()});await saveSave();typingEl.remove();cl.innerHTML+=`<div class="chat-msg hero"><div class="chat-msg-name">${esc(hero.name)}</div>${esc(reply)}</div>`;cl.scrollTop=cl.scrollHeight;}catch(err){typingEl.remove();toast('Chat failed: '+err.message,'error');}};
+
+window.clearChatLog=async function(heroId){let hero=G.heroes.find(h=>h.id===heroId);hero.chatLog=[];await saveSave();closeModal();window.openHeroChat(heroId);};
+
+// === SKILL UPGRADE ===
+window.confirmUpgradeSkill=function(heroId,idx){let hero=G.heroes.find(h=>h.id===heroId);let skill=hero.skills[idx];let earnedSP=skillPointsForWins(hero.wins);let availableSP=earnedSP-hero.skillPointsSpent;if(availableSP<=0){toast('No SP!','error');return;}if(skill.level>=CONFIG.maxSkillLevel){toast('Maxed!','error');return;}showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button><h2>Upgrade Skill?</h2><p>Upgrade <strong style="color:var(--gold)">${esc(skill.name)}</strong> from Lv. ${skill.level} to Lv. ${skill.level+1}?</p><p class="text-sm text-muted mb12">Cost: 1 SP (you have ${availableSP})</p><div class="fight-actions"><button class="btn btn-gold" onclick="window.doUpgradeSkill('${heroId}',${idx})">✓ Confirm</button><button class="btn btn-ghost" onclick="window.closeModal()">✗ Cancel</button></div>`);};
+window.doUpgradeSkill=async function(heroId,idx){let hero=G.heroes.find(h=>h.id===heroId);let skill=hero.skills[idx];skill.level++;hero.skillPointsSpent++;await saveSave();let champ=G.myChampions.find(c=>c.heroId===heroId);if(champ){try{await rpc('updateChampion',{championId:champ.id,ownerId:G.ownerId,skills:hero.skills});}catch(e){}}closeModal();showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button>${renderHeroDetailHTML(hero)}`);toast(`${skill.name} → Lv. ${skill.level}!`,'success');};
+
+// === SKILL REGEN (with comparison) ===
+window.regenSkill=function(heroId,idx){let hero=G.heroes.find(h=>h.id===heroId);let skill=hero.skills[idx];let earnedSP=skillPointsForWins(hero.wins);let availableSP=earnedSP-hero.skillPointsSpent;if(availableSP<CONFIG.skillRegenCostSP){toast(`Need ${CONFIG.skillRegenCostSP} SP!`,'error');return;}showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button><h2>🔄 Regenerate Skill?</h2><p>Replace <strong style="color:var(--gold)">${esc(skill.name)}</strong> with a new AI-generated skill?</p><p class="text-sm text-muted mb12">Cost: ${CONFIG.skillRegenCostSP} SP. The new skill starts at Lv.1 (current level not transferred). You'll see both and choose which to keep.</p><div class="fight-actions"><button class="btn btn-gold" onclick="window.doRegenSkill('${heroId}',${idx})">✓ Generate</button><button class="btn btn-ghost" onclick="window.closeModal()">✗ Cancel</button></div>`);};
+window.doRegenSkill=async function(heroId,idx){let hero=G.heroes.find(h=>h.id===heroId);let cls=CLASSES.find(c=>c.key===hero.class);let genre=GENRES.find(g=>g.key===hero.genre);closeModal();showModal(`<div class="inline-loading"><div class="inline-spinner"></div><div class="inline-loading-text">🔄 Generating new skill...</div></div>`);try{let otherSkills=hero.skills.filter((_,i)=>i!==idx).map(s=>s.name).join(', ');let prompt=`You are designing a single skill for a PvP arena hero. Return ONLY valid JSON.
+
+HERO: ${hero.name}
+CLASS: ${cls.name} — focuses on ${CLASS_FOCUS[hero.class]}
+GENRE: ${genre.name}
+DESCRIPTION: ${hero.description}
+EXISTING SKILLS (do not duplicate): ${otherSkills}
+
+Generate ONE new skill that thematically fits the hero and class. It must be balanced (basePower 10-50).
+Return ONLY: { "name": "<name>", "type": "active" or "passive", "subtypes": ["<s1>"] or ["<s1>","<s2>"], "description": "<2-3 sentences: how it looks, how it works, what it does>", "basePower": <10-50> }
+Subtypes from: offense, defense, buff, debuff, summon, control, mobility. Max 2. Buff includes healing.`;let result=await root.generateText({instruction:prompt,startWith:'{'});let jt=result.text.trim();let s=jt.indexOf('{'),e=jt.lastIndexOf('}');if(s>=0&&e>s)jt=jt.slice(s,e+1);let newSkill=JSON.parse(jt);let oldSkill=hero.skills[idx];showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button><h2>🔄 Choose Your Skill</h2><p class="text-sm text-muted mb12">Keep the current skill or replace it with the new one?</p><div class="skill-compare"><div class="skill-compare-col current"><div class="scc-label">Current</div><div class="si-name">${esc(oldSkill.name)}</div><div class="si-tags" style="margin:4px 0;"><span class="si-tag type-${oldSkill.type}">${oldSkill.type}</span>${oldSkill.subtypes.map(st=>`<span class="si-tag">${st}</span>`).join('')}</div><div class="si-desc">${esc(oldSkill.description)}</div><div class="text-sm" style="margin-top:4px;color:var(--accent)">Lv. ${oldSkill.level} · Power ${oldSkill.basePower}</div><button class="btn btn-ghost btn-sm btn-block" style="margin-top:8px;" onclick="window.keepCurrentSkill('${heroId}',${idx})">Keep Current</button></div><div class="skill-compare-col new"><div class="scc-label">New</div><div class="si-name">${esc(newSkill.name)}</div><div class="si-tags" style="margin:4px 0;"><span class="si-tag type-${newSkill.type}">${newSkill.type}</span>${newSkill.subtypes.map(st=>`<span class="si-tag">${st}</span>`).join('')}</div><div class="si-desc">${esc(newSkill.description)}</div><div class="text-sm" style="margin-top:4px;color:var(--gold)">Lv. 1 · Power ${newSkill.basePower}</div><button class="btn btn-gold btn-sm btn-block" style="margin-top:8px;" onclick="window.keepNewSkill('${heroId}',${idx})">Use New (Lv.1)</button></div></div>`);window._regenNewSkill=newSkill;}catch(err){toast('Regen failed: '+err.message,'error');closeModal();}};
+
+window.keepCurrentSkill=function(heroId,idx){closeModal();toast('Kept current skill.','success');};
+window.keepNewSkill=async function(heroId,idx){let hero=G.heroes.find(h=>h.id===heroId);let newSkill=window._regenNewSkill;newSkill.level=1;hero.skills[idx]=newSkill;hero.skillPointsSpent+=CONFIG.skillRegenCostSP;await saveSave();let champ=G.myChampions.find(c=>c.heroId===heroId);if(champ){try{await rpc('updateChampion',{championId:champ.id,ownerId:G.ownerId,skills:hero.skills});}catch(e){}}closeModal();showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button>${renderHeroDetailHTML(hero)}`);toast(`${newSkill.name} equipped (Lv.1)!`,'success');};
+
+// === GEMS TO SP ===
+window.convertGemsToSP=function(heroId){let hero=G.heroes.find(h=>h.id===heroId);if(G.gems<CONFIG.gemsToSkillPointCost){toast(`Need ${CONFIG.gemsToSkillPointCost} gems!`,'error');return;}showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button><h2>Convert Gems to SP?</h2><p>Spend <strong style="color:var(--gold)">${CONFIG.gemsToSkillPointCost} 💎</strong> for 1 SP for <strong style="color:var(--gold)">${esc(hero.name)}</strong>?</p><p class="text-sm text-muted mb12">You have ${G.gems} gems.</p><div class="fight-actions"><button class="btn btn-gold" onclick="window.doConvertGems('${heroId}')">✓ Confirm</button><button class="btn btn-ghost" onclick="window.closeModal()">✗ Cancel</button></div>`);};
+window.doConvertGems=async function(heroId){let hero=G.heroes.find(h=>h.id===heroId);G.gems-=CONFIG.gemsToSkillPointCost;hero.skillPointsSpent-=1;await saveSave();updateGemsDisplay();closeModal();showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button>${renderHeroDetailHTML(hero)}`);toast('+1 Skill Point!','success');};
+
+// === DELETE HERO ===
+window.deleteHero=function(heroId){let hero=G.heroes.find(h=>h.id===heroId);let isReg=G.myChampions.some(c=>c.heroId===heroId);if(isReg){toast('Unregister first!','error');return;}if(G.heroes.length<CONFIG.minHeroesToDelete){toast(`Need ${CONFIG.minHeroesToDelete}+ heroes!`,'error');return;}showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button><h2>Delete Hero?</h2><p>Permanently delete <strong style="color:var(--gold)">${esc(hero.name)}</strong>?</p><p class="text-sm text-muted mb12">This cannot be undone.</p><div class="fight-actions"><button class="btn btn-red" onclick="window.doDeleteHero('${heroId}')">🗑️ Delete</button><button class="btn btn-ghost" onclick="window.closeModal()">Cancel</button></div>`);};
+window.doDeleteHero=async function(heroId){G.heroes=G.heroes.filter(h=>h.id!==heroId);await saveSave();closeModal();renderInventory();toast('Hero deleted.','success');};
+
+// === INVENTORY ===
+function renderInventory(){let grid=$('heroGrid');let empty=$('inventoryEmpty');$('inventoryCount').textContent=`${G.heroes.length} / ${G.inventoryLimit}`;if(G.heroes.length===0){grid.innerHTML='';empty.classList.remove('hidden');return;}empty.classList.add('hidden');grid.innerHTML=G.heroes.map(h=>{let cls=CLASSES.find(c=>c.key===h.class);let genre=GENRES.find(g=>g.key===h.genre);let isReg=G.myChampions.some(c=>c.heroId===h.id);let books=(h.books||[]).length;let imgHTML=`<div class="hero-card-img-placeholder">${getClassEmoji(h.class)}</div>`;return `<div class="hero-card" onclick="window.showHeroDetail('${h.id}')">${imgHTML}${isReg?'<div class="hc-registered">⚔️</div>':''}${books>0?`<div class="hc-books">📖${books}</div>`:''}<div class="hc-name">${esc(h.name)}</div><div class="hc-meta mb8"><span class="class-badge class-${h.class}">${cls.name}</span></div><div class="hc-meta">${genre.name}</div><div class="hc-meta">⚡ ${computePower(h)} · 🏆 ${h.wins}W</div></div>`;}).join('');}
+window.showHeroDetail=function(heroId){let hero=G.heroes.find(h=>h.id===heroId);if(!hero)return;showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button>${renderHeroDetailHTML(hero)}`);};
+window.upgradeInventory=async function(){if(G.gems<CONFIG.inventoryUpgradeCost){toast(`Need ${CONFIG.inventoryUpgradeCost} gems!`,'error');return;}G.gems-=CONFIG.inventoryUpgradeCost;G.inventoryLimit+=CONFIG.inventoryUpgradeAmount;await saveSave();updateGemsDisplay();renderInventory();toast(`+${CONFIG.inventoryUpgradeAmount} slots!`,'success');};
+
+// === ARENA ===
+window.arenaTab=function(tab){document.querySelectorAll('.arena-tabs .tab').forEach(t=>t.classList.remove('active'));document.querySelector(`.arena-tabs .tab[data-atab="${tab}"]`).classList.add('active');let subs={battle:'Forge glory in combat',register:'Manage your registered heroes',rankings:'The ladder of legends',history:'Attack & defense logs'};let subEl=$('arenaHeroSub');if(subEl&&subs[tab])subEl.textContent=subs[tab];$('arenaRegister').classList.toggle('hidden',tab!=='register');$('arenaBattle').classList.toggle('hidden',tab!=='battle');$('arenaRankings').classList.toggle('hidden',tab!=='rankings');$('arenaHistory').classList.toggle('hidden',tab!=='history');if(tab==='register')renderArenaRegister();if(tab==='battle')renderArenaBattle();if(tab==='rankings')renderArenaRankings();if(tab==='history')renderArenaHistory();};
+function renderArena(){arenaTab('battle');}
+
+function renderArenaRegister(){let ctn=$('arenaRegister');let myRegCount=G.myChampions.length;let regHTML='';if(G.myChampions.length>0){regHTML=`<div class="section"><h3>Registered (${myRegCount}/${CONFIG.maxRegistrations})</h3><div class="hero-grid">${G.myChampions.map(c=>{let tier=getRankTier(c.rankingPoints||0);let locked=(c.rankingPoints||0)>=CONFIG.unregisterLockRank;let imgHTML=`<div class="hero-card-img-placeholder">${getClassEmoji(c.class)}</div>`;return `<div class="hero-card" onclick="window.showChampionDetail('${c.id}')">${imgHTML}<div class="hc-name">${esc(c.name)}</div><div class="hc-meta mb8"><span class="class-badge class-${c.class}">${CLASSES.find(x=>x.key===c.class).name}</span></div><div class="hc-meta"><span class="rank-badge rank-${tier.key}">${tier.name}</span></div><div class="hc-meta">🏆 ${c.rankingPoints||0} RP · ${c.wins||0}W/${c.losses||0}L</div>${locked?'<div class="text-xs" style="color:var(--gold);margin-top:4px;">🔒 Rank locked</div>':''}</div>`;}).join('')}</div></div>`;}let unreg=G.heroes.filter(h=>!G.myChampions.some(c=>c.heroId===h.id));let unregHTML='';if(unreg.length>0&&myRegCount<CONFIG.maxRegistrations){unregHTML=`<div class="section"><h3>Available Heroes</h3><p class="text-sm text-muted mb12">Select 3 of 5 skills for battle.</p>${unreg.map(h=>{let imgHTML=`<div class="hero-card-img-placeholder">${getClassEmoji(h.class)}</div>`;return `<div class="hero-card" style="cursor:default;">${imgHTML}<div class="hc-name">${esc(h.name)}</div><div class="hc-meta mb8"><span class="class-badge class-${h.class}">${CLASSES.find(x=>x.key===h.class).name}</span> · ⚡ ${computePower(h)}</div><button class="btn btn-purple btn-sm btn-block" style="margin-top:6px;" onclick="window.openRegisterModal('${h.id}')">Register</button></div>`;}).join('')}</div>`;}ctn.innerHTML=regHTML+unregHTML;if(G.myChampions.length===0&&unreg.length===0){ctn.innerHTML=`<div class="section"><div class="empty-state"><div class="es-icon">⚔️</div><p>No heroes. Forge one first!</p><button class="btn btn-purple btn-sm" style="margin-top:10px;" onclick="window.navigate('forge')">Go to Forge</button></div></div>`;}}
+
+window.openRegisterModal=function(heroId){let hero=G.heroes.find(h=>h.id===heroId);if(!hero)return;let selected=new Set();let skillsHTML=hero.skills.map((s,i)=>`<div class="skill-select-item" data-idx="${i}" onclick="window.toggleSkillSelect(this,${i})"><div class="ssi-header"><div><span class="ssi-name">${esc(s.name)}</span><div class="si-tags" style="margin-top:3px;"><span class="si-tag type-${s.type}">${s.type}</span>${s.subtypes.map(st=>`<span class="si-tag">${st}</span>`).join('')}</div></div><span class="ssi-check">○</span></div><div class="si-desc" style="margin-top:4px;">${esc(s.description)}</div></div>`).join('');showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button><h2>Register ${esc(hero.name)}</h2><p class="text-sm text-muted mb12">Select exactly ${CONFIG.skillsInBattle} skills for battle.</p><div id="skillSelectList">${skillsHTML}</div><p class="text-sm text-muted mb12" id="skillSelectCount">0 / ${CONFIG.skillsInBattle} selected</p><button class="btn btn-gold btn-block" id="confirmRegisterBtn" disabled onclick="window.confirmRegister('${heroId}')">Register Champion</button>`);window._skillSelectState={selected:new Set(),heroId};};
+window.toggleSkillSelect=function(itemEl,idx){let state=window._skillSelectState;if(!state)return;if(state.selected.has(idx)){state.selected.delete(idx);itemEl.classList.remove('selected');itemEl.querySelector('.ssi-check').textContent='○';}else{if(state.selected.size>=CONFIG.skillsInBattle){toast(`Max ${CONFIG.skillsInBattle}!`,'error');return;}state.selected.add(idx);itemEl.classList.add('selected');itemEl.querySelector('.ssi-check').textContent='●';}$('skillSelectCount').textContent=`${state.selected.size} / ${CONFIG.skillsInBattle} selected`;$('confirmRegisterBtn').disabled=state.selected.size!==CONFIG.skillsInBattle;};
+window.confirmRegister=async function(heroId){let state=window._skillSelectState;let hero=G.heroes.find(h=>h.id===heroId);let selIdx=[...state.selected].sort((a,b)=>a-b);let champ={id:uuid(),heroId:hero.id,ownerId:G.ownerId,name:hero.name,gender:hero.gender,class:hero.class,genre:hero.genre,description:hero.description,stats:hero.stats,skills:hero.skills,selectedSkills:selIdx,powerScore:computePower(hero),rankingPoints:0,wins:hero.wins||0,losses:hero.losses||0,registeredAt:Date.now()};try{let res=await rpc('register',champ);if(res.error){toast('Failed: '+res.error,'error');return;}await syncChampions();renderArenaRegister();closeModal();toast(`${hero.name} registered!`,'success');}catch(e){toast('Failed: '+e.message,'error');}};
+
+window.showChampionDetail=function(champId){let c=G.allChampions.find(ch=>ch.id===champId)||G.myChampions.find(ch=>ch.id===champId);if(!c)return;let tier=getRankTier(c.rankingPoints||0);let isMine=c.ownerId===G.ownerId;let hero=G.heroes.find(h=>h.id===c.heroId);let detailHTML=hero?renderHeroDetailHTML(hero,{showDelete:false}):'';let selSkills=c.selectedSkills||[];let skillsNote=selSkills.length>0?`<p class="text-sm text-muted mb8">Battle skills: ${selSkills.map(i=>hero?.skills[i]?.name||'?').map(esc).join(', ')}</p>`:'';let locked=(c.rankingPoints||0)>=CONFIG.unregisterLockRank;showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button><div class="flex-between mb12"><span class="rank-badge rank-${tier.key}">${tier.name}</span>${isMine&&G.myChampions.length>1&&!locked?`<button class="btn btn-red btn-sm" onclick="window.unregisterChampion('${c.id}')">Unregister</button>`:''}${isMine&&locked?`<span class="text-xs" style="color:var(--gold)">🔒 Rank locked (Adept+)</span>`:''}</div><h2 style="color:var(--gold)">${esc(c.name)}</h2><p class="text-sm text-muted mb12">🏆 ${c.rankingPoints||0} RP · ${c.wins||0}W / ${c.losses||0}L</p>${skillsNote}${detailHTML}`);};
+window.unregisterChampion=async function(champId){if(G.myChampions.length<=1){toast('Must keep 1 registered!','error');return;}try{let res=await rpc('unregister',{championId:champId,ownerId:G.ownerId});if(res.error==='must_keep_one'){toast('Must keep 1 registered!','error');return;}if(res.error==='rank_locked'){toast('Cannot unregister Adept+ champions!','error');return;}await syncChampions();renderArenaRegister();closeModal();toast('Unregistered.','success');}catch(e){toast('Failed: '+e.message,'error');}};
+
+// === BATTLE ===
+function renderArenaBattle(){
+  let ctn=$('arenaBattle');
+  if(G.myChampions.length===0){
+    ctn.innerHTML='<div class="section"><div class="empty-state"><div class="es-icon">⚔️</div><p>No hero registered yet.</p><button class="btn btn-purple btn-sm" style="margin-top:10px;" onclick="window.arenaTab(\'register\')">Register a Hero</button></div></div>';
+    return;
+  }
+  if(G.currentBattle){renderBattleResult(G.currentBattle);return;}
+  let champOpts=G.myChampions.map(c=>{let tier=getRankTier(c.rankingPoints||0);return '<option value="'+c.id+'">'+esc(c.name)+' ('+tier.name+', '+(c.rankingPoints||0)+' RP)</option>';}).join('');
+  ctn.innerHTML='<div class="section"><div class="form-group"><label>⚔️ Champion</label><select id="battleChampionSelect">'+champOpts+'</select></div><div class="form-group"><label>Mode</label><div class="mode-cards"><div class="mode-card selected" data-mode="ranked" onclick="window.selectMode(\'ranked\')"><div class="mc-icon">🏆</div><div class="mc-title">Ranked</div><div class="mc-desc">Climb the ladder. Beginners: +2/win, no loss. Adept+: +1/win, -1/loss</div></div><div class="mode-card" data-mode="classic" onclick="window.selectMode(\'classic\')"><div class="mc-icon">🗡️</div><div class="mc-title">Classic</div><div class="mc-desc">Casual fights. Wins only, no RP change</div></div></div></div><div class="form-group"><div class="setting-row" style="padding:8px 0;border-bottom:none;"><div><div class="setting-label">🔞 Allow NSFW opponents</div><div class="setting-desc">Off (default): skip heroes with explicit names/descriptions. On: allow matching anyone.</div></div><div class="toggle" id="nsfwBattleToggle" onclick="window.toggleNsfwBattle(this)"></div></div></div><button class="btn btn-gold btn-block" id="findMatchBtn" onclick="window.startBattle()">⚔️ Find Match</button><div id="battleContent"></div></div>';
+  window._battleMode='ranked';
+  let t=$('nsfwBattleToggle');if(t)t.classList.toggle('on',G.allowNsfw);
+}
+window.toggleNsfwBattle=function(el){G.allowNsfw=!G.allowNsfw;el.classList.toggle('on',G.allowNsfw);saveSave();};
+window.selectMode=function(m){window._battleMode=m;document.querySelectorAll('.mode-card').forEach(c=>c.classList.toggle('selected',c.dataset.mode===m));};
+
+window.startBattle=async function(){let champId=$('battleChampionSelect').value;let mode=window._battleMode||'ranked';let btn=$('findMatchBtn');btn.disabled=true;let contentEl=$('battleContent');contentEl.innerHTML='<div class="inline-loading"><div class="inline-spinner"></div><div class="inline-loading-text">⚔️ Finding opponent...</div></div>';try{let res=await rpc('findMatch',{championId:champId,mode,allowNsfw:G.allowNsfw});if(res.error){if(res.error==='no_opponents')toast('No opponents available!','error');else toast('Match failed: '+res.error,'error');contentEl.innerHTML='';return;}let myChamp=G.allChampions.find(c=>c.id===res.myChampionId);let opponent=G.allChampions.find(c=>c.id===res.opponentId);if(!myChamp||!opponent){await syncChampions();myChamp=G.allChampions.find(c=>c.id===res.myChampionId);opponent=G.allChampions.find(c=>c.id===res.opponentId);}if(!myChamp||!opponent){toast('Failed to load data.','error');contentEl.innerHTML='';return;}let myHero=G.heroes.find(h=>h.id===myChamp.heroId);if(myHero){myHero.wins=res.myWins;myHero.losses=res.myLosses;let earnedSP=skillPointsForWins(myHero.wins);if(earnedSP>myHero.lastRewardedSP){let totalGems=0;for(let i=myHero.lastRewardedSP+1;i<=earnedSP;i++)totalGems+=gemsForSkillPoint(i);G.gems+=totalGems;myHero.lastRewardedSP=earnedSP;await saveSave();updateGemsDisplay();toast('Skill point earned! +'+totalGems+' 💎','success');}await saveSave();}await syncChampions();let arenaName=ARENAS[Math.floor(Math.random()*ARENAS.length)];let myWon=res.outcome.winnerId===myChamp.id;G.currentBattle={myChamp,opponent,outcome:res.outcome,arenaName,mode,myWon,narration:'',generating:false,genError:null,narrationPrompt:buildFightPrompt(myChamp,opponent,res.outcome,arenaName),savedToHistory:false,genPromise:null,arenaImage:null,arenaImageLoading:false,arenaImageError:null,allSkills:collectBattleSkills(myChamp,opponent)};openFightOverlay(G.currentBattle);window.battleAgain_arenaTab='battle';await runNarration();if(G.settings.arenaImages!==false)runArenaImageGen();}catch(e){toast('Battle failed: '+e.message,'error');console.error(e);contentEl.innerHTML='';}finally{btn.disabled=false;}};
+
+function collectBattleSkills(my,opp){let mySel=my.selectedSkills||[];let oppSel=opp.selectedSkills||[];let mySk=mySel.length>0?mySel.map(i=>my.skills[i]).filter(Boolean):my.skills.slice(0,3);let oppSk=oppSel.length>0?oppSel.map(i=>opp.skills[i]).filter(Boolean):opp.skills.slice(0,3);return [...mySk,...oppSk].filter(Boolean).map(s=>({name:s.name,type:s.type}));}
+
+function openFightOverlay(b){let ov=$('fightOverlay');let body=$('fightOverlayBody');$('fightOverlayTitle').textContent='⚔️ '+esc(b.myChamp.name)+' vs '+esc(b.opponent.name);ov.classList.add('active');document.body.style.overflow='hidden';renderFightOverlayBody(b);}
+window.closeFightOverlay=function(){let ov=$('fightOverlay');ov.classList.remove('active');document.body.style.overflow='';};
+
+function renderFightOverlayBody(b){let body=$('fightOverlayBody');let{myChamp,opponent,outcome,arenaName,myWon,narration,generating,genError}=b;
+let sceneHTML;
+if(b.arenaImage){sceneHTML='<img class="battle-scene-img" src="'+b.arenaImage+'">';}
+else if(b.arenaImageLoading){sceneHTML='<div class="battle-scene-loading"><div class="inline-spinner"></div><div class="inline-loading-text">🎨 Generating arena...</div></div>';}
+else if(b.arenaImageError){sceneHTML='<div class="battle-scene-loading" style="gap:6px;"><div style="font-size:1.5rem;">🖼️</div><div class="text-sm text-muted">'+esc(b.arenaImageError)+'</div><button class="btn btn-gold btn-sm" onclick="window.regenerateArenaImage()">Retry</button></div>';}
+else{sceneHTML='<div class="battle-scene-loading"><div style="font-size:2rem;">⚔️</div><div class="text-sm text-muted">'+esc(arenaName)+'</div></div>';}
+let sceneVS='<div class="battle-scene-vs"><div class="bs-fighter"><div class="bs-name">'+esc(myChamp.name)+'</div><div class="bs-class"><span class="class-badge class-'+myChamp.class+'">'+CLASSES.find(c=>c.key===myChamp.class).name+'</span></div></div><div class="bs-vs">VS</div><div class="bs-fighter"><div class="bs-name">'+esc(opponent.name)+'</div><div class="bs-class"><span class="class-badge class-'+opponent.class+'">'+CLASSES.find(c=>c.key===opponent.class).name+'</span></div></div></div>';
+let bannerHTML='<div class="fight-result '+(myWon?'win':'lose')+'" style="'+((generating||genError)?'display:none;':'')+'">'+(myWon?'🏆 VICTORY!':'💀 DEFEAT')+'</div>';
+let narrHTML;
+if(genError){narrHTML=(narration?formatNarration(narration,b):'')+'<div class="inline-loading" style="padding:14px;"><div class="inline-loading-text" style="color:var(--red);">⚠️ Generation stopped: '+esc(genError)+'</div><button class="btn btn-gold btn-sm" style="margin-top:10px;" onclick="window.regenerateNarration()">🔄 Regenerate</button></div>';}
+else if(generating){narrHTML=(narration?formatNarration(narration,b)+'<div class="text-xs text-muted" style="text-align:center;padding:8px 0;">✍️ Generating...</div>':'<div class="inline-loading"><div class="inline-spinner"></div><div class="inline-loading-text">⚔️ The battle begins...</div></div>');}
+else{narrHTML=formatNarration(narration||'(No narration.)',b);}
+body.innerHTML='<div class="battle-scene">'+sceneHTML+sceneVS+'<div class="battle-scene-arena-label">📍 '+esc(arenaName)+'</div>'+(G.settings.arenaImages!==false?'<button class="battle-scene-regen" onclick="window.regenerateArenaImage()">🎨</button>':'')+'</div>'+bannerHTML+'<div class="battle-narration-card"><div id="narrationText" class="fight-narration">'+narrHTML+'</div></div><div class="fight-actions '+(generating||genError?'hidden':'')+'" id="fightEndBtns" style="width:100%;max-width:760px;"><button class="btn btn-gold" onclick="window.battleAgain()">⚔️ Fight Again</button><button class="btn btn-ghost" onclick="window.saveFightToFavs()">⭐ Favorite</button><button class="btn btn-ghost" onclick="window.closeFightOverlay()">← Close</button></div>';
+}
+
+async function runNarration(){let b=G.currentBattle;if(!b)return;b.generating=true;b.genError=null;if(!b.narration)b.narration='';renderFightOverlayBody(b);try{b.genPromise=root.generateText({instruction:b.narrationPrompt,onChunk:(data)=>{b.narration=data.fullTextSoFar;let ne=document.getElementById('narrationText');if(ne){let wasAtBottom=ne.scrollHeight-ne.scrollTop-ne.clientHeight<60;ne.innerHTML=formatNarration(b.narration,b)+(b.generating?'<div class="text-xs text-muted" style="text-align:center;padding:8px 0;">✍️ Generating...</div>':'');if(wasAtBottom)ne.scrollTop=ne.scrollHeight;}}});await b.genPromise;b.generating=false;if(!b.narration)b.narration='(No narration generated.)';if(!b.savedToHistory){saveFightToHistory(b);b.savedToHistory=true;}renderFightOverlayBody(b);}catch(e){b.generating=false;b.genError=e.message||'Generation failed';console.error(e);renderFightOverlayBody(b);toast('Narration stopped — tap Regenerate to retry.','error');}}
+window.regenerateNarration=async function(){let b=G.currentBattle;if(!b)return;if(b.genPromise&&b.genPromise.stop){try{b.genPromise.stop();}catch(e){}}b.narration='';b.genError=null;await runNarration();};
+
+function renderBattleResult(b){renderFightOverlayBody(b);}
+
+const ARENA_VISUALS={"Stone Pit":"a sunken gladiator pit of cracked stone walls lit by flickering torches, sandy floor","Iron Colosseum":"a massive iron-and-steel colosseum with riveted metal walls and glowing furnace light","Frozen Arena":"a frozen glacial arena of blue ice walls and drifting snow under a pale sky","Lava Crater":"a volcanic crater arena with rivers of molten lava and black obsidian rock, red glow","Sky Platform":"a floating stone platform suspended high above the clouds, golden sunset light","Underground Cavern":"a vast underground cavern with stalactites and bioluminescent blue moss, dripping water","Crystal Dome":"a transparent dome of glowing crystal shards on a dark metal frame, refracted rainbow light","Desert Ruins":"ancient sandstone ruins in a vast desert, broken pillars and statues under harsh sun","Void Rift":"a jagged platform floating in a purple-black void with distant stars and crackling energy","Forest Clearing":"a moonlit forest clearing surrounded by towering ancient trees and glowing fireflies","Thunderdome":"a geodesic steel dome arena with lightning arcing across the mesh, storm clouds above","Sunken Temple":"a half-flooded temple of mossy stone columns and rising mist, green luminescent water","Obsidian Spire":"a narrow obsidian spire peak above a sea of clouds, black glass catching crimson light","Wasteland Bunker":"a rusted concrete bunker in a barren grey wasteland under overcast sky, scrap metal","Celestial Bridge":"a glowing bridge of light arching through a star-filled cosmos, nebula colors"};
+function buildArenaImagePrompt(arenaName){let desc=ARENA_VISUALS[arenaName]||arenaName;return 'early 2000s light novel illustration, wide establishing shot: '+desc+'. atmospheric rim lighting, deep shadows, dramatic mood, empty combat arena, no people. wide landscape illustration, high quality painterly digital art, rich color, cinematic composition.';}
+async function runArenaImageGen(){let b=G.currentBattle;if(!b)return;b.arenaImageLoading=true;b.arenaImageError=null;b.arenaImage=null;renderFightOverlayBody(b);try{let result=await root.generateImage(buildArenaImagePrompt(b.arenaName),{resolution:'768x512'});b.arenaImage=result.dataUrl;b.arenaImageLoading=false;renderFightOverlayBody(b);}catch(e){b.arenaImageLoading=false;b.arenaImageError=e.message||'Image generation failed';renderFightOverlayBody(b);}}
+window.regenerateArenaImage=function(){if(G.currentBattle)runArenaImageGen();};
+
+function formatNarration(text,battle){let style=G.settings.dialogueStyle;let html=esc(text);
+if(G.settings.skillHighlight!==false&&battle&&battle.allSkills){
+  let skills=battle.allSkills;
+  let sorted=[...skills].sort((a,b)=>b.name.length-a.name.length);
+  for(let sk of sorted){if(!sk.name||sk.name.length<3)continue;
+    let escapedName=sk.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    let re=new RegExp('\\b('+escapedName+')\\b','gi');
+    html=html.replace(re,'<span class="skill-highlight'+(sk.type==='passive'?' passive':'')+'">$1</span>');
+  }
+}
+if(style==='none')return html.split('\n').filter(p=>p.trim()).map(p=>'<p>'+p+'</p>').join('');
+let dlgClass=style==='dim'?'narration-highlight':'dialogue';
+let parts=html.split('&quot;');
+let result='';
+for(let i=0;i<parts.length;i++){if(i>0){if(i%2===1){result+='<span class="'+dlgClass+'">&quot;'+parts[i]+'&quot;</span>';}else{result+='&quot;'+parts[i];}}else{result+=parts[i];}}
+if(style==='dim'){result='<span class="narration-dim">'+result+'</span>';}
+return result.split('\n').filter(p=>p.trim()).map(p=>'<p>'+p+'</p>').join('');}
+window.battleAgain=function(){if(G.currentBattle&&G.currentBattle.genPromise&&G.currentBattle.genPromise.stop){try{G.currentBattle.genPromise.stop();}catch(e){}}G.currentBattle=null;window.closeFightOverlay();renderArenaBattle();};
+window.backToArena=function(){if(G.currentBattle&&G.currentBattle.genPromise&&G.currentBattle.genPromise.stop){try{G.currentBattle.genPromise.stop();}catch(e){}}G.currentBattle=null;window.closeFightOverlay();arenaTab('register');};
+window.saveFightToFavs=function(){if(!G.currentBattle)return;if(G.attackFavorites.length>=CONFIG.fightFavoritesLimit){toast('Favorites full!','error');return;}let b=G.currentBattle;G.attackFavorites.unshift({id:uuid(),timestamp:Date.now(),myName:b.myChamp.name,oppName:b.opponent.name,myClass:b.myChamp.class,oppClass:b.opponent.class,arena:b.arenaName,myWon:b.myWon,narration:b.narration,mode:b.mode,skills:b.allSkills});saveSave();toast('Saved to attack favorites!','success');};
+
+function pickNarrativeParams(){
+  const openings=['announcer-intro','mid-strike','dead-silence','opponent-moving','memory-flash','pre-fight-ritual','held-breath'];
+  const tones=['gritty-clinical','mythic-undercurrent','darkly-wry','sparse-brutal','lyrical-violent','cold-reportage'];
+  const lengths=[{k:'short-brutal',min:3,max:4},{k:'standard',min:5,max:7},{k:'epic-grind',min:8,max:10}];
+  const curveballs=['a chosen skill misfires or whiffs at a critical moment, shifting momentum','the arena itself intervenes — ground cracks, a light fails, dust blinds someone, a rope snaps','a single voice from the crowd shouts one specific, unsettling sentence (not cheering, not encouraging)','one fighter has a split-second flashback to a memory from their background books','a skill manifests differently than expected — stronger, weaker, or with an unintended side effect','a moment of unexpected mercy or hesitation that costs (or saves) the hesitator','both fighters stall, utterly spent, before the final exchange — a standoff of breathing','a near-fatal mistake is reversed by a desperate improvised move','the announcer breaks its one-line rule with a second, flatter remark mid-fight','an early injury becomes the exact reason the loser loses, late in the fight'];
+  function pick(a){return a[Math.floor(Math.random()*a.length)];}
+  let n=1+Math.floor(Math.random()*2);
+  let cs=[];let pool=[...curveballs];
+  for(let i=0;i<n&&pool.length;i++){let idx=Math.floor(Math.random()*pool.length);cs.push(pool.splice(idx,1)[0]);}
+  return{opening:pick(openings),tone:pick(tones),length:pick(lengths),curveballs:cs};
+}
+
+function buildFightPrompt(my,opp,outcome,arenaName){
+  let winner=outcome.winnerId===my.id?my:opp;
+  let loser=outcome.winnerId===my.id?opp:my;
+  let myHero=G.heroes.find(h=>h.id===my.heroId);
+  let mySelSkills=my.selectedSkills||[];
+  let mySkills=mySelSkills.length>0?mySelSkills.map(i=>my.skills[i]).filter(Boolean):my.skills.slice(0,3);
+  let oppSelSkills=opp.selectedSkills||[];
+  let oppSkills=oppSelSkills.length>0?oppSelSkills.map(i=>opp.skills[i]).filter(Boolean):opp.skills.slice(0,3);
+  function skillList(skills){return skills.map(s=>`- ${s.name} (${s.type}, ${s.subtypes.join('/')}, Lv.${s.level}) — ${s.description}`).join('\n');}
+  function personality(hero){return(hero.description||'').slice(0,300);}
+  let myBookContent='';
+  if(myHero&&(myHero.books||[]).length>0){myBookContent='\nHERO BACKGROUND (from unlocked books):\n'+myHero.books.sort((a,b)=>a.index-b.index).map(b=>b.content.slice(0,400)).join('\n');}
+  let myClassFocus=CLASS_FOCUS[my.class]||'';
+  let oppClassFocus=CLASS_FOCUS[opp.class]||'';
+  let myClassName=CLASSES.find(c=>c.key===my.class).name;
+  let oppClassName=CLASSES.find(c=>c.key===opp.class).name;
+  let np=pickNarrativeParams();
+  let myRaw=computePower(my), oppRaw=computePower(opp);
+  let myAdv=outcome.aPower/Math.max(1,myRaw), oppAdv=outcome.bPower/Math.max(1,oppRaw);
+  let matchupCtx;
+  if(myAdv>oppAdv+0.03)matchupCtx=my.name+"'s class has a tactical edge over "+opp.name+"'s. Reflect this — "+my.name+" exploits the matchup.";
+  else if(oppAdv>myAdv+0.03)matchupCtx=opp.name+"'s class has a tactical edge over "+my.name+"'s. "+my.name+" must work around the disadvantage.";
+  else matchupCtx='Neither class clearly counters the other — an even tactical fight.';
+  let paceDesc={
+    'upset':"PACE: an UPSET. "+winner.name+" was the underdog on paper (power "+outcome.aPower+" vs "+outcome.bPower+") but found a way — through cunning, endurance, a capitalised mistake, or a single perfect opening. Make the win feel earned and surprising, not lucky.",
+    'nail-biter':"PACE: a NAIL-BITER. The deciding moment came at the very last possible second. Both fighters were barely standing. The margin between them was a breath. Build unbearable tension toward the final exchange.",
+    'dominant':"PACE: DOMINANT. "+winner.name+" was favoured and controlled the fight — but "+loser.name+" still made them work for it. No effortless victory; show the loser's resistance breaking down in stages.",
+    'contested':"PACE: BACK-AND-FORTH. Momentum swung at least twice. Neither fighter had it their way for long. The winner prevailed through adaptation, not superiority."
+  }[outcome.pace]||"PACE: a contested fight with shifting momentum.";
+  let openingDesc={
+    'announcer-intro':"OPENING: The announcer's flat voice speaks both names. The fighters enter. One vivid physical detail each. The crowd murmurs once. Then silence.",
+    'mid-strike':"OPENING: Start IN MEDIA RES — mid-strike, no preamble. The fight is already moving. Skip introductions; reveal who the fighters are through the action. The announcer can name them afterward, flatly, during a lull.",
+    'dead-silence':"OPENING: A held, unnatural silence before the first move. No announcer yet. Describe the stillness and the weight of it. The first strike breaks it. The announcer speaks the names only after blood is drawn.",
+    'opponent-moving':"OPENING: "+opp.name+" is already moving when the fight begins — no formal start. "+my.name+" reacts. The announcer's voice comes late, almost an afterthought. Drop the reader into motion.",
+    'memory-flash':"OPENING: A single-line memory from "+my.name+"'s past flickers (drawn from their background books if available, else invent briefly), then the present snaps back as the first blow falls. Keep the memory to one sentence.",
+    'pre-fight-ritual':"OPENING: One fighter performs a small personal ritual before engaging — a prayer, a stretch, a whispered word, checking a weapon. Reveal character through it. Then the fight begins.",
+    'held-breath':"OPENING: Both fighters still, eyes locked, breathing. One long sentence of held tension. Then they close the distance together. No announcer for this one."
+  }[np.opening];
+  let toneDesc={
+    'gritty-clinical':"TONE: Gritty and clinical. Short, hard sentences. Physical detail over emotion. Think Joe Abercrombie meets a boxing report.",
+    'mythic-undercurrent':"TONE: Grounded combat with a mythic undercurrent — the fight feels like it matters beyond the two fighters, as if older things are watching. Don't tip into purple prose; keep it restrained.",
+    'darkly-wry':"TONE: Darkly wry. A dry, mordant humour in the narration and any dialogue. The violence is still real, but there's a gallows wit to it.",
+    'sparse-brutal':"TONE: Sparse and brutal. Minimal words. Let gaps do work. Short paragraphs, some a single sentence. No ornament.",
+    'lyrical-violent':"TONE: Lyrical but violent — flowing, sensory sentences that turn suddenly hard. Beauty and blood, contrasted. Avoid cliché at all costs.",
+    'cold-reportage':"TONE: Cold reportage. Narrate almost like a dispassionate witness recording facts. Let the violence speak for itself without colour commentary."
+  }[np.tone];
+  let curveballDesc=np.curveballs.length?("\nNARRATIVE CURVEBALL"+(np.curveballs.length>1?"S":"")+" (weave in naturally, do NOT announce):\n"+np.curveballs.map(c=>"- "+c).join("\n")):"";
+  let lengthDesc="LENGTH: "+np.length.min+"-"+np.length.max+" paragraphs total. Do not exceed "+np.length.max+".";
+  let allSkills=[...mySkills.map(s=>({s,side:my.name})),...oppSkills.map(s=>({s,side:opp.name}))].filter(x=>x.s);
+  let sigText="";
+  if(allSkills.length){
+    let sig1=allSkills[Math.floor(Math.random()*allSkills.length)];
+    sigText="\nSIGNATURE SKILL TO SPOTLIGHT: \""+sig1.s.name+"\" ("+sig1.side+") — feature this skill's visuals and impact prominently during the fight. Show what it looks like when it connects.";
+    if(allSkills.length>1){
+      let sig2=allSkills[Math.floor(Math.random()*allSkills.length)];
+      if(sig2.s.name!==sig1.s.name)sigText+="\nSECONDARY SKILL: \""+sig2.s.name+"\" ("+sig2.side+") — reference this one too, but more briefly.";
+    }
+  }
+  return `You are the voice of the Arena. Narrate this fight.
+
+${toneDesc}
+
+ABSOLUTELY AVOID these phrases and patterns (banned): "a testament to", "a symphony of", "the weight of", "echoes through", "seemed to", "as if", "in that moment", "time itself", "the air crackled", "a blur of", "dance of", "cacophony", "crescendo", "elegant", "poignant", "visceral" (as adjective), "palpable", "myriad", "tapestry", "azure", "crimson" (use red instead), "shattered the silence", "hung in the air", "the crowd held its breath".
+
+ARENA: ${arenaName} — a simple combat space (stone, sand, iron, concrete). Keep it grounded.
+
+THE CROWD: Rows of silhouettes in the dark. Their eyes glow — different colors, shapes, some too many. They don't cheer; they murmur. Sometimes one laughs. You don't know if they're people. Write them as presence, not characters. One or two sentences max across the WHOLE narration.
+
+THE ANNOUNCER: A bodiless voice. Flat, formal, oddly calm even when someone is dying. Normally ONE line — the introductions — unless a curveball says otherwise. Do not let it narrate the fight.
+
+FIGHTER A (Challenger):
+Name: ${my.name}
+Class: ${myClassName} — ${myClassFocus}
+Genre: ${GENRES.find(g=>g.key===my.genre).name}
+Personality & Background: ${personality(my)}
+Stats: ATK ${my.stats.attack} / DEF ${my.stats.defense} / SPD ${my.stats.speed} / HP ${my.stats.health} / ENG ${my.stats.energy}
+Battle Skills (only these are available):
+${skillList(mySkills)}
+${myBookContent}
+
+FIGHTER B (Defender):
+Name: ${opp.name}
+Class: ${oppClassName} — ${oppClassFocus}
+Genre: ${GENRES.find(g=>g.key===opp.genre).name}
+Personality & Background: ${personality(opp)}
+Stats: ATK ${opp.stats.attack} / DEF ${opp.stats.defense} / SPD ${opp.stats.speed} / HP ${opp.stats.health} / ENG ${opp.stats.energy}
+Battle Skills:
+${skillList(oppSkills)}
+
+TACTICAL CONTEXT: ${matchupCtx}
+${sigText}
+
+RESULT: ${winner.name} wins. ${loser.name} loses.
+${paceDesc}
+Power comparison: ${outcome.aPower} vs ${outcome.bPower} (winner's odds: ${outcome.ratio}).
+
+${lengthDesc}
+${curveballDesc}
+
+STRUCTURE (one flowing piece, NO headers, paragraphs separated by blank lines):
+
+${openingDesc}
+
+THE TALK (optional, 0-1 short paragraph): Fighters MAY speak based on personality — a boast, a taunt, cold silence, a question, shown respect. 1-2 lines each max, in quotation marks. Not every hero talks. Make dialogue sound like THAT character: a mage ≠ a tank; a dark-fantasy vampire ≠ a futuristic cyborg. Use their background.
+
+THE FIGHT (the bulk): Back and forth. Skill usage is central — when a fighter uses a skill, NAME it explicitly and vividly describe its visual manifestation (the light, the sound, the effect on the target and environment). Sometimes the fighter shouts the skill name aloud as they invoke it; sometimes they use it silently and the narrator describes it. Vary which approach you use across the fight. Show near-misses, mistakes, recoveries, fatigue, energy depleting (skills cost energy — low energy = forced to basic attacks), wounds accumulating. Weave in mid-combat dialogue naturally — a grunt, a curse, a shouted warning, a skill name called out. Use the STATS: high speed = moves first; low energy = rations skills; high defense = blows land but hurt less. Two tanks grind; two assassins are fast and bloody; a mage keeps distance; an assassin closes it. Make each fight feel DIFFERENT — vary the pacing, the tactics, the momentum shifts. Avoid repeating the same beats across fights.
+
+THE END (1-2 paragraphs): ${winner.name} wins. Show the final exchange — the specific skill or strike that ends it, earned not random. The loser falls or concedes. One quiet beat after the violence: the crowd's murmur returns, or the announcer repeats the winner's name, or the winner stands alone.
+
+RULES:
+- Do NOT reveal who wins until the final paragraph. Keep it genuinely uncertain until then.
+- Use real names, never "Fighter A/B".
+- Spoken dialogue in "quotation marks".
+- 2-5 sentences of dialogue total across the fight, distributed naturally — more if a fighter is talkative, none if they're silent.
+- Vary sentence length: short. Then longer, flowing. Then short again.
+- Concrete sensory detail: what does a skill look like? What does the arena smell like? What sound does a blocked blow make?
+- No introspection about "the nature of combat" or "what it means to fight." Just the fight.
+- Never repeat the same word (blade, strike, blow, dodge) more than twice in a paragraph.
+- Start directly. No preamble.`;
+}
+
+// === RANKINGS ===
+function renderArenaRankings(){let ctn=$('arenaRankings');let genreTabsHTML=`<div class="tabs" id="rankGenreTabs"><div class="tab active" data-rgtab="all" onclick="window.rankGenreTab('all')">All</div>${GENRES.map(g=>`<div class="tab" data-rgtab="${g.key}" onclick="window.rankGenreTab('${g.key}')">${g.name}</div>`).join('')}</div>`;ctn.innerHTML=genreTabsHTML+`<div id="rankList"></div>`;window.rankGenreTab('all');}
+window.rankGenreTab=function(genre){document.querySelectorAll('#rankGenreTabs .tab').forEach(t=>t.classList.remove('active'));document.querySelector(`#rankGenreTabs .tab[data-rgtab="${genre}"]`).classList.add('active');let champs=[...G.allChampions].sort((a,b)=>(b.rankingPoints||0)-(a.rankingPoints||0));if(genre!=='all')champs=champs.filter(c=>c.genre===genre);let tiersHTML=RANK_TIERS.map(t=>{let count=champs.filter(c=>(c.rankingPoints||0)>=t.min&&(c.rankingPoints||0)<=t.max).length;return `<span class="rank-badge rank-${t.key}" style="margin:2px;">${t.name}: ${count}</span>`;}).join('');let podiumHTML='';if(champs.length>=3){let pod=[champs[1],champs[0],champs[2]];let cls=['second','first','third'];let medals=['🥈','🥇','🥉'];podiumHTML=`<div class="podium">`+pod.map((c,i)=>{let tier=getRankTier(c.rankingPoints||0);return `<div class="podium-col ${cls[i]}" onclick="window.showLeaderboardHero('${c.id}')"><div class="podium-medal">${medals[i]}</div><div class="podium-name">${esc(c.name)}</div><div class="podium-rp">${c.rankingPoints||0}</div><div class="podium-meta"><span class="class-badge class-${c.class}">${CLASSES.find(x=>x.key===c.class).name}</span> · ${c.wins||0}W/${c.losses||0}L</div></div>`;}).join('')+`</div>`;}let restStart=champs.length>=3?3:0;let restHTML=champs.slice(restStart).map((c,i)=>{let tier=getRankTier(c.rankingPoints||0);let isMine=c.ownerId===G.ownerId;let imgHTML=`<div class="rank-row-img-placeholder">${getClassEmoji(c.class)}</div>`;return `<div class="rank-row ${isMine?'mine':''}" onclick="window.showLeaderboardHero('${c.id}')">${imgHTML}<span class="rr-pos">${restStart+i+1}</span><div class="rr-name">${esc(c.name)} ${isMine?'<span class="text-sm" style="color:var(--accent)">(You)</span>':''}<div class="rr-meta"><span class="class-badge class-${c.class}">${CLASSES.find(x=>x.key===c.class).name}</span> · ${GENRES.find(g=>g.key===c.genre).name} · ${c.wins||0}W/${c.losses||0}L</div></div><div style="text-align:right;"><span class="rank-badge rank-${tier.key}">${tier.name}</span><div class="rr-meta">${c.rankingPoints||0} RP</div></div></div>`;}).join('');$('rankList').innerHTML=`<div class="section"><h2>🏆 Rankings — ${genre==='all'?'All':GENRES.find(g=>g.key===genre).name}</h2><div class="mb12">${tiersHTML}</div>${champs.length===0?'<p class="text-muted">No champions yet.</p>':podiumHTML+'<div class="text-xs text-muted mb8" style="text-align:center;">Tap any champion to view full details</div>'+restHTML}</div>`;};
+window.showLeaderboardHero=function(champId){let c=G.allChampions.find(ch=>ch.id===champId);if(!c)return;let tier=getRankTier(c.rankingPoints||0);let isMine=c.ownerId===G.ownerId;let hero=G.heroes.find(h=>h.id===c.heroId);let detailHTML=hero?renderHeroDetailHTML(hero,{showDelete:false}):`<p class="text-sm text-muted mb12">${esc(c.description||'A mysterious champion from another summoner.')}</p><h3>Stats</h3><div class="mb16">${STAT_KEYS.map(k=>{let v=(c.stats&&c.stats[k])||0;let info=STAT_INFO.find(s=>s.key===k);return `<div class="stat-bar"><span class="sb-label">${info.name}<div class="stat-tooltip">${esc(info.desc)}</div></span><div class="sb-track"><div class="sb-fill" style="width:${v}%;background:${STAT_COLORS[k]||'#888'}"></div></div><span class="sb-val">${v}</span></div>`;}).join('')}</div><h3>Skills</h3><div>${(c.skills||[]).map(s=>`<div class="skill-item"><div class="si-header"><span class="si-name">${esc(s.name)}</span><span class="si-level">Lv. ${s.level||1}/${CONFIG.maxSkillLevel}</span></div><div class="si-tags"><span class="si-tag type-${s.type}">${s.type}</span>${(s.subtypes||[]).map(st=>`<span class="si-tag">${st}</span>`).join('')}</div><div class="si-desc">${esc(s.description)}</div></div>`).join('')}</div>`;let selSkills=c.selectedSkills||[];let skillsNote=selSkills.length>0?`<p class="text-sm text-muted mb8">Battle skills: ${selSkills.map(i=>(c.skills||[])[i]?.name||'?').map(esc).join(', ')}</p>`:'';let cls=CLASSES.find(x=>x.key===c.class),genre=GENRES.find(g=>g.key===c.genre);let badge=isMine?'<span class="text-sm" style="color:var(--accent)">(You)</span>':'';showModal(`<button class="modal-close" onclick="window.closeModal()">&times;</button><div class="flex-between mb12"><span class="rank-badge rank-${tier.key}">${tier.name}</span><span class="text-sm text-muted">${esc(cls?.name||'')} · ${esc(genre?.name||'')}</span></div><h2 style="color:var(--gold)">${esc(c.name)} ${badge}</h2><p class="text-sm text-muted mb12">🏆 ${c.rankingPoints||0} RP · ${c.wins||0}W / ${c.losses||0}L${isMine?'':' · Opponent'}</p>${skillsNote}${detailHTML}`);};
+
+// === HISTORY ===
+let _historyTab='attack';
+function renderArenaHistory(){let ctn=$('arenaHistory');ctn.innerHTML='<div class="history-tabs"><div class="history-tab '+(_historyTab==='attack'?'active':'')+'" onclick="window.setHistoryTab(\'attack\')"><div class="ht-icon">⚔️</div><div class="ht-title">Attacks</div><div class="ht-count">'+G.attackHistory.length+' fights</div></div><div class="history-tab '+(_historyTab==='defend'?'active':'')+'" onclick="window.setHistoryTab(\'defend\')"><div class="ht-icon">🛡️</div><div class="ht-title">Defenses</div><div class="ht-count">'+G.defendHistory.length+' fights</div></div></div><div id="historyContent"></div>';renderHistoryContent();}
+window.setHistoryTab=function(tab){_historyTab=tab;renderArenaHistory();};
+function renderHistoryContent(){let c=$('historyContent');if(_historyTab==='attack'){
+let favHTML=G.attackFavorites.length>0?G.attackFavorites.map(f=>histItemHTML(f,'attack',true)).join(''):'<p class="text-muted text-sm">No favorites yet.</p>';
+let histHTML=G.attackHistory.length>0?G.attackHistory.map(f=>histItemHTML(f,'attack',false)).join(''):'<p class="text-muted text-sm">No attack history yet. Start a battle!</p>';
+c.innerHTML='<div class="section"><h3>⭐ Attack Favorites ('+G.attackFavorites.length+'/'+CONFIG.fightFavoritesLimit+')</h3>'+favHTML+'</div><div class="section"><h3>⚔️ Recent Attacks ('+G.attackHistory.length+'/'+CONFIG.fightHistoryLimit+')</h3>'+histHTML+'</div>';
+}else{
+let favHTML=G.defendFavorites.length>0?G.defendFavorites.map(f=>histItemHTML(f,'defend',true)).join(''):'<p class="text-muted text-sm">No favorites yet.</p>';
+let histHTML=G.defendHistory.length>0?G.defendHistory.map(f=>histItemHTML(f,'defend',false)).join(''):'<p class="text-muted text-sm">No defense history yet. Other heroes will attack yours!</p>';
+c.innerHTML='<div class="section"><h3>⭐ Defense Favorites ('+G.defendFavorites.length+'/'+CONFIG.fightFavoritesLimit+')</h3>'+favHTML+'</div><div class="section"><h3>🛡️ Recent Defenses ('+G.defendHistory.length+'/'+CONFIG.fightHistoryLimit+')</h3>'+histHTML+'</div>';
+}}
+function histItemHTML(f,type,isFav){let isFaved=G[type+'Favorites'].some(x=>x.id===f.id);let starBtn=isFaved?'<button class="fav-star on" onclick="event.stopPropagation();window.toggleFav(\''+f.id+'\',\''+type+'\')">★</button>':'<button class="fav-star" onclick="event.stopPropagation();window.toggleFav(\''+f.id+'\',\''+type+'\')">☆</button>';let label=type==='attack'?(f.myWon?'WIN':'LOSS'):(f.myWon?'DEFENDED':'LOST');let color=f.myWon?'var(--green)':'var(--red)';return '<div class="fight-history-item" onclick="window.viewFight(\''+f.id+'\',\''+type+'\')"><div class="fhi-header"><span class="fhi-title">'+(isFaved?'⭐ ':'')+esc(f.myName)+' vs '+esc(f.oppName)+'</span><div style="display:flex;align-items:center;gap:6px;"><span class="text-sm" style="color:'+color+'">'+label+'</span>'+starBtn+'</div></div><div class="fhi-meta">'+esc(f.arena)+' · '+new Date(f.timestamp).toLocaleDateString()+'</div></div>';}
+window.toggleFav=function(id,type){let list=G[type+'History'];let f=list.find(x=>x.id===id);if(!f)return;let favList=G[type+'Favorites'];let idx=favList.findIndex(x=>x.id===id);if(idx>=0){favList.splice(idx,1);toast('Removed from favorites.','success');}else{if(favList.length>=CONFIG.fightFavoritesLimit){toast('Favorites full!','error');return;}favList.unshift({...f});toast('Saved to favorites!','success');}saveSave();renderHistoryContent();};
+window.viewFight=function(id,type){if(!type)type='attack';let list=type==='defend'?(G.defendFavorites.find(x=>x.id===id)?G.defendFavorites:G.defendHistory):(G.attackFavorites.find(x=>x.id===id)?G.attackFavorites:G.attackHistory);let f=list.find(x=>x.id===id);if(!f)return;let label=type==='attack'?(f.myWon?'🏆 VICTORY!':'💀 DEFEAT'):(f.myWon?'🛡️ DEFENDED!':'💀 OVERRUN');let battleObj={allSkills:f.skills||[]};showModal('<button class="modal-close" onclick="window.closeModal()">&times;</button><div class="fight-vs"><div class="fv-fighter"><div class="fv-name">'+esc(f.myName)+'</div><div class="fv-class"><span class="class-badge class-'+f.myClass+'">'+(CLASSES.find(c=>c.key===f.myClass)?.name||'')+'</span></div></div><div class="fv-vs">VS</div><div class="fv-fighter"><div class="fv-name">'+esc(f.oppName)+'</div><div class="fv-class"><span class="class-badge class-'+f.oppClass+'">'+(CLASSES.find(c=>c.key===f.oppClass)?.name||'')+'</span></div></div></div><div class="text-sm text-muted" style="text-align:center;margin-bottom:8px;">📍 '+esc(f.arena)+' · '+(type==='attack'?'You attacked':'You were attacked')+'</div><div class="fight-result '+(f.myWon?'win':'lose')+'">'+label+'</div><div class="fight-narration">'+formatNarration(f.narration||'(No narration saved.)',battleObj)+'</div>');};
+window.removeFav=function(id){G.fightFavorites=G.fightFavorites.filter(f=>f.id!==id);saveSave();renderArenaHistory();toast('Removed.','success');};
+function saveFightToHistory(b){let e={id:uuid(),timestamp:Date.now(),myName:b.myChamp.name,oppName:b.opponent.name,myClass:b.myChamp.class,oppClass:b.opponent.class,arena:b.arenaName,myWon:b.myWon,narration:b.narration,mode:b.mode,skills:b.allSkills};G.attackHistory.unshift(e);if(G.attackHistory.length>CONFIG.fightHistoryLimit)G.attackHistory=G.attackHistory.slice(0,CONFIG.fightHistoryLimit);saveSave();
+// Log to the opponent's defend history on the server (best-effort)
+try{let b2=G.currentBattle;if(b2&&b2.opponent){rpc('logDefend',{defenderId:b2.opponent.id,attackerId:b2.myChamp.id,attackerName:b2.myChamp.name,defenderName:b2.opponent.name,attackerClass:b2.myChamp.class,defenderClass:b2.opponent.class,arena:b2.arenaName,defenderWon:b2.myWon?false:true,narration:b2.narration,mode:b2.mode}).catch(()=>{});}}catch(e2){}}
+
+// === SERVER ===
+function socketReady(){return G.serverReady&&G.socket&&G.socket.readyState===1;}
+async function seedBots(){if(!socketReady())return;try{let res=await rpc('list',{});let bots=(res.champions||[]).filter(c=>c.ownerId==='bot');if(bots.length>=BOT_CHAMPIONS.length)return;for(let i=bots.length;i<BOT_CHAMPIONS.length;i++){if(!socketReady())return;let b=BOT_CHAMPIONS[i];let champ={id:uuid(),heroId:'bot-'+uuid(),ownerId:'bot',name:b.name,gender:b.gender,class:b.class,genre:b.genre,description:b.description,stats:b.stats,skills:b.skills.map(s=>({...s})),selectedSkills:[0,1,2],powerScore:0,rankingPoints:Math.floor(Math.random()*(CONFIG.botMaxRP+1)),wins:Math.floor(Math.random()*(CONFIG.botMaxWins+1)),losses:Math.floor(Math.random()*(CONFIG.botMaxLosses+1)),registeredAt:Date.now()};champ.powerScore=computePower(champ);await rpc('register',champ);}await syncChampions();}catch(e){if(socketReady())console.error('Bot seeding failed:',e);}}
+let reconnectTimer=null,reconnectDelay=2000,botSeedAttempted=false;
+async function connectServer(){return new Promise((resolve)=>{if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}let socket=root.createServerSocket();G.socket=socket;socket.addEventListener('open',async()=>{G.serverReady=true;reconnectDelay=2000;try{await rpc('setBannedWords',{words:BANNED_WORDS});}catch(e){}if(!botSeedAttempted){botSeedAttempted=true;try{await seedBots();}catch(e){}}await syncChampions();pollDefends();resolve();});socket.addEventListener('close',(ev)=>{G.serverReady=false;let delay=reconnectDelay;if(ev&&ev.code===4429){let m=/(\d+)/.exec(ev.reason||'');if(m)delay=Math.max(delay,parseInt(m[1])*1000+500);delay=Math.min(delay,300000);}else{reconnectDelay=Math.min(reconnectDelay*2,60000);}reconnectTimer=setTimeout(()=>{connectServer();},delay);});socket.addEventListener('error',()=>{G.serverReady=false;});setTimeout(()=>{if(!G.serverReady)resolve();},5000);});}
+async function rpc(method,data){if(!socketReady()){for(let i=0;i<20;i++){if(socketReady())break;await new Promise(r=>setTimeout(r,200));}}if(!socketReady())throw new Error('Server not connected');let result=await G.socket.rpc[method](JSON.stringify(data));return JSON.parse(result);}
+async function pollDefends(){if(!socketReady())return;try{let res=await rpc('getMyDefends',{ownerId:G.ownerId});let newDefends=(res.defends||[]).filter(d=>!G.defendHistory.some(h=>h.id===d.id));if(newDefends.length>0){for(let d of newDefends){G.defendHistory.unshift({id:d.id,timestamp:d.timestamp,myName:d.defenderName,oppName:d.attackerName,myClass:d.defenderClass,oppClass:d.attackerClass,arena:d.arena,myWon:d.defenderWon,narration:d.narration,mode:d.mode});}if(G.defendHistory.length>CONFIG.fightHistoryLimit)G.defendHistory=G.defendHistory.slice(0,CONFIG.fightHistoryLimit);await saveSave();if(newDefends.length>0)toast('🛡️ '+newDefends.length+' new defense(s) logged!','success');}}catch(e){if(socketReady())console.error('pollDefends failed:',e);}}
+async function syncChampions(){if(!socketReady())return;try{let allRes=await rpc('list',{});G.allChampions=allRes.champions||[];let myRes=await rpc('getMyChampions',{ownerId:G.ownerId});G.myChampions=myRes.champions||[];let updated=false;for(let champ of G.myChampions){let hero=G.heroes.find(h=>h.id===champ.heroId);if(hero){if(hero.wins!==champ.wins){hero.wins=champ.wins||0;updated=true;}if(hero.losses!==champ.losses){hero.losses=champ.losses||0;updated=true;}let earnedSP=skillPointsForWins(hero.wins);if(earnedSP>hero.lastRewardedSP){let totalGems=0;for(let i=hero.lastRewardedSP+1;i<=earnedSP;i++)totalGems+=gemsForSkillPoint(i);G.gems+=totalGems;hero.lastRewardedSP=earnedSP;updated=true;if(totalGems>0)toast(`${hero.name} earned SP! +${totalGems} 💎`,'success');}}}if(updated){await saveSave();updateGemsDisplay();}}catch(e){if(socketReady())console.error('Sync failed:',e);}}
+
+async function init(){await loadSave();updateGemsDisplay();updateArenaLock();renderForge();renderMenuStats();await connectServer();updateArenaLock();renderMenuStats();setInterval(()=>{if(G.serverReady){syncChampions().then(()=>{if(document.getElementById('menuView').classList.contains('active'))renderMenuStats();});pollDefends();}},30000);}
+init();
+</script>
+
+</body>
+</html>

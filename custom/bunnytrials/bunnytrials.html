@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>bunnytrials — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+BunnyTrials AI Trial Generator for Perchance.org
+- Purple-themed, mobile-friendly UI inspired by Reddit-style cards
+- Features: category picker, wheel spinner, voting, save/load, copy, AI text/image integration
+- Plugins used: text-to-image-plugin, ai-text-plugin, kv-plugin, remember-plugin, super-fetch-plugin, copy-text-plugin
+-->
+<style>
+  :root {
+    --bg-1: #0d0f0f;
+    --bg-2: #111414;
+    --bg-3: #181b1b;
+    --bg-4: #1e2222;
+    --panel: #151818;
+    --text-1: #eef2f0;
+    --text-2: #9aa3a0;
+    --text-3: #6b7872;
+    --accent: #6cd99c;          /* minty lime */
+    --accent-2: #2ec27e;
+    --accent-glow: rgba(108, 217, 156, 0.22);
+    --bad: #ff6b6b;
+    --muted: #2a3030;
+    --muted-2: #232928;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji"; background: var(--bg-1); color: var(--text-1); }
+  
+  .app-shell { display:flex; max-width:1100px; margin:0 auto; min-height:100vh; }
+  
+  /* Left rail: settings + stats */
+  .sidebar { width:320px; flex:none; padding:18px 14px 24px 18px; border-right:1px solid var(--muted); position:sticky; top:0; align-self:start; }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+  .brand-logo { font-size:28px; }
+  .brand-title { font-weight:800; letter-spacing:.3px; font-size:18px; }
+  .badge { font-size:10px; font-weight:700; background: var(--accent-glow); color: var(--accent); border:1px solid rgba(108,217,156,0.35); padding:2px 8px; border-radius:999px; text-transform:uppercase; }
+  
+  .panel { background: var(--panel); border:1px solid var(--muted); border-radius:16px; padding:14px; margin-bottom:14px; }
+  .panel h3 { margin:0 0 10px; font-size:13px; color:var(--text-2); text-transform:uppercase; letter-spacing:.5px; }
+  
+  .pill-grid { display:flex; flex-wrap:wrap; gap:6px; }
+  .pill { font-size:12px; padding:6px 10px; border-radius:999px; border:1px solid var(--muted); background:transparent; color:var(--text-2); cursor:pointer; user-select:none; }
+  .pill.on { background: var(--accent-glow); color: var(--accent); border-color: rgba(108,217,156,0.45); font-weight:600; }
+  .pill:hover { border-color: var(--text-3); color: var(--text-1); }
+  .pill.on:hover { border-color: rgba(108,217,156,0.6); }
+  
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:12px; border-radius:12px; border:0; font-weight:700; font-size:14px; cursor:pointer; letter-spacing:.3px; }
+  .btn-primary { background: var(--accent); color: #062010; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-ghost { background: var(--bg-3); color: var(--text-1); border:1px solid var(--muted); }
+  .btn-ghost:hover { background: var(--bg-4); }
+  
+  .slider { -webkit-appearance:none; appearance:none; width:100%; height:6px; border-radius:999px; background: var(--muted); outline:none; }
+  .slider::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:50%; background: var(--accent); box-shadow: 0 0 0 6px rgba(108,217,156,0.18); cursor:pointer; }
+  
+  .stat-row { display:flex; align-items:center; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--muted); font-size:13px; color:var(--text-2); }
+  .stat-row:last-child { border-bottom:none; }
+  .stat-val { color: var(--text-1); font-weight:700; }
+  
+  /* Main feed */
+  .main { flex:1; padding:18px 18px 60px; min-width:0; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+  .search { flex:1; }
+  .search input { width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--muted); background: var(--bg-2); color: var(--text-1); outline:none; font-size:14px; }
+  .search input::placeholder { color: var(--text-3); }
+  
+  .chipbar { display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:14px; scrollbar-width:none; }
+  .chipbar::-webkit-scrollbar { display:none; }
+  .chip { white-space:nowrap; font-size:12px; padding:7px 12px; border-radius:999px; border:1px solid var(--muted); background: var(--bg-3); color: var(--text-2); cursor:pointer; }
+  .chip.on { background: var(--accent-glow); color: var(--accent); border-color: rgba(108,217,156,0.45); font-weight:600; }
+  
+  .empty { text-align:center; padding:60px 18px; color:var(--text-3); font-size:14px; }
+  
+  /* Trial card */
+  .trial { background: var(--bg-2); border:1px solid var(--muted); border-radius:20px; overflow:hidden; margin-bottom:22px; }
+  .trial-header { display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--muted); }
+  .trial-avatar { width:34px; height:34px; border-radius:50%; background: linear-gradient(135deg, #b6f9c9 0%, #4ade80 100%); display:grid; place-items:center; font-size:16px; color: #06301a; font-weight:700; }
+  .trial-meta { flex:1; }
+  .trial-user { font-weight:700; font-size:13px; color: var(--text-1); }
+  .trial-when { font-size:11px; color: var(--text-3); }
+  .trial-save { font-size:18px; color:var(--text-3); cursor:pointer; background:none; border:none; padding:4px; }
+  .trial-save.on { color: var(--accent); }
+  
+  .trial-body { padding:14px; }
+  .trial-badge { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color: var(--accent); background: var(--accent-glow); border:1px solid rgba(108,217,156,0.3); padding:4px 10px; border-radius:999px; margin-bottom:10px; }
+  .trial-title { font-size:17px; font-weight:800; line-height:1.3; margin:0 0 8px; }
+  .trial-desc { font-size:14px; color:var(--text-2); margin-bottom:14px; line-height:1.45; }
+  
+  .options { display:flex; gap:10px; }
+  .option { flex:1; position:relative; background: var(--bg-3); border:1px solid var(--muted); border-radius:16px; overflow:hidden; cursor:pointer; transition: transform .05s ease, border-color .15s ease; }
+  .option:hover { border-color: var(--text-3); }
+  .option:active { transform: translateY(1px); }
+  .option-media { width:100%; aspect-ratio:16/10; background: var(--bg-4); display:grid; place-items:center; font-size:34px; }
+  .option-img { width:100%; height:100%; object-fit:cover; display:block; }
+  .option-bar { position:absolute; bottom:0; left:0; height:4px; width:0%; background: var(--accent); transition: width .35s ease; }
+  .option-content { padding:10px 12px 14px; }
+  .option-name { font-weight:800; font-size:14px; margin-bottom:2px; }
+  .option-votes { font-size:12px; color:var(--text-3); }
+  .option-pick { font-size:12px; color:var(--accent); font-weight:700; display:none; }
+  .option.voted .option-pick { display:block; }
+  .option.voted .option-bar { width:100%; }
+  
+  .trial-footer { display:flex; align-items:center; gap:14px; padding:10px 14px; border-top:1px solid var(--muted); color:var(--text-3); font-size:12px; }
+  .trial-footer span { cursor:pointer; }
+  .trial-footer span:hover { color:var(--text-1); }
+  
+  /* Wheel overlay */
+  #wheelCtn { position:fixed; inset:0; background: rgba(0,0,0,0.65); display:grid; place-items:center; z-index:50; opacity:0; pointer-events:none; transition: opacity .2s ease; }
+  #wheelCtn.open { opacity:1; pointer-events:auto; }
+  .wheel-card { background: var(--bg-2); border:1px solid var(--muted); border-radius:24px; padding:18px; width: min(420px, 92vw); text-align:center; }
+  #wheelCanvas { width:100%; height:auto; display:block; margin:10px 0 14px; }
+  .wheel-title { font-weight:800; margin-bottom:4px; }
+  .wheel-sub { color:var(--text-3); font-size:13px; margin-bottom:10px; }
+  .wheel-spun { color:var(--accent); font-weight:800; font-size:18px; margin:8px 0 14px; min-height:28px; }
+  
+  /* Toast */
+  #toastCtn { position:fixed; left:50%; bottom:22px; transform: translateX(-50%) translateY(20px); opacity:0; pointer-events:none; background: var(--accent); color:#062010; font-weight:700; padding:10px 16px; border-radius:12px; font-size:13px; z-index:60; transition: all .25s ease; }
+  #toastCtn.open { transform: translateX(-50%) translateY(0); opacity:1; }
+  
+  @media (max-width: 900px) {
+    .app-shell { flex-direction:column; }
+    .sidebar { width:100%; border-right:none; border-bottom:1px solid var(--muted); position:static; padding:14px 14px 18px; }
+    .main { padding:14px; }
+  }
+</style>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">🐇</div>
+      <div>
+        <div class="brand-title">BunnyTrials</div>
+        <div style="font-size:11px;color:var(--text-3);">r/BunnyTrials AI Trial Generator</div>
+      </div>
+      <div style="margin-left:auto;" class="badge">Beta</div>
+    </div>
+  
+    <div class="panel">
+      <h3>Categories</h3>
+      <div class="pill-grid" id="catGrid"></div>
+    </div>
+  
+    <div class="panel">
+      <h3>Create Trial</h3>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button class="btn btn-primary" onclick="generateTrials(1)">🎲 1 Trial</button>
+        <button class="btn btn-ghost" onclick="generateTrials(3)">🔥 3 Trials</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button class="btn btn-ghost" onclick="spinRandomTrialWheel()">🎯 Spin & Pick</button>
+        <button class="btn btn-ghost" onclick="clearTrials()">Clear</button>
+      </div>
+      
+      <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--muted);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:12px;color:var(--text-2);">Difficulty / Chaos</span>
+          <span id="chaosValue" style="font-size:12px;font-weight:700;color:var(--accent);">Balanced</span>
+        </div>
+        <input type="range" id="chaosInput" class="slider" min="1" max="5" value="3" oninput="updateChaosLabel()">
+      </div>
+    </div>
+  
+    <div class="panel">
+      <h3>Statistics</h3>
+      <div class="stat-row"><span>Trials</span><span class="stat-val" id="statTrials">0</span></div>
+      <div class="stat-row"><span>Total Votes</span><span class="stat-val" id="statVotes">0</span></div>
+      <div class="stat-row"><span>Saved</span><span class="stat-val" id="statSaved">0</span></div>
+      <div class="stat-row"><span>Top Category</span><span class="stat-val" id="statTopCat">—</span></div>
+    </div>
+  
+    <div class="panel">
+      <button class="btn btn-ghost" onclick="exportTrials()">📋 Copy JSON</button>
+    </div>
+  </aside>
+  
+  <main class="main" id="mainEl">
+    <div class="topbar">
+      <div class="search">
+        <input id="searchInput" placeholder="Search trials..." oninput="renderFeed()">
+      </div>
+    </div>
+    
+    <div class="chipbar" id="chipBar">
+      <div class="chip on" onclick="setFilter('all')" data-filter="all">All</div>
+      <div class="chip" onclick="setFilter('saved')" data-filter="saved">⭐ Saved</div>
+      <div class="chip" onclick="setFilter('text')" data-filter="text">Text</div>
+      <div class="chip" onclick="setFilter('superpowers')" data-filter="superpowers">Superpowers</div>
+      <div class="chip" onclick="setFilter('characters')" data-filter="characters">Characters</div>
+      <div class="chip" onclick="setFilter('emojis')" data-filter="emojis">Emojis</div>
+      <div class="chip" onclick="setFilter('food')" data-filter="food">Food</div>
+      <div class="chip" onclick="setFilter('animals')" data-filter="animals">Animals</div>
+    </div>
+    
+    <div id="feedCtn"></div>
+  </main>
+</div>
+
+<!-- Wheel overlay -->
+<div id="wheelCtn" onclick="if(event.target===wheelCtn) wheelCtn.classList.remove('open')">
+  <div class="wheel-card" onclick="event.stopPropagation()">
+    <div class="wheel-title" id="wheelTitle">Bunny Roulette</div>
+    <div class="wheel-sub" id="wheelSub">Spin to reveal your trial</div>
+    <canvas id="wheelCanvas" width="380" height="380"></canvas>
+    <div class="wheel-spun" id="wheelResult"></div>
+    <button class="btn btn-primary" onclick="spinWheel()" id="spinBtn">🎰 Spin</button>
+  </div>
+</div>
+
+<div id="toastCtn"></div>
+
+<script>
+  // ============ DATASETS ============
+  const categories = [
+    {key:'text',        label:'Text',         icon:'📝'},
+    {key:'money',       label:'Money',        icon:'💰'},
+    {key:'superpowers', label:'Superpowers',  icon:'⚡'},
+    {key:'characters',  label:'Characters',   icon:'🎭'},
+    {key:'emojis',      label:'Emojis',       icon:'😂'},
+    {key:'food',        label:'Food',         icon:'🍕'},
+    {key:'animals',     label:'Animals',      icon:'🐇'},
+    {key:'flags',       label:'Flags',        icon:'🏳️'},
+    {key:'structures',  label:'Structures',   icon:'🏗️'},
+    {key:'bunny',       label:'BunnyTrials',  icon:'🐰'},
+    {key:'meme',        label:'Meme',         icon:'🌀'},
+    {key:'chaos',       label:'Chaos',        icon:'🔥'},
+  ];
+  
+  const titleTemplates = [
+    "Would you rather {a} or {b}?",
+    "Choose one: {a} or {b}",
+    "Pick your poison — {a} vs {b}",
+    "Bunny Trial: accept {a} or face {b}",
+    "You can only keep one: {a} or {b}",
+    "Reddit decides: {a} or {b}",
+    "Sacrifice one — {a} or {b}?",
+    "Instant win if you pick {a}. Instant regret if you pick {b}.",
+    "The Council offers {a} but demands {b}. Do you accept?",
+    "BunnyTrials Daily Dilemma: {a} vs {b}",
+  ];
+  
+  const prompts = [
+    "Both options last exactly 24 hours. You cannot opt out.",
+    "The effect is permanent. Choose wisely.",
+    "One option is secretly rigged. Good luck.",
+    "Whatever you pick, your friends find out immediately.",
+    "You get $100 if you pick the most popular choice.",
+    "The Bunny Council will judge your answer.",
+    "You can only undo your choice by doing 100 jumping jacks.",
+    "Next trial unlocks based on this pick.",
+    "There is a hidden third option. Maybe.",
+    "This trial has a 10% chance of reversing the outcome.",
+  ];
+  
+  const pool = {
+    text: [
+      {name:"Comic Sans Everything", icon:"🅰️", desc:"Every text you see becomes Comic Sans."},
+      {name:"ALL CAPS FOREVER", icon:"🔠", desc:"You can only type in ALL CAPS."},
+      {name:"Spoil Every Movie", icon:"🎬", desc:"You accidentally spoil the ending of every movie you mention."},
+      {name:"Speak in Rhyme", icon:"🎤", desc:"All your speech must rhyme."},
+      {name:"Autocorrect King", icon:"📱", desc:"Your autocorrect always changes words to food names."},
+      {name:"No Punctuation", icon:"❌", desc:"You cannot use punctuation for a week."},
+      {name:"Haiku Only", icon:"🍃", desc:"You must speak in haiku format."},
+      {name:"Text Backwards", icon:"🔁", desc:"You read and write everything backwards."},
+    ],
+    money: [
+      {name:"$1,000,000 but...", icon:"💸", desc:"...you must wear a bunny suit to every meeting."},
+      {name:"Infinite Coupons", icon:"🎟️", desc:"You get a 90% off coupon to any store, once per day."},
+      {name:"Penny Doubler", icon:"🪙", desc:"Every penny you touch doubles. Taxed immediately."},
+      {name:"Lottery Ticket Curse", icon:"🎫", desc:"You win $100 every time you complain about money."},
+      {name:"Crypto Bunny", icon:"🐰", desc:"All your money is converted to a memecoin called $BUNNY."},
+      {name:"Cash Rain", icon:"🌧️", desc:"It rains $1 bills around you when you dance."},
+      {name:"Bank Error", icon:"🏦", desc:"You get $10k but your bank statement is public."},
+      {name:"Treasure Map", icon:"🗺️", desc:"You own a map to buried treasure but it's written in emoji."},
+    ],
+    superpowers: [
+      {name:"Teleport but Random", icon:"🌀", desc:"Teleportation works, but the destination is random within 10 miles."},
+      {name:"Read Minds (Boring)", icon:"🧠", desc:"You can read minds, but only thoughts about breakfast."},
+      {name:"Super Speed (Nap)", icon:"⚡", desc:"You run at lightning speed, then nap for 6 hours."},
+      {name:"Invisibility Clothes", icon:"👻", desc:"Only your clothes turn invisible. You stay visible."},
+      {name:"Flight (Low)", icon:"🛸", desc:"You can fly, but only 3 feet off the ground."},
+      {name:"X-Ray Vision (Fog)", icon:"👁️", desc:"You see through things, but everything is foggy."},
+      {name:"Time Pause (You Too)", icon:"⏸️", desc:"You pause time, but you also freeze."},
+      {name:"Super Strength (Gentle)", icon:"💪", desc:"You are incredibly strong but physically incapable of violence."},
+    ],
+    characters: [
+      {name:"Team Bugs Bunny", icon:"🐰", desc:"Bugs Bunny is your lawyer. He never loses."},
+      {name:"Sidekick Gromit", icon:"🐕", desc:"Gromit builds you any gadget in 24 hours."},
+      {name:"Mentor Shrek", icon:"🧅", desc:"Shrek gives you life advice. It's surprisingly deep."},
+      {name:"Rival Daffy Duck", icon:"🦆", desc:"Daffy Duck sabotages one thing you do per day."},
+      {name:"Bodyguard Totoro", icon:"🌲", desc:"Totoro follows you. He is invisible to everyone else."},
+      {name:"Roommate SpongeBob", icon:"🍍", desc:"SpongeBob moves into your house. Permanently."},
+      {name:"Nemesis Plankton", icon:"🦠", desc:"Plankton tries to steal your secret formula daily."},
+      {name:"Guest Waluigi", icon:"🎾", desc:"Waluigi haunts your dreams. He's surprisingly supportive."},
+    ],
+    emojis: [
+      {name:"😂 Emoji Vision", icon:"😂", desc:"You see people as the emoji that best represents them."},
+      {name:"💀 Cursed Reactions", icon:"💀", desc:"Every message you send auto-appends a random skull emoji."},
+      {name:"🍑 Peach Only Mode", icon:"🍑", desc:"You can only react with the peach emoji for 48 hours."},
+      {name:"🤡 Clown Prerequisite", icon:"🤡", desc:"You must send a clown emoji before any serious message."},
+      {name:"❤️ Heart Eyes", icon:"😍", desc:"Your vision is filtered through heart-eye lenses."},
+      {name:"🤯 Mind Blown Aura", icon:"🤯", desc:"Everyone around you says 'mind blown' every 10 minutes."},
+      {name:"🙃 Upside-Down Life", icon:"🙃", desc:"Gravity is normal, but your internal compass is inverted."},
+      {name:"💯 Everything is 100", icon:"💯", desc:"You can only rate things 100/100. No exceptions."},
+    ],
+    food: [
+      {name:"Pizza Portal", icon:"🍕", desc:"A pizza appears every time you snap your fingers. Always pineapple."},
+      {name:"Spicy Curse", icon:"🌶️", desc:"Everything you eat is randomly mild or ghost-pepper hot."},
+      {name:"Taco Tuesdays... Daily", icon:"🌮", desc:"Every meal is tacos. Breakfast tacos. Dessert tacos."},
+      {name:"Floating Sushi", icon:"🍣", desc:"Sushi follows you like a school of fish. You can't eat it."},
+      {name:"Condiment King", icon:"🥫", desc:"You can shoot ketchup and mustard from your wrists."},
+      {name:"Cheese Telepathy", icon:"🧀", desc:"You can communicate telepathically with cheese."},
+      {name:"Soup Weather Control", icon:"🍲", desc:"The weather matches the temperature of your soup."},
+      {name:"Instant Noodle Hair", icon:"🍜", desc:"Your hair becomes ramen. It regrows nightly."},
+    ],
+    animals: [
+      {name:"Talk to Squirrels", icon:"🐿️", desc:"You can talk to squirrels. They are gossip kings."},
+      {name:"Cat Whisperer (Loud)", icon:"🐱", desc:"You understand cats, but they only scream at you."},
+      {name:"Penguin Entourage", icon:"🐧", desc:"Five penguins follow you. They judge your fashion."},
+      {name:"Bee Treasurer", icon:"🐝", desc:"A bee manages your finances. Surprisingly competent."},
+      {name:"Owl Notifications", icon:"🦉", desc:"An owl hoots every time you get a notification."},
+      {name:"Frog Choir", icon:"🐸", desc:"A choir of frogs sings your theme song when you enter rooms."},
+      {name:"Crab Arm Day", icon:"🦀", desc:"One of your arms is a crab claw today."},
+      {name:"Duck Commander", icon:"🦆", desc:"You can summon ducks. They obey... reluctantly."},
+    ],
+    flags: [
+      {name:"Random Flag Cape", icon:"🏳️", desc:"You wear a random country's flag as a cape daily."},
+      {name:"Anthem Alarm", icon:"🔊", desc:"Your alarm is a random national anthem. Volume: max."},
+      {name:"Diplomatic Immunity", icon:"🛡️", desc:"You have diplomatic immunity in one random country."},
+      {name:"Border Bunny", icon:"🐰", desc:"You teleport to a random border crossing every midnight."},
+      {name:"Currency Roulette", icon:"💱", desc:"Your money denomination changes to a random currency hourly."},
+      {name:"Visa-Free Life", icon:"✈️", desc:"No visa required anywhere — but you must hop like a bunny at customs."},
+      {name:"Flag Quiz Shield", icon:"🎌", desc:"A forcefield protects you if you name the flag correctly."},
+      {name:"Emoji Embassy", icon:"🏛️", desc:"You are the ambassador to the Republic of Emoji."},
+    ],
+    structures: [
+      {name:"Cardboard Fort", icon:"📦", desc:"You live in an impenetrable cardboard fort."},
+      {name:"Bouncy Castle Home", icon:"🏰", desc:"Your house is a bouncy castle. Furniture included."},
+      {name:"Treehouse Penthouse", icon:"🌳", desc:"Your apartment is a treehouse at the top of a skyscraper."},
+      {name:"Infinite Staircase", icon:"🪜", desc:"Your home has an infinite staircase. Good exercise."},
+      {name:"Mirror Maze Office", icon:"🪞", desc:"Your office is a mirror maze. Meetings are confusing."},
+      {name:"Igloo Server Room", icon:"🧊", desc:"Your servers are cooled by an actual igloo."},
+      {name:"Tent Mansion", icon:"⛺", desc:"You own a mansion made entirely of luxury tents."},
+      {name:"Sand Castle Vault", icon:"🏖️", desc:"Your valuables are stored in a sandcastle. Tide is coming."},
+    ],
+    bunny: [
+      {name:"Bunny Ears (Real)", icon:"🐇", desc:"You grow real bunny ears. Very sensitive hearing."},
+      {name:"Carrot Tax", icon:"🥕", desc:"You must pay a 10% carrot tax on all income."},
+      {name:"Hop Only Transport", icon:"🦘", desc:"You can only travel by hopping. No walking allowed."},
+      {name:"Cotton Tail Aura", icon:"☁️", desc:"You leave a trail of literal cotton balls behind you."},
+      {name:"Burrow Bunker", icon:"🕳️", desc:"You sleep underground. Cozy, but WiFi is terrible."},
+      {name:"Carrot Vision", icon:"👀", desc:"Everything edible glows orange. Everything else is grayscale."},
+      {name:"Bunny Court", icon:"⚖️", desc:"You are judged by a jury of seven rabbits."},
+      {name:"Bunny Council Vote", icon:"🗳️", desc:"The Bunny Council votes on your daily schedule."},
+    ],
+    meme: [
+      {name:"Distracted Boyfriend", icon:"👀", desc:"You are physically unable to ignore distractions."},
+      {name:"Doge Much Wow", icon:"🐕", desc:"You speak in Doge grammar. Very challenge. Much stress."},
+      {name:"Success Kid", icon:"👶", desc:"You succeed at everything, but only in very minor ways."},
+      {name:"Woman Yelling at Cat", icon:"🐱", desc:"A random woman yells at you about your decisions daily."},
+      {name:"Is This a Pigeon?", icon:"🦋", desc:"You misidentify objects confidently. Always wrong."},
+      {name:"Galaxy Brain", icon:"🧠", desc:"Your ideas get progressively more absurd. You think they're genius."},
+      {name:"Stonks", icon:"📈", desc:"All your graphs go up. Reality does not match the graphs."},
+      {name:"Wojak Companion", icon:"😟", desc:"A little Wojak follows you, representing your inner monologue."},
+    ],
+    chaos: [
+      {name:"Gravity Lottery", icon:"🎲", desc:"Gravity's direction changes hourly. Check your ceiling."},
+      {name:"Color Swap World", icon:"🎨", desc:"All colors are randomly swapped. Red is blue. Good luck driving."},
+      {name:"Reverse Day", icon:"🔁", desc:"Your day plays in reverse after 6 PM."},
+      {name:"Sound-to-Light", icon:"🔊", desc:"All sounds create visible flashes of light. Sneezing is blinding."},
+      {name:"Identity Roulette", icon:"🎭", desc:"You swap personalities with the nearest person every noon."},
+      {name:"Narrator Mode", icon:"📖", desc:"A narrator describes everything you do out loud."},
+      {name:"Lag IRL", icon:"⏳", desc:"You experience 1.5 seconds of lag between thought and action."},
+      {name:"Fourth Wall Break", icon:"🧱", desc:"You sometimes hear the audience. They do not like your choices."},
+    ],
+  };
+  
+  // ============ STATE ============
+  let selectedCats = new Set(categories.map(c => c.key));
+  let chaosLevel = 3;
+  let trials = [];
+  let nextId = 1;
+  let savedIds = new Set();
+  let currentFilter = 'all';
+  let voteMap = {}; // trialId -> optionIndex
+  
+  function rand(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
+  function randN(n) { return Math.floor(Math.random()*n); }
+  function uid() { return 't'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6); }
+  
+  // ============ INIT UI ============
+  function init() {
+    // Category pills
+    catGrid.innerHTML = categories.map(c => 
+      `<button class="pill on" data-cat="${c.key}" onclick="toggleCat('${c.key}')">${c.icon} ${c.label}</button>`
+    ).join('');
+    
+    generateTrials(3);
+    updateStats();
+    
+    // Load saved from kv if available (best-effort)
+    if (typeof kv !== 'undefined') {
+      kv.bunnycache?.get('savedTrials').then(v => {
+        if (Array.isArray(v)) { v.forEach(id => savedIds.add(id)); renderFeed(); updateStats(); }
+      }).catch(()=>{});
+    }
+  }
+  
+  function toggleCat(key) {
+    const btn = document.querySelector(`[data-cat="${key}"]`);
+    if (selectedCats.has(key)) { selectedCats.delete(key); btn.classList.remove('on'); }
+    else { selectedCats.add(key); btn.classList.add('on'); }
+  }
+  
+  function updateChaosLabel() {
+    chaosLevel = +chaosInput.value;
+    const labels = {1:'Calm',2:'Mild',3:'Balanced',4:'Chaotic',5:'BunnyBall'};
+    chaosValue.textContent = labels[chaosLevel] || 'Balanced';
+  }
+  
+  function setFilter(f) {
+    currentFilter = f;
+    chipBar.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.filter===f));
+    renderFeed();
+  }
+  
+  function getFilteredTrials() {
+    let list = [...trials];
+    if (currentFilter !== 'all') {
+      if (currentFilter === 'saved') list = list.filter(t => savedIds.has(t.id));
+      else list = list.filter(t => t.category === currentFilter);
+    }
+    const q = searchInput.value.trim().toLowerCase();
+    if (q) list = list.filter(t => (t.title+' '+t.prompt+' '+t.desc).toLowerCase().includes(q));
+    return list;
+  }
+  
+  // ============ GENERATION ============
+  function generateTrials(n) {
+    for (let i=0;i<n;i++) {
+      const catKey = rand([...selectedCats]);
+      const cat = categories.find(c => c.key===catKey) || categories[0];
+      const opts = pool[catKey] || pool.text;
+      // pick 2-4 options
+      const optCount = Math.min(opts.length, Math.random() < 0.3 ? 3 : 2);
+      const shuffled = [...opts].sort(()=>Math.random()-0.5);
+      const chosen = shuffled.slice(0, optCount);
+      
+      const template = rand(titleTemplates);
+      const title = template
+        .replace('{a}', chosen[0].name)
+        .replace('{b}', chosen[1] ? chosen[1].name : 'nothing');
+      
+      const trial = {
+        id: uid(),
+        title,
+        category: catKey,
+        categoryLabel: cat.label,
+        categoryIcon: cat.icon,
+        prompt: rand(prompts),
+        desc: chosen.map((o,i) => `Option ${i+1}: ${o.desc}`).join(' '),
+        options: chosen.map((o,i) => ({
+          name: o.name,
+          icon: o.icon,
+          desc: o.desc,
+          votes: Math.floor(Math.random()*420)+10,
+          color: i===0?'#6cd99c':i===1?'#2ec27e':i===2?'#34d399':'#a3e635',
+        })),
+        difficulty: ['Easy','Normal','Hard','Insane','BunnyLord'][chaosLevel-1],
+        chaosLevel,
+        tags: [catKey, `difficulty-${chaosLevel}`, 'reddit', 'bunny-trials'],
+        postedAt: Date.now() - Math.floor(Math.random()*1000*60*60*24*3), // up to 3 days ago
+      };
+      trials.unshift(trial);
+    }
+    renderFeed();
+    updateStats();
+  }
+  
+  function clearTrials() {
+    if (!confirm('Clear all current trials?')) return;
+    trials = [];
+    voteMap = {};
+    renderFeed();
+    updateStats();
+  }
+  
+  // ============ RENDER ============
+  function timeAgo(ts) {
+    const s = Math.floor((Date.now()-ts)/1000);
+    if (s<60) return 'just now';
+    const m = Math.floor(s/60); if (m<60) return m+'m ago';
+    const h = Math.floor(m/60); if (h<24) return h+'h ago';
+    const d = Math.floor(h/24); return d+'d ago';
+  }
+  
+  function renderFeed() {
+    const list = getFilteredTrials();
+    if (!list.length) {
+      feedCtn.innerHTML = `<div class="empty">No trials match your filters.<br>Try adjusting categories or generate new ones!</div>`;
+      return;
+    }
+    feedCtn.innerHTML = list.map(t => {
+      const saved = savedIds.has(t.id);
+      const votedIdx = voteMap[t.id];
+      const total = t.options.reduce((a,o)=>a+o.votes,0) || 1;
+      return `
+      <article class="trial" data-id="${t.id}">
+        <div class="trial-header">
+          <div class="trial-avatar">${t.categoryIcon}</div>
+          <div class="trial-meta">
+            <div class="trial-user">u/BunnyBot_${t.id.slice(-4)} <span style="color:lightcoral">•</span> ${t.categoryLabel}</div>
+            <div class="trial-when">${timeAgo(t.postedAt)} • r/BunnyTrials</div>
+          </div>
+          <button class="trial-save ${saved?'on':''}" onclick="toggleSave('${t.id}')" title="${saved?'Unsave':'Save'}">${saved?'★':'☆'}</button>
+        </div>
+        <div class="trial-body">
+          <div class="trial-badge">${t.categoryIcon} ${t.categoryLabel} • ${t.difficulty}</div>
+          <div class="trial-title">${escapeHtml(t.title)}</div>
+          <div class="trial-desc">${escapeHtml(t.prompt)} <span style="color:var(--text-3)">(${t.options.length} options)</span></div>
+          <div class="options">
+            ${t.options.map((o,i) => {
+              const pct = Math.round((o.votes/total)*100);
+              const voted = votedIdx===i;
+              return `
+              <div class="option ${voted?'voted':''}" onclick="vote('${t.id}',${i})">
+                <div class="option-media" style="background:${voted?o.color:'var(--bg-4)'}22;">
+                  <div style="font-size:44px;">${o.icon}</div>
+                </div>
+                <div class="option-bar" style="width:${voted?pct:0}%; background:${o.color};"></div>
+                <div class="option-content">
+                  <div class="option-name">${escapeHtml(o.name)}</div>
+                  <div class="option-votes">${o.votes.toLocaleString()} votes ${voted?`• ${pct}%`:''}</div>
+                  <div class="option-pick">✅ You picked this</div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+          <div style="margin-top:10px;font-size:12px;color:var(--text-3);">${escapeHtml(t.desc)}</div>
+        </div>
+        <div class="trial-footer">
+          <span onclick="vote('${t.id}',0)" style="display:inline-flex;align-items:center;gap:4px;">👍 Upvote</span>
+          <span onclick="copyTrial('${t.id}')" style="display:inline-flex;align-items:center;gap:4px;">📋 Copy</span>
+          <span onclick="shareTrial('${t.id}')" style="display:inline-flex;align-items:center;gap:4px;">🔗 Share</span>
+          <span style="margin-left:auto;">💬 ${Math.floor(Math.random()*80+5)}</span>
+        </div>
+      </article>`;
+    }).join('');
+  }
+  
+  function escapeHtml(s) {
+    const d=document.createElement('div');
+    d.textContent=s;
+    return d.innerHTML;
+  }
+  
+  function vote(tid, idx) {
+    const t = trials.find(x=>x.id===tid);
+    if (!t) return;
+    if (voteMap[tid] !== undefined) {
+      // change vote
+      const old = voteMap[tid];
+      t.options[old].votes = Math.max(0, t.options[old].votes-1);
+    }
+    voteMap[tid] = idx;
+    t.options[idx].votes++;
+    renderFeed();
+    updateStats();
+  }
+  
+  function toggleSave(tid) {
+    if (savedIds.has(tid)) savedIds.delete(tid);
+    else savedIds.add(tid);
+    renderFeed();
+    updateStats();
+    persistSaved();
+  }
+  
+  function persistSaved() {
+    if (typeof kv !== 'undefined') {
+      kv.bunnycache?.set('savedTrials', [...savedIds]).catch(()=>{});
+    }
+  }
+  
+  function updateStats() {
+    statTrials.textContent = trials.length;
+    const totalVotes = trials.reduce((a,t)=>a+t.options.reduce((b,o)=>b+o.votes,0),0);
+    statVotes.textContent = totalVotes.toLocaleString();
+    statSaved.textContent = savedIds.size;
+    // top category
+    const counts = {};
+    trials.forEach(t=>counts[t.category]=(counts[t.category]||0)+1);
+    const top = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+    statTopCat.textContent = top ? top[0] : '—';
+  }
+  
+  function copyTrial(tid) {
+    const t = trials.find(x=>x.id===tid);
+    if (!t) return;
+    const text = `${t.title}\nCategory: ${t.categoryLabel} • Difficulty: ${t.difficulty}\n${t.prompt}\nOptions:\n${t.options.map((o,i) => `${i+1}. ${o.icon} ${o.name}`).join('\n')}\n#BunnyTrials #WouldYouRather`;
+    if (typeof copyText !== 'undefined') {
+      copyText(text);
+    } else if (typeof root?.copyText !== 'undefined') {
+      root.copyText(text);
+    } else {
+      navigator.clipboard.writeText(text);
+    }
+    toast('Copied to clipboard!');
+  }
+  
+  function exportTrials() {
+    const payload = JSON.stringify(trials.map(t => ({title:t.title, category:t.categoryLabel, prompt:t.prompt, options:t.options.map(o=>o.name), difficulty:t.difficulty, chaosLevel:t.chaosLevel, tags:t.tags})), null, 2);
+    navigator.clipboard.writeText(payload);
+    toast('JSON copied!');
+  }
+  
+  function shareTrial(tid) {
+    const t = trials.find(x=>x.id===tid);
+    if (!t) return;
+    toast(`Shared: ${t.title.slice(0,40)}...`);
+  }
+  
+  function toast(msg) {
+    toastCtn.textContent = msg;
+    toastCtn.classList.add('open');
+    setTimeout(()=>toastCtn.classList.remove('open'), 1800);
+  }
+  
+  // ============ WHEEL ============
+  let wheelOpts = [];
+  let wheelAngle = 0;
+  let wheelSpinning = false;
+  
+  function spinRandomTrialWheel() {
+    // build wheel from current selected categories
+    const cats = [...selectedCats];
+    if (!cats.length) { toast('Select at least one category!'); return; }
+    wheelOpts = cats.map(k => {
+      const c = categories.find(x=>x.key===k);
+      const o = rand(pool[k] || pool.text);
+      return { label: `${c.icon} ${o.name}`, color: c.key==='bunny'?'#6cd99c':c.key==='chaos'?'#ff6b6b':'#34d399', sub: o.desc };
+    });
+    if (wheelOpts.length < 2) { toast('Need more categories!'); return; }
+    wheelTitle.textContent = 'Bunny Roulette';
+    wheelSub.textContent = `${wheelOpts.length} options • Spin to pick your trial`;
+    wheelResult.textContent = '';
+    wheelCtn.classList.add('open');
+    requestAnimationFrame(drawWheel);
+  }
+  
+  function drawWheel() {
+    const cvs = wheelCanvas;
+    const ctx = cvs.getContext('2d');
+    const w = cvs.width, h = cvs.height, r = w/2 - 10, cx=w/2, cy=h/2;
+    ctx.clearRect(0,0,w,h);
+    
+    const n = wheelOpts.length;
+    const slice = Math.PI*2/n;
+    // background ring
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='var(--bg-3)'; ctx.fill(); ctx.strokeStyle='var(--muted)'; ctx.lineWidth=2; ctx.stroke();
+    
+    for (let i=0;i<n;i++) {
+      const a0 = wheelAngle + i*slice, a1 = a0 + slice;
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,a0,a1); ctx.closePath();
+      ctx.fillStyle = wheelOpts[i].color; ctx.globalAlpha=0.25; ctx.fill(); ctx.globalAlpha=1;
+      ctx.strokeStyle='var(--muted)'; ctx.lineWidth=1; ctx.stroke();
+      // text
+      const ma = a0 + slice/2;
+      const tx = cx + Math.cos(ma)*(r*0.62);
+      const ty = cy + Math.sin(ma)*(r*0.62);
+      ctx.save(); ctx.translate(tx,ty); ctx.rotate(ma+Math.PI/2);
+      ctx.fillStyle='var(--text-1)'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(wheelOpts[i].label,0,0);
+      ctx.restore();
+    }
+    // pointer
+    ctx.beginPath(); ctx.moveTo(cx+r+2,cy-8); ctx.lineTo(cx+r+18,cy); ctx.lineTo(cx+r+2,cy+8); ctx.closePath();
+    ctx.fillStyle='var(--accent)'; ctx.fill(); ctx.strokeStyle='var(--bg-1)'; ctx.lineWidth=2; ctx.stroke();
+    // center cap
+    ctx.beginPath(); ctx.arc(cx,cy,16,0,Math.PI*2); ctx.fillStyle='var(--bg-2)'; ctx.fill(); ctx.strokeStyle='var(--muted)'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='var(--accent)'; ctx.font='18px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('🐰',cx,cy);
+  }
+  
+  function spinWheel() {
+    if (wheelSpinning) return;
+    wheelSpinning = true;
+    spinBtn.disabled = true; spinBtn.textContent = 'Spinning...';
+    const n = wheelOpts.length;
+    const slice = Math.PI*2/n;
+    const extra = Math.PI*2 * (Math.random()*3 + 4); // 4-7 spins
+    const start = wheelAngle;
+    const startTime = performance.now();
+    const dur = 2400;
+    
+    function easeOut(t) { return 1 - Math.pow(1-t, 3); }
+    
+    function frame(now) {
+      const t = Math.min(1, (now-startTime)/dur);
+      wheelAngle = start + extra * easeOut(t);
+      drawWheel();
+      if (t < 1) requestAnimationFrame(frame);
+      else {
+        wheelSpinning = false;
+        spinBtn.disabled = false; spinBtn.textContent = '🎰 Spin Again';
+        const norm = ((wheelAngle % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+        const idx = (n - Math.floor(norm / slice) % n) % n;
+        const win = wheelOpts[idx];
+        wheelResult.textContent = `Result: ${win.label} — ${win.sub}`;
+        // after a moment, generate a trial in that category
+        setTimeout(() => {
+          wheelCtn.classList.remove('open');
+          generateTrials(1);
+          toast('New trial generated from wheel!');
+        }, 1200);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  
+  // ============ KICKOFF ============
+  init();
+</script>
+</body>
+</html>

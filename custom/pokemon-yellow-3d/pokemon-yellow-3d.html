@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>pokemon-yellow-3d — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div style="width:100%; height:100vh; overflow:hidden; position:relative; font-family:'Courier New', Courier, monospace;">
+  <!-- 3D Canvas -->
+  <canvas id="renderCanvasEl" style="width:100%; height:100%; touch-action:none; outline:none;"></canvas>
+
+  <!-- Loading Screen -->
+  <div id="loadingEl" style="position:absolute; top:0; left:0; width:100%; height:100%; background:#202020; color:#ffcc00; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:10;">
+    <h1>POKEMON YELLOW 3D</h1>
+    <p>Connecting to PokeAPI...</p>
+  </div>
+
+  <!-- UI Overlay (HUD) -->
+  <div id="uiLayer" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; display:none;">
+    <!-- Player Stats -->
+    <div style="position:absolute; top:10px; left:10px; color:white; background:rgba(0,0,0,0.5); padding:10px; border:2px solid white; border-radius:5px;">
+      <div id="playerNameEl">ASH</div>
+      <div id="partyInfoEl">Loading...</div>
+    </div>
+    <!-- Controls Hint -->
+    <div style="position:absolute; bottom:10px; left:10px; color:white; font-size:12px; background:rgba(0,0,0,0.5); padding:5px;">
+      WASD to Move | E to Interact
+    </div>
+  </div>
+
+  <!-- Battle UI -->
+  <div id="battleScreen" class="hidden" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:20; display:flex; flex-direction:column; justify-content:center; align-items:center; pointer-events:auto;">
+    <div style="display:flex; justify-content:space-between; width:80%; max-width:800px; margin-bottom:20px;">
+      <!-- Enemy Info -->
+      <div style="background:white; border:4px solid #333; padding:10px; border-radius:5px; width:40%;">
+        <div id="enemyNameEl" style="font-weight:bold; text-transform:uppercase;">???</div>
+        <div style="background:#eee; height:20px; width:100%; border:1px solid black; margin-top:5px;">
+          <div id="enemyHpBar" style="background:red; height:100%; width:100%; transition:width 0.5s;"></div>
+        </div>
+      </div>
+      <!-- Player Pokemon Info -->
+      <div style="background:white; border:4px solid #333; padding:10px; border-radius:5px; width:40%; text-align:right;">
+        <div id="battlePokeNameEl" style="font-weight:bold; text-transform:uppercase;">PIKACHU</div>
+        <div style="background:#eee; height:20px; width:100%; border:1px solid black; margin-top:5px; text-align:left;">
+          <div id="playerHpBar" style="background:limegreen; height:100%; width:100%; transition:width 0.5s;"></div>
+        </div>
+        <div id="playerHpText" style="font-size:12px;">35/35</div>
+      </div>
+    </div>
+
+    <!-- Battle Menu -->
+    <div id="battleMenuBox" style="background:white; border:4px solid #333; padding:15px; width:80%; max-width:800px; display:flex; gap:10px;">
+      <div style="flex:1; display:flex; flex-direction:column; gap:10px;">
+        <div id="battleTextEl" style="height:40px; font-weight:bold;">What will PIKACHU do?</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <button id="fightBtn" class="battle-btn">FIGHT</button>
+          <button id="runBtn" class="battle-btn">RUN</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Simple Toast/Dialog -->
+  <div id="dialogEl" class="hidden" style="position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:white; border:4px solid #333; padding:15px; width:80%; max-width:600px; text-align:center; font-weight:bold; z-index:15; pointer-events:auto;">
+    <span id="dialogTextEl">Hello!</span>
+    <div style="margin-top:10px; font-size:10px; color:#666;">[Press E to close]</div>
+  </div>
+
+  <style>
+    .hidden { display:none !important; }
+    .battle-btn { 
+      background:#fff; border:2px solid #333; padding:10px; font-family:'Courier New', monospace; font-weight:bold; cursor:pointer; 
+      box-shadow: 2px 2px 0px #333; transition: transform 0.1s;
+    }
+    .battle-btn:active { transform: translate(2px, 2px); box-shadow: none; }
+    .battle-btn:hover { background:#f0f0f0; }
+    #battleScreen { pointer-events:auto; }
+  </style>
+
+  <script type="module">
+    // --- Imports & Setup ---
+    import * as BABYLON from 'https://esm.sh/@babylonjs/core@6.0.0';
+    import { createNoise2D } from 'https://esm.sh/simplex-noise@4.0.3';
+
+    // --- Global State ---
+    const canvas = renderCanvasEl;
+    const engine = new BABYLON.Engine(canvas, true);
+    let scene, camera, playerMesh;
+    const gameState = { mode: 'LOADING', playerPos: {x:0, z:0}, encounterRate: 0.15 };
+    
+    // --- Game Data ---
+    const myPokemon = { name: "Pikachu", maxHp: 35, currentHp: 35, atk: 55, def: 40, sprite: "", level: 5 };
+    let enemyPokemon = null;
+
+    // --- API Helper ---
+    async function fetchPokemon(nameOrId) {
+      try {
+        let res = await fetch(`https://pokeapi.co/api/v2/pokemon/${nameOrId.toString().toLowerCase()}`);
+        if(!res.ok) throw new Error("Pokemon not found");
+        return await res.json();
+      } catch(e) {
+        console.error(e);
+        return null;
+      }
+    }
+
+    // --- Initialization ---
+    async function init() {
+      loadingEl.innerHTML = `<h1>POKEMON YELLOW 3D</h1><p>Fetching PIKACHU data...</p>`;
+      
+      // Fetch initial data
+      const pikaData = await fetchPokemon('pikachu');
+      if(pikaData) {
+        myPokemon.sprite = pikaData.sprites.front_default;
+        myPokemon.maxHp = Math.floor(pikaData.stats[0].base_stat * 1.5);
+        myPokemon.currentHp = myPokemon.maxHp;
+        myPokemon.atk = pikaData.stats[1].base_stat;
+        myPokemon.def = pikaData.stats[2].base_stat;
+      }
+
+      createScene();
+      updateUI();
+      
+      loadingEl.hidden = true;
+      uiLayer.style.display = 'block';
+      gameState.mode = 'ROAM';
+
+      engine.runRenderLoop(() => {
+        if(scene) scene.render();
+      });
+      window.addEventListener('resize', () => engine.resize());
+    }
+
+    // --- 3D Scene Setup ---
+    function createScene() {
+      scene = new BABYLON.Scene(engine);
+      scene.clearColor = new BABYLON.Color3(0.5, 0.8, 1); // Sky blue
+
+      // Camera (Isometric-ish)
+      camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 4, Math.PI / 3, 15, BABYLON.Vector3.Zero(), scene);
+      camera.attachControl(canvas, true);
+      camera.lowerRadiusLimit = 5;
+      camera.upperRadiusLimit = 30;
+
+      // Lighting
+      const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+      light.intensity = 0.8;
+
+      // Materials
+      const matGround = new BABYLON.StandardMaterial("matGround", scene);
+      matGround.diffuseColor = new BABYLON.Color3(0.2, 0.6, 0.2); // Grass Green
+
+      const matWall = new BABYLON.StandardMaterial("matWall", scene);
+      matWall.diffuseColor = new BABYLON.Color3(0.4, 0.4, 0.4); // Wall Grey
+
+      const matPath = new BABYLON.StandardMaterial("matPath", scene);
+      matPath.diffuseColor = new BABYLON.Color3(0.9, 0.8, 0.6); // Dirt Path
+
+      const matWater = new BABYLON.StandardMaterial("matWater", scene);
+      matWater.diffuseColor = new BABYLON.Color3(0.2, 0.4, 0.8); 
+
+      // Procedural Map Generation
+      const noise2D = createNoise2D();
+      const mapSize = 20;
+      const tileSize = 2;
+      
+      for (let x = -mapSize; x <= mapSize; x++) {
+        for (let z = -mapSize; z <= mapSize; z++) {
+          let n = noise2D(x * 0.1, z * 0.1);
+          let tile = BABYLON.MeshBuilder.CreateGround("tile", {width: tileSize, height: tileSize}, scene);
+          tile.position.x = x * tileSize;
+          tile.position.z = z * tileSize;
+          
+          // Simple biomes based on noise
+          if (n < -0.3) {
+            tile.material = matWater; // Water
+            tile.metadata = { type: 'water' };
+          } else if (n < 0) {
+            tile.material = matGround; // Grass
+            tile.metadata = { type: 'grass' };
+          } else {
+            tile.material = matPath; // Path
+            tile.metadata = { type: 'path' };
+          }
+
+          // Add Trees randomly in grass
+          if (tile.metadata.type === 'grass' && Math.random() < 0.1) {
+            let treeTrunk = BABYLON.MeshBuilder.CreateCylinder("trunk", {diameter: 0.5, height: 2}, scene);
+            treeTrunk.position.x = x * tileSize;
+            treeTrunk.position.z = z * tileSize;
+            treeTrunk.position.y = 1;
+            let treeLeaves = BABYLON.MeshBuilder.CreateSphere("leaves", {diameter: 2}, scene);
+            treeLeaves.position.x = x * tileSize;
+            treeLeaves.position.z = z * tileSize;
+            treeLeaves.position.y = 2.5;
+            treeLeaves.material = matGround; // Reusing green for leaves
+            treeTrunk.parent = tile; // Simple parenting
+            treeLeaves.parent = tile;
+            tile.metadata.type = 'wall'; // Collision blocker
+          }
+        }
+      }
+
+      // Player Character
+      playerMesh = BABYLON.MeshBuilder.CreateBox("player", {height: 1.8, width: 0.8, depth: 0.8}, scene);
+      playerMesh.position.y = 1;
+      playerMesh.material = new BABYLON.StandardMaterial("playerMat", scene);
+      playerMesh.material.diffuseColor = new BABYLON.Color3(1, 0.8, 0); // Yellow (Ash's hat color)
+      
+      // Add a cap brim
+      let brim = BABYLON.MeshBuilder.CreateBox("brim", {width: 1.2, height: 0.1, depth: 0.5}, scene);
+      brim.position.y = 0.8;
+      brim.position.z = 0.3;
+      brim.parent = playerMesh;
+
+      // Input Handling
+      scene.onBeforeRenderObservable.add(() => {
+        if(gameState.mode !== 'ROAM') return;
+        
+        let speed = 0.15;
+        let dx = 0, dz = 0;
+        
+        if (scene.activeKeyboard) { // Babylon input manager fallback if needed, but using simple key map
+          if (mapInput['w'] || mapInput['arrowup']) dz = -1;
+          if (mapInput['s'] || mapInput['arrowdown']) dz = 1;
+          if (mapInput['a'] || mapInput['arrowleft']) dx = -1;
+          if (mapInput['d'] || mapInput['arrowright']) dx = 1;
+        }
+
+        if (dx !== 0 || dz !== 0) {
+          let nextX = playerMesh.position.x + dx * speed;
+          let nextZ = playerMesh.position.z + dz * speed;
+          
+          // Simple collision check (ground tiles)
+          // Raycast down to find tile
+          let ray = new BABYLON.Ray(new BABYLON.Vector3(nextX, 5, nextZ), new BABYLON.Vector3(0, -1, 0), 10);
+          let hit = scene.pickWithRay(ray);
+          
+          if (hit.hit && hit.pickedMesh.metadata) {
+            if (hit.pickedMesh.metadata.type !== 'water' && hit.pickedMesh.metadata.type !== 'wall') {
+              playerMesh.position.x = nextX;
+              playerMesh.position.z = nextZ;
+              
+              // Rotate player
+              playerMesh.rotation.y = Math.atan2(dx, dz); // Simple rotation logic
+              
+              // Camera follow
+              camera.setTarget(playerMesh.position);
+
+              // Random Encounter (Only in grass)
+              if (hit.pickedMesh.metadata.type === 'grass' && Math.random() < 0.02) {
+                triggerEncounter();
+              }
+            }
+          }
+        }
+      });
+
+      // Input Map
+      let mapInput = {};
+      window.addEventListener('keydown', (e) => {
+        mapInput[e.key.toLowerCase()] = true;
+        if(e.key.toLowerCase() === 'e') handleInteraction();
+      });
+      window.addEventListener('keyup', (e) => mapInput[e.key.toLowerCase()] = false);
+    }
+
+    // --- Battle System ---
+    async function triggerEncounter() {
+      gameState.mode = 'BATTLE';
+      
+      // Camera animation to side view
+      const animCamAlpha = new BABYLON.Animation("camAlpha", "alpha", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+      const animCamBeta = new BABYLON.Animation("camBeta", "beta", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+      const animCamRadius = new BABYLON.Animation("camRadius", "radius", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+
+      const keysAlpha = [{frame: 0, value: camera.alpha}, {frame: 30, value: 0}];
+      const keysBeta = [{frame: 0, value: camera.beta}, {frame: 30, value: Math.PI / 2.5}];
+      const keysRadius = [{frame: 0, value: camera.radius}, {frame: 30, value: 8}];
+
+      animCamAlpha.setKeys(keysAlpha);
+      animCamBeta.setKeys(keysBeta);
+      animCamRadius.setKeys(keysRadius);
+
+      camera.animations = [animCamAlpha, animCamBeta, animCamRadius];
+      scene.beginAnimation(camera, 0, 30, false);
+
+      // Fetch Random Enemy
+      battleScreen.hidden = false;
+      battleTextEl.textContent = "Wild POKEMON appeared!";
+      updateBattleUI();
+
+      // Pick random ID between 1 and 151
+      const randId = Math.floor(Math.random() * 151) + 1;
+      enemyPokemon = await fetchPokemon(randId);
+      
+      if(enemyPokemon) {
+        enemyNameEl.textContent = enemyPokemon.name.toUpperCase();
+        // Create 3D Enemy Mesh
+        let enemyMesh = BABYLON.MeshBuilder.CreateSphere("enemyMesh", {diameter: 1.5}, scene);
+        enemyMesh.position = playerMesh.position.add(new BABYLON.Vector3(0, 0, -4)); // In front
+        enemyMesh.material = new BABYLON.StandardMaterial("enemyMat", scene);
+        enemyMesh.material.diffuseColor = BABYLON.Color3.Random();
+        
+        // Create 3D Player Pokemon Mesh
+        let pokeMesh = BABYLON.MeshBuilder.CreateSphere("pokeMesh", {diameter: 1.5}, scene);
+        pokeMesh.position = playerMesh.position.add(new BABYLON.Vector3(0, 0, 2)); // Behind
+        pokeMesh.material = new BABYLON.StandardMaterial("pokeMat", scene);
+        pokeMesh.material.diffuseColor = new BABYLON.Color3(1, 1, 0); // Pikachu Yellow
+
+        // Look at each other
+        enemyMesh.lookAt(pokeMesh.position);
+        pokeMesh.lookAt(enemyMesh.position);
+
+        gameState.enemyMesh = enemyMesh;
+        gameState.pokeMesh = pokeMesh;
+        
+        // Set Stats based on API
+        enemyPokemon.maxHp = Math.floor(enemyPokemon.stats[0].base_stat * 1.5);
+        enemyPokemon.currentHp = enemyPokemon.maxHp;
+        enemyPokemon.atk = enemyPokemon.stats[1].base_stat;
+        enemyPokemon.def = enemyPokemon.stats[2].base_stat;
+        
+        updateBattleUI();
+        enableBattleControls(true);
+      } else {
+        // Fallback if API fails
+        enemyNameEl.textContent = "MISSINGNO";
+        enemyPokemon = { maxHp: 50, currentHp: 50, atk: 30, def: 30 };
+        updateBattleUI();
+        enableBattleControls(true);
+      }
+    }
+
+    function endBattle(won) {
+      battleScreen.hidden = true;
+      gameState.mode = 'ROAM';
+      
+      // Clean up meshes
+      if(gameState.enemyMesh) gameState.enemyMesh.dispose();
+      if(gameState.pokeMesh) gameState.pokeMesh.dispose();
+      
+      // Reset Camera
+      camera.setTarget(playerMesh.position);
+      // Simple snap back for prototype, ideally animate
+      camera.alpha = -Math.PI / 4;
+      camera.beta = Math.PI / 3;
+      camera.radius = 15;
+
+      if(won) {
+        showDialog(`You won! ${enemyPokemon ? enemyPokemon.name.toUpperCase() : 'Enemy'} fainted.`);
+      } else {
+        showDialog("You scurried back to the Pokemon Center... (Healed)");
+        myPokemon.currentHp = myPokemon.maxHp;
+        updateUI();
+      }
+    }
+
+    function updateBattleUI() {
+      if(!enemyPokemon) return;
+      
+      // Enemy
+      let enemyPct = (enemyPokemon.currentHp / enemyPokemon.maxHp) * 100;
+      enemyHpBar.style.width = `${Math.max(0, enemyPct)}%`;
+      enemyHpBar.style.backgroundColor = enemyPct < 20 ? 'red' : (enemyPct < 50 ? 'orange' : 'limegreen');
+
+      // Player
+      let playerPct = (myPokemon.currentHp / myPokemon.maxHp) * 100;
+      playerHpBar.style.width = `${Math.max(0, playerPct)}%`;
+      playerHpBar.style.backgroundColor = playerPct < 20 ? 'red' : (playerPct < 50 ? 'orange' : 'limegreen');
+      playerHpText.textContent = `${Math.ceil(myPokemon.currentHp)}/${myPokemon.maxHp}`;
+      battlePokeNameEl.textContent = myPokemon.name.toUpperCase();
+    }
+
+    async function playerAttack() {
+      enableBattleControls(false);
+      battleTextEl.textContent = `${myPokemon.name} used TACKLE!`;
+      
+      // Animation
+      let pokeMesh = gameState.pokeMesh;
+      let startPos = pokeMesh.position.clone();
+      let enemyPos = gameState.enemyMesh.position.clone();
+      
+      // Simple lerp animation
+      let frame = 0;
+      let anim = setInterval(() => {
+        frame++;
+        if(frame < 10) pokeMesh.position = BABYLON.Vector3.Lerp(startPos, enemyPos, frame/10);
+        else if(frame < 20) pokeMesh.position = BABYLON.Vector3.Lerp(enemyPos, startPos, (frame-10)/10);
+        else clearInterval(anim);
+      }, 20);
+
+      await new Promise(r => setTimeout(r, 500));
+
+      // Damage Calc
+      let damage = Math.floor(((2 * 5 / 5 + 2) * 40 * (myPokemon.atk / enemyPokemon.def)) / 50 + 2);
+      damage = Math.max(1, damage);
+      enemyPokemon.currentHp -= damage;
+      updateBattleUI();
+
+      await new Promise(r => setTimeout(r, 1000));
+
+      if(enemyPokemon.currentHp <= 0) {
+        battleTextEl.textContent = "Enemy fainted!";
+        await new Promise(r => setTimeout(r, 1500));
+        endBattle(true);
+      } else {
+        enemyTurn();
+      }
+    }
+
+    async function enemyTurn() {
+      battleTextEl.textContent = `Enemy ${enemyPokemon.name} attacks!`;
+      
+      // Animation
+      let enemyMesh = gameState.enemyMesh;
+      let startPos = enemyMesh.position.clone();
+      let pokePos = gameState.pokeMesh.position.clone();
+      
+      let frame = 0;
+      let anim = setInterval(() => {
+        frame++;
+        if(frame < 10) enemyMesh.position = BABYLON.Vector3.Lerp(startPos, pokePos, frame/10);
+        else if(frame < 20) enemyMesh.position = BABYLON.Vector3.Lerp(pokePos, startPos, (frame-10)/10);
+        else clearInterval(anim);
+      }, 20);
+
+      await new Promise(r => setTimeout(r, 500));
+
+      // Damage
+      let damage = Math.floor(((2 * 5 / 5 + 2) * 40 * (enemyPokemon.atk / myPokemon.def)) / 50 + 2);
+      myPokemon.currentHp -= damage;
+      updateBattleUI();
+      updateUI();
+
+      await new Promise(r => setTimeout(r, 1000));
+
+      if(myPokemon.currentHp <= 0) {
+        battleTextEl.textContent = `${myPokemon.name} fainted!`;
+        await new Promise(r => setTimeout(r, 1500));
+        endBattle(false);
+      } else {
+        battleTextEl.textContent = "What will you do?";
+        enableBattleControls(true);
+      }
+    }
+
+    function enableBattleControls(enable) {
+      fightBtn.disabled = !enable;
+      runBtn.disabled = !enable;
+      if(enable) {
+        fightBtn.onclick = playerAttack;
+        runBtn.onclick = () => {
+          battleTextEl.textContent = "Got away safely!";
+          enableBattleControls(false);
+          setTimeout(() => endBattle(false), 1000);
+        };
+      }
+    }
+
+    // --- UI Helpers ---
+    function updateUI() {
+      partyInfoEl.innerHTML = `
+        <img src="${myPokemon.sprite}" style="width:30px; vertical-align:middle;"> 
+        ${myPokemon.name} Lvl${myPokemon.level}<br>
+        HP: ${Math.ceil(myPokemon.currentHp)}/${myPokemon.maxHp}
+      `;
+    }
+
+    function showDialog(text) {
+      dialogTextEl.textContent = text;
+      dialogEl.hidden = false;
+    }
+
+    function handleInteraction() {
+      if(!dialogEl.hidden) {
+        dialogEl.hidden = true;
+      }
+    }
+
+    // Start
+    init();
+
+  </script>
+</div>
+</body>
+</html>

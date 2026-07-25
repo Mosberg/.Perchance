@@ -1,0 +1,367 @@
+ai = {import:ai-text-plugin}
+literal = {import:literal-plugin}
+
+$meta
+  title = Gerador de Histórias Imersivas
+  description = Narrativas profundamente imersivas em português brasileiro, com controle fino de gênero, tom, ponto de vista, tempo verbal e ritmo.
+  tags = story, ai, writer, português, narrative, immersive, text, fiction
+
+// ───────────────────────────────────────────────────────────
+// Configuração ajustável. Modifique estes valores para reajustar o gerador.
+// ───────────────────────────────────────────────────────────
+config
+  wordsPerChunk = 140
+  language = português brasileiro
+  // quão perto do final (px) o usuário deve estar para a rolagem automática funcionar
+  autoScrollThreshold = 60
+  // comprimento mínimo da entrada (caracteres) antes de recusar gerar
+  minInputLength = 3
+  // palavras por minuto usadas para estimar o tempo de leitura
+  readingWpm = 200
+  // meta de extensão do romance em palavras (0 = sem meta, sem diretrizes de ritmo)
+  targetWords = 50000
+  // quantas palavras de texto recente passar literalmente à IA (texto mais antigo é representado pelo resumo da trama)
+  recentTextWindow = 1200
+  // executar análise do estado da história a cada N trechos
+  // analisar a cada N trechos (valor maior = menos chamadas à IA, mais barato)
+  analysisInterval = 2
+
+// ───────────────────────────────────────────────────────────
+// Estado da história: memória estruturada que cresce junto com a história.
+// Atualizado periodicamente por `analyzeStoryState()` e injetado no
+// prompt de geração para que a IA mantenha consistência de personagens,
+// continuidade da trama, desenvolvimento de temas e ritmo em obras longas.
+// ───────────────────────────────────────────────────────────
+storyState
+  characters = nenhum personagem estabelecido ainda
+  plotSummary = a história ainda não começou
+  openThreads = nenhum
+  themes = nenhum tema identificado ainda
+  chunkCount = 0
+  lastAnalyzedChunk = 0
+
+resetStoryState() =>
+  storyState.characters = "nenhum personagem estabelecido ainda";
+  storyState.plotSummary = "a história ainda não começou";
+  storyState.openThreads = "nenhum";
+  storyState.themes = "nenhum tema identificado ainda";
+  storyState.chunkCount = 0;
+  storyState.lastAnalyzedChunk = 0;
+  localStorage.removeItem("storyState");
+
+saveStoryState() =>
+  try {
+    localStorage.setItem("storyState", JSON.stringify({
+      characters: storyState.characters,
+      plotSummary: storyState.plotSummary,
+      openThreads: storyState.openThreads,
+      themes: storyState.themes,
+      chunkCount: storyState.chunkCount,
+      lastAnalyzedChunk: storyState.lastAnalyzedChunk
+    }));
+  } catch(e) {
+    console.error("saveStoryState falhou:", e);
+  }
+
+loadStoryState() =>
+  try {
+    let saved = localStorage.getItem("storyState");
+    if (saved) {
+      let s = JSON.parse(saved);
+      storyState.characters = s.characters || storyState.characters;
+      storyState.plotSummary = s.plotSummary || storyState.plotSummary;
+      storyState.openThreads = s.openThreads || storyState.openThreads;
+      storyState.themes = s.themes || storyState.themes;
+      storyState.chunkCount = s.chunkCount || 0;
+      storyState.lastAnalyzedChunk = s.lastAnalyzedChunk || 0;
+    }
+  } catch(e) {
+    console.error("loadStoryState falhou:", e);
+  }
+
+// Retorna diretrizes de ritmo com base em quão longe a história progrediu
+// em relação à extensão-alvo. Isso incentiva a IA a desacelerar na configuração,
+// construir tensão no meio e resolver com naturalidade perto do fim.
+pacingDirective() =>
+  let words = (responseEl.value.trim().match(/\S+/g) || []).length;
+  let target = config.targetWords;
+  if (target <= 0) {
+    return "RITMO: Mantenha um ritmo narrativo natural — alterne entre momentos de tensão e batidas mais calmas. Mantenha a história em movimento sem pressa.";
+  }
+  let pct = Math.min(words / target, 1.0);
+  if (pct < 0.12) {
+    return "RITMO: Abertura / configuração. Estabeleça o mundo, os personagens e seus desejos com detalhes concretos. Ritmo lento a moderado — deixe o leitor se acomodar. Insinue a tensão central, mas não a introduza diretamente ainda.";
+  } else if (pct < 0.35) {
+    return "RITMO: Ação ascendente. Introduza complicações e obstáculos. Ritmo moderado — cada trecho deve adicionar um novo problema ou aprofundar um existente. Comece a conduzir em direção ao conflito central através de consequências, não de anúncios.";
+  } else if (pct < 0.60) {
+    return "RITMO: Meio / complicações se aprofundando. Varie o ritmo: desacelere para momentos de definição de personagem e batidas emocionais, acelere para ação e tensão. Subtramas devem estar ativas e se cruzando com o fio principal.";
+  } else if (pct < 0.80) {
+    return "RITMO: Aproximando-se do clímax. Acelere — eleve as apostas, concentre o foco, converja os fios. Cada trecho deve dar a sensação de que a tensão está aumentando. Personagens devem enfrentar suas escolhas mais difíceis. Não introduza subtramas importantes novas.";
+  } else if (pct < 0.93) {
+    return "RITMO: Clímax. Este é o momento de maior tensão — a confrontação, a decisão, o ponto de virada. Não se contenha. Deixe o conflito central atingir seu pico e começar a se resolver.";
+  } else {
+    return "RITMO: Resolução / ação decrescente. Alivie a tensão — resolva fios abertos, mostre as consequências, deixe personagens e leitor respirarem. Caminhe para um desfecho satisfatório sem pressa. Não introduza novos conflitos.";
+  }
+
+// Retorna a porção mais recente da história de forma literal, com um marcador
+// indicando que o texto anterior está resumido no resumo da trama. Isso mantém
+// a contagem de tokens do prompt gerenciável para obras de romance, preservando
+// a capacidade da IA de continuar sem costuras a partir da última frase.
+getRecentText() =>
+  let full = responseEl.value.trim();
+  if (full === "") return "";
+  let words = full.split(/\s+/);
+  if (words.length <= config.recentTextWindow) {
+    return full;
+  }
+  return "…(texto anterior está resumido no resumo da trama acima)…\n\n" + words.slice(-config.recentTextWindow).join(" ");
+
+// Analisa periodicamente o texto da história até agora e atualiza `storyState`
+// com personagens extraídos, resumo da trama, fios abertos e temas. Chamado
+// antes de cada trecho de continuação (a cada `analysisInterval` trechos).
+// Este é o mecanismo que mantém a geração de formato longo consistente e no rumo.
+buildAnalyzePrompt() =>
+  // Usa apenas o texto recente (janela limitada) em vez da história completa.
+  // O texto mais antigo já está representado pelo resumo da trama em `storyState`,
+  // mantém a contagem de tokens do prompt estável mesmo em romances longos.
+  let recentText = getRecentText();
+  return "Você é um editor de histórias meticuloso. Analise o texto da história abaixo e extraia um estado da história estruturado e conciso em " + config.language + ". Este estado será usado para manter um romance de forma longo consistente ao longo de muitas sessões de escrita.\n\nEstado atual da história (atualize-o — não apenas repita):\nPERSONAGENS:\n" + storyState.characters + "\n\nRESUMO DA TRAMA:\n" + storyState.plotSummary + "\n\nFIOS ABERTOS:\n" + storyState.openThreads + "\n\nTEMAS:\n" + storyState.themes + "\n\n--- TEXTO RECENTE DA HISTÓRIA (eventos anteriores estão no estado acima) ---\n" + (recentText === "" ? "(vazio)" : recentText) + "\n\n--- FIM DO TEXTO ---\n\nProduza o estado atualizado da história EM EXATAMENTE este formato (texto puro, NÃO JSON, NÃO markdown):\n\nPERSONAGENS:\n- Nome: descrição física/papel em uma linha | motivação atual | estado emocional atual | relacionamentos importantes (atualize personagens existentes, adicione novos, remova irrelevantes)\n\nRESUMO DA TRAMA:\n2-4 frases resumindo o que aconteceu até agora. Inclua pontos de virada importantes. Seja preciso sobre causa e efeito.\n\nFIOS ABERTOS:\n- Liste cada fio de trama não resolvido, mistério ou tensão que ainda precisa de acompanhamento. Marque os que parecem próximos de resolução.\n\nTEMAS:\n- Liste os temas principais e como cada um foi desenvolvido até agora. Indique quais temas precisam de mais exploração.\n\nMantenha cada seção concisa, mas específica. Escreva em " + config.language + ".";
+
+analyzeSettings
+  instruction
+    [buildAnalyzePrompt()]
+  startWith() =>
+    return "PERSONAGENS:\n";
+  stopSequences = [["\n\n\n"]]
+
+async analyzeStoryState(force) =>
+  let currentText = responseEl.value.trim();
+  if (currentText === "") return;
+  storyState.chunkCount = (storyState.chunkCount || 0) + 1;
+  if (!force && storyState.chunkCount - storyState.lastAnalyzedChunk < config.analysisInterval) return;
+  storyState.lastAnalyzedChunk = storyState.chunkCount;
+  flashStatus("analisando a história…");
+  try {
+    let pendingObj = ai(analyzeSettings);
+    let finishData = await pendingObj.onFinishPromise;
+    let raw = (finishData && finishData.text) ? finishData.text : (pendingObj.liveResponseText || "");
+    if (raw && raw.trim()) {
+      parseStoryState(raw);
+    }
+    saveStoryState();
+    updateStoryStateDisplay();
+    flashStatus("");
+  } catch(e) {
+    console.error("analyzeStoryState falhou:", e);
+    flashStatus("");
+  }
+
+// Analisa a resposta estruturada da análise e modifica `storyState` no lugar.
+parseStoryState(text) =>
+  let sections = {};
+  let currentSection = null;
+  let lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    let headerMatch = line.match(/^(PERSONAGENS|RESUMO DA TRAMA|FIOS ABERTOS|TEMAS|CHARACTERS|PLOT SUMMARY|OPEN THREADS|THEMES)\s*:\s*$/i);
+    if (headerMatch) {
+      currentSection = headerMatch[1].toUpperCase();
+      sections[currentSection] = "";
+    } else if (currentSection) {
+      sections[currentSection] += line + "\n";
+    }
+  }
+  storyState.characters = (sections["PERSONAGENS"] || sections["CHARACTERS"] || "").trim() || "nenhum personagem estabelecido ainda";
+  storyState.plotSummary = (sections["RESUMO DA TRAMA"] || sections["PLOT SUMMARY"] || "").trim() || "a história ainda não começou";
+  storyState.openThreads = (sections["FIOS ABERTOS"] || sections["OPEN THREADS"] || "").trim() || "nenhum";
+  storyState.themes = (sections["TEMAS"] || sections["THEMES"] || "").trim() || "nenhum tema identificado ainda";
+
+// Atualiza o painel recolhível do estado da história na interface.
+updateStoryStateDisplay() =>
+  let el = document.getElementById("storyStateContent");
+  if (!el) return;
+  let s = storyState;
+  el.innerHTML =
+    "<div style='margin-bottom:0.6rem'><span class='ss-label'>Personagens</span><br><span class='ss-text'>" + escapeHtml(s.characters) + "</span></div>" +
+    "<div style='margin-bottom:0.6rem'><span class='ss-label'>Resumo da Trama</span><br><span class='ss-text'>" + escapeHtml(s.plotSummary) + "</span></div>" +
+    "<div style='margin-bottom:0.6rem'><span class='ss-label'>Fios Abertos</span><br><span class='ss-text'>" + escapeHtml(s.openThreads) + "</span></div>" +
+    "<div><span class='ss-label'>Temas</span><br><span class='ss-text'>" + escapeHtml(s.themes) + "</span></div>";
+
+escapeHtml(str) =>
+  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+// Objeto de configuração do ai-text-plugin. Estruturado para que a instrução
+// estática venha primeiro e o bloco `story_so_far` em crescimento venha por
+// último — isso mantém o prompt amigável ao cache de prefixo (o prefixo em
+// cache permanece válido à medida que a história cresce, apenas o final muda).
+
+// Auxiliar usado por `settings.instruction`: retorna a diretriz de continuação
+// correta dependendo se este é o trecho de abertura ou um seguimento.
+continuationDirective() =>
+  if (responseEl.value.trim().length === 0) {
+    return "Comece in medias res — mergulhe o leitor em um momento concreto, não em exposição. Estabeleça voz, lugar e um vislumbre de desejo ou tensão nas primeiras frases.";
+  } else {
+    return "Continue organicamente a partir da última frase. Avance pelo menos um fio (trama, personagem ou tensão). Não restate o que já aconteceu.";
+  }
+
+settings
+  instruction
+    Você é um mestre da ficção — atento à voz, ao subtexto e ao peso dos pequenos detalhes. Escreva prosa imersiva que *mostra* em vez de contar: revele personagem e sentimento através de fala, pensamento, gesto, ação e a textura do mundo, nunca narrando fatos ou emoções diretamente.
+    [""]
+    # Regras de voz e ofício (sempre aplicar)
+    - Escreva APENAS prosa narrativa em [config.language]. Sem cabeçalhos, sem markdown, sem meta-comentários, sem indicações de cena entre colchetes, sem rótulos "Capítulo X".
+    - Não resuma, não conclua, nem se apresse para um final. Cada trecho deve abrir um fio, aprofundar um, ou fechar um — sempre deixando espaço para continuar.
+    - Honre absolutamente o ponto de vista e o tempo verbal escolhidos. Nunca escorregue para resumo onisciente se um POV limitado foi solicitado. Nunca troque de cabeça dentro de uma cena.
+    - Varie o comprimento e o ritmo das frases deliberadamente: deixe frases curtas caírem com impacto. Evite repetir fraseologia, imagens ou aberturas de frase já presentes em `story_so_far`.
+    - Envolva os cinco sentidos. Ancore cada cena em pelo menos um detalhe físico concreto e específico (um cheiro, um som, uma textura) em vez de abstração.
+    - Deixe o diálogo trabalhar: revele personagem, avance a tensão, deixe coisas não ditas. Evite verbos de elocução óbvios e explicar demais sentimentos após a fala.
+    - Confie no leitor. Implique histórico e motivação através de comportamento e do mundo; não dê sermões.
+    [""]
+    # Visão geral da história (o destino ao qual esta história se encaminha)
+    <story_overview>
+    [literal(inputTextEl.value.trim())]
+    </story_overview>
+    [""]
+    # Estado da história — referência de consistência (NÃO repita isso na prosa; use para se manter consistente)
+    <story_state>
+    PERSONAGENS (mantenha ações, motivações e vozes consistentes com estes perfis):
+    [storyState.characters]
+    RESUMO DA TRAMA (o que aconteceu — mantenha continuidade de causa e efeito com isso):
+    [storyState.plotSummary]
+    FIOS ABERTOS (cada um deve permanecer consistente; avance ou resolva-os gradualmente — nunca abandone ou contradiga um):
+    [storyState.openThreads]
+    TEMAS (desenvolva e aprofunde estes através de cena e subtexto; não os enuncie explicitamente — deixe-os emergir das escolhas e consequências dos personagens):
+    [storyState.themes]
+    </story_state>
+    [""]
+    # O que aconteceu até agora (texto mais recente; eventos anteriores estão resumidos no resumo da trama acima)
+    <story_so_far>
+    [literal(getRecentText())]
+    </story_so_far>
+    [""]
+    [pacingDirective()]
+    [""]
+    # Tarefa
+    Escreva o [responseEl.value.trim().length === 0 ? "trecho de abertura" : "próximo trecho"] desta história.
+    A `story_overview` é o destino eventual — conduza em direção a ela *indiretamente*: nunca anuncie, resuma ou antecipe, nunca acelere a trama em sua direção. Deixe que seja alcançada através de consequência, textura e o momentum natural da cena, de modo que o leitor (e até mesmo os personagens) sintam a atração sem ver a maquinaria. Descarte qualquer impulso de tornar a conexão óbvia; confie que pequenas escolhas concretas agora curvarão silenciosamente a história em direção a esse destino.
+    [continuationDirective()]
+    Aponte para aproximadamente [config.wordsPerChunk] palavras. Permaneça em [config.language].
+    $output = [this.joinItems("\n")]
+  startWith() =>
+    if(responseEl.value.trim() === "") {
+      return "";
+    } else {
+      return responseEl.value + "\n\n";
+    }
+  outputTo = [responseEl]
+  onStart() =>
+    setControlsBusy(true);
+    responseDeleteBtn.style.display = '';
+    responseDeleteBtn.dataset.mode = 'delete';
+  onChunk(data) =>
+    if(responseEl.scrollTop + responseEl.offsetHeight > responseEl.scrollHeight - config.autoScrollThreshold) {
+      responseEl.scrollTop = responseEl.scrollHeight;
+    }
+  onFinish(data) =>
+    setControlsBusy(false);
+    loaderEl.innerHTML = "";
+    // normalizar espaços em branco: colapsar linhas em branco perdidas, aparar espaços finais
+    responseEl.value = responseEl.value.trim().split(/\n{2,}/).map(m => m.trim()).join("\n\n").trim();
+    // Se o parágrafo final não termina em um limite de frase, cortar de volta
+    // ao último limite de frase dentro dele (em vez de descartar o parágrafo
+    // inteiro) para manter o máximo de boa prosa possível e o próximo
+    // "continuar" retomar de forma limpa.
+    if (!/[.。．！!？?」』\"'）)*:—–。]$/.test(responseEl.value.trim())) {
+      let paras = responseEl.value.split("\n\n");
+      let last = paras[paras.length - 1];
+      // encontrar a última pontuação de fim de frase no parágrafo final
+      let m = last.match(/.*[.。．！!？?」』"']\s/s);
+      if (m && m[0].trim().length > 0) {
+        paras[paras.length - 1] = m[0].trim();
+      } else {
+        // nenhum limite de frase no último parágrafo — descartá-lo
+        paras.pop();
+      }
+      responseEl.value = paras.join("\n\n").trim();
+    }
+    localStorage.response = responseEl.value;
+    updateWordCount();
+    updateContinueAvailability();
+    updateStoryStateDisplay();
+
+// Auxiliar: alternar todos os controles de geração entre ocupado/livre.
+// Usar uma única função garante que nunca deixemos um botão preso
+// desativado se a geração falhar ou for interrompida no meio.
+setControlsBusy(busy) =>
+  generateBtn.disabled = busy;
+  continueBtn.disabled = busy || responseEl.value.trim() === "";
+  bottomContinueBtn.disabled = continueBtn.disabled;
+  retryBtn.disabled = busy || (window.responseContentBeforeLastGenerate || responseEl.value).trim() === "";
+  stopBtn.style.display = busy ? "" : "none";
+  bottomStopBtn.style.display = busy ? "" : "none";
+
+// Auxiliar: habilitar/desabilitar os botões de continuar com base no conteúdo atual do editor.
+updateContinueAvailability() =>
+  let has = responseEl.value.trim() !== "";
+  continueBtn.disabled = !has;
+  bottomContinueBtn.disabled = !has;
+  retryBtn.disabled = !has;
+
+// Auxiliar: mostrar contagem de palavras ao vivo e estimativa de tempo de leitura do textarea de resposta.
+updateWordCount() =>
+  let n = (responseEl.value.trim().match(/\S+/g) || []).length;
+  if (wordCountEl) {
+    let mins = Math.ceil(n / config.readingWpm);
+    wordCountEl.textContent = n + " palavras" + (n > 0 ? " · ~" + mins + " min de leitura" : "");
+  }
+
+// Auxiliar: exibir uma mensagem de status curta e visível perto do carregador.
+flashStatus(msg, isErr) =>
+  loaderEl.innerHTML = "";
+  let s = document.createElement("span");
+  s.textContent = msg;
+  s.style.cssText = "font-size:70%; white-space:nowrap; opacity:" + (isErr ? "1" : "0.6") + ";" + (isErr ? " color:#c0392b;" : "");
+  loaderEl.appendChild(s);
+  if (!isErr) setTimeout(() => { if (loaderEl.firstChild === s) loaderEl.innerHTML = ""; }, 3000);
+
+async generate() =>
+  // proteger contra geração dupla (cliques rápidos / reentrada)
+  if (window._generating) return;
+  // recusar se não há nada sobre o que escrever
+  if (inputTextEl.value.trim().length < config.minInputLength) {
+    flashStatus("escreva algo no campo de entrada primeiro", true);
+    return;
+  }
+  window._generating = true;
+  window.responseContentBeforeLastGenerate = responseEl.value;
+  // Se for um recomeço (resposta vazia), redefinir o estado da história.
+  // Se continuando, executar análise para manter o estado da história atualizado.
+  if (responseEl.value.trim() === "") {
+    resetStoryState();
+    updateStoryStateDisplay();
+  } else {
+    flashStatus("analisando a história…");
+    setControlsBusy(true);
+    await analyzeStoryState(true);
+    setControlsBusy(false);
+    flashStatus("");
+  }
+  let pendingObj = ai(settings);
+  let stopClickHandler = () => {
+    pendingObj.stop();
+    setControlsBusy(false);
+  };
+  stopBtn.onclick = stopClickHandler;
+  bottomStopBtn.onclick = stopClickHandler;
+  loaderEl.innerHTML = pendingObj.loadingIndicatorHtml;
+  setControlsBusy(true);
+  generateBtn.textContent = 'regenerar';
+  try {
+    await pendingObj.onFinishPromise;
+  } catch (e) {
+    console.error("generate failed:", e);
+    flashStatus("erro ao gerar — tente novamente", true);
+  } finally {
+    setControlsBusy(false);
+    window._generating = false;
+  }

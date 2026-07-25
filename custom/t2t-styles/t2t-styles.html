@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>t2t-styles — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  body { text-align: left; }
+  .__fw-wrap { max-width: 900px; margin: 0 auto; padding: 1rem; }
+  h2 { text-align: center; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0.5rem 0; }
+  select, textarea, input { width: 100%; box-sizing: border-box; padding: 0.4rem; font-size: 0.9rem; border: 1px solid #ccc; border-radius: 4px; }
+  textarea { min-height: 80px; resize: vertical; font-family: inherit; }
+  button { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; background: #4a9eff; color: #fff; font-size: 0.9rem; }
+  button.secondary { background: #666; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .output { margin-top: 0.5rem; padding: 0.6rem; border: 1px solid #ccc; border-radius: 6px; min-height: 60px; white-space: pre-wrap; word-wrap: break-word; background: #f9f9f9; }
+  .tip { font-size: 0.8rem; opacity: 0.6; margin-top: 0.2rem; }
+  .loading { padding: 1rem; text-align: center; opacity: 0.8; }
+  .meta { font-size: 0.75rem; opacity: 0.5; margin-top: 0.2rem; }
+</style>
+
+<div class="__fw-wrap">
+  <h2>🎭 t2t-styles</h2>
+  <p style="text-align:center; opacity:0.7; font-size:0.85rem;">Text-to-Text style presets for the t2t-t2i-framework-plugin — <span id="styleCount">?</span> styles</p>
+
+  <div class="grid">
+    <div>
+      <label style="font-size:0.85rem; font-weight:bold;">Style</label>
+      <select id="styleSelect"></select>
+    </div>
+    <div>
+      <label style="font-size:0.85rem; font-weight:bold;">Category Filter</label>
+      <select id="categorySelect"></select>
+    </div>
+  </div>
+
+  <div>
+    <label style="font-size:0.85rem; font-weight:bold;">Input Text</label>
+    <textarea id="inputTextEl" placeholder="Type text to rewrite...">The quick brown fox jumps over the lazy dog.</textarea>
+  </div>
+
+  <div class="grid">
+    <button id="applyBtn">👁 Preview Instruction</button>
+    <button class="secondary" id="generateBtn">✨ Generate</button>
+    <button class="secondary" id="stopBtn" style="display:none;">⏹ Stop</button>
+  </div>
+
+  <div class="meta" id="styleMetaEl"></div>
+
+  <div>
+    <label style="font-size:0.85rem; font-weight:bold;">Generated Instruction (what gets sent to the AI)</label>
+    <div class="output" id="instructionEl">Pick a style and click "Preview Instruction".</div>
+  </div>
+
+  <div>
+    <label style="font-size:0.85rem; font-weight:bold;">Generated Output</label>
+    <div class="output" id="outputEl">Output appears here.</div>
+  </div>
+
+  <div class="tip" id="tipEl">Tip: These styles wrap your text in an instruction prompt. The framework's <code>FW.t2tStyles.apply(styleName, text)</code> returns the full instruction. Use <code>FW.text(\{instruction: result.prompt, startWith: result.startWith\})</code> to generate.</div>
+</div>
+
+<script>
+  // Build the styles dropdown from the $output list
+  var stylesList = [];
+  var categories = new Object();
+  var currentJob = null;
+
+  function init() {
+    // Access the imported t2t-styles via the framework pattern
+    // The $output list is available as root[name] or via the t2tStyles global
+    try {
+      var t2tStyles = window.t2tStyles || window.__t2tStyles || null;
+      if (!t2tStyles && typeof root !== 'undefined') {
+        // root is the perchance generator root
+        // The $output list means importing gives us the list directly
+      }
+      // Try to get style names from the perchance root
+      var styleNames = [];
+      if (typeof root !== 'undefined' && root['$output'] && root['$output'].selectAll) {
+        root['$output'].selectAll.forEach(function(item) {
+          styleNames.push(item.getName);
+        });
+      }
+      stylesList = styleNames;
+    } catch(e) {
+      console.error("Init error:", e);
+    }
+
+    if (!stylesList.length) {
+      document.getElementById("styleSelect").innerHTML = '<option>No styles found</option>';
+      return;
+    }
+
+    document.getElementById("styleCount").textContent = stylesList.length;
+
+    // Build categories
+    stylesList.forEach(function(name) {
+      try {
+        // Build categories from style name patterns
+        var n = name.toLowerCase();
+        var cats = [];
+        if (/(formal|professional|business)/.test(n)) cats.push('formal');
+        if (/(casual|human|normal|relax)/.test(n)) cats.push('casual');
+        if (/(short|long)/.test(n)) cats.push('length');
+        if (/(smart|giga|brain)/.test(n)) cats.push('intelligence');
+        if (/(drunk|tipsy)/.test(n)) cats.push('drunk');
+        if (/(pirate)/.test(n)) cats.push('pirate');
+        if (/(neko|uwu)/.test(n)) cats.push('neko');
+        if (/(flirt|romantic|date|sensual|tender|worship)/.test(n)) cats.push('romantic');
+        if (/(suggestive|spicy|fade)/.test(n)) cats.push('suggestive');
+        if (/(erotic|sexual|horny|naughty|rough|quickie|grinding|squirting|creampie)/.test(n)) cats.push('sexual');
+        if (/(bdsm|bondage|leather|latex|rope|shibari|cuff|chain|sadist|masochist|impact|spank|chok|knife|wax|sensory)/.test(n)) cats.push('bdsm');
+        if (/(femboy|sissy|cross|feminiz|trans|gender|queer|nonbinary|agender|demi|twospirit|drag|androgyn)/.test(n)) cats.push('gender');
+        if (/(dom|sub|primal|obedi|permission|begging|chastity|denial|humiliation|degradation|praise|freeuse|cuckold|hotwife|swinging|cheating)/.test(n)) cats.push('powerDynamics');
+        if (/(pet|pony|age|little|caregiver)/.test(n)) cats.push('petplay');
+        if (/(incubus|succubus|vampire|werewolf|ghost|angel|demon|monster|alien|robot)/.test(n)) cats.push('supernatural');
+        if (/(tentacle|slime|parasite|scp)/.test(n)) cats.push('scifi');
+        if (/(transform|corruption|petrifi|dollif|dollplay|bodysuit)/.test(n)) cats.push('transformation');
+        if (/(mind|hypno|brainwash)/.test(n)) cats.push('mindControl');
+        if (/(voyeur|exhibit)/.test(n)) cats.push('voyeurism');
+        if (/(orgasm|edging|denial|chastity|overstim|multiplegasm)/.test(n)) cats.push('orgasmControl');
+        if (/(breeding|pregnan|lactation|inflat)/.test(n)) cats.push('breeding');
+        if (/(size|giant|mini)/.test(n)) cats.push('sizeDifference');
+        if (/(futa)/.test(n)) cats.push('futanari');
+        if (/(vore|guro|scat)/.test(n)) cats.push('extreme');
+        if (/(furry|kemono|anthro)/.test(n)) cats.push('furry');
+        if (/(gay|lesbian|bisex|pansex|asex|demisex|graysex|sapiosex)/.test(n)) cats.push('sexuality');
+        if (/(curvy|bbw|skinny|muscular|tattoo|pierc|milf|dilf|cougar|schoolgirl|teacher|boss|nurse|maid|stripper|librarian|barista|trainer|roommate)/.test(n)) cats.push('roleplay');
+        if (/(blowjob|cunnilingus|oral|deepthroat|rimjob|asslick|sixtynine|69)/.test(n)) cats.push('oral');
+        if (/(anal|pegging|prostate)/.test(n)) cats.push('anal');
+        if (/(gangbang|orgy|threesome|group)/.test(n)) cats.push('groupSex');
+        if (/(cum|cock|pussy|facesit|titfuck|handjob|fingering|dildo|vibrator|strapon|gloryhole)/.test(n)) cats.push('sexAct');
+        if (/(interracial|bbc)/.test(n)) cats.push('interracial');
+        if (/(public|exhibit)/.test(n)) cats.push('public');
+        if (/(musk|omegaverse|knot|heat)/.test(n)) cats.push('omegaverse');
+        if (/(poke|pokemon)/.test(n)) cats.push('pokemon');
+        if (cats.length === 0) cats.push('rewrite');
+        cats.forEach(function(t) {
+          if (!categories[t]) categories[t] = [];
+          categories[t].push(name);
+        });
+      } catch(e) {}
+    });
+
+    var catSelect = document.getElementById("categorySelect");
+    var catOption = document.createElement("option");
+    catOption.value = "";
+    catOption.textContent = "All categories (" + stylesList.length + ")";
+    catSelect.appendChild(catOption);
+    Object.keys(categories).sort().forEach(function(cat) {
+      var o = document.createElement("option");
+      o.value = cat;
+      o.textContent = cat + " (" + categories[cat].length + ")";
+      catSelect.appendChild(o);
+    });
+
+    populateStyles("");
+    catSelect.onchange = function() { populateStyles(catSelect.value); };
+
+    document.getElementById("applyBtn").onclick = previewInstruction;
+    document.getElementById("generateBtn").onclick = generateText;
+    document.getElementById("stopBtn").onclick = function() {
+      if (currentJob) { try { currentJob.stop(); } catch(e){} }
+      document.getElementById("stopBtn").style.display = "none";
+    };
+  }
+
+  function populateStyles(category) {
+    var sel = document.getElementById("styleSelect");
+    sel.innerHTML = "";
+    var list = category ? categories[category] : stylesList;
+    list.forEach(function(name) {
+      var o = document.createElement("option");
+      o.value = name;
+      var label = name;
+      try {
+        var item = root['$output'][name];
+        if (item && item.label) label = item.label.evaluateItem;
+      } catch(e){}
+      o.textContent = label;
+      sel.appendChild(o);
+    });
+  }
+
+  function previewInstruction() {
+    var styleName = document.getElementById("styleSelect").value;
+    var inputText = document.getElementById("inputTextEl").value;
+    var out = document.getElementById("instructionEl");
+    var meta = document.getElementById("styleMetaEl");
+
+    try {
+      var origInput = window.input;
+      window.input = new Object();
+      window.input.description = inputText;
+      window.input.negative = "";
+      window.input.customInstruction = "";
+      var style = root['$output'][styleName];
+      var prompt = style.prompt.evaluateItem;
+      var startWith = style.startWith ? style.startWith.evaluateItem : "";
+      var tags = style["meta:tags"] ? style["meta:tags"].evaluateItem : null;
+      if (!tags) tags = "(metadata)";
+      window.input = origInput;
+
+      out.textContent = prompt;
+      meta.textContent = "startWith: " + JSON.stringify(startWith) + " | tags: " + JSON.stringify(tags);
+    } catch(e) {
+      out.textContent = "Error: " + e.message;
+    }
+  }
+
+  async function generateText() {
+    var styleName = document.getElementById("styleSelect").value;
+    var inputText = document.getElementById("inputTextEl").value;
+    var out = document.getElementById("outputEl");
+    var btn = document.getElementById("generateBtn");
+    var stopBtn = document.getElementById("stopBtn");
+
+    btn.disabled = true;
+    stopBtn.style.display = "";
+    out.innerHTML = '<div class="loading">⏳ generating...</div>';
+
+    try {
+      var origInput = window.input;
+      window.input = new Object();
+      window.input.description = inputText;
+      window.input.negative = "";
+      window.input.customInstruction = "";
+      var style = root['$output'][styleName];
+      var prompt = style.prompt.evaluateItem;
+      var startWith = style.startWith ? style.startWith.evaluateItem : "";
+      var hideStartWith = style.hideStartWith ? style.hideStartWith.evaluateItem : false;
+      window.input = origInput;
+
+      var genOpts = new Object();
+      genOpts.instruction = prompt;
+      if (startWith) genOpts.startWith = startWith;
+
+      currentJob = root.generateText(genOpts);
+      currentJob.onChunk = function(data) {
+        out.textContent = data.textChunk;
+      };
+      var result = await currentJob.onFinishPromise;
+      out.textContent = String(result);
+    } catch(e) {
+      out.textContent = "Error: " + e.message;
+    }
+    btn.disabled = false;
+    stopBtn.style.display = "none";
+  }
+
+  // Wait for root to be available
+  var pollTries = 0;
+  var pollInterval = setInterval(function() {
+    pollTries++;
+    if (typeof root !== 'undefined' && root['$output'] && root['$output'].selectAll) {
+      clearInterval(pollInterval);
+      init();
+    } else if (pollTries > 200) {
+      clearInterval(pollInterval);
+      console.error("root not initialized");
+    }
+  }, 50);
+</script>
+
+</body>
+</html>

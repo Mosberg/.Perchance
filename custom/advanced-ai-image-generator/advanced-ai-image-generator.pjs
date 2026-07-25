@@ -1,0 +1,409 @@
+// ---------------------------
+// Imports
+// ---------------------------
+image = {import:text-to-image-plugin}
+ai = {import:ai-text-plugin}
+kv = {import:kv-plugin}
+tooltip = {import:tooltip-plugin}
+generatorStats = {import:generator-stats-plugin}
+commentsPlugin = {import:comments-plugin}
+
+// ---------------------------
+// Tooltip style (optional)
+// ---------------------------
+tooltipOptions
+  interactive = true
+  allowHTML = false
+  css = background-color:#111; color:#fff; font-size:12px; border-radius:6px; padding:6px 8px;
+
+// ---------------------------
+// Random prompt building blocks
+// ---------------------------
+character
+  a {mech|demon|cyberpunk|angelic|steampunk|biomechanical} {warrior|minion|samurai|assassin|sentinel}
+
+place
+  a retropunk dystopia
+  a small village
+  a mountainous region
+  an underwater cavern
+  a neon-lit megacity
+  ancient ruins in a jungle
+  a floating island above clouds
+
+season
+  winter
+  summer
+  autumn
+  spring
+
+style
+  extremely detailed oil painting, unreal 5 render, studio ghibli, octane render, beautiful composition, trending on artstation, masterpiece
+  8k, hyper-detailed, volumetric lighting, ray-traced reflections, artgerm, greg rutkowski
+  cinematic, award-winning photograph, shallow depth of field, bokeh, dramatic lighting
+  watercolor illustration, soft light, pastel palette, storybook style, ghibli-inspired
+
+promptTemplate
+  detailed painting of [character] in [place], [season], [style]
+
+// Returns a randomized, SD-friendly prompt
+randomPrompt() =>
+  return promptTemplate.evaluateItem;
+
+// ---------------------------
+// Safe mode helpers
+// ---------------------------
+safeNegative
+  nsfw, nude, nudity, explicit, porn, sexual, erotic,
+  gore, blood, graphic violence, dismemberment,
+  watermark, signature, text, caption, logo,
+  lowres, blurry, low quality, jpeg artifacts,
+  deformed, mutated hands, extra fingers, extra limbs, bad anatomy
+
+safePromptAddon
+  fully clothed, tasteful, pg-13, safe for work
+
+// ---------------------------
+// UI helpers
+// ---------------------------
+getEl(id) =>
+  return document.getElementById(id);
+
+setStatus(text, isError=false) =>
+  let el = getEl('statusText');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = isError ? 'crimson' : 'inherit';
+
+populateUIFrom(obj) =>
+  if (!obj) return;
+  if (obj.prompt !== undefined && getEl('promptInput')) getEl('promptInput').value = obj.prompt;
+  if (obj.negativePrompt !== undefined && getEl('negativeInput')) getEl('negativeInput').value = obj.negativePrompt;
+  if (obj.seed !== undefined && getEl('seedInput')) getEl('seedInput').value = obj.seed;
+  if (obj.guidanceScale !== undefined && getEl('guidanceInput')) getEl('guidanceInput').value = obj.guidanceScale;
+  if (obj.resolution !== undefined && getEl('resolutionSelect')) getEl('resolutionSelect').value = obj.resolution;
+  if (obj.width !== undefined && getEl('displayWidth')) getEl('displayWidth').value = obj.width;
+  if (obj.removeBackground !== undefined && getEl('removeBgCheck')) getEl('removeBgCheck').checked = !!obj.removeBackground;
+  if (obj.safeMode !== undefined && getEl('safeModeCheck')) getEl('safeModeCheck').checked = !!obj.safeMode;
+
+getUI() =>
+  // Read and normalize UI values
+  let prompt = (getEl('promptInput')?.value || '').trim();
+  let negativePrompt = (getEl('negativeInput')?.value || '').trim();
+  let seedRaw = (getEl('seedInput')?.value || '').trim();
+  let seed = seedRaw === '' ? -1 : Number(seedRaw);
+  if (Number.isNaN(seed)) seed = -1;
+
+  let guidanceScaleRaw = (getEl('guidanceInput')?.value || '7').trim();
+  let guidanceScale = Number(guidanceScaleRaw);
+  if (!Number.isFinite(guidanceScale)) guidanceScale = 7;
+  guidanceScale = Math.min(30, Math.max(1, guidanceScale));
+
+  let resolution = (getEl('resolutionSelect')?.value || '512x768').trim();
+  if (!['512x512','512x768','768x512'].includes(resolution)) resolution = '512x768';
+
+  let widthRaw = (getEl('displayWidth')?.value || '').trim();
+  let width = widthRaw === '' ? undefined : Number(widthRaw);
+  if (width !== undefined && (!Number.isFinite(width) || width <= 0)) width = undefined;
+
+  let removeBackground = !!getEl('removeBgCheck')?.checked;
+  let safeMode = !!getEl('safeModeCheck')?.checked;
+
+  return { prompt, negativePrompt, seed, guidanceScale, resolution, width, removeBackground, safeMode };
+
+applySafeModeText(prompt, negativePrompt, isOn) =>
+  if (!isOn) return {prompt, negativePrompt};
+  // Append safe prompt add-on if not already present
+  let addon = '[safePromptAddon]';
+  let safePrompt = prompt.includes(addon) ? prompt : (prompt ? (prompt + ', ' + addon) : addon);
+
+  // Merge negative prompts avoiding duplicates
+  let baseNeg = '[safeNegative]';
+  let mergedNeg =
+    (negativePrompt ? (negativePrompt + ', ' + baseNeg) : baseNeg)
+      .replace(/\s*,\s*/g, ', ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  return {prompt: safePrompt, negativePrompt: mergedNeg};
+
+// ---------------------------
+// Core: Generate image
+// ---------------------------
+async generate(useLast=false) =>
+  try {
+    setStatus('Generating...');
+    let btn = getEl('generateBtn'); if (btn) btn.disabled = true;
+
+    // Get UI state or reuse previous inputs
+    let ui = getUI();
+    if (useLast && window._lastInputs) {
+      // Reuse last prompt/negative/guidance/resolution/removeBg; keep current seed field choice
+      ui.prompt = window._lastInputs.prompt || ui.prompt;
+      ui.negativePrompt = window._lastInputs.negativePrompt || ui.negativePrompt;
+      ui.guidanceScale = window._lastInputs.guidanceScale || ui.guidanceScale;
+      ui.resolution = window._lastInputs.resolution || ui.resolution;
+      ui.removeBackground = !!window._lastInputs.removeBackground;
+    }
+
+    // Apply safe mode merge
+    let merged = applySafeModeText(ui.prompt, ui.negativePrompt, ui.safeMode);
+    ui.prompt = merged.prompt;
+    ui.negativePrompt = merged.negativePrompt;
+
+    // Build inputs for plugin
+    let inputs = {
+      prompt: ui.prompt,
+      negativePrompt: ui.negativePrompt,
+      guidanceScale: ui.guidanceScale,
+      seed: ui.seed,
+      resolution: ui.resolution,
+      removeBackground: ui.removeBackground
+    };
+    if (ui.width) inputs.width = ui.width; // display width
+
+    // Call plugin
+    let result = await image(inputs);
+
+    // Display
+    let outImg = getEl('resultImg');
+    if (outImg) {
+      outImg.src = result; // result is a string with dataUrl
+      outImg.alt = 'AI generated image';
+    }
+
+    // Show last prompt used
+    let promptEl = getEl('lastPromptText');
+    if (promptEl) promptEl.textContent = result.inputs?.prompt || ui.prompt || '';
+
+    // Save last inputs in memory and KV
+    window._lastInputs = Object.assign({}, result.inputs || inputs);
+    await kv.settings.set('lastUI', ui);
+
+    setStatus('Done.');
+  } catch (err) {
+    console.error(err);
+    setStatus('Error: ' + (err?.message || err), true);
+  } finally {
+    let btn = getEl('generateBtn'); if (btn) btn.disabled = false;
+  }
+
+// ---------------------------
+// Randomize + Suggest prompt
+// ---------------------------
+randomizePrompt() =>
+  let p = randomPrompt();
+  let el = getEl('promptInput');
+  if (el) el.value = p;
+
+async suggestPrompt() =>
+  try {
+    setStatus('Suggesting prompt...');
+    let theme = (getEl('themeInput')?.value || '').trim();
+    if (!theme) theme = 'a striking fantasy scene with a focal subject';
+
+    // Short, image-model-friendly instruction
+    let instruction =
+      `Write a single, high-quality text-to-image prompt in ~30–50 words.
+       Focus on a vivid subject, environment, mood, and lighting.
+       Use photography/illustration keywords only if appropriate.
+       Avoid pronouns, avoid quotes. No lists. Return only the prompt.
+       Theme: ${theme}`;
+
+    let res = await ai({ instruction });
+    let text = String(res).trim().replace(/^"+|"+$/g, '');
+    if (!text) throw new Error('Empty AI response');
+
+    let el = getEl('promptInput');
+    if (el) el.value = text;
+
+    setStatus('Prompt suggested. You can tweak it, then Generate.');
+  } catch (e) {
+    console.error(e);
+    setStatus('Could not suggest a prompt. Try again.', true);
+  }
+
+// ---------------------------
+// Presets via KV
+// ---------------------------
+async savePreset() =>
+  let name = (getEl('presetName')?.value || '').trim();
+  if (!name) {
+    setStatus('Enter a preset name first.', true);
+    return;
+  }
+  try {
+    let ui = getUI();
+    await kv.presets.set(name, ui);
+    await loadPresetList();
+    let sel = getEl('presetSelect');
+    if (sel) sel.value = name;
+    setStatus(`Saved preset "${name}".`);
+  } catch (e) {
+    console.error(e);
+    setStatus('Failed to save preset.', true);
+  }
+
+async loadPresetList() =>
+  try {
+    let keys = await kv.presets.keys();
+    keys = Array.isArray(keys) ? keys.slice().sort((a,b)=>a.localeCompare(b)) : [];
+    let sel = getEl('presetSelect');
+    if (!sel) return;
+    sel.innerHTML = '';
+    let placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '-- select preset --';
+    sel.appendChild(placeholder);
+    for (let k of keys) {
+      let opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = k;
+      sel.appendChild(opt);
+    }
+  } catch (e) {
+    console.error(e);
+    setStatus('Could not load preset list.', true);
+  }
+
+async loadPreset() =>
+  try {
+    let name = (getEl('presetSelect')?.value || '').trim();
+    if (!name) {
+      setStatus('Choose a preset to load.', true);
+      return;
+    }
+    let ui = await kv.presets.get(name);
+    if (!ui) {
+      setStatus(`Preset "${name}" not found.`, true);
+      return;
+    }
+    populateUIFrom(ui);
+    setStatus(`Loaded preset "${name}".`);
+  } catch (e) {
+    console.error(e);
+    setStatus('Failed to load preset.', true);
+  }
+
+async deletePreset() =>
+  try {
+    let name = (getEl('presetSelect')?.value || '').trim() || (getEl('presetName')?.value || '').trim();
+    if (!name) {
+      setStatus('Select or type a preset name to delete.', true);
+      return;
+    }
+    await kv.presets.delete(name);
+    await loadPresetList();
+    setStatus(`Deleted preset "${name}".`);
+  } catch (e) {
+    console.error(e);
+    setStatus('Failed to delete preset.', true);
+  }
+
+// ---------------------------
+// Convenience helpers
+// ---------------------------
+randomSeed() =>
+  // 53-bit safe random integer
+  let n = Math.floor(Math.random() * 9007199254740991);
+  let el = getEl('seedInput');
+  if (el) el.value = n;
+
+resetSeedToRandom() =>
+  let el = getEl('seedInput');
+  if (el) el.value = -1;
+
+// ---------------------------
+// Gallery options (remix button)
+// ---------------------------
+galleryOptions
+  gallery = true
+  sort = recent
+  timeRange = 1-week
+  adaptiveHeight = true
+  hideIfScoreIsBelow = -2
+  contentFilter = pg13
+  customButton
+    emoji = ♻️
+    onClick(data) =>
+      try {
+        // Pull fields from gallery image into the UI so user can tweak + regenerate
+        if (getEl('promptInput')) getEl('promptInput').value = data.prompt || '';
+        if (getEl('negativeInput')) getEl('negativeInput').value = data.negativePrompt || '';
+        if (getEl('seedInput')) getEl('seedInput').value = (data.seed ?? -1);
+        if (getEl('guidanceInput')) getEl('guidanceInput').value = (data.guidanceScale ?? 7);
+        // If resolution metadata is available, set it
+        if (data.resolution && getEl('resolutionSelect')) getEl('resolutionSelect').value = data.resolution;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setStatus('Loaded prompt from gallery. Edit and click Generate.');
+      } catch (e) {
+        console.error(e);
+      }
+
+// ---------------------------
+// Comments plugin options
+// ---------------------------
+commentOptions
+  width = 100%
+  height = 280
+  channel = advanced-ai-image-generator
+  newestCommentsAtTop = true
+  forceColorScheme = dark
+  messageBubbleStyle = background:light-dark(#1e1e1e,#ffffff); color:light-dark(#f5f5f5,#111);
+  inputAreaStyle = background:light-dark(#0f0f10,#f2f2f2); color:light-dark(#eaeaea,#111);
+  submitButtonStyle = background:#4f46e5; color:white; border:none;
+  // You can set adminPasswordHash here later to enable moderation tools
+
+// ---------------------------
+// Startup
+// ---------------------------
+async start() =>
+  try {
+    // Preset dropdown
+    await loadPresetList();
+
+    // Load last UI if available
+    let last = await kv.settings.get('lastUI');
+    if (last) {
+      populateUIFrom(last);
+    } else {
+      // Sensible defaults on first load
+      if (getEl('guidanceInput')) getEl('guidanceInput').value = 7;
+      if (getEl('resolutionSelect')) getEl('resolutionSelect').value = '512x768';
+      if (getEl('displayWidth')) getEl('displayWidth').value = 512;
+      if (getEl('seedInput')) getEl('seedInput').value = -1;
+      randomizePrompt();
+    }
+
+    // Optional: keyboard shortcut Ctrl/Cmd+Enter to generate
+    let p = getEl('promptInput');
+    if (p) {
+      p.addEventListener('keydown', (ev) => {
+        if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') generate();
+      });
+    }
+    setStatus('Ready.');
+  } catch (e) {
+    console.error(e);
+    setStatus('Ready (with minor init errors).', true);
+  }
+
+// ---------------------------
+// Patch: make Safe Mode use the list values (not literal [safe...] text)
+// ---------------------------
+applySafeModeText(prompt, negativePrompt, isOn) =>
+  if (!isOn) return {prompt, negativePrompt};
+
+  // Evaluate list items so we get real text
+  let addon = safePromptAddon.evaluateItem;
+  let baseNeg = safeNegative.evaluateItem;
+
+  let safePrompt = prompt ? (prompt + ', ' + addon) : addon;
+
+  // Merge and tidy commas/spaces
+  let mergedNeg =
+    (negativePrompt ? (negativePrompt + ', ' + baseNeg) : baseNeg)
+      .replace(/\s*,\s*/g, ', ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  return {prompt: safePrompt, negativePrompt: mergedNeg};

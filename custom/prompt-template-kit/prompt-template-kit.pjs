@@ -1,0 +1,219 @@
+$meta
+  title = Prompt Template Kit
+  description = Scoped prompt template registry with token extraction, rendering, and batch composition helpers.
+  image = https://user.uploads.dev/file/8c7563d0ece7c9ed36c8a83f8361a7a7.webp
+  tags = prompt templates, rendering, text generation, reuse
+
+ensurePromptTemplateStore() =>
+  if(!window.__promptTemplateKitV1) {
+    window.__promptTemplateKitV1 = {};
+  }
+  return window.__promptTemplateKitV1;
+
+normalizeScope(scope) =>
+  const raw = scope === undefined || scope === null ? "default" : String(scope).trim();
+  return raw === "" ? "default" : raw;
+
+normalizeTemplateName(name) =>
+  const raw = name === undefined || name === null ? "" : String(name).trim();
+  return raw;
+
+ensureScope(scope) =>
+  const scopeName = normalizeScope(scope);
+  const store = ensurePromptTemplateStore();
+
+  if(!store[scopeName]) {
+    store[scopeName] = {};
+  }
+
+  return store[scopeName];
+
+deepClone(value) =>
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch(error) {
+    return value;
+  }
+
+toObject(value) =>
+  if(value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return {};
+
+pathGet(data, keyPath, fallback) =>
+  const parts = String(keyPath || "").split(".").map(part => part.trim()).filter(Boolean);
+  if(parts.length === 0) {
+    return fallback === undefined ? "" : fallback;
+  }
+
+  let current = data;
+  for(let i = 0; i < parts.length; i += 1) {
+    if(current === undefined || current === null || typeof current !== "object" || !current.hasOwnProperty(parts[i])) {
+      return fallback === undefined ? "" : fallback;
+    }
+    current = current[parts[i]];
+  }
+
+  return current;
+
+set(scope, templateName, templateText) =>
+  const name = normalizeTemplateName(templateName);
+  if(name === "") return "error: empty template name";
+
+  const space = ensureScope(scope);
+  space[name] = String(templateText || "");
+  return name;
+
+get(scope, templateName, fallback) =>
+  const name = normalizeTemplateName(templateName);
+  if(name === "") return fallback === undefined ? "" : fallback;
+
+  const space = ensureScope(scope);
+  if(space.hasOwnProperty(name)) {
+    return space[name];
+  }
+
+  return fallback === undefined ? "" : fallback;
+
+has(scope, templateName) =>
+  const name = normalizeTemplateName(templateName);
+  if(name === "") return false;
+  return ensureScope(scope).hasOwnProperty(name);
+
+remove(scope, templateName) =>
+  const name = normalizeTemplateName(templateName);
+  if(name === "") return false;
+
+  const space = ensureScope(scope);
+  if(!space.hasOwnProperty(name)) {
+    return false;
+  }
+
+  delete space[name];
+  return true;
+
+list(scope, separator) =>
+  const sep = separator === undefined ? "," : String(separator);
+  return Object.keys(ensureScope(scope)).join(sep);
+
+tokenList(templateText, separator) =>
+  const text = String(templateText || "");
+  const tokens = [];
+  const seen = {};
+  const regex = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
+  let match;
+
+  while((match = regex.exec(text)) !== null) {
+    const token = String(match[1] || "").trim();
+    if(token !== "" && !seen[token]) {
+      seen[token] = true;
+      tokens.push(token);
+    }
+  }
+
+  if(separator === undefined) {
+    return tokens;
+  }
+  return tokens.join(String(separator));
+
+renderText(templateText, data, mode) =>
+  const text = String(templateText || "");
+  const payload = toObject(data);
+
+  return text.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (fullMatch, token) => {
+    const value = pathGet(payload, token, undefined);
+    if(value === undefined || value === null) {
+      if(mode === "keep") {
+        return fullMatch;
+      }
+      if(mode === "blank") {
+        return "";
+      }
+      return `[missing:${token}]`;
+    }
+
+    if(typeof value === "object") {
+      return JSON.stringify(value);
+    }
+
+    return String(value);
+  });
+
+render(scope, templateName, data, mode) =>
+  const template = get(scope, templateName, "");
+  return renderText(template, data, mode);
+
+renderBatch(scope, templateNames, data, joiner, mode) =>
+  const names = Array.isArray(templateNames)
+    ? templateNames
+    : String(templateNames || "").split(",").map(item => item.trim()).filter(Boolean);
+
+  const out = [];
+  for(let i = 0; i < names.length; i += 1) {
+    out.push(render(scope, names[i], data, mode));
+  }
+
+  const sep = joiner === undefined ? "\n" : String(joiner);
+  return out.join(sep);
+
+mergeData(baseData, overlayData) =>
+  const base = deepClone(toObject(baseData));
+  const overlay = toObject(overlayData);
+
+  for(const keyName of Object.keys(overlay)) {
+    base[keyName] = overlay[keyName];
+  }
+
+  return base;
+
+preview(scope, templateName, data, mode) =>
+  const template = get(scope, templateName, "");
+  return {
+    scope: normalizeScope(scope),
+    template: normalizeTemplateName(templateName),
+    tokens: tokenList(template),
+    result: renderText(template, data, mode)
+  };
+
+clear(scope) =>
+  const scopeName = normalizeScope(scope);
+  const store = ensurePromptTemplateStore();
+
+  if(!store[scopeName]) {
+    return 0;
+  }
+
+  const removed = Object.keys(store[scopeName]).length;
+  delete store[scopeName];
+  return removed;
+
+exportJson(scope) =>
+  return JSON.stringify(ensureScope(scope));
+
+importJson(scope, jsonText, mode) =>
+  let parsed;
+  try {
+    parsed = JSON.parse(String(jsonText));
+  } catch(error) {
+    return "error: invalid json";
+  }
+
+  if(!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return "error: expected object";
+  }
+
+  const space = ensureScope(scope);
+  const replace = mode === "replace";
+
+  if(replace) {
+    for(const keyName of Object.keys(space)) {
+      delete space[keyName];
+    }
+  }
+
+  for(const keyName of Object.keys(parsed)) {
+    space[String(keyName)] = String(parsed[keyName]);
+  }
+
+  return Object.keys(parsed).length;

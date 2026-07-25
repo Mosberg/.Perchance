@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>universal-lpc-spritesheet-character-generator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  body { text-align:left; margin:0; font-family:system-ui,sans-serif; overflow:hidden; }
+  select, input[type=color], button { cursor:pointer; }
+</style>
+
+<div id="appCtn" style="display:flex; flex-direction:column; height:100vh;">
+  <div style="background:#1a1a2e; color:#000; padding:12px 16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+    <h1 style="margin:0; font-size:1.1rem; flex:1;">🎮 AI LPC Character Generator</h1>
+    <input id="themeInput" placeholder="AI theme, e.g. frost mage" style="padding:5px 8px; border-radius:4px; border:none; min-width:150px;">
+    <button id="aiGenBtn" onclick="aiGenerate().catch(()=>{})">✨ AI Generate</button>
+    <button onclick="randomize()">🎲 Random</button>
+    <button onclick="exportPng()">📥 PNG</button>
+    <button onclick="exportJson()">💾 JSON</button>
+    <button onclick="showCredits()">📋 Credits</button>
+  </div>
+  
+  <div style="display:flex; flex:1; overflow:hidden;">
+    <div id="sidebarCtn" style="width:260px; background:#f7f7f7; overflow-y:auto; padding:12px; border-right:1px solid #ccc;"></div>
+    
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#2d2d3a; position:relative;">
+      <canvas id="previewCanvas" width="64" height="64" style="width:320px; height:320px; image-rendering:pixelated; background:#87CEEB; border:2px solid #111; box-shadow:0 4px 20px rgba(0,0,0,0.4);"></canvas>
+      <div style="position:absolute; bottom:20px; display:flex; gap:12px; align-items:center; background:rgba(0,0,0,0.6); color:#fff; padding:8px 16px; border-radius:8px;">
+        <button onclick="togglePlay()" id="playBtn">⏸ Pause</button>
+        <input type="range" id="frameSlider" min="0" max="3" value="0" style="width:120px;" oninput="setFrame(this.value)">
+        <span id="frameLabelEl">0 / 3</span>
+      </div>
+      <canvas id="sheetCanvas" width="256" height="64" style="display:none;"></canvas>
+    </div>
+    
+    <div style="width:220px; padding:12px; background:#fafafa; border-left:1px solid #ccc; overflow-y:auto;">
+      <h3 style="margin-top:0;">Status</h3>
+      <div id="statusEl" style="font-size:0.85rem; color:#555; min-height:1.2em;">Ready</div>
+      <hr style="margin:12px 0;">
+      <h3>Guide</h3>
+      <p style="font-size:0.8rem; color:#444;">
+        Choose parts in the sidebar and recolor them live. Use <em>AI Generate</em> to design a full character from a text theme. Export a 4-frame walk-cycle spritesheet as PNG or save your design as JSON.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div id="creditsModalCtn" hidden style="position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:1000;">
+  <div style="background:#fff; padding:16px; border-radius:8px; max-width:480px; width:90%; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+    <h2 style="margin-top:0;">Credits & Attribution</h2>
+    <pre id="creditsPre" style="flex:1; overflow:auto; font-size:0.8rem; background:#f5f5f5; padding:10px; white-space:pre-wrap; border:1px solid #ddd;"></pre>
+    <button onclick="creditsModalCtn.hidden=true" style="margin-top:10px; align-self:flex-end; padding:6px 14px;">Close</button>
+  </div>
+</div>
+
+<script>
+  let c = previewCanvas.getContext('2d');
+  let parts = {
+    body:{label:'Body', opts:[{id:'human',n:'Human'},{id:'elf',n:'Elf'},{id:'orc',n:'Orc'}], def:'human', col:'#e0ac69'},
+    hair:{label:'Hair', opts:[{id:'none',n:'None'},{id:'short',n:'Short'},{id:'long',n:'Long'},{id:'spiky',n:'Spiky'},{id:'pony',n:'Ponytail'}], def:'short', col:'#332211'},
+    shirt:{label:'Torso', opts:[{id:'none',n:'None'},{id:'tunic',n:'Tunic'},{id:'vest',n:'Vest'},{id:'armor',n:'Armor'}], def:'tunic', col:'#aa3333'},
+    pants:{label:'Legs', opts:[{id:'none',n:'None'},{id:'shorts',n:'Shorts'},{id:'pants',n:'Pants'},{id:'skirt',n:'Skirt'}], def:'pants', col:'#223355'},
+    shoes:{label:'Feet', opts:[{id:'none',n:'Barefoot'},{id:'boots',n:'Boots'},{id:'shoes',n:'Shoes'}], def:'boots', col:'#1a1a1a'},
+    weapon:{label:'Weapon', opts:[{id:'none',n:'None'},{id:'sword',n:'Sword'},{id:'staff',n:'Staff'},{id:'bow',n:'Bow'}], def:'none', col:'#cccccc'}
+  };
+  let state = {};
+  Object.keys(parts).forEach(k => state[k] = {type: parts[k].def, color: parts[k].col});
+  state.frame = 0; state.playing = true;
+
+  function rect(ctx, x, y, w, h, col, sc) {
+    ctx.fillStyle = col;
+    ctx.fillRect(Math.round(x)*sc, Math.round(y)*sc, Math.round(w)*sc, Math.round(h)*sc);
+  }
+
+  function drawChar(ctx, s, f, ox, oy, sc) {
+    let bx = ox + 32, by = oy + 44 + (f%2 ? -1 : 0); // walk bob
+    let lLeg = {x: bx-3, y: by}, rLeg = {x: bx+3, y: by};
+    let lArm = {x: bx-5, y: by-20}, rArm = {x: bx+5, y: by-20};
+
+    if(f===1) { lLeg.x -= 2; rLeg.x += 2; lLeg.y += 1; lArm.x += 2; rArm.x -= 2; }
+    else if(f===3) { lLeg.x += 2; rLeg.x -= 2; rLeg.y += 1; lArm.x -= 2; rArm.x += 2; }
+
+    // Legs / pants / skirt
+    let lCol = s.pants.type==='none' ? s.body.color : s.pants.color;
+    let rCol = s.pants.type==='skirt' ? s.pants.color : lCol;
+    rect(ctx, lLeg.x-2, lLeg.y-10, 4, 10, lCol, sc);
+    rect(ctx, rLeg.x-2, rLeg.y-10, 4, 10, rCol, sc);
+    if(s.pants.type==='skirt') rect(ctx, bx-5, by-10, 10, 10, s.pants.color, sc);
+
+    // Shoes
+    if(s.shoes.type!=='none') {
+      rect(ctx, lLeg.x-2, lLeg.y-2, 4, 2, s.shoes.color, sc);
+      rect(ctx, rLeg.x-2, rLeg.y-2, 4, 2, s.shoes.color, sc);
+    }
+
+    // Torso
+    let tCol = s.shirt.type==='none' ? s.body.color : s.shirt.color;
+    rect(ctx, bx-5, by-24, 10, 14, tCol, sc);
+    if(s.shirt.type==='armor') { rect(ctx, bx-6, by-22, 12, 8, '#555', sc); rect(ctx, bx-1, by-14, 2, 4, '#777', sc); }
+    if(s.shirt.type==='vest') rect(ctx, bx-5, by-24, 10, 6, tCol, sc);
+
+    // Arms
+    rect(ctx, lArm.x-1, lArm.y, 2, 10, tCol, sc);
+    rect(ctx, rArm.x-1, rArm.y, 2, 10, tCol, sc);
+    rect(ctx, lArm.x-1, lArm.y+10, 2, 2, s.body.color, sc);
+    rect(ctx, rArm.x-1, rArm.y+10, 2, 2, s.body.color, sc);
+
+    // Head
+    let hs = 8, hx = bx - hs/2, hy = by - 32;
+    if(s.body.type==='elf') { rect(ctx, hx-2, hy+2, 2, 2, s.body.color, sc); rect(ctx, hx+hs, hy+2, 2, 2, s.body.color, sc); }
+    rect(ctx, hx, hy, hs, hs, s.body.color, sc);
+    if(s.body.type==='orc') rect(ctx, bx-1, hy+5, 2, 1, '#2a5', sc);
+    rect(ctx, bx-3, hy+3, 1, 1, '#000', sc);
+    rect(ctx, bx+2, hy+3, 1, 1, '#000', sc);
+
+    // Hair
+    if(s.hair.type!=='none') {
+      let hc = s.hair.color;
+      if(s.hair.type==='short') { rect(ctx, hx-1, hy-1, hs+2, 3, hc, sc); rect(ctx, hx-1, hy, 1, hs-2, hc, sc); rect(ctx, hx+hs, hy, 1, hs-2, hc, sc); }
+      else if(s.hair.type==='long') { rect(ctx, hx-2, hy-2, hs+4, 4, hc, sc); rect(ctx, hx-2, hy, 2, hs+6, hc, sc); rect(ctx, hx+hs, hy, 2, hs+6, hc, sc); }
+      else if(s.hair.type==='spiky') { rect(ctx, hx, hy-3, hs, 3, hc, sc); rect(ctx, hx-2, hy, 2, 4, hc, sc); rect(ctx, hx+hs, hy, 2, 4, hc, sc); }
+      else if(s.hair.type==='pony') { rect(ctx, hx-1, hy-1, hs+2, 3, hc, sc); let px=hx+hs, py=hy+2; if(f===1) px++; if(f===3) px--; rect(ctx, px, py, 3, 8, hc, sc); }
+    }
+
+    // Weapon in right hand
+    if(s.weapon.type!=='none') {
+      let hx2 = rArm.x, hy2 = rArm.y+12;
+      if(s.weapon.type==='sword') {
+        rect(ctx, hx2, hy2-14, 2, 14, s.weapon.color, sc);
+        rect(ctx, hx2-1, hy2, 4, 2, '#444', sc);
+        rect(ctx, hx2, hy2-2, 2, 2, '#444', sc);
+      } else if(s.weapon.type==='staff') {
+        rect(ctx, hx2, hy2-18, 2, 20, '#654321', sc);
+        rect(ctx, hx2-1, hy2-20, 4, 2, s.weapon.color, sc);
+      } else if(s.weapon.type==='bow') {
+        rect(ctx, hx2-2, hy2-14, 2, 14, '#876543', sc);
+        rect(ctx, hx2-2, hy2-14, 6, 2, '#876543', sc);
+        rect(ctx, hx2-2, hy2-2, 6, 2, '#876543', sc);
+        rect(ctx, hx2+2, hy2-12, 1, 10, '#ccc', sc);
+      }
+    }
+  }
+
+  function draw() { c.clearRect(0,0,64,64); drawChar(c, state, state.frame, 0, 0, 1); }
+
+  function buildUI() {
+    sidebarCtn.innerHTML = '';
+    Object.entries(parts).forEach(([key, conf]) => {
+      let d = document.createElement('div'); d.style.cssText = 'margin-bottom:14px;';
+      d.innerHTML = `<div style="font-weight:600; font-size:0.9rem; margin-bottom:4px;">${conf.label}</div>`;
+      let sel = document.createElement('select'); sel.style.cssText = 'width:100%; padding:4px; margin-bottom:4px;';
+      sel.onchange = e => { state[key].type = e.target.value; if(state[key].type==='none' && key!=='body') state[key].color = '#888'; draw(); buildUI(); };
+      conf.opts.forEach(o => { let op=document.createElement('option'); op.value=o.id; op.textContent=o.n; if(state[key].type===o.id) op.selected=true; sel.appendChild(op); });
+      d.appendChild(sel);
+
+      let row = document.createElement('div'); row.style.cssText = 'display:flex; align-items:center; gap:6px;';
+      let cin = document.createElement('input'); cin.type='color'; cin.value = state[key].color;
+      cin.oninput = e => { state[key].color = e.target.value; draw(); };
+      row.appendChild(cin); row.appendChild(document.createTextNode('Recolor'));
+      let grey = key!=='body' && state[key].type==='none';
+      row.style.opacity = grey?'0.3':'1'; cin.disabled = grey;
+      d.appendChild(row);
+      sidebarCtn.appendChild(d);
+    });
+  }
+
+  let lastT = 0;
+  function loop(ts) {
+    if(state.playing && ts-lastT > 180) {
+      state.frame = (state.frame+1)%4;
+      frameSlider.value = state.frame;
+      frameLabelEl.textContent = state.frame + ' / 3';
+      draw(); lastT = ts;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function togglePlay() { state.playing = !state.playing; playBtn.textContent = state.playing ? '⏸ Pause' : '▶ Play'; }
+  function setFrame(v) { state.frame = +v; state.playing = false; playBtn.textContent = '▶ Play'; frameLabelEl.textContent = v + ' / 3'; draw(); }
+
+  function randomize() {
+    Object.keys(parts).forEach(k => {
+      let p = parts[k]; state[k].type = p.opts[Math.floor(Math.random()*p.opts.length)].id;
+      let r = () => Math.floor(Math.random()*256).toString(16).padStart(2,'0');
+      state[k].color = '#'+r()+r()+r();
+    });
+    state.body.color = '#e0ac69'; // keep skin sane
+    buildUI(); draw(); statusEl.textContent = 'Randomized!';
+  }
+
+  async function aiGenerate() {
+    let theme = themeInput.value.trim() || 'random fantasy character';
+    aiGenBtn.disabled = true; aiGenBtn.textContent = '⏳...'; statusEl.textContent = 'Asking AI...';
+    try {
+      if (typeof generateText !== 'function') throw new Error('AI text generator is unavailable in this environment');
+      let inst = 'Design an LPC pixel art RPG character for theme: "' + theme + '".\n' +
+        'Available: body (human/elf/orc), hair (none/short/long/spiky/pony), shirt (none/tunic/vest/armor), pants (none/shorts/pants/skirt), shoes (none/boots/shoes), weapon (none/sword/staff/bow).\n' +
+        'Reply ONLY with JSON: {body,hair,shirt,pants,shoes,weapon,bodyColor,hairColor,shirtColor,pantsColor,shoesColor,weaponColor}';
+      let txt = await generateText(inst);
+      let m = txt.match(/\{[\s\S]*?\}/);
+      if(!m) throw new Error('No JSON found in AI response');
+      let d = JSON.parse(m[0]);
+      let map = {body:'body', hair:'hair', shirt:'shirt', pants:'pants', shoes:'shoes', weapon:'weapon'};
+      Object.entries(map).forEach(([k,sk]) => { if(d[k]) state[sk].type = d[k]; });
+      ['bodyColor','hairColor','shirtColor','pantsColor','shoesColor','weaponColor'].forEach(k => { let sk=k.replace('Color',''); if(d[k]) state[sk].color = d[k]; });
+      buildUI(); draw();
+      statusEl.textContent = 'AI applied: ' + theme;
+    } catch(e) {
+      statusEl.textContent = 'AI error: ' + e.message;
+      console.error(e);
+    }
+    aiGenBtn.disabled = false;
+    aiGenBtn.textContent = '✨ AI Generate';
+  }
+
+  function exportPng() {
+    let cc = document.createElement('canvas'); cc.width = 64*4; cc.height = 64;
+    let x = cc.getContext('2d');
+    for(let i=0;i<4;i++) drawChar(x, state, i, i*64, 0, 1);
+    let a = document.createElement('a'); a.download = 'lpc-spritesheet.png'; a.href = cc.toDataURL(); a.click();
+    statusEl.textContent = 'Spritesheet exported!';
+  }
+
+  function exportJson() {
+    let a = document.createElement('a');
+    a.download = 'lpc-character.json';
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(state,null,2)], {type:'application/json'}));
+    a.click(); statusEl.textContent = 'JSON exported!';
+  }
+
+  function showCredits() {
+    let lines = Object.entries(parts).map(([k,c]) => {
+      let t = state[k].type; return t==='none' ? '' : '- ' + c.label + ': ' + t + ' (color ' + state[k].color + ') — procedural';
+    }).filter(Boolean);
+    creditsPre.textContent = 'AI LPC Character Generator — Procedural Credits\n' + lines.join('\n') + '\n\nNote: This vanilla demo uses procedurally drawn shapes.\nThe full LPC project credits thousands of artists.\nhttps://github.com/liberatedpixelcup/Universal-LPC-Spritesheet-Character-Generator';
+    creditsModalCtn.hidden = false;
+  }
+
+  buildUI(); draw(); requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,303 @@
+// jsonX = {import:jsonx}
+
+jsonX
+  // ---------- JSONC CORE ----------
+
+  stripJsonc(text) =>
+    text = String(text || "")
+    text = text.replace(///[^
+
+]*/g, "")
+    text = text.replace(//*[sS]*?*//g, "")
+    text
+
+  parse(text, fallback) =>
+    let clean = this.stripJsonc(text)
+    try JSON.parse(clean) catch(e) fallback
+
+  parseStrict(text) =>
+    let clean = this.stripJsonc(text)
+    JSON.parse(clean)
+
+  stringify(value, space) =>
+    try JSON.stringify(value, null, space || 0) catch(e) ""
+
+  clone(value) =>
+    try JSON.parse(JSON.stringify(value)) catch(e) value
+
+  // ---------- TYPE HELPERS ----------
+
+  typeOf(value) =>
+    if(value === null) return "null"
+    if(Array.isArray(value)) return "array"
+    return typeof value
+
+  isArray(value) =>
+    return Array.isArray(value)
+
+  isObject(value) =>
+    return !!value && typeof value === "object" && !Array.isArray(value)
+
+  isString(value) =>
+    return typeof value === "string"
+
+  isNumber(value) =>
+    return typeof value === "number" && !isNaN(value)
+
+  isBoolean(value) =>
+    return typeof value === "boolean"
+
+  isNull(value) =>
+    return value === null
+
+  isUndefined(value) =>
+    return value === undefined
+
+  ensureArray(value) =>
+    if(Array.isArray(value)) return value
+    if(value === undefined || value === null) return []
+    return [value]
+
+  ensureObject(value) =>
+    if(this.isObject(value)) return value
+    return {}
+
+  toNumber(value, fallback) =>
+    let n = Number(value)
+    if(isNaN(n)) return fallback
+    return n
+
+  toBoolean(value, fallback) =>
+    if(typeof value === "boolean") return value
+    if(typeof value === "string")
+      let v = value.toLowerCase().trim()
+      if(v === "true" || v === "1" || v === "yes" || v === "on") return true
+      if(v === "false" || v === "0" || v === "no" || v === "off") return false
+    if(typeof value === "number")
+      if(value === 0) return false
+      if(value === 1) return true
+    return fallback
+
+  // ---------- PATH HELPERS (deep get/set) ----------
+
+  splitPath(path) =>
+    if(Array.isArray(path)) return path
+    path = String(path || "")
+    if(!path) return []
+    return path.split(".")
+
+  get(obj, path, fallback) =>
+    if(!obj) return fallback
+    let parts = this.splitPath(path)
+    let cur = obj
+    for(let i = 0; i < parts.length; i++)
+      let key = parts[i]
+      if(cur == null) return fallback
+      if(!(key in cur)) return fallback
+      cur = cur[key]
+    return cur
+
+  has(obj, path) =>
+    if(!obj) return false
+    let parts = this.splitPath(path)
+    let cur = obj
+    for(let i = 0; i < parts.length; i++)
+      let key = parts[i]
+      if(cur == null || !(key in cur)) return false
+      cur = cur[key]
+    return true
+
+  set(obj, path, value) =>
+    if(!obj) obj = {}
+    let parts = this.splitPath(path)
+    if(parts.length === 0) return obj
+    let cur = obj
+    for(let i = 0; i < parts.length - 1; i++)
+      let key = parts[i]
+      if(!this.isObject(cur[key]) && !Array.isArray(cur[key]))
+        cur[key] = {}
+      cur = cur[key]
+    cur[parts[parts.length - 1]] = value
+    return obj
+
+  delete(obj, path) =>
+    if(!obj) return obj
+    let parts = this.splitPath(path)
+    if(parts.length === 0) return obj
+    let cur = obj
+    for(let i = 0; i < parts.length - 1; i++)
+      let key = parts[i]
+      if(cur == null || !(key in cur)) return obj
+      cur = cur[key]
+    delete cur[parts[parts.length - 1]]
+    return obj
+
+  // ---------- MERGE / PATCH ----------
+
+  assign(target, source) =>
+    target = target || {}
+    if(!this.isObject(source)) return target
+    Object.keys(source).forEach(k => { target[k] = source[k] })
+    return target
+
+  mergeDeep(target, source) =>
+    target = this.ensureObject(target)
+    source = this.ensureObject(source)
+    Object.keys(source).forEach(key => {
+      let sv = source[key]
+      let tv = target[key]
+      if(this.isObject(sv) && this.isObject(tv))
+        target[key] = this.mergeDeep(tv, sv)
+      else if(Array.isArray(sv) && Array.isArray(tv))
+        target[key] = tv.concat(sv)
+      else
+        target[key] = sv
+    })
+    return target
+
+  // ---------- OBJECT UTILITIES ----------
+
+  keys(obj) =>
+    if(!this.isObject(obj)) return []
+    return Object.keys(obj)
+
+  values(obj) =>
+    if(!this.isObject(obj)) return []
+    return Object.keys(obj).map(k => obj[k])
+
+  entries(obj) =>
+    if(!this.isObject(obj)) return []
+    return Object.keys(obj).map(k => [k, obj[k]])
+
+  pick(obj, keys) =>
+    let out = {}
+    keys = this.ensureArray(keys)
+    keys.forEach(k => {
+      if(obj && k in obj) out[k] = obj[k]
+    })
+    return out
+
+  omit(obj, keys) =>
+    let out = {}
+    keys = this.ensureArray(keys)
+    let skip = {}
+    keys.forEach(k => { skip[k] = true })
+    if(this.isObject(obj))
+      Object.keys(obj).forEach(k => {
+        if(!skip[k]) out[k] = obj[k]
+      })
+    return out
+
+  // ---------- ARRAY UTILITIES ----------
+
+  listLength(list) =>
+    if(Array.isArray(list)) return list.length
+    return 0
+
+  listGet(list, index, fallback) =>
+    if(!Array.isArray(list)) return fallback
+    if(index < 0 || index >= list.length) return fallback
+    return list[index]
+
+  listRandom(list, fallback) =>
+    if(!Array.isArray(list) || list.length === 0) return fallback
+    return list[Math.floor(Math.random() * list.length)]
+
+  listMap(list, fn) =>
+    if(!Array.isArray(list)) return []
+    if(typeof fn !== "function") return list.slice()
+    return list.map(fn)
+
+  listFilter(list, fn) =>
+    if(!Array.isArray(list)) return []
+    if(typeof fn !== "function") return list.slice()
+    return list.filter(fn)
+
+  listFind(list, fn, fallback) =>
+    if(!Array.isArray(list) || typeof fn !== "function") return fallback
+    for(let i = 0; i < list.length; i++)
+      if(fn(list[i], i, list)) return list[i]
+    return fallback
+
+  listSortBy(list, fn) =>
+    if(!Array.isArray(list)) return []
+    let copy = list.slice()
+    if(typeof fn !== "function") return copy
+    copy.sort((a, b) => {
+      let av = fn(a)
+      let bv = fn(b)
+      if(av < bv) return -1
+      if(av > bv) return 1
+      return 0
+    })
+    return copy
+
+  listUnique(list, keyFn) =>
+    if(!Array.isArray(list)) return []
+    let seen = {}
+    let out = []
+    if(typeof keyFn !== "function")
+      list.forEach(v => {
+        let k = JSON.stringify(v)
+        if(!seen[k]) { seen[k] = true; out.push(v) }
+      })
+    else
+      list.forEach(v => {
+        let k = keyFn(v)
+        if(!seen[k]) { seen[k] = true; out.push(v) }
+      })
+    return out
+
+  // ---------- SIMPLE VALIDATION HELPERS ----------
+
+  requireKeys(obj, keys) =>
+    obj = this.ensureObject(obj)
+    keys = this.ensureArray(keys)
+    let missing = []
+    keys.forEach(k => {
+      if(!(k in obj)) missing.push(k)
+    })
+    return missing
+
+  validateShape(obj, shape) =>
+    obj = this.ensureObject(obj)
+    shape = this.ensureObject(shape)
+    let errors = []
+    Object.keys(shape).forEach(key => {
+      let expected = shape[key]
+      let actualType = this.typeOf(obj[key])
+      if(expected === "any") return
+      if(actualType !== expected)
+        errors.push(key + ": expected " + expected + " but got " + actualType)
+    })
+    return errors
+
+  // ---------- HTML HELPERS (JSON-backed UI) ----------
+
+  html(text) =>
+    return String(text || "")
+
+  escapeHtml(text) =>
+    return String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;")
+
+  htmlBlock(text, className) =>
+    let cls = className ? " class="" + className + """ : ""
+    return "<div" + cls + ">" + String(text || "") + "</div>"
+
+  htmlAttr(name, value) =>
+    if(value === undefined || value === null || value === false) return ""
+    if(value === true) return " " + name
+    return " " + name + "="" + this.escapeHtml(value) + """
+
+  htmlTag(tag, attrs, innerHtml) =>
+    attrs = this.ensureObject(attrs)
+    let attrStr = ""
+    Object.keys(attrs).forEach(k => {
+      attrStr += this.htmlAttr(k, attrs[k])
+    })
+    return "<" + tag + attrStr + ">" + String(innerHtml || "") + "</" + tag + ">"

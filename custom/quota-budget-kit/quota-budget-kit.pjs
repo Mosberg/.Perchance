@@ -1,0 +1,259 @@
+$meta
+  title = Quota Budget Kit
+  description = Scope-based budgets and quota windows for throttling features, actions, and AI usage safely.
+  image = https://user.uploads.dev/file/8c7563d0ece7c9ed36c8a83f8361a7a7.webp
+  tags = quotas, rate limiting, budgets, resource control
+
+ensureQuotaStore() =>
+  if(!window.__quotaBudgetKitV1) {
+    window.__quotaBudgetKitV1 = {};
+  }
+  return window.__quotaBudgetKitV1;
+
+normalizeScope(scope) =>
+  const raw = scope === undefined || scope === null ? "default" : String(scope).trim();
+  return raw === "" ? "default" : raw;
+
+normalizeBudgetName(name) =>
+  const raw = name === undefined || name === null ? "" : String(name).trim();
+  return raw;
+
+nowMs(customNow) =>
+  if(customNow !== undefined && Number.isFinite(Number(customNow))) {
+    return Number(customNow);
+  }
+  return Date.now();
+
+ensureScope(scope) =>
+  const scopeName = normalizeScope(scope);
+  const store = ensureQuotaStore();
+
+  if(!store[scopeName]) {
+    store[scopeName] = {};
+  }
+
+  return store[scopeName];
+
+refreshWindow(entry, currentTime) =>
+  if(currentTime >= entry.resetAt) {
+    entry.used = 0;
+    entry.resetAt = currentTime + entry.windowMs;
+  }
+
+create(scope, budgetName, limit, windowMs, startUsed) =>
+  const name = normalizeBudgetName(budgetName);
+  if(name === "") return "error: empty budget name";
+
+  let max = Number(limit);
+  if(!Number.isFinite(max) || max < 0) {
+    return "error: invalid limit";
+  }
+
+  let windowSize = Number(windowMs);
+  if(!Number.isFinite(windowSize) || windowSize <= 0) {
+    windowSize = 60000;
+  }
+
+  let used = Number(startUsed);
+  if(!Number.isFinite(used) || used < 0) {
+    used = 0;
+  }
+
+  const currentTime = nowMs();
+  const scopeData = ensureScope(scope);
+
+  scopeData[name] = {
+    name: name,
+    limit: max,
+    used: used,
+    windowMs: windowSize,
+    resetAt: currentTime + windowSize
+  };
+
+  return name;
+
+has(scope, budgetName) =>
+  const name = normalizeBudgetName(budgetName);
+  if(name === "") return false;
+  return ensureScope(scope).hasOwnProperty(name);
+
+status(scope, budgetName, customNow) =>
+  const name = normalizeBudgetName(budgetName);
+  if(name === "") return { ok: false, error: "empty budget name" };
+
+  const scopeData = ensureScope(scope);
+  if(!scopeData[name]) {
+    return { ok: false, error: "budget not found", name: name };
+  }
+
+  const currentTime = nowMs(customNow);
+  const entry = scopeData[name];
+  refreshWindow(entry, currentTime);
+
+  const remaining = Math.max(0, entry.limit - entry.used);
+
+  return {
+    ok: true,
+    name: entry.name,
+    limit: entry.limit,
+    used: entry.used,
+    remaining: remaining,
+    windowMs: entry.windowMs,
+    resetAt: entry.resetAt
+  };
+
+consume(scope, budgetName, amount, customNow) =>
+  let units = Number(amount);
+  if(!Number.isFinite(units) || units <= 0) {
+    units = 1;
+  }
+
+  const current = status(scope, budgetName, customNow);
+  if(current.ok !== true) {
+    return current;
+  }
+
+  const scopeData = ensureScope(scope);
+  const entry = scopeData[current.name];
+
+  if(entry.used + units > entry.limit) {
+    return {
+      ok: false,
+      blocked: true,
+      name: entry.name,
+      requested: units,
+      remaining: Math.max(0, entry.limit - entry.used),
+      resetAt: entry.resetAt
+    };
+  }
+
+  entry.used += units;
+
+  return {
+    ok: true,
+    name: entry.name,
+    used: entry.used,
+    remaining: Math.max(0, entry.limit - entry.used),
+    resetAt: entry.resetAt
+  };
+
+grant(scope, budgetName, amount, customNow) =>
+  let units = Number(amount);
+  if(!Number.isFinite(units) || units <= 0) {
+    units = 1;
+  }
+
+  const current = status(scope, budgetName, customNow);
+  if(current.ok !== true) {
+    return current;
+  }
+
+  const scopeData = ensureScope(scope);
+  const entry = scopeData[current.name];
+  entry.used = Math.max(0, entry.used - units);
+
+  return status(scope, budgetName, customNow);
+
+setLimit(scope, budgetName, limit) =>
+  const current = status(scope, budgetName);
+  if(current.ok !== true) {
+    return current;
+  }
+
+  let max = Number(limit);
+  if(!Number.isFinite(max) || max < 0) {
+    return { ok: false, error: "invalid limit" };
+  }
+
+  const scopeData = ensureScope(scope);
+  const entry = scopeData[current.name];
+  entry.limit = max;
+  if(entry.used > entry.limit) {
+    entry.used = entry.limit;
+  }
+
+  return status(scope, budgetName);
+
+reset(scope, budgetName, customNow) =>
+  const current = status(scope, budgetName, customNow);
+  if(current.ok !== true) {
+    return current;
+  }
+
+  const scopeData = ensureScope(scope);
+  const entry = scopeData[current.name];
+  const currentTime = nowMs(customNow);
+
+  entry.used = 0;
+  entry.resetAt = currentTime + entry.windowMs;
+  return status(scope, budgetName, customNow);
+
+list(scope, separator) =>
+  const sep = separator === undefined ? "," : String(separator);
+  return Object.keys(ensureScope(scope)).join(sep);
+
+cleanup(scope, customNow) =>
+  const scopeData = ensureScope(scope);
+  const currentTime = nowMs(customNow);
+  let refreshed = 0;
+
+  for(const keyName of Object.keys(scopeData)) {
+    const before = scopeData[keyName].used;
+    refreshWindow(scopeData[keyName], currentTime);
+    if(before !== scopeData[keyName].used) {
+      refreshed += 1;
+    }
+  }
+
+  return refreshed;
+
+remove(scope, budgetName) =>
+  const name = normalizeBudgetName(budgetName);
+  if(name === "") return false;
+
+  const scopeData = ensureScope(scope);
+  if(!scopeData[name]) {
+    return false;
+  }
+
+  delete scopeData[name];
+  return true;
+
+exportJson(scope) =>
+  return JSON.stringify(ensureScope(scope));
+
+importJson(scope, jsonText, mode) =>
+  let parsed;
+  try {
+    parsed = JSON.parse(String(jsonText));
+  } catch(error) {
+    return "error: invalid json";
+  }
+
+  if(!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return "error: invalid payload";
+  }
+
+  const scopeData = ensureScope(scope);
+  if(mode === "replace") {
+    for(const keyName of Object.keys(scopeData)) {
+      delete scopeData[keyName];
+    }
+  }
+
+  for(const keyName of Object.keys(parsed)) {
+    const item = parsed[keyName];
+    if(!item || typeof item !== "object") {
+      continue;
+    }
+
+    scopeData[keyName] = {
+      name: String(item.name || keyName),
+      limit: Number(item.limit || 0),
+      used: Math.max(0, Number(item.used || 0)),
+      windowMs: Math.max(1, Number(item.windowMs || 60000)),
+      resetAt: Number(item.resetAt || (Date.now() + 60000))
+    };
+  }
+
+  return Object.keys(scopeData).length;

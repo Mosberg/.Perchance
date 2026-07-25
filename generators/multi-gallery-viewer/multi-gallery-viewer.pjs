@@ -1,0 +1,1351 @@
+// Sets up this plugin's own text-to-image gallery config (ia), independent of any host-page instance
+createMediaGallery = {import:antimatter-media-gallery-plugin}
+newImg = {import:antimatter-regenerate-port}
+ia = {import:text-to-image-plugin}
+superFetch = {import:super-fetch-plugin}
+AMShared = {import:antimatter-shared}
+galleryOptions
+  gallery = true
+  hideIfScoreIsBelow = -999 // 100% uncensored
+  adaptiveHeight = true
+  customButton
+    emoji = 🔍 // ✨
+    onClick(data) => newImg.regenerateFromGallery(data);
+  customButton2
+    emoji = 💾
+    onClick(data) => galleryToPrivateGallery(data);
+async galleryToPrivateGallery(data) =>
+  const blobToDataURL = b => new Promise(
+    r => {
+      const fr = new FileReader();
+      fr.onload = () => r(fr.result);
+      fr.readAsDataURL(b);
+    }
+  );
+  window.t2i_privateGallery = createMediaGallery();
+  let { prompt, negativePrompt, seed, guidanceScale } = data;
+  let imageBlob = await fetch(data.imageUrl).then(r => r.blob());
+  await window.t2i_privateGallery.add(imageBlob, {info:{prompt, negativePrompt, seed, guidanceScale}});
+MultiGalleryViewer = [$output]
+$output() =>
+  // Multi-generator gallery viewer plugin. Returns an instance with show()/close();
+  // show() builds the overlay once and reuses it, close() just hides it so state persists.
+  const ROOT_ID = "mgv-root";
+  const STYLE_ID = "mgv-styles";
+  const STORAGE_KEY = "multiGalleryViewerInputs";
+  const TOP100_CACHE_KEY = "multiGalleryTopXImageCache";
+  // Shared theme and .am-slider look, from AMShared
+  const AMS = AMShared();
+  AMS.applyTheme();
+  AMS.ensureWidgetStyles();
+  let root = null;
+  let initialized = false;
+  // Populated once the overlay is built — see wireElements().
+  let els = {};
+  function injectStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+      #${ROOT_ID} {
+        --scheme: dark;
+        color-scheme: var(--scheme);
+        text-align: left;
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        margin: 0;
+        padding: 0 20px 20px;
+        font-family: var(--font-ui);
+        background: var(--bg-body);
+        color: var(--text-main);
+        overflow-y: auto;
+      }
+      #${ROOT_ID} .section {background: var(--bg-surface);border: 1px solid var(--border-color);border-radius: var(--radius-md);padding: 18px;margin-bottom: 18px;}
+      #${ROOT_ID} textarea, #${ROOT_ID} input, #${ROOT_ID} select {border-radius: var(--radius-sm);padding: 8px;background: rgba(255,255,255,0.04);border: 1px solid var(--border-color);color: var(--text-main);font-family: inherit;font-size: 13px;}
+      #${ROOT_ID} textarea {width: 100%;min-height: 60px;resize: vertical;box-sizing: border-box;}
+      #${ROOT_ID} input[type="text"], #${ROOT_ID} input:not([type]) {width: 100%;box-sizing: border-box;}
+      #${ROOT_ID} button {border-radius: var(--radius-sm);padding: 8px 16px;background: rgba(255,255,255,0.04);border: 1px solid var(--border-color);color: var(--text-main);cursor: pointer;font-size: 13px;}
+      #${ROOT_ID} button:hover {border-color: var(--accent-color);background: rgba(139, 92, 246, 0.15);}
+      /* --- Top bar --- */
+      #${ROOT_ID} #mgvTopBar {position: sticky;top: 0;z-index: 2;background: rgba(10, 10, 10, 0.85);backdrop-filter: blur(8px);border-bottom: 1px solid var(--border-color);margin: 0 -20px 18px;padding: 3px 20px;font-size: 6px;}
+      #${ROOT_ID} #mgvTopBar select, #${ROOT_ID} #mgvTopBar > #mgvTopBarRow button, #${ROOT_ID} #mgvTopBar input {font-size: 6px;padding: 2px 4px;}
+      #${ROOT_ID} #mgvTopBarToggleRow {position: relative;display: flex;justify-content: center;align-items: center;gap: 6px;}
+      #${ROOT_ID} #mgvTopBarToggleRow button {background: none;border: none;color: var(--accent-color);font-size: 12px;padding: 2px 8px;cursor: pointer;}
+      #${ROOT_ID} #mgvCloseBtn {position: absolute;right: 0;top: 50%;transform: translateY(-50%);}
+      #${ROOT_ID} #mgvTopBarRow {display: flex;align-items: center;justify-content: space-between;gap: 8px;flex-wrap: nowrap;overflow-x: auto;margin-top: 4px;padding-bottom: 2px;}
+      #${ROOT_ID} #mgvGeneratorTabSelect {min-width: 110px;max-width: 170px;flex-shrink: 0;}
+      #${ROOT_ID} #mgvTopBarFilters {display: flex;gap: 6px;flex-wrap: nowrap;flex-shrink: 0;}
+      #${ROOT_ID} #mgvTopBarFilters select {min-width: 70px;}
+      #${ROOT_ID} #mgvTopBarZoom {display: flex;align-items: center;gap: 4px;flex-shrink: 0;}
+      #${ROOT_ID} #mgvZoomSlider {width: 90px;}
+      #${ROOT_ID} #mgvSettingsPanel {display: flex;flex-direction: column;gap: 8px;padding: 12px 4px 14px;font-size: 13px;}
+      #${ROOT_ID} #mgvSettingsPanel input, #${ROOT_ID} #mgvSettingsPanel textarea, #${ROOT_ID} #mgvSettingsPanel button {font-size: 13px;padding: 7px 9px;}
+      #${ROOT_ID} #mgvSettingsPanel h1 {font-size: 17px;color: var(--accent-color);margin: 0;}
+      #${ROOT_ID} #mgvSettingsPanel .subtitle {color: var(--text-muted);font-size: 12px;margin: 0 0 4px;}
+      #${ROOT_ID} #mgvSettingsPanel label {font-size: 12px;color: var(--text-muted);display: block;margin-bottom: 3px;}
+      #${ROOT_ID} .mgvGalleryWrapper {transform-origin: top left;position: relative;}
+      #${ROOT_ID} .mgvEmptyState {text-align: center;padding: 60px 20px;color: var(--text-dim);font-size: 14px;display: block;}
+      /* --- Back to top button --- */
+      #${ROOT_ID} #mgvBackToTopBtn {position: fixed;right: 24px;bottom: 24px;z-index: 3;width: 44px;height: 44px;border-radius: 50%;display: flex;align-items: center;justify-content: center;font-size: 18px;line-height: 1;padding: 0;background: rgba(10, 10, 10, 0.75);border: 1px solid var(--border-color);color: var(--accent-color);cursor: pointer;opacity: 0;visibility: hidden;transform: translateY(8px);transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;}
+      #${ROOT_ID} #mgvBackToTopBtn.visible {opacity: 1;visibility: visible;transform: translateY(0);}
+      #${ROOT_ID} #mgvBackToTopBtn:hover {border-color: var(--accent-color);background: rgba(139, 92, 246, 0.15);}
+      /* Custom dark dropdowns, since native <select> popups are OS-drawn and ignore page CSS */
+      #${ROOT_ID} .mgvCustomSelectWrap {position: relative;display: inline-flex;}
+      #${ROOT_ID} .mgvCustomSelectBtn {display: flex;align-items: center;justify-content: space-between;gap: 6px;cursor: pointer;user-select: none;white-space: nowrap;overflow: hidden;border-radius: var(--radius-sm);background: rgba(255,255,255,0.04);border: 1px solid var(--border-color);color: var(--text-main);width: 100%;box-sizing: border-box;}
+      #${ROOT_ID} #mgvTopBar .mgvCustomSelectBtn {font-size: 11px !important;padding: 4px 8px !important;}
+      #${ROOT_ID} .mgvCustomSelectBtn:hover, #${ROOT_ID} .mgvCustomSelectBtn.open {border-color: var(--accent-color);background: rgba(139, 92, 246, 0.15);}
+      #${ROOT_ID} .mgvCustomSelectBtn .mgvCustomSelectLabel {overflow: hidden;text-overflow: ellipsis;}
+      #${ROOT_ID} .mgvCustomSelectBtn .mgvCustomSelectArrow {font-size: 9px;opacity: 0.75;flex-shrink: 0;transition: transform 0.15s ease;}
+      #${ROOT_ID} .mgvCustomSelectBtn.open .mgvCustomSelectArrow {transform: rotate(180deg);}
+      /* This list is a fixed-position overlay appended to the root (not the dropdown's own parent) so it isn't clipped by the scrolling top bar. */
+      #${ROOT_ID} .mgvCustomSelectList {display: none;position: fixed;max-height: 240px;overflow-y: auto;background: var(--bg-elevated);border: 1px solid var(--border-color);border-radius: var(--radius-sm);z-index: 3000;box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);}
+      #${ROOT_ID} .mgvCustomSelectList.open {display: block;}
+      #${ROOT_ID} .mgvCustomSelectOption {padding: 6px 9px;font-size: 11px;color: var(--text-main);cursor: pointer;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
+      #${ROOT_ID} .mgvCustomSelectOption:hover {background: rgba(139, 92, 246, 0.15);color: var(--text-main);}
+      #${ROOT_ID} .mgvCustomSelectOption.highlighted {background: rgba(139, 92, 246, 0.2);color: var(--text-main);}
+      #${ROOT_ID} .mgvCustomSelectOption.selected {background: rgba(139, 92, 246, 0.25);color: var(--accent-color);}
+      #${ROOT_ID} #mgvGeneratorTabSelectCustomWrap {min-width: 110px;max-width: 170px;flex-shrink: 0;}
+      #${ROOT_ID} #mgvTopBarFilters .mgvCustomSelectWrap {min-width: 70px;flex-shrink: 0;}
+      #${ROOT_ID} .mgvCustomSelectList.mgv-searchable {overflow: visible;max-height: none;padding: 0;display: none;}
+      #${ROOT_ID} .mgvCustomSelectList.mgv-searchable.open {display: block;}
+      #${ROOT_ID} .mgvCustomSelectSearchInput {display: block;width: 100%;box-sizing: border-box;border: none;border-bottom: 1px solid var(--border-color);background: var(--bg-body);color: var(--text-main);padding: 7px 9px;font-size: 11px;outline: none;position: sticky;top: 0;border-radius: var(--radius-sm) var(--radius-sm) 0 0;}
+      #${ROOT_ID} .mgvCustomSelectSearchInput:focus {border-bottom-color: var(--accent-color);}
+      #${ROOT_ID} .mgvCustomSelectOptionsCtn {max-height: 220px;overflow-y: auto;}
+      /* --- Combined Feed mode --- */
+      #${ROOT_ID} #mgvCombinedModeBtn {flex-shrink: 0;}
+      #${ROOT_ID} #mgvTopBarToggleRow button.active {border: 1px solid var(--accent-color) !important;border-radius: 6px;background: rgba(139, 92, 246, 0.25) !important;color: var(--accent-color) !important;}
+      #${ROOT_ID} #mgvGeneratorTabSelectCustomWrap.mgv-disabled {opacity: 0.35;pointer-events: none;}
+      #${ROOT_ID} #mgvCombinedStatus {text-align: center;color: var(--text-muted);font-size: 12px;margin: 0 0 10px;min-height: 1.2em;}
+      #${ROOT_ID} .mgvMasonry {display: flex; align-items: flex-start; gap: 0px;}
+      #${ROOT_ID} .mgvMasonryCol {display: flex; flex-direction: column; gap: 0px; flex: 1 1 0; min-width: 0;}
+      #${ROOT_ID} .mgvMasonryItem {break-inside: avoid;margin-bottom: 0px;position: relative;border-radius: 8px;overflow: hidden;border: 1px solid var(--border-color);background: rgba(255,255,255,0.03);cursor: pointer;}
+      #${ROOT_ID} .mgvMasonryItem img {width: 100%;display: block;}
+      #${ROOT_ID} .mgvMasonryItem .mgvOverlay {position: absolute;bottom: 0;left: 0;right: 0;background: linear-gradient(transparent, rgba(0,0,0,0.88));padding: 26px 8px 8px;opacity: 0;transition: opacity 0.2s;}
+      #${ROOT_ID} .mgvMasonryItem:hover .mgvOverlay {opacity: 1;}
+      #${ROOT_ID} .mgvMasonryItem .mgvPromptText {font-size: 11px;color: var(--text-main);line-height: 1.3;display: -webkit-box;-webkit-line-clamp: 3;-webkit-box-orient: vertical;overflow: hidden;}
+      #${ROOT_ID} .mgvMasonryItem .mgvCardBtns {display: flex;gap: 6px;margin-top: 5px;justify-content: center;}
+      #${ROOT_ID} .mgvBlockCornerBtn {position: absolute;bottom: 6px;right: 6px;background: rgba(0,0,0,0.7);color: #ffaa44;border: none;border-radius: 4px;width: 30px;height: 30px;font-size: 14px;cursor: pointer;opacity: 0;transition: opacity 0.2s;display: flex;align-items: center;justify-content: center;z-index: 2;}
+      #${ROOT_ID} .mgvMasonryItem:hover .mgvBlockCornerBtn {opacity: 1;}
+      #${ROOT_ID} .mgvBlockCornerBtn:hover {background: rgba(255,170,68,0.85);color: var(--text-main);}
+      #${ROOT_ID} .mgvSaveCornerBtn {position: absolute;bottom: 6px;left: 6px;background: rgba(0,0,0,0.7);color: #7fe0c4;border: none;border-radius: 4px;width: 30px;height: 30px;font-size: 14px;cursor: pointer;opacity: 0;transition: opacity 0.2s;display: flex;align-items: center;justify-content: center;z-index: 2;}
+      #${ROOT_ID} .mgvMasonryItem:hover .mgvSaveCornerBtn {opacity: 1;}
+      #${ROOT_ID} .mgvSaveCornerBtn:hover {background: rgba(127,224,196,0.85);color: #0a0a0f;}
+      #${ROOT_ID} .mgvInfoModal {position: fixed;inset: 0;background: rgba(0,0,0,0.75);z-index: 10050;display: flex;align-items: center;justify-content: center;padding: 20px;}
+      #${ROOT_ID} .mgvInfoModal[hidden] {display: none;}
+      #${ROOT_ID} .mgvInfoModalInner {background: var(--bg-surface);border: 1px solid var(--border-color);border-radius: var(--radius-md);max-width: 520px;width: 100%;max-height: 85vh;overflow-y: auto;padding: 18px;position: relative;}
+      #${ROOT_ID} .mgvInfoModalClose {position: absolute;top: 10px;right: 10px;background: none;border: none;color: var(--text-main);font-size: 18px;cursor: pointer;line-height: 1;}
+      #${ROOT_ID} #mgvInfoModalImg {width: 100%;border-radius: 8px;margin-bottom: 14px;display: block;}
+      #${ROOT_ID} .mgvInfoRow {margin-bottom: 10px;}
+      #${ROOT_ID} .mgvInfoLabel {font-size: 11px;text-transform: uppercase;letter-spacing: 0.05em;color: var(--accent-color);margin-bottom: 3px;}
+      #${ROOT_ID} .mgvInfoValue {font-size: 13px;color: var(--text-main);white-space: pre-wrap;word-break: break-word;}
+      #${ROOT_ID} .mgvInfoMissing {color: var(--text-dim);font-style: italic;}
+      #${ROOT_ID} .mgvMasonryItem .mgvCardBtn {background: rgba(0,0,0,0.6);border: 1px solid var(--border-color);color: var(--text-main);border-radius: 4px;width: 30px;height: 30px;display: flex;align-items: center;justify-content: center;font-size: 14px;cursor: pointer;}
+      #${ROOT_ID} .mgvMasonryItem .mgvCardBtn:hover {border-color: var(--accent-color);background: rgba(139, 92, 246, 0.2);}
+      #${ROOT_ID} .mgvMasonryItem .mgvGenBadge {position: absolute;top: 6px;left: 6px;background: rgba(139, 92, 246, 0.85);color: #0a0a0f;font-size: 10px;font-weight: 600;padding: 2px 6px;border-radius: 4px;opacity: 0;transition: opacity 0.2s;max-width: 70%;overflow: hidden;text-overflow: ellipsis;white-space: nowrap;}
+      #${ROOT_ID} .mgvMasonryItem:hover .mgvGenBadge {opacity: 1;}
+      #${ROOT_ID} .mgvSentinel {height: 1px;}
+      #${ROOT_ID} .mgvFeedEnd {text-align: center;color: var(--text-dim);font-size: 12px;padding: 18px 0;}
+    `;
+    document.head.appendChild(style);
+    // Belt-and-suspenders fix for the gallery plugin's inspect/lightbox popup, which renders outside our root
+    if (!document.getElementById("mgv-re-info-fix")) {
+      const s2 = document.createElement("style");
+      s2.id = "mgv-re-info-fix";
+      s2.textContent = `.re-info-wrapper {z-index: 10000 !important;}`;
+      document.head.appendChild(s2);
+    }
+  }
+
+  // Watches for popups the gallery plugin appends directly to <body> and forces them above our z-index
+  let bodyObserver = null;
+  function watchForEscapedPopups() {
+    if (bodyObserver) return;
+    bodyObserver = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        m.addedNodes.forEach(node => {
+          if (node.nodeType !== 1 || node === root) return;
+          const current = parseInt(getComputedStyle(node).zIndex, 10) || 0;
+          if (current < 10000) node.style.setProperty('z-index', '10000', 'important');
+        });
+      }
+    });
+    bodyObserver.observe(document.body, { childList: true });
+  }
+  function buildMarkup() {
+    const div = document.createElement("div");
+    div.id = ROOT_ID;
+    div.innerHTML = `
+      <div id="mgvTopBar">
+        <div id="mgvTopBarToggleRow">
+          <button id="mgvPrivateGalleryBtn" title="My Private Gallery">💾</button>
+          <button id="mgvCombinedModeBtn" title="Merge every generator in your list into one giant scrollable feed">🧺</button>
+          <button id="mgvSettingsToggleBtn">⚙️</button>
+          <button id="mgvTopBarToggleBtn" title="Show/hide sort &amp; filter bar">⇅</button>
+          <button id="mgvCloseBtn" title="Close">✕</button>
+        </div>
+        <div id="mgvSettingsPanel" hidden>
+          <h1>Multi-Generator Gallery Viewer</h1>
+          <p class="subtitle">Browse real public galleries from multiple Perchance text-to-image generators.</p>
+          <div id="mgvGeneratorListLabelRow" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <label for="mgvGeneratorListInput" style="margin-bottom:0;">Generator names (comma or newline separated)</label>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button id="mgvLoadTopNBtn" title="Add the top N most popular image generators to your list (adds to, doesn't replace)" style="padding:4px 8px;font-size:11px;">➕ Add Top</button>
+              <button id="mgvRemoveEmptyBtn" title="Check every generator currently in the list and remove any with an empty gallery" style="padding:4px 8px;font-size:11px;">🧹 Remove Empty Galleries</button>
+              <button id="mgvResetGeneratorListBtn" style="padding:4px 8px;font-size:11px;">Reset</button>
+            </div>
+          </div>
+          <textarea id="mgvGeneratorListInput">${DEFAULT_GENERATOR_LIST}</textarea>
+          <label for="mgvSearchTagInput">Search words (comma separated — image must contain ALL of them)</label>
+          <input id="mgvSearchTagInput" type="text" placeholder="Leave blank to show everything">
+          <label for="mgvBannedWordsInput">Banned words (comma separated — excluded if present)</label>
+          <input id="mgvBannedWordsInput" type="text" placeholder="Leave blank for none">
+        </div>
+        <div id="mgvTopBarRow">
+          <select id="mgvGeneratorTabSelect">
+            <option>No galleries loaded</option>
+          </select>
+          <div id="mgvTopBarFilters">
+            <select id="mgvSortSelect">
+              <option value="recent" selected>Recent</option>
+              <option value="top">Top</option>
+              <option value="trending">Trending</option>
+            </select>
+            <select id="mgvBucketSortMethod" title="How 🧺 combined-feed results are interleaved">
+              <option value="shuffle" selected>Shuffle</option>
+              <option value="roundRobin">Round Robin</option>
+              <option value="proportional">Proportional</option>
+            </select>
+            <select id="mgvTimeRangeSelect">
+              <option value="all-time" selected>All Time</option>
+              <option value="day">Past Day</option>
+              <option value="week">Past Week</option>
+              <option value="month">Past Month</option>
+              <option value="year">Past Year</option>
+            </select>
+            <select id="mgvContentFilterSelect">
+              <option value="none">None</option>
+              <option value="g">G</option>
+              <option value="pg13" selected>PG-13</option>
+            </select>
+          </div>
+          <div id="mgvTopBarZoom">
+            <button id="mgvZoomMinusBtn">−</button>
+            <input id="mgvZoomSlider" class="am-slider" type="range" min="30" max="180" value="100" step="10">
+            <button id="mgvZoomPlusBtn">+</button>
+            <button id="mgvZoomResetBtn">Reset</button>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <span id="mgvEmptyStateMsg" class="mgvEmptyState" hidden>Loading...</span>
+        <p id="mgvCombinedStatus" hidden></p>
+        <button id="mgvBlockedResetBtn" hidden title="Unblock all blocked authors" style="display:block;margin:0 auto 10px;font-size:11px;padding:4px 10px;">🚫 Blocked (0)</button>
+        <div id="mgvGalleryWrapper" class="mgvGalleryWrapper">
+          <div id="mgvImageGalleryCtn"></div>
+        </div>
+      </div>
+      <button id="mgvBackToTopBtn" title="Back to top">↑</button>
+      <div id="mgvInfoModal" class="mgvInfoModal" hidden>
+        <div class="mgvInfoModalInner">
+          <button id="mgvInfoModalCloseBtn" class="mgvInfoModalClose" title="Close">✕</button>
+          <img id="mgvInfoModalImg" src="">
+          <div id="mgvInfoModalBody"></div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(div);
+    return div;
+  }
+  // Grabs every element we need out of the freshly-built root, once
+  function wireElements(root) {
+    els = {
+      topBar: root.querySelector("#mgvTopBar"),
+      topBarToggleRow: root.querySelector("#mgvTopBarToggleRow"),
+      privateGalleryBtn: root.querySelector("#mgvPrivateGalleryBtn"),
+      settingsToggleBtn: root.querySelector("#mgvSettingsToggleBtn"),
+      topBarToggleBtn: root.querySelector("#mgvTopBarToggleBtn"),
+      closeBtn: root.querySelector("#mgvCloseBtn"),
+      settingsPanel: root.querySelector("#mgvSettingsPanel"),
+      generatorListInput: root.querySelector("#mgvGeneratorListInput"),
+      loadTopNBtn: root.querySelector("#mgvLoadTopNBtn"),
+      removeEmptyBtn: root.querySelector("#mgvRemoveEmptyBtn"),
+      resetGeneratorListBtn: root.querySelector("#mgvResetGeneratorListBtn"),
+      searchTagInput: root.querySelector("#mgvSearchTagInput"),
+      bannedWordsInput: root.querySelector("#mgvBannedWordsInput"),
+      bucketSortMethodSelect: root.querySelector("#mgvBucketSortMethod"),
+      topBarRow: root.querySelector("#mgvTopBarRow"),
+      generatorTabSelect: root.querySelector("#mgvGeneratorTabSelect"),
+      combinedModeBtn: root.querySelector("#mgvCombinedModeBtn"),
+      combinedStatus: root.querySelector("#mgvCombinedStatus"),
+      blockedResetBtn: root.querySelector("#mgvBlockedResetBtn"),
+      sortSelect: root.querySelector("#mgvSortSelect"),
+      timeRangeSelect: root.querySelector("#mgvTimeRangeSelect"),
+      contentFilterSelect: root.querySelector("#mgvContentFilterSelect"),
+      zoomSlider: root.querySelector("#mgvZoomSlider"),
+      zoomMinusBtn: root.querySelector("#mgvZoomMinusBtn"),
+      zoomPlusBtn: root.querySelector("#mgvZoomPlusBtn"),
+      zoomResetBtn: root.querySelector("#mgvZoomResetBtn"),
+      emptyStateMsg: root.querySelector("#mgvEmptyStateMsg"),
+      galleryWrapper: root.querySelector("#mgvGalleryWrapper"),
+      imageGalleryCtn: root.querySelector("#mgvImageGalleryCtn"),
+      backToTopBtn: root.querySelector("#mgvBackToTopBtn"),
+      infoModal: root.querySelector("#mgvInfoModal"),
+      infoModalImg: root.querySelector("#mgvInfoModalImg"),
+      infoModalBody: root.querySelector("#mgvInfoModalBody"),
+      infoModalCloseBtn: root.querySelector("#mgvInfoModalCloseBtn"),
+    };
+  }
+  // Multi-gallery state
+  let generatorNames = [];
+  const DEFAULT_GENERATOR_LIST = "antimatter-ai-image-generator, ai-anime-generator, ai-artgen, ai-cartoon-generator, ai-character-generator, ai-generated-realistic-portraits, ai-human-generator, ai-illustration-generator, ai-painting-generator, ai-photo-generator, ai-pokemon-generator, ai-text-to-image-generator, ai-waifu-generator, aistudio, binarycats-generator, d99oupja4w, first-french-generator, image-generator-professional, kaw-ai, loop-ai-generator, mack-mcgenerator, mega-lens-ai, penumbra-ai, power-image-generator, pretty-ai, simple-ai-art-generator, text-to-image-gallery-moderation-example, unsafeimagesgenerator, ym3s7c43wf";
+  function resetGeneratorList() {
+    if (!confirm("Reset the generator list back to the default list?")) return;
+    els.generatorListInput.value = DEFAULT_GENERATOR_LIST;
+    saveInputsToStorage();
+    refreshGallery();
+  }
+  // --- Top image generators (live, fetched from Perchance) — "Add Top N" merges into the existing list ---
+  const IMAGE_GENERATOR_KEYWORDS = /\b(image|photo|picture|art|draw|paint|visual|avatar|anime|waifu|character|portrait|pokemon|cartoon|illustration|render|artwork)\b/i;
+  const TOP_GEN_CACHE_TTL = 12 * 60 * 60 * 1000; // 12 hours — avoids hitting the API on every visit
+  const TOP_GEN_CACHE_SIZE = 200; // fetch/cache a generous pool so most "Add Top N" requests are served from cache
+  const DEFAULT_INITIAL_TOP_N = 100; // used only to seed the list the very first time it's empty
+  async function fetchTopImageGeneratorNames(limit) {
+    let res = await fetch(`/api/getGeneratorList?max=10000`);
+    if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+    let data = await res.json();
+    let gens = Array.isArray(data.generators) ? data.generators : [];
+    let imageGens = gens.filter(g => {
+      if (!g || !g.name) return false;
+      let meta = g.metaData || {};
+      let text = `${g.name} ${meta.title || ''} ${meta.description || ''}`;
+      return IMAGE_GENERATOR_KEYWORDS.test(text);
+    });
+    imageGens.sort((a, b) => (b.views || 0) - (a.views || 0));
+    return imageGens.slice(0, limit).map(g => g.name);
+  }
+  function getCachedTopNames() {
+    try {
+      let raw = localStorage.getItem(TOP_GEN_CACHE_KEY);
+      if (!raw) return null;
+      let cache = JSON.parse(raw);
+      if (!Array.isArray(cache.names) || !cache.names.length || !cache.timestamp) return null;
+      if (Date.now() - cache.timestamp > TOP_GEN_CACHE_TTL) return null;
+      return cache.names;
+    } catch (e) {
+      return null;
+    }
+  }
+  function setCachedTopNames(names) {
+    try {
+      localStorage.setItem(TOP_GEN_CACHE_KEY, JSON.stringify({ names, timestamp: Date.now() }));
+    } catch (e) {
+      console.warn("Could not cache top generators list", e);
+    }
+  }
+  // Ensures we have at least `n` cached top-generator names, fetching fresh ones only if the cache is missing, stale, or too short
+  async function ensureTopNames(n, forceRefresh) {
+    let names = forceRefresh ? null : getCachedTopNames();
+    if (!names || names.length < n) {
+      let fetchCount = Math.max(n, TOP_GEN_CACHE_SIZE);
+      names = await fetchTopImageGeneratorNames(fetchCount);
+      if (!names.length) throw new Error("No image generators returned");
+      setCachedTopNames(names);
+    }
+    return names;
+  }
+  // Parses the generator list textarea into a clean array of names (comma or newline separated)
+  function getCurrentGeneratorNames() {
+    return els.generatorListInput.value
+      .split(/[,\n]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+  // Adds the top N most popular image generators to the existing list — does NOT replace it,
+  // and skips any name that's already present (case-insensitive match). Returns # actually added, or -1 on failure.
+  async function addTopNImageGenerators(n) {
+    let btn = els.loadTopNBtn;
+    let originalLabel = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
+    try {
+      let topNames = (await ensureTopNames(n, false)).slice(0, n);
+      let existing = getCurrentGeneratorNames();
+      let existingLower = new Set(existing.map(x => x.toLowerCase()));
+      let added = 0;
+      for (let name of topNames) {
+        if (!existingLower.has(name.toLowerCase())) {
+          existing.push(name);
+          existingLower.add(name.toLowerCase());
+          added++;
+        }
+      }
+      els.generatorListInput.value = existing.join(', ');
+      saveInputsToStorage();
+      return added;
+    } catch (e) {
+      console.error("Could not load top image generators", e);
+      return -1;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = originalLabel || '➕ Add Top'; }
+    }
+  }
+  async function addTopNBtnClick() {
+    let input = prompt("How many of the current most popular image generators would you like to add to your list?", "50");
+    if (input === null) return; // cancelled
+    let n = parseInt(input, 10);
+    if (!Number.isFinite(n) || n < 1) {
+      alert("Please enter a whole number greater than 0.");
+      return;
+    }
+    n = Math.min(n, 5000); // sanity cap
+    let added = await addTopNImageGenerators(n);
+    if (added === -1) {
+      alert("Could not fetch the top image generators right now — the Perchance list API may not be reachable from this page. Your current list was left unchanged.");
+      return;
+    }
+    refreshGallery();
+    let skipped = n - added;
+    alert(`Added ${added} new generator${added === 1 ? '' : 's'} to your list.` + (skipped > 0 ? ` (${skipped} of the top ${n} were already in your list.)` : ''));
+  }
+  // Used once, on first-ever load, to seed an empty list — separate from the "Add Top N" button logic above
+  async function populateInitialTopGenerators() {
+    try {
+      let names = await ensureTopNames(DEFAULT_INITIAL_TOP_N, false);
+      els.generatorListInput.value = names.slice(0, DEFAULT_INITIAL_TOP_N).join(', ');
+      saveInputsToStorage();
+      return true;
+    } catch (e) {
+      console.error("Could not load initial top image generators", e);
+      return false;
+    }
+  }
+  // --- Remove Empty Galleries ---
+  const EMPTY_GALLERY_HEIGHT_PX = 200;
+  const GALLERY_CHECK_TIMEOUT_MS = 3500;
+  const GALLERY_POLL_INTERVAL_MS = 200;
+  const GALLERY_CONFIRM_DELAY_MS = 400;
+  function buildChannelCheckUrl(baseSrc, generatorName) {
+    let formatGenName = generatorName.trim().toLowerCase().replace(/\s+/g, '-');
+    let url = new URL(baseSrc);
+    url.searchParams.set('channel', formatGenName);
+    url.searchParams.set('subChannel', 'public');
+    url.searchParams.set('sort', 'top');
+    url.searchParams.set('timeRange', 'allTime');
+    url.searchParams.set('contentFilter', els.contentFilterSelect.value || 'pg13');
+    return url;
+  }
+  // Polls the gallery container's height until content loads or the timeout is hit
+  function waitForGalleryContent(container, timeoutMs) {
+    return new Promise(resolve => {
+      let start = Date.now();
+      let poll = () => {
+        let h = container.getBoundingClientRect().height;
+        if (h >= EMPTY_GALLERY_HEIGHT_PX) {
+          setTimeout(() => {
+            resolve(container.getBoundingClientRect().height >= EMPTY_GALLERY_HEIGHT_PX);
+          }, GALLERY_CONFIRM_DELAY_MS);
+          return;
+        }
+        if (Date.now() - start > timeoutMs) { resolve(false); return; }
+        setTimeout(poll, GALLERY_POLL_INTERVAL_MS);
+      };
+      setTimeout(poll, 250);
+    });
+  }
+  // Loads a generator's channel into the current iframe and checks whether it has any images
+  async function candidateHasImages(name) {
+    let iframe = getCurrentIframe();
+    if (!iframe) return true;
+    let url = buildChannelCheckUrl(iframe.src, name);
+    updateGalleryIframe(iframe, url);
+    return await waitForGalleryContent(els.imageGalleryCtn, GALLERY_CHECK_TIMEOUT_MS);
+  }
+  // Checks every generator in the list and removes ones with no images
+  async function removeEmptyGalleries() {
+    let btn = els.removeEmptyBtn;
+    let originalLabel = btn ? btn.textContent : '';
+    let names = els.generatorListInput.value
+      .split(/[,\n]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (!names.length) {
+      alert("The generator list is empty — nothing to check.");
+      return;
+    }
+    if (!getCurrentIframe()) {
+      if (!renderRealGallery()) { alert("Gallery isn't available to check generators with."); return; }
+      await new Promise(r => setTimeout(r, 400));
+    }
+    if (btn) { btn.disabled = true; }
+    let kept = [];
+    try {
+      for (let i = 0; i < names.length; i++) {
+        if (btn) btn.textContent = `Checking ${i + 1}/${names.length} (${i - kept.length} removed so far)`;
+        try {
+          if (await candidateHasImages(names[i])) kept.push(names[i]);
+        } catch (e) {
+          console.warn(`Could not verify "${names[i]}", keeping it by default`, e);
+          kept.push(names[i]);
+        }
+      }
+      let removedCount = names.length - kept.length;
+      els.generatorListInput.value = kept.join(', ');
+      saveInputsToStorage();
+      refreshGallery();
+      alert(removedCount ? `Removed ${removedCount} empty generator(s). ${kept.length} remain.` : "No empty generators found — list unchanged.");
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = originalLabel || '🧹 Remove Empty Galleries'; }
+    }
+  }
+  // Replaces a <select> with a custom dropdown; searchable adds a filter input for long lists
+  function enhanceSelect(select, searchable) {
+    if (!select || select.dataset.customEnhanced) return;
+    select.dataset.customEnhanced = "true";
+    let wrap = document.createElement('div');
+    wrap.className = 'mgvCustomSelectWrap';
+    wrap.id = select.id + 'CustomWrap';
+    select.parentNode.insertBefore(wrap, select);
+    wrap.appendChild(select);
+    select.style.display = 'none';
+    let btn = document.createElement('div');
+    btn.className = 'mgvCustomSelectBtn';
+    btn.tabIndex = 0;
+    btn.innerHTML = '<span class="mgvCustomSelectLabel"></span><span class="mgvCustomSelectArrow">▾</span>';
+    wrap.appendChild(btn);
+    let list = document.createElement('div');
+    list.className = 'mgvCustomSelectList';
+    root.appendChild(list);
+    select._customBtn = btn;
+    select._customList = list;
+    let searchInput = null;
+    let optsCtn = list;
+    if (searchable) {
+      list.classList.add('mgv-searchable');
+      searchInput = document.createElement('input');
+      searchInput.type = 'text';
+      searchInput.className = 'mgvCustomSelectSearchInput';
+      searchInput.placeholder = '🔍 Search...';
+      list.appendChild(searchInput);
+      optsCtn = document.createElement('div');
+      optsCtn.className = 'mgvCustomSelectOptionsCtn';
+      list.appendChild(optsCtn);
+      select._searchInput = searchInput;
+    }
+    select._optsCtn = optsCtn;
+    let closeList = () => { list.classList.remove('open'); btn.classList.remove('open'); };
+    let openList = () => {
+      closeAllCustomDropdowns();
+      let rect = btn.getBoundingClientRect();
+      list.style.left = rect.left + 'px';
+      list.style.top = (rect.bottom + 4) + 'px';
+      list.style.width = rect.width + 'px';
+      list.classList.add('open');
+      btn.classList.add('open');
+      if (searchInput) {
+        searchInput.value = '';
+        filterCustomOptions(select, '');
+        setTimeout(() => searchInput.focus(), 0);
+      }
+      highlightSelectedOrFirst(select);
+    };
+    let confirmHighlighted = () => {
+      let item = list._highlightEl;
+      if (item && item.style.display !== 'none') {
+        select.value = item._optValue;
+        select.dispatchEvent(new Event('change'));
+        syncCustomSelectUI(select);
+      }
+      closeList();
+    };
+    let handleNavKey = (e) => {
+      let isOpen = list.classList.contains('open');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (!isOpen) openList(); else moveHighlight(select, 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!isOpen) openList(); else moveHighlight(select, -1);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (isOpen) confirmHighlighted(); else openList();
+      } else if (e.key === 'Escape') {
+        closeList();
+        btn.focus();
+      }
+    };
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (list.classList.contains('open')) closeList(); else openList();
+    });
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === ' ' && !list.classList.contains('open')) { e.preventDefault(); openList(); return; }
+      handleNavKey(e);
+    });
+    if (searchInput) {
+      searchInput.addEventListener('click', (e) => e.stopPropagation());
+      searchInput.addEventListener('input', () => filterCustomOptions(select, searchInput.value));
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') e.preventDefault();
+        handleNavKey(e);
+      });
+    }
+    rebuildCustomOptions(select);
+  }
+  function highlightItem(select, item) {
+    let list = select._customList;
+    Array.from(select._optsCtn.children).forEach(el => el.classList.toggle('highlighted', el === item));
+    list._highlightEl = item;
+    if (item) item.scrollIntoView({ block: 'nearest' });
+  }
+  function visibleOptionItems(select) {
+    return Array.from(select._optsCtn.children).filter(el => el.style.display !== 'none');
+  }
+  function highlightSelectedOrFirst(select) {
+    let visible = visibleOptionItems(select);
+    if (!visible.length) { select._customList._highlightEl = null; return; }
+    let match = visible.find(el => el._optValue === select.value);
+    highlightItem(select, match || visible[0]);
+  }
+  function moveHighlight(select, delta) {
+    let visible = visibleOptionItems(select);
+    if (!visible.length) return;
+    let current = select._customList._highlightEl;
+    let idx = current ? visible.indexOf(current) : -1;
+    idx = Math.max(0, Math.min(visible.length - 1, idx + delta));
+    highlightItem(select, visible[idx]);
+  }
+  function filterCustomOptions(select, query) {
+    query = (query || '').trim().toLowerCase();
+    Array.from(select._optsCtn.children).forEach(item => {
+      item.style.display = (!query || item.textContent.toLowerCase().includes(query)) ? '' : 'none';
+    });
+    highlightSelectedOrFirst(select);
+  }
+  function closeAllCustomDropdowns() {
+    if (!root) return;
+    root.querySelectorAll('.mgvCustomSelectList.open').forEach(l => l.classList.remove('open'));
+    root.querySelectorAll('.mgvCustomSelectBtn.open').forEach(b => b.classList.remove('open'));
+  }
+  function rebuildCustomOptions(select) {
+    if (!select || !select.dataset.customEnhanced) return;
+    let btn = select._customBtn;
+    let optsCtn = select._optsCtn;
+    if (!btn || !optsCtn) return;
+    optsCtn.innerHTML = '';
+    Array.from(select.options).forEach((opt) => {
+      let item = document.createElement('div');
+      item.className = 'mgvCustomSelectOption';
+      item.textContent = opt.textContent;
+      item.title = opt.textContent;
+      item._optValue = opt.value;
+      item.addEventListener('mouseenter', () => highlightItem(select, item));
+      item.addEventListener('click', () => {
+        select.value = opt.value;
+        select.dispatchEvent(new Event('change'));
+        syncCustomSelectUI(select);
+        closeAllCustomDropdowns();
+      });
+      optsCtn.appendChild(item);
+    });
+    syncCustomSelectUI(select);
+  }
+  function syncCustomSelectUI(select) {
+    if (!select || !select.dataset.customEnhanced) return;
+    let btn = select._customBtn;
+    let optsCtn = select._optsCtn;
+    if (!btn) return;
+    let label = btn.querySelector('.mgvCustomSelectLabel');
+    let selectedOption = select.options[select.selectedIndex];
+    label.textContent = selectedOption ? selectedOption.textContent : '';
+    label.title = selectedOption ? selectedOption.textContent : '';
+    if (optsCtn) {
+      Array.from(optsCtn.children).forEach((item) => item.classList.toggle('selected', item._optValue === select.value));
+    }
+  }
+  function debounce(fn, delay) {
+    let timer;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), delay);
+    };
+  }
+  // --- Real gallery rendering (single instance, prompt-hunter style) ---
+  function renderRealGallery() {
+    if (typeof ia !== "function" || typeof galleryOptions === "undefined") {
+      els.emptyStateMsg.textContent = "ia/galleryOptions not available — this page needs to be running on Perchance with those imports set up.";
+      els.emptyStateMsg.hidden = false;
+      return false;
+    }
+    // Sets the gallery HTML directly, handling either a plain string or a plugin result object
+    const result = ia(galleryOptions);
+    els.imageGalleryCtn.innerHTML = (result && result.evaluateItem !== undefined) ? String(result.evaluateItem) : String(result);
+    els.emptyStateMsg.hidden = true;
+    return true;
+  }
+  function getCurrentIframe() {
+    return els.imageGalleryCtn.querySelector('iframe.text-to-image-plugin-gallery');
+  }
+  function updateGalleryIframe(iframe, url) {
+    iframe.src = 'about:blank';
+    setTimeout(() => {
+      iframe.src = url.toString();
+    }, 300);
+  }
+  // Combined Feed mode: merges every generator into one scraped, infinitely-scrolling masonry grid
+  let combinedModeOn = false;
+  let combinedBaseUrlTemplate = null; // origin+path borrowed from the real gallery iframe, reused per-channel
+  let combinedRawData = [];   // everything fetched, unfiltered
+  let combinedData = [];      // combinedRawData after search/banned-word filters
+  let combinedDisplayed = 0;
+  const COMBINED_PAGE_SIZE = 40;
+  const COMBINED_FETCH_CONCURRENCY = 5;
+  let combinedObserver = null;
+  let combinedColumns = []; // the actual column <div>s currently in the masonry grid — new cards always
+                             // go into whichever column is shortest right now, and existing cards are never
+                             // touched again, so scrolling never reshuffles already-placed images.
+  let combinedFetchToken = 0; // guards against a stale fetch finishing after mode was toggled off/refreshed again
+  const BLOCKED_USERS_KEY = "multiGalleryBlockedUserIds";
+  let blockedUserIds = loadBlockedUserIds();
+  function loadBlockedUserIds() {
+    try { return new Set(JSON.parse(localStorage.getItem(BLOCKED_USERS_KEY) || "[]")); }
+    catch (e) { return new Set(); }
+  }
+  function saveBlockedUserIds() {
+    try { localStorage.setItem(BLOCKED_USERS_KEY, JSON.stringify([...blockedUserIds])); } catch (e) {}
+  }
+  function updateBlockedResetBtn() {
+    if (!els.blockedResetBtn) return;
+    els.blockedResetBtn.hidden = !combinedModeOn;
+    els.blockedResetBtn.textContent = `🚫 Blocked (${blockedUserIds.size})`;
+  }
+  function blockAuthor(userId) {
+    if (!userId) return;
+    blockedUserIds.add(userId);
+    saveBlockedUserIds();
+    updateBlockedResetBtn();
+    applyCombinedFilters();
+  }
+  function resetBlockedAuthors() {
+    if (!blockedUserIds.size) { alert("No blocked authors yet."); return; }
+    if (!confirm(`Unblock all ${blockedUserIds.size} author(s)?`)) return;
+    blockedUserIds.clear();
+    saveBlockedUserIds();
+    updateBlockedResetBtn();
+    applyCombinedFilters();
+  }
+  function setCombinedModeUI(on) {
+    els.combinedModeBtn.classList.toggle('active', on);
+    let wrap = root.querySelector('#mgvGeneratorTabSelectCustomWrap');
+    if (wrap) wrap.classList.toggle('mgv-disabled', on);
+    let bucketSortWrap = root.querySelector('#mgvBucketSortMethodCustomWrap');
+    if (bucketSortWrap) bucketSortWrap.style.display = on ? '' : 'none';
+    updateBlockedResetBtn();
+  }
+  async function toggleCombinedMode() {
+    combinedModeOn = !combinedModeOn;
+    setCombinedModeUI(combinedModeOn);
+    saveInputsToStorage();
+    if (combinedModeOn) {
+      els.galleryWrapper.style.width = '';
+      els.galleryWrapper.style.transform = '';
+      els.galleryWrapper.style.marginBottom = '0px';
+      await renderCombinedGallery();
+    } else {
+      combinedFetchToken++; // invalidate any in-flight renderCombinedGallery() so it can't finish later and re-show the feed
+      if (combinedObserver) { combinedObserver.disconnect(); combinedObserver = null; }
+      els.combinedStatus.hidden = true;
+      if (!getCurrentIframe()) { if (!renderRealGallery()) return; }
+      setTimeout(() => { applyGallerySettings(); applyZoom(); }, 250);
+    }
+  }
+  // Grabs the real gallery iframe's src once, to reuse its origin/path/params shape for scraping
+  async function ensureCombinedBaseUrl() {
+    if (combinedBaseUrlTemplate) return combinedBaseUrlTemplate;
+    if (!renderRealGallery()) return null;
+    await new Promise(r => setTimeout(r, 350));
+    let iframe = getCurrentIframe();
+    if (!iframe) return null;
+    combinedBaseUrlTemplate = iframe.src;
+    return combinedBaseUrlTemplate;
+  }
+  // Parses scraped gallery HTML into an array of image item objects
+  function parseCombinedGalleryHtml(html, genLabel, genFormatted) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const items = [];
+    doc.querySelectorAll(".imageCtn").forEach(ctn => {
+      const imgId = ctn.dataset.imageId;
+      if (!imgId) return;
+      const styleAttr = ctn.getAttribute("style") || "";
+      const arMatch = styleAttr.match(/aspect-ratio:\s*([\d.]+)\/([\d.]+)/);
+      const ar = arMatch ? parseFloat(arMatch[1]) / parseFloat(arMatch[2]) : 1;
+      items.push({
+        imageId: imgId,
+        imageUrl: `https://aigc.uploads.dev/image/${imgId}.jpeg`,
+        prompt: ctn.dataset.prompt || ctn.dataset.title || "",
+        // Lowercase fallbacks in case scraped data-* attributes aren't camelCased
+        negativePrompt: ctn.dataset.negativePrompt || ctn.dataset.negativeprompt || "",
+        seed: ctn.dataset.seed || undefined,
+        guidanceScale: ctn.dataset.guidanceScale || ctn.dataset.guidancescale || undefined,
+        title: ctn.dataset.title || "",
+        genLabel,
+        genFormatted,
+        aspectRatio: ar || 1,
+        isNsfw: ctn.dataset.isNsfw === "true",
+        userId: ctn.dataset.userId || "",
+      });
+    });
+    return items;
+  }
+  // Applies blocked-user, search, and banned-word filters to a combined feed item
+  function combinedTextFilters(item) {
+    if (item.userId && blockedUserIds.has(item.userId)) return false;
+    let text = `${item.prompt} ${item.title}`.toLowerCase();
+    let searchTags = els.searchTagInput.value.toLowerCase().split(",").map(t => t.trim()).filter(Boolean);
+    if (searchTags.length && !searchTags.every(t => text.includes(t))) return false;
+    let banned = els.bannedWordsInput.value.toLowerCase().split(",").map(t => t.trim()).filter(Boolean);
+    if (banned.length && banned.some(t => text.includes(t))) return false;
+    return true;
+  }
+  // Builds the data object passed to regenerate/save-to-private-gallery actions
+  function buildRegenSaveData(item) {
+    return {
+      imageUrl: item.imageUrl,
+      prompt: item.prompt,
+      negativePrompt: item.negativePrompt,
+      seed: item.seed,
+      guidanceScale: item.guidanceScale,
+      userId: item.userId,
+    };
+  }
+  // Populates and shows the image info modal for a combined feed item
+  function showImageInfo(item) {
+    if (!els.infoModal) return;
+    els.infoModalImg.src = item.imageUrl;
+    let rows = [
+      ["Prompt", item.prompt],
+      ["Negative Prompt", item.negativePrompt],
+      ["Seed", item.seed],
+      ["Guidance Scale", item.guidanceScale],
+      ["Generator", item.genLabel],
+    ];
+    els.infoModalBody.innerHTML = rows.map(([label, val]) => `
+      <div class="mgvInfoRow">
+        <div class="mgvInfoLabel">${label}</div>
+        <div class="mgvInfoValue">${(val !== undefined && val !== null && val !== "") ? String(val).replace(/</g, '&lt;') : '<span class="mgvInfoMissing">not available</span>'}</div>
+      </div>
+    `).join('');
+    els.infoModal.hidden = false;
+  }
+  function hideImageInfo() {
+    if (els.infoModal) els.infoModal.hidden = true;
+  }
+  async function renderCombinedGallery() {
+    let myToken = ++combinedFetchToken;
+    if (combinedObserver) { combinedObserver.disconnect(); combinedObserver = null; }
+    els.emptyStateMsg.hidden = true;
+    els.combinedStatus.hidden = false;
+    els.combinedStatus.textContent = "Preparing combined feed...";
+    let baseUrl = await ensureCombinedBaseUrl();
+    if (myToken !== combinedFetchToken) return;
+    if (!baseUrl) {
+      els.combinedStatus.textContent = "Couldn't set up the combined feed on this page.";
+      return;
+    }
+    let names = generatorNames.length ? generatorNames : [PINNED_GENERATOR];
+    let orderedNames = [PINNED_GENERATOR, ...names.filter(n => n.toLowerCase() !== PINNED_GENERATOR.toLowerCase())];
+    let merged = [];
+    let loaded = 0;
+    let queue = orderedNames.slice();
+    async function worker() {
+      while (queue.length) {
+        let name = queue.shift();
+        let formatted = name.trim().toLowerCase().replace(/\s+/g, '-');
+        try {
+          let url = new URL(baseUrl);
+          url.searchParams.set('channel', formatted);
+          url.searchParams.set('subChannel', 'public');
+          url.searchParams.set('sort', els.sortSelect.value);
+          url.searchParams.set('timeRange', els.timeRangeSelect.value);
+          url.searchParams.set('contentFilter', els.contentFilterSelect.value);
+          url.hash = '';
+          let html = await superFetch(url.toString()).then(r => r.text());
+          merged = merged.concat(parseCombinedGalleryHtml(html, name, formatted));
+        } catch (e) {
+          console.warn(`Combined feed: could not load "${name}"`, e);
+        }
+        loaded++;
+        if (myToken === combinedFetchToken) {
+          els.combinedStatus.textContent = `Loading combined feed... ${loaded}/${orderedNames.length} generators (${merged.length} images)`;
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(COMBINED_FETCH_CONCURRENCY, orderedNames.length) }, worker));
+    if (myToken !== combinedFetchToken) return;
+    // Interleaves each generator's block of images into one mixed feed
+    combinedRawData = applyBucketSortMethod(merged);
+    applyCombinedFilters();
+  }
+  // Groups items by generator, preserving each generator's own internal order
+  function groupItemsByGenerator(items) {
+    const byGen = new Map();
+    for (const item of items) {
+      if (!byGen.has(item.genFormatted)) byGen.set(item.genFormatted, []);
+      byGen.get(item.genFormatted).push(item);
+    }
+    return byGen;
+  }
+  function shuffleItems(items) {
+    return items.slice().sort(() => Math.random() - 0.5);
+  }
+  // One image from each generator per round, in turn, until every list is exhausted
+  function roundRobinInterleave(items) {
+    const lists = Array.from(groupItemsByGenerator(items).values());
+    const result = [];
+    let i = 0;
+    while (result.length < items.length) {
+      for (const list of lists) {
+        if (i < list.length) result.push(list[i]);
+      }
+      i++;
+    }
+    return result;
+  }
+  // Like round robin, but each generator's items are spread across the whole feed in proportion to its size
+  function proportionalInterleave(items) {
+    const withFraction = [];
+    for (const list of groupItemsByGenerator(items).values()) {
+      list.forEach((item, i) => withFraction.push({ item, pos: (i + 0.5) / list.length }));
+    }
+    withFraction.sort((a, b) => a.pos - b.pos);
+    return withFraction.map(w => w.item);
+  }
+  function applyBucketSortMethod(items) {
+    const method = els.bucketSortMethodSelect ? els.bucketSortMethodSelect.value : 'shuffle';
+    if (method === 'roundRobin') return roundRobinInterleave(items);
+    if (method === 'proportional') return proportionalInterleave(items);
+    return shuffleItems(items);
+  }
+  function buildMasonryColumns(grid, count) {
+    grid.innerHTML = '';
+    const cols = [];
+    for (let i = 0; i < count; i++) {
+      const col = document.createElement('div');
+      col.className = 'mgvMasonryCol';
+      grid.appendChild(col);
+      cols.push(col);
+    }
+    combinedColumns = cols;
+    return cols;
+  }
+  // Appends a card to whichever masonry column is currently shortest
+  function appendToShortestColumn(card) {
+    if (!combinedColumns.length) return;
+    let shortest = combinedColumns[0];
+    for (let i = 1; i < combinedColumns.length; i++) {
+      if (combinedColumns[i].offsetHeight < shortest.offsetHeight) shortest = combinedColumns[i];
+    }
+    shortest.appendChild(card);
+  }
+  // Size slider doubles as bucket-mode column count: min value -> 6 columns, max value -> 1 column
+  function getCombinedColumnCount() {
+    const min = Number(els.zoomSlider.min), max = Number(els.zoomSlider.max);
+    const t = (Number(els.zoomSlider.value) - min) / (max - min);
+    return Math.max(1, Math.min(6, Math.round(6 - t * 5)));
+  }
+  function applyCombinedColumnCount() {
+    if (!combinedModeOn) return;
+    let grid = els.imageGalleryCtn.querySelector("#mgvMasonryGrid");
+    if (!grid) return;
+    let newCount = getCombinedColumnCount();
+    if (newCount === combinedColumns.length) return;
+    // Re-lays-out already-displayed cards into the new column count, shortest-column-first
+    const cardsInOrder = Array.from(grid.querySelectorAll('.mgvMasonryItem'));
+    buildMasonryColumns(grid, newCount);
+    cardsInOrder.forEach(card => appendToShortestColumn(card));
+  }
+  // Re-filters combinedRawData and re-renders the masonry grid from scratch
+  function applyCombinedFilters() {
+    if (combinedObserver) { combinedObserver.disconnect(); combinedObserver = null; }
+    combinedData = combinedRawData.filter(combinedTextFilters);
+    combinedDisplayed = 0;
+    els.imageGalleryCtn.innerHTML = '<div class="mgvMasonry" id="mgvMasonryGrid"></div><div class="mgvSentinel" id="mgvSentinel"></div>';
+    els.combinedStatus.hidden = false;
+    els.combinedStatus.textContent = combinedData.length
+      ? `Combined feed: ${combinedData.length} images loaded`
+      : "No images found across your generator list with the current filters.";
+    if (!combinedData.length) return;
+    let grid = els.imageGalleryCtn.querySelector("#mgvMasonryGrid");
+    let sentinel = els.imageGalleryCtn.querySelector("#mgvSentinel");
+    buildMasonryColumns(grid, getCombinedColumnCount());
+    renderCombinedBatch(grid, sentinel);
+    combinedObserver = new IntersectionObserver((entries) => {
+      if (combinedModeOn && entries.some(e => e.isIntersecting)) renderCombinedBatch(grid, sentinel);
+    }, { root: root, rootMargin: "600px" });
+    combinedObserver.observe(sentinel);
+  }
+  // Renders the next page of combined feed items into the masonry grid
+  function renderCombinedBatch(grid, sentinel) {
+    let next = combinedData.slice(combinedDisplayed, combinedDisplayed + COMBINED_PAGE_SIZE);
+    next.forEach(item => {
+      let card = document.createElement("div");
+      card.className = "mgvMasonryItem";
+      card.style.aspectRatio = item.aspectRatio;
+      card.title = "Click to inspect this image";
+      card.innerHTML = `
+        <span class="mgvGenBadge">${item.genLabel}</span>
+        <img src="${item.imageUrl}" loading="lazy" alt="${(item.title || '').replace(/"/g, '&quot;').slice(0, 100)}">
+        <button class="mgvSaveCornerBtn" title="Save to private gallery">💾</button>
+        <button class="mgvBlockCornerBtn" title="Block this author">🚫</button>
+        <div class="mgvOverlay">
+          <div class="mgvPromptText">${item.prompt.replace(/</g, '&lt;').slice(0, 200)}</div>
+          <div class="mgvCardBtns">
+            <button class="mgvCardBtn mgv-info-btn" title="Show prompt, seed, guidance & more">ℹ️</button>
+          </div>
+        </div>
+      `;
+      card.addEventListener("click", () => {
+        if (typeof newImg !== "undefined" && newImg.regenerateFromGallery) newImg.regenerateFromGallery(buildRegenSaveData(item));
+      });
+      card.querySelector(".mgvSaveCornerBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (typeof galleryToPrivateGallery === "function") galleryToPrivateGallery(buildRegenSaveData(item));
+      });
+      card.querySelector(".mgv-info-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        showImageInfo(item);
+      });
+      card.querySelector(".mgvBlockCornerBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        blockAuthor(item.userId);
+      });
+      appendToShortestColumn(card);
+    });
+    combinedDisplayed += next.length;
+    els.combinedStatus.textContent = `Combined feed: showing ${combinedDisplayed} of ${combinedData.length} images`;
+    if (combinedDisplayed >= combinedData.length) {
+      if (combinedObserver) { combinedObserver.disconnect(); combinedObserver = null; }
+      if (!els.imageGalleryCtn.querySelector(".mgvFeedEnd")) {
+        let end = document.createElement("div");
+        end.className = "mgvFeedEnd";
+        end.textContent = "— That's every image in the combined feed —";
+        els.imageGalleryCtn.appendChild(end);
+      }
+    }
+  }
+  function applyFilterChange() {
+    if (combinedModeOn) { renderCombinedGallery(); } else { applyGallerySettings(); }
+    saveInputsToStorage();
+  }
+  // Builds regex phrase filters for the real gallery iframe's built-in filtering
+  function buildBannedPhrases(tagFilter, bannedWordsFilter) {
+    let searchTags = tagFilter
+      .toLowerCase()
+      .split(",")
+      .map(t => t.trim())
+      .filter(Boolean)
+      .map(t => `/^(?!.*(\\b${t}\\b)).*$/i`);
+    let bannedTags = bannedWordsFilter
+      .toLowerCase()
+      .split(",")
+      .map(t => t.trim())
+      .filter(Boolean)
+      .map(t => `/${t}/i`);
+    return [...searchTags, ...bannedTags];
+  }
+  let lastAppliedGenerator = null;
+  let lastAppliedSearchTag = null;
+  let lastAppliedBannedWords = null;
+  // Updates the real gallery iframe's URL to match the selected generator/sort/filter settings
+  function applyGallerySettings() {
+    let iframe = getCurrentIframe();
+    if (!iframe) return;
+    let generatorName = els.generatorTabSelect.value;
+    if (!generatorName || generatorName === "No galleries loaded") return;
+    let formatGenName = generatorName.trim().toLowerCase().replace(/\s+/g, '-');
+    let url = new URL(iframe.src);
+    url.searchParams.set('channel', formatGenName);
+    url.searchParams.set('subChannel', 'public');
+    url.searchParams.set('sort', els.sortSelect.value);
+    url.searchParams.set('timeRange', els.timeRangeSelect.value);
+    url.searchParams.set('contentFilter', els.contentFilterSelect.value);
+    let rawData = decodeURIComponent(url.hash).replace(/^#data=/, "");
+    let dataObj = {};
+    try { Object.assign(dataObj, JSON.parse(rawData)); } catch (e) { console.warn("Could not parse existing gallery hash", e); }
+    dataObj.bannedPromptPhrases = buildBannedPhrases(els.searchTagInput.value.trim(), els.bannedWordsInput.value.trim());
+    url.hash = "#data=" + encodeURIComponent(JSON.stringify(dataObj));
+    updateGalleryIframe(iframe, url);
+    saveInputsToStorage();
+    lastAppliedGenerator = formatGenName;
+    lastAppliedSearchTag = els.searchTagInput.value.trim();
+    lastAppliedBannedWords = els.bannedWordsInput.value.trim();
+  }
+  function onGeneratorSelectChange() {
+    applyGallerySettings();
+    els.galleryWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  let restoredGeneratorSelection = null;
+  // Always shown first in the dropdown, regardless of the user's own list
+  const PINNED_GENERATOR = "antimatter-ai-image-generator";
+  // Rebuilds the generator dropdown from the textarea list, keeping the current selection if still valid
+  function refreshGeneratorDropdown() {
+    generatorNames = els.generatorListInput.value
+      .split(/[,\n]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    let orderedNames = [PINNED_GENERATOR, ...generatorNames.filter(n => n.toLowerCase() !== PINNED_GENERATOR.toLowerCase())];
+    let desiredValue = restoredGeneratorSelection !== null ? restoredGeneratorSelection : els.generatorTabSelect.value;
+    restoredGeneratorSelection = null;
+    els.generatorTabSelect.innerHTML = '';
+    orderedNames.forEach(name => {
+      let option = document.createElement('option');
+      option.value = name;
+      option.textContent = name === PINNED_GENERATOR ? `📌 ${name}` : name;
+      els.generatorTabSelect.appendChild(option);
+    });
+    let stillExists = orderedNames.includes(desiredValue);
+    if (stillExists) {
+      els.generatorTabSelect.value = desiredValue;
+    } else {
+      els.generatorTabSelect.selectedIndex = 0;
+    }
+    rebuildCustomOptions(els.generatorTabSelect);
+    return { hasOptions: true, selectionChanged: !stillExists };
+  }
+  // Rebuilds the dropdown and re-applies gallery settings/combined feed as needed
+  function refreshGallery() {
+    let { hasOptions, selectionChanged } = refreshGeneratorDropdown();
+    if (!hasOptions) return;
+    if (combinedModeOn) {
+      renderCombinedGallery();
+      return;
+    }
+    if (!getCurrentIframe()) {
+      if (!renderRealGallery()) return;
+      setTimeout(() => {
+        applyGallerySettings();
+        applyZoom();
+      }, 400);
+      return;
+    }
+    let currentFormatted = els.generatorTabSelect.value.trim().toLowerCase().replace(/\s+/g, '-');
+    if (selectionChanged || currentFormatted !== lastAppliedGenerator) {
+      applyGallerySettings();
+    }
+  }
+  const debouncedGeneratorListUpdate = debounce(() => refreshGallery(), 700);
+  const debouncedCombinedFilterUpdate = debounce(() => {
+    if (!combinedModeOn) return;
+    lastAppliedSearchTag = els.searchTagInput.value.trim();
+    lastAppliedBannedWords = els.bannedWordsInput.value.trim();
+    applyCombinedFilters();
+  }, 250);
+  // Re-applies search/banned-word filters when the input loses focus, only if they changed
+  function onFilterBlur() {
+    let newSearch = els.searchTagInput.value.trim();
+    let newBanned = els.bannedWordsInput.value.trim();
+    if (combinedModeOn) {
+      if (newSearch === lastAppliedSearchTag && newBanned === lastAppliedBannedWords) return;
+      lastAppliedSearchTag = newSearch;
+      lastAppliedBannedWords = newBanned;
+      saveInputsToStorage();
+      applyCombinedFilters();
+      return;
+    }
+    if (!getCurrentIframe()) return;
+    if (newSearch === lastAppliedSearchTag && newBanned === lastAppliedBannedWords) return;
+    applyGallerySettings();
+  }
+  function openPrivateGallery() {
+    if (typeof createMediaGallery !== "function") {
+      alert("Private gallery plugin isn't available on this page yet.");
+      return;
+    }
+    createMediaGallery().show();
+  }
+  // --- Top bar toggles ---
+  function toggleTopBar() {
+    let hidden = els.topBarRow.style.display === "none";
+    els.topBarRow.style.display = hidden ? "flex" : "none";
+    els.topBarToggleBtn.classList.toggle('active', hidden);
+    saveInputsToStorage();
+  }
+  function toggleSettingsPanel() {
+    els.settingsPanel.hidden = !els.settingsPanel.hidden;
+    els.settingsToggleBtn.classList.toggle('active', !els.settingsPanel.hidden);
+  }
+  // --- Card size / zoom ---
+  let currentZoomValue = 1;
+  function applyZoom() {
+    currentZoomValue = Number(els.zoomSlider.value) / 100;
+    if (combinedModeOn) {
+      // Bucket mode has its own grid, so the zoom slider sets column count (1-6) instead of scaling
+      els.galleryWrapper.style.width = '';
+      els.galleryWrapper.style.transform = '';
+      els.galleryWrapper.style.marginBottom = '0px';
+      applyCombinedColumnCount();
+    } else {
+      els.galleryWrapper.style.width = `${100 / currentZoomValue}%`;
+      els.galleryWrapper.style.transform = `scale(${currentZoomValue})`;
+      recalcZoomMargin();
+    }
+    localStorage.setItem("multiGalleryZoom", els.zoomSlider.value);
+  }
+  function recalcZoomMargin() {
+    if (combinedModeOn) { els.galleryWrapper.style.marginBottom = '0px'; return; }
+    els.galleryWrapper.style.marginBottom = '0px';
+    let naturalHeight = els.galleryWrapper.offsetHeight;
+    let visualHeight = naturalHeight * currentZoomValue;
+    els.galleryWrapper.style.marginBottom = `${visualHeight - naturalHeight}px`;
+  }
+  function adjustZoom(delta) {
+    let newVal = Number(els.zoomSlider.value) + delta;
+    newVal = Math.max(Number(els.zoomSlider.min), Math.min(Number(els.zoomSlider.max), newVal));
+    els.zoomSlider.value = newVal;
+    applyZoom();
+  }
+  function resetZoom() {
+    els.zoomSlider.value = 100;
+    applyZoom();
+  }
+  function restoreZoom() {
+    let saved = localStorage.getItem("multiGalleryZoom");
+    if (saved !== null) els.zoomSlider.value = saved;
+  }
+  // --- Persistence (localStorage) ---
+  function saveInputsToStorage() {
+    try {
+      let saved = {
+        generatorList: els.generatorListInput.value,
+        searchTag: els.searchTagInput.value,
+        bannedWords: els.bannedWordsInput.value,
+        bucketSortMethod: els.bucketSortMethodSelect.value,
+        sort: els.sortSelect.value,
+        timeRange: els.timeRangeSelect.value,
+        contentFilter: els.contentFilterSelect.value,
+        selectedGenerator: els.generatorTabSelect.value,
+        combinedMode: combinedModeOn,
+        topBarCollapsed: els.topBarRow.style.display === "none"
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+    } catch (e) {
+      console.error("Could not save inputs", e);
+    }
+  }
+  function restoreInputsFromStorage() {
+    try {
+      let raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      let saved = JSON.parse(raw);
+      if (saved.generatorList !== undefined) els.generatorListInput.value = saved.generatorList;
+      if (saved.searchTag !== undefined) els.searchTagInput.value = saved.searchTag;
+      if (saved.bannedWords !== undefined) els.bannedWordsInput.value = saved.bannedWords;
+      if (saved.bucketSortMethod !== undefined) { els.bucketSortMethodSelect.value = saved.bucketSortMethod; syncCustomSelectUI(els.bucketSortMethodSelect); }
+      if (saved.sort !== undefined) { els.sortSelect.value = saved.sort; syncCustomSelectUI(els.sortSelect); }
+      if (saved.timeRange !== undefined) { els.timeRangeSelect.value = saved.timeRange; syncCustomSelectUI(els.timeRangeSelect); }
+      if (saved.contentFilter !== undefined) { els.contentFilterSelect.value = saved.contentFilter; syncCustomSelectUI(els.contentFilterSelect); }
+      if (saved.selectedGenerator !== undefined) restoredGeneratorSelection = saved.selectedGenerator;
+      if (saved.combinedMode !== undefined) combinedModeOn = !!saved.combinedMode;
+      if (saved.topBarCollapsed !== undefined) {
+        els.topBarRow.style.display = saved.topBarCollapsed ? "none" : "flex";
+        els.topBarToggleBtn.classList.toggle('active', !saved.topBarCollapsed);
+      }
+    } catch (e) {
+      console.error("Could not restore inputs", e);
+    }
+  }
+  // --- Back to top ---
+  function scrollToTop() {
+    root.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  // Wires all UI event listeners (replacing the standalone version's inline attributes)
+  function wireEvents(root) {
+    els.privateGalleryBtn.addEventListener('click', openPrivateGallery);
+    els.settingsToggleBtn.addEventListener('click', toggleSettingsPanel);
+    els.topBarToggleBtn.addEventListener('click', toggleTopBar);
+    els.closeBtn.addEventListener('click', close);
+    els.loadTopNBtn.addEventListener('click', addTopNBtnClick);
+    els.removeEmptyBtn.addEventListener('click', removeEmptyGalleries);
+    els.resetGeneratorListBtn.addEventListener('click', resetGeneratorList);
+    els.generatorListInput.addEventListener('input', () => { debouncedGeneratorListUpdate(); saveInputsToStorage(); });
+    els.searchTagInput.addEventListener('input', () => { saveInputsToStorage(); debouncedCombinedFilterUpdate(); });
+    els.searchTagInput.addEventListener('blur', onFilterBlur);
+    els.bannedWordsInput.addEventListener('input', () => { saveInputsToStorage(); debouncedCombinedFilterUpdate(); });
+    els.bannedWordsInput.addEventListener('blur', onFilterBlur);
+    els.bucketSortMethodSelect.addEventListener('change', () => {
+      saveInputsToStorage();
+      if (combinedModeOn && combinedRawData.length) {
+        combinedRawData = applyBucketSortMethod(combinedRawData);
+        applyCombinedFilters();
+      }
+    });
+    els.generatorTabSelect.addEventListener('change', onGeneratorSelectChange);
+    els.combinedModeBtn.addEventListener('click', toggleCombinedMode);
+    els.blockedResetBtn.addEventListener('click', resetBlockedAuthors);
+    els.infoModalCloseBtn.addEventListener('click', hideImageInfo);
+    els.infoModal.addEventListener('click', (e) => { if (e.target === els.infoModal) hideImageInfo(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && els.infoModal && !els.infoModal.hidden) hideImageInfo();
+    });
+    els.sortSelect.addEventListener('change', applyFilterChange);
+    els.timeRangeSelect.addEventListener('change', applyFilterChange);
+    els.contentFilterSelect.addEventListener('change', applyFilterChange);
+    els.zoomMinusBtn.addEventListener('click', () => adjustZoom(-10));
+    els.zoomSlider.addEventListener('input', applyZoom);
+    els.zoomPlusBtn.addEventListener('click', () => adjustZoom(10));
+    els.zoomResetBtn.addEventListener('click', resetZoom);
+    els.backToTopBtn.addEventListener('click', scrollToTop);
+    root.addEventListener('scroll', () => {
+      els.backToTopBtn.classList.toggle('visible', root.scrollTop > 300);
+    });
+    root.addEventListener('click', (e) => {
+      if (!e.target.closest('.mgvCustomSelectWrap') && !e.target.closest('.mgvCustomSelectList')) closeAllCustomDropdowns();
+    });
+    root.addEventListener('scroll', (e) => {
+      if (e.target instanceof Element && e.target.closest('.mgvCustomSelectList')) return;
+      closeAllCustomDropdowns();
+    }, true);
+    window.addEventListener('resize', closeAllCustomDropdowns);
+    const zoomResizeObserver = new ResizeObserver(() => recalcZoomMargin());
+    zoomResizeObserver.observe(els.galleryWrapper);
+  }
+  async function init() {
+    restoreInputsFromStorage();
+    setCombinedModeUI(combinedModeOn);
+    restoreZoom();
+    let hasSavedList = false;
+    try {
+      let raw = localStorage.getItem(STORAGE_KEY);
+      let saved = raw ? JSON.parse(raw) : null;
+      hasSavedList = !!(saved && saved.generatorList && saved.generatorList.trim());
+    } catch (e) {}
+    if (!hasSavedList) {
+      await populateInitialTopGenerators();
+    }
+    refreshGallery();
+  }
+  function ensureBuilt() {
+    if (initialized) return;
+    injectStyles();
+    root = buildMarkup();
+    watchForEscapedPopups();
+    wireElements(root);
+    enhanceSelect(els.generatorTabSelect, true);
+    enhanceSelect(els.sortSelect);
+    enhanceSelect(els.timeRangeSelect);
+    enhanceSelect(els.contentFilterSelect);
+    enhanceSelect(els.bucketSortMethodSelect);
+    wireEvents(root);
+    els.topBarToggleBtn.classList.toggle('active', els.topBarRow.style.display !== 'none');
+    initialized = true;
+    init();
+  }
+  // --- Public API ---
+  function show() {
+    ensureBuilt();
+    root.style.display = 'block';
+  }
+  function close() {
+    if (root) root.style.display = 'none';
+  }
+  return { show, close };

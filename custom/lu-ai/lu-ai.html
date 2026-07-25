@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>lu-ai — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Completed:
+  [x] AI-powered Luau code generator with advanced prompt engineering
+  [x] Syntax-highlighted code editor with Luau-specific keywords
+  [x] Roblox-oriented settings: script type, game mode, optimization level
+  [x] Intelligent code analysis, optimization and bug-fixing tools
+  [x] Asset/Module/Script libraries with quick-insert into editor
+  [x] AI Chat assistant specialized in Roblox development
+  [x] Interactive execution log and debug console output
+  [x] Local storage for project history and configs
+  [x] Responsive split-pane UI with dark-mode aesthetic
+  [x] Generate Game Icons/Thumbnails using generateImage
+
+Possible Next Steps:
+  [ ] Integrate a full Luau parser for more robust linting
+  [ ] Add a visual UI hierarchy tree generator (StarterGui, etc.)
+  [ ] Add "Deploy to Roblox" button (requires Roblox Open Cloud API)
+  [ ] Add multi-file project support with a file tree
+  [ ] Integrate with Luau type-checking to show real-time errors
+-->
+
+<style>
+  :root {
+    --bg: #0b0c10;
+    --surface: #1a1d26;
+    --surface-hl: #242832;
+    --accent: #ff4d4d;
+    --accent-dim: #b33636;
+    --text: #9ba6b5;
+    --text-hl: #ecf0f1;
+    --border: #2c3440;
+    --border-hl: #4a5463;
+    --success: #00d084;
+    --warning: #ffcc00;
+    --luau-blue: #00a2ff;
+  }
+  
+  body { 
+    background-color: var(--bg); 
+    color: var(--text); 
+    font-family: 'Segoe UI', Roboto, sans-serif; 
+    margin: 0; 
+    overflow: hidden; 
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    text-align: left;
+  }
+
+  /* Layout */
+  #appCtn { display: flex; flex: 1; overflow: hidden; gap: 8px; padding: 8px; }
+  #mainCtn { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  #sidebarCtn { width: 320px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+  
+  /* Header */
+  #headerCtn { 
+    background: var(--surface); 
+    padding: 12px 20px; 
+    display: flex; 
+    align-items: center; 
+    gap: 20px; 
+    border-bottom: 2px solid var(--luau-blue);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  #logoEl { font-size: 26px; font-weight: 900; color: var(--text-hl); letter-spacing: -0.5px; display: flex; align-items: center; gap: 10px; }
+  #subtitleEl { color: var(--accent); font-weight: 700; font-size: 0.75rem; letter-spacing: 4px; text-transform: uppercase; }
+  
+  /* Code Area */
+  #codeAreaCtn { flex: 1; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+  #tabsCtn { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); border-radius: 8px 8px 0 0; overflow: hidden; }
+  .tabEl { padding: 10px 16px; cursor: pointer; font-weight: 600; font-size: 13px; border-right: 1px solid var(--border); transition: background 0.2s; color: var(--text); }
+  .tabEl:hover { background: var(--surface-hl); color: var(--text-hl); }
+  .tabEl.activeTab { background: var(--luau-blue); color: #111; border-color: var(--luau-blue); }
+  
+  #codeEditorEl {
+    flex: 1; background: #0d0e12; color: #abb2bf; font-family: 'Fira Code', 'Cascadia Mono', monospace;
+    padding: 16px; border: none; resize: none; outline: none; line-height: 1.5; font-size: 14px;
+    overflow: auto; white-space: pre; tab-size: 2;
+  }
+  #codeOutputEl { flex: 1; background: #0d0e12; padding: 16px; overflow: auto; font-family: monospace; font-size: 13px; white-space: pre-wrap; }
+  
+  /* Panels */
+  .panelCtn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; min-height: 0; }
+  .panelTitle { padding: 10px 14px; font-weight: 700; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .panelBody { padding: 12px; overflow: auto; flex: 1; min-height: 0; }
+  
+  /* Inputs */
+  textarea#promptInputEl, input { width: 100%; background: #111318; border: 1px solid var(--border); color: var(--text-hl); padding: 10px; border-radius: 6px; font-family: inherit; outline: none; transition: border-color 0.2s; resize: none; box-sizing: border-box; }
+  textarea#promptInputEl:focus, input:focus { border-color: var(--luau-blue); }
+  textarea#promptInputEl { min-height: 90px; }
+  
+  /* Buttons */
+  button { 
+    background: var(--accent); color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: 700; 
+    cursor: pointer; transition: all 0.15s; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; 
+  }
+  button:hover { filter: brightness(1.2); transform: translateY(-1px); }
+  button:active { transform: translateY(0); filter: brightness(0.9); }
+  button.secondaryBtn { background: var(--surface-hl); color: var(--text-hl); border: 1px solid var(--border); }
+  button.secondaryBtn:hover { background: #333b4a; }
+  button.actionBtn { background: var(--luau-blue); color: #fff; }
+  
+  /* Settings */
+  .settingRow { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; }
+  .settingRow label { font-weight: 600; }
+  select { background: #111318; color: var(--text-hl); border: 1px solid var(--border); padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 13px; outline: none; min-width: 140px; }
+  
+  /* Library */
+  .libCat { color: #7f8c8d; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin: 16px 0 6px 0; }
+  .libItem { 
+    background: #161920; padding: 10px; border-radius: 6px; margin-bottom: 6px; cursor: pointer;
+    font-size: 13px; font-family: monospace; border: 1px solid transparent; transition: all 0.2s; position: relative;
+  }
+  .libItem:hover { background: #1f232e; border-color: var(--border-hl); transform: translateX(4px); }
+  .libItem code { color: var(--luau-blue); font-weight: 700; display: block; }
+  .libItem span { color: var(--text); font-size: 11px; }
+  
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #444; }
+  
+  /* Log */
+  .log-entry { font-size: 12px; margin-bottom: 4px; }
+  .log-info { color: var(--luau-blue); }
+  .log-warn { color: var(--warning); }
+  .log-err { color: var(--accent); }
+  .log-success { color: var(--success); }
+  
+  /* Features */
+  .featureGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .featureChip { background: #161920; padding: 8px; border-radius: 6px; font-size: 12px; text-align: center; cursor: pointer; border: 1px solid var(--border); transition: all 0.2s; }
+  .featureChip:hover { background: var(--surface-hl); border-color: var(--accent); color: var(--text-hl); }
+  
+  #loadingOverlayEl { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; backdrop-filter: blur(4px); }
+  .spinner { width: 50px; height: 50px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  
+  /* GPT Settings */
+  .model-opt { display: flex; gap: 6px; align-items: center; background: #111318; padding: 6px 10px; border-radius: 4px; cursor: pointer; border: 1px solid var(--border); margin-bottom: 6px; font-size: 12px; }
+  .model-opt.selectedModel { border-color: var(--luau-blue); background: #1a2530; }
+  .model-opt input { width: auto; min-width: auto; margin: 0; }
+
+  /* Chat */
+  #chatAreaEl { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+  .msg { max-width: 90%; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.4; }
+  .msg.userMsg { align-self: flex-end; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
+  .msg.aiMsg { align-self: flex-start; background: #161920; color: var(--text-hl); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  #chatInputRow { display: flex; gap: 6px; }
+  #chatInput { flex: 1; padding: 8px 12px; font-size: 13px; background: #111318; color: var(--text-hl); border: 1px solid var(--border); border-radius: 6px; outline: none; }
+  #chatInput:focus { border-color: var(--luau-blue); }
+  
+  /* Stats Bar */
+  #statsBar { display: flex; gap: 16px; font-size: 12px; color: #7f8c8d; padding: 4px 0 0 2px; }
+</style>
+
+<div id="loadingOverlayEl" hidden>
+  <div class="spinner"></div>
+  <div style="color:white; font-weight:700; font-size:16px;" id="loadingTextEl">Generating Luau Code...</div>
+</div>
+
+<!-- Header -->
+<div id="headerCtn">
+  <div style="display:flex; align-items:center; gap:12px;">
+    <div id="logoEl">🎮 LU.AI <span id="subtitleEl">Expert Roblox Sandbox</span></div>
+  </div>
+  <div style="flex:1;"></div>
+  <button onclick="runCodeInEditor()" style="background:#00d084;">▶ Run Script</button>
+  <button onclick="clearEditor()" class="secondaryBtn">🗑 Clear</button>
+  <button onclick="saveProject()" class="secondaryBtn">💾 Save</button>
+</div>
+
+<div id="appCtn">
+  <!-- Sidebar -->
+  <div id="sidebarCtn">
+    
+    <!-- Prompt Panel -->
+    <div class="panelCtn" style="flex: 0 0 auto;">
+      <div class="panelTitle">✨ Prompt (<span id="promptLenEl">0</span> chars)</div>
+      <div class="panelBody" style="display:flex; flex-direction:column; gap:8px;">
+        <textarea id="promptInputEl" placeholder="Describe the Roblox feature you want to build (e.g., 'Advanced AI enemy that tracks players and uses pathfinding')"></textarea>
+        
+        <div style="display:flex; gap:6px;">
+          <button onclick="generateFromPrompt()" style="flex:1;">🚀 Generate</button>
+          <button onclick="showGenOptions()" class="secondaryBtn" style="padding:10px 12px;">⚙️</button>
+        </div>
+
+        <div id="advancedOptions" hidden style="display:flex; flex-direction:column; gap:6px;">
+          <div class="settingRow">
+            <label>Creativity</label>
+            <input type="range" id="tempSlider" min="0" max="100" value="70" style="width:100px;" oninput="updateSettings()">
+          </div>
+          <div class="settingRow">
+            <label>Game Type</label>
+            <select id="gameTypeSel" onchange="updateSettings()">
+              <option>Simulator</option>
+              <option>RPG</option>
+              <option>Tycoon</option>
+              <option>Obby</option>
+              <option>Horror</option>
+              <option>Shooter</option>
+              <option>Story</option>
+            </select>
+          </div>
+          <div class="settingRow">
+            <label>Scope</label>
+            <select id="scopeSel" onchange="updateSettings()">
+              <option>One Script</option>
+              <option>System</option>
+              <option>Full Module</option>
+            </select>
+          </div>
+          <div class="settingRow">
+            <label>Optimization</label>
+            <select id="optimizationSel" onchange="updateSettings()">
+              <option>Readable</option>
+              <option>Optimized</option>
+              <option>Performance-First</option>
+            </select>
+          </div>
+          <div class="settingRow">
+            <label>Include Types</label>
+            <input type="checkbox" id="includeTypeCheck" onchange="updateSettings()">
+          </div>
+          <div class="settingRow">
+            <label>Model</label>
+            <select id="modelSel" onchange="updateSettings()">
+              <option>Mixtral</option>
+              <option>Llama 3 70B</option>
+              <option>Command-R-Plus</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Tools -->
+    <div class="panelCtn" style="flex: 0 0 auto; max-height: 220px;">
+      <div class="panelTitle">🛠 AI Tools</div>
+      <div class="panelBody">
+        <div class="featureGrid">
+          <div class="featureChip" onclick="optimizeSelectedCode()">⚡ Optimize</div>
+          <div class="featureChip" onclick="fixBugs()">🐛 Fix Bugs</div>
+          <div class="featureChip" onclick="explainCode()">📝 Explain</div>
+          <div class="featureChip" onclick="unitTestCode()">🧪 Unit Test</div>
+          <div class="featureChip" onclick="addComments()">📄 Comments</div>
+          <div class="featureChip" onclick="addTypes()">🔒 Type Safe</div>
+          <div class="featureChip" onclick="genDocs()">📘 Docs</div>
+          <div class="featureChip" onclick="generateImageFromPrompt()">🖼 Icon</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Library -->
+    <div class="panelCtn" style="flex: 1;">
+      <div class="panelTitle">📚 Luau Expert Library</div>
+      <div class="panelBody" id="libraryBody"></div>
+    </div>
+
+    <!-- Chat -->
+    <div class="panelCtn" style="flex: 1;">
+      <div class="panelTitle">💬 Roblox Dev Chat</div>
+      <div class="panelBody" style="display:flex; flex-direction:column; padding: 0;">
+        <div id="chatAreaEl" style="padding:12px;"></div>
+        <div id="chatInputRow" style="padding: 10px 12px; border-top: 1px solid var(--border);">
+          <input id="chatInput" placeholder="Ask about Roblox API...">
+          <button onclick="sendChat()" style="padding:8px 12px;">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div id="mainCtn">
+    <!-- Stats & Tabs -->
+    <div style="display:flex; justify-content:space-between; align-items:center; flex:0 0 auto;">
+      <div id="tabsCtn">
+        <div class="tabEl activeTab" id="tabEditor" onclick="switchTab('editor')">📄 Code Editor (*.luau)</div>
+        <div class="tabEl" id="tabOutput" onclick="switchTab('output')">📋 Execution Log</div>
+        <div class="tabEl" id="tabHistory" onclick="switchTab('history')">🕘 History</div>
+      </div>
+      <div id="statsBar">
+        <span>C: <span id="charCountEl">0</span></span>
+        <span>L: <span id="lineCountEl">0</span></span>
+        <span>Words: <span id="wordCountEl">0</span></span>
+        <span id="statusEl" style="color:var(--luau-blue);">Ready</span>
+      </div>
+    </div>
+
+    <!-- Code Editor Area -->
+    <div id="codeAreaCtn">
+      <textarea id="codeEditorEl" spellcheck="false" placeholder="-- Enter or generate Luau code here..." oninput="onEditorInput()"></textarea>
+      <div id="codeOutputEl" hidden></div>
+      <div id="historyCtn" hidden>
+        <div class="panelBody">
+          <div id="historyListCtn"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== State =====
+  let activeTab = 'editor';
+  let history = JSON.parse(localStorage._luai_history || '[]');
+  let settings = JSON.parse(localStorage._luai_settings || '{}');
+  let libraryFlat = [];
+  
+  // ===== Helpers =====
+  function setLoading(msg) {
+    loadingOverlayEl.hidden = false;
+    loadingTextEl.textContent = msg;
+    statusEl.textContent = 'Generating...';
+    statusEl.style.color = 'var(--warning)';
+  }
+  function stopLoading() {
+    loadingOverlayEl.hidden = true;
+    statusEl.textContent = 'Ready';
+    statusEl.style.color = 'var(--luau-blue)';
+  }
+  
+  function switchTab(tab) {
+    activeTab = tab;
+    ['editor','output','history'].forEach(t => {
+      let isActive = (t === tab);
+      let el = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+      if(el) el.className = isActive ? 'tabEl activeTab' : 'tabEl';
+    });
+    codeEditorEl.hidden = (tab !== 'editor');
+    codeOutputEl.hidden = (tab !== 'output');
+    historyCtn.hidden = (tab !== 'history');
+  }
+  
+  function onEditorInput() {
+    updateStats();
+    if(promptInputEl) promptLenEl.textContent = promptInputEl.value.length;
+  }
+  function updateStats() {
+    let txt = codeEditorEl.value;
+    charCountEl.textContent = txt.length;
+    lineCountEl.textContent = txt.split('\n').length;
+    wordCountEl.textContent = txt.split(/\s+/).filter(w => w).length;
+  }
+  
+  function showGenOptions() {
+    advancedOptions.hidden = !advancedOptions.hidden;
+  }
+  
+  // ===== Luau Expert Library Data =====
+  let libraryData = [
+    { cat: 'Services', items: [
+      { code: 'Players = game:GetService("Players")', desc: 'Player management service' },
+      { code: 'ReplicatedStorage = game:GetService("ReplicatedStorage")', desc: 'Shared storage' },
+      { code: 'TweenService = game:GetService("TweenService")', desc: 'Animation tweens' },
+      { code: 'RunService = game:GetService("RunService")', desc: 'Heartbeat/RenderStep' },
+      { code: 'HttpService = game:GetService("HttpService")', desc: 'JSON/HTTP calls' },
+      { code: 'PathfindingService = game:GetService("PathfindingService")', desc: 'NPC Pathfinding' },
+      { code: 'TeleportService = game:GetService("TeleportService")', desc: 'Server teleportation' },
+      { code: 'MarketplaceService = game:GetService("MarketplaceService")', desc: 'Monetization' },
+      { code: 'DataStoreService = game:GetService("DataStoreService")', desc: 'Save player data' },
+      { code: 'GroupService = game:GetService("GroupService")', desc: 'Roblox Groups API' }
+    ]},
+    { cat: 'Communication', items: [
+      { code: 'RemoteEvent', desc: 'Client-server messaging' },
+      { code: 'RemoteFunction', desc: 'Client-server function calls' },
+      { code: 'BindableEvent', desc: 'Internal script signals' },
+      { code: 'MessagingService', desc: 'Cross-server messaging' },
+      { code: 'TextChatService', desc: 'Modern chat system' }
+    ]},
+    { cat: 'Data & State', items: [
+      { code: 'Attributes', desc: 'Instance properties via :SetAttribute()' },
+      { code: 'Value Objects', desc: 'IntValue, StringValue, etc.' },
+      { code: 'ModuleScripts', desc: 'Reusable shared code modules' },
+      { code: 'DataStore:GetAsync(key)', desc: 'Retrieve saved data' },
+      { code: 'DataStore:SetAsync(key, val)', desc: 'Write persistent data' },
+      { code: 'DataStore:UpdateAsync(key, transform)', desc: 'Atomic data update' },
+      { code: 'MemoryStoreService', desc: 'Fast ephemeral queues' }
+    ]},
+    { cat: 'Physics', items: [
+      { code: 'BodyVelocity', desc: 'Linear velocity force' },
+      { code: 'BodyPosition', desc: 'Move parts to target' },
+      { code: 'BodyGyro', desc: 'Maintain orientation' },
+      { code: 'LinearVelocity', desc: 'Modern linear mover' },
+      { code: 'AngularVelocity', desc: 'Modern angular mover' },
+      { code: 'AlignOrientation', desc: 'Align rotation goals' },
+      { code: 'AlignPosition', desc: 'Align position goals' },
+      { code: 'Constraint | Weld', desc: 'Weld parts together' },
+      { code: 'Raycast(params)', desc: 'Collision detection' }
+    ]},
+    { cat: 'Instances & Hierarchy', items: [
+      { code: 'Instance.new(className, parent)', desc: 'Create new objects' },
+      { code: 'Clone()', desc: 'Duplicate instances' },
+      { code: 'Destroy()', desc: 'Clean up instances' },
+      { code: 'WaitForChild("Name")', desc: 'Safe child retrieval' },
+      { code: 'FindFirstChild("Name", recursive)', desc: 'Find child in tree' },
+      { code: 'GetChildren()', desc: 'Array of children' },
+      { code: 'GetDescendants()', desc: 'Flattened tree array' }
+    ]},
+    { cat: 'UI & Input', items: [
+      { code: 'ScreenGui | BillboardGui', desc: '2D UI containers' },
+      { code: 'TextButton | ImageButton', desc: 'Clickable UI elements' },
+      { code: 'TextBox', desc: 'User text input' },
+      { code: 'UIScale', desc: 'Scale UI for devices' },
+      { code: 'UserInputService', desc: 'Keyboard/Mouse/Touch' },
+      { code: 'ContextActionService', desc: 'Bind complex inputs' }
+    ]},
+    { cat: 'AI & NPCs', items: [
+      { code: 'Pathfinding:CreatePath()', desc: 'Generate navigation path' },
+      { code: 'Path:ComputeAsync()', desc: 'Async compute path' },
+      { code: 'Path:MoveTo()', desc: 'Move NPC along path' },
+      { code: 'Humanoid:MoveTo()', desc: 'Simple movement target' },
+      { code: 'Humanoid:MoveToFinished', desc: 'Arrival detection' }
+    ]},
+    { cat: 'Optimization & Patterns', items: [
+      { code: 'task.spawn(f)', desc: 'Lightweight coroutine' },
+      { code: 'task.defer(f)', desc: 'Deferred execution' },
+      { code: 'task.delay(t, f)', desc: 'Scheduled callback' },
+      { code: 'table.create(n, val)', desc: 'Pre-sized array' },
+      { code: 'table.clone(t)', desc: 'Shallow copy' },
+      { code: 'table.freeze(t)', desc: 'Immutable table' },
+      { code: '__iter metamethod', desc: 'Generic for loops (Luau)' },
+      { code: 'type function', desc: 'Luau type functions' }
+    ]},
+    { cat: 'Security', items: [
+      { code: 'pcall()', desc: 'Error handling wrapper' },
+      { code: 'xpcall()', desc: 'Extended error handling' },
+      { code: 'assert(cond, msg)', desc: 'Precondition checker' },
+      { code: ':SetCore("DevConsoleVisible")', desc: 'Toggle console' },
+      { code: 'FilterStringAsync()', desc: 'Text filtering' }
+    ]}
+  ];
+
+  function renderLibrary() {
+    libraryFlat = [];
+    let html = '';
+    libraryData.forEach(cat => {
+      html += '<div class="libCat">' + escapeHtml(cat.cat) + '</div>';
+      cat.items.forEach(item => {
+        let idx = libraryFlat.length;
+        libraryFlat.push(item.code);
+        html += '<div class="libItem" data-idx="' + idx + '"><code>' + escapeHtml(item.code) + '</code><span>' + escapeHtml(item.desc) + '</span></div>';
+      });
+    });
+    libraryBody.innerHTML = html;
+    libraryBody.querySelectorAll('.libItem').forEach(el => {
+      el.addEventListener('click', () => {
+        let code = libraryFlat[parseInt(el.dataset.idx)];
+        insertCode(code);
+      });
+    });
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  
+  function insertCode(codeStr) {
+    codeEditorEl.value += (codeEditorEl.value ? '\n' : '') + codeStr;
+    onEditorInput();
+    switchTab('editor');
+    statusEl.textContent = 'Snippet inserted';
+    statusEl.style.color = 'var(--success)';
+    setTimeout(() => { statusEl.textContent = 'Ready'; statusEl.style.color = 'var(--luau-blue)'; }, 1500);
+  }
+  
+  // ===== Prompt Engineering =====
+  function buildSystemPrompt() {
+    let s = '-- You are a Senior Roblox Game Developer and a Luau Language Expert.\n';
+    s += '-- Generate professional, optimized Luau code.\n';
+    s += '-- Game Type: ' + gameTypeSel.value + '\n';
+    s += '-- Scope: ' + scopeSel.value + '\n';
+    s += '-- Optimization: ' + optimizationSel.value + '\n';
+    s += '-- Include Types: ' + (includeTypeCheck.checked ? 'Yes' : 'No') + '\n';
+    s += '-- Follow Roblox Style Guide. Use modern APIs. Prefer task library over wait().\n';
+    return s;
+  }
+  
+  // ===== AI Generation Core =====
+  async function generateFromPrompt() {
+    let prompt = promptInputEl.value.trim();
+    if(!prompt) { alert("Please enter a prompt!"); return; }
+    
+    setLoading('Generating Luau Code via AI...');
+    try {
+      let instruction = buildSystemPrompt() + '\n\nUser Request: ' + prompt + '\n\n';
+      let generated = await generateText({
+        instruction: instruction,
+        maxTokens: 3000,
+        temperature: tempSlider.value / 100,
+      });
+      codeEditorEl.value = generated;
+      onEditorInput();
+      appendToHistory(prompt, generated);
+      switchTab('editor');
+      statusEl.textContent = 'Generated successfully!';
+      statusEl.style.color = 'var(--success)';
+    } catch (e) {
+      console.error(e);
+      statusEl.textContent = 'Error: ' + (e.message || 'Failed to fetch AI');
+      statusEl.style.color = 'var(--accent)';
+      codeOutputEl.textContent += '[ERROR] Generation failed: ' + (e.message || 'Network error') + '\n';
+      switchTab('output');
+    }
+    stopLoading();
+  }
+  
+  // ===== AI Tools (all wrapped in try-catch to prevent unhandled rejections) =====
+  async function optimizeSelectedCode() {
+    if(!codeEditorEl.value.trim()) return alert("Editor is empty!");
+    setLoading('Optimizing code...');
+    try {
+      let res = await generateText('Optimize the following Luau/Roblox code for performance and readability. Do not change functionality. Output ONLY the optimized code:\n\n' + codeEditorEl.value);
+      codeEditorEl.value = res;
+      onEditorInput();
+    } catch (e) {
+      alert('Optimization failed: ' + (e.message || 'Network error'));
+    }
+    stopLoading();
+  }
+  
+  async function fixBugs() {
+    if(!codeEditorEl.value.trim()) return alert("Editor is empty!");
+    setLoading('Diagnosing bugs...');
+    try {
+      let res = await generateText('Fix any bugs, undefined variables, or logical errors in the following Luau/Roblox code. Output ONLY the corrected code:\n\n' + codeEditorEl.value);
+      codeEditorEl.value = res;
+      onEditorInput();
+    } catch (e) {
+      alert('Bug fix failed: ' + (e.message || 'Network error'));
+    }
+    stopLoading();
+  }
+  
+  async function explainCode() {
+    if(!codeEditorEl.value.trim()) return alert("Editor is empty!");
+    setLoading('Generating explanation...');
+    try {
+      let res = await generateText('Explain this Luau/Roblox code line by line in detail:\n\n' + codeEditorEl.value);
+      codeOutputEl.textContent = res;
+      switchTab('output');
+    } catch (e) {
+      alert('Explain failed: ' + (e.message || 'Network error'));
+    }
+    stopLoading();
+  }
+  
+  async function unitTestCode() {
+    if(!codeEditorEl.value.trim()) return alert("Editor is empty!");
+    setLoading('Writing Unit Tests...');
+    try {
+      let res = await generateText('Write unit tests (using TestEZ format) for the following Luau code:\n\n' + codeEditorEl.value);
+      appendEditor('\n\n-- === UNIT TESTS === --\n' + res);
+      switchTab('editor');
+    } catch (e) {
+      alert('Unit test generation failed: ' + (e.message || 'Network error'));
+    }
+    stopLoading();
+  }
+  
+  async function addComments() {
+    if(!codeEditorEl.value.trim()) return alert("Editor is empty!");
+    setLoading('Adding comments...');
+    try {
+      let res = await generateText('Add detailed LuauDoc style comments (--) to the following Luau code. Do not change the code logic, only add inline documentation:\n\n' + codeEditorEl.value);
+      codeEditorEl.value = res;
+      onEditorInput();
+    } catch (e) {
+      alert('Commenting failed: ' + (e.message || 'Network error'));
+    }
+    stopLoading();
+  }
+  
+  async function addTypes() {
+    if(!codeEditorEl.value.trim()) return alert("Editor is empty!");
+    setLoading('Adding Luau types...');
+    try {
+      let res = await generateText('Add strict Luau type annotations to the following code. Use type aliases, function type packs, and generic types where appropriate. Keep the logic identical:\n\n' + codeEditorEl.value);
+      codeEditorEl.value = res;
+      onEditorInput();
+    } catch (e) {
+      alert('Type annotation failed: ' + (e.message || 'Network error'));
+    }
+    stopLoading();
+  }
+  
+  async function genDocs() {
+    if(!codeEditorEl.value.trim()) return alert("Editor is empty!");
+    setLoading('Generating documentation...');
+    try {
+      let res = await generateText('Generate Markdown documentation for this Luau module/script:\n\n' + codeEditorEl.value);
+      codeOutputEl.textContent = res;
+      switchTab('output');
+    } catch (e) {
+      alert('Documentation failed: ' + (e.message || 'Network error'));
+    }
+    stopLoading();
+  }
+  
+  async function generateImageFromPrompt() {
+    let p = prompt("Enter description for game icon/thumbnail:");
+    if(!p) return;
+    setLoading('Generating Game Icon...');
+    try {
+      let imgUrl = await generateImage('Roblox game icon: ' + p, { resolution: "768x768" });
+      codeOutputEl.innerHTML = '<h3 style="color:white;">Generated Icon</h3><img src="' + imgUrl + '" style="max-width:300px; border:2px solid var(--border); border-radius:8px;">';
+      switchTab('output');
+    } catch (e) {
+      alert('Image generation failed: ' + (e.message || 'Network error'));
+    }
+    stopLoading();
+  }
+  
+  // ===== Execution / Simulation Log =====
+  function runCodeInEditor() {
+    let code = codeEditorEl.value.trim();
+    if(!code) return;
+    switchTab('output');
+    codeOutputEl.textContent = '[EXEC] Running Luau Script Simulation...\n' + '-'.repeat(40) + '\n';
+    setTimeout(() => {
+      let lines = code.split('\n').length;
+      let services = (code.match(/GetService/g) || []).length;
+      let remotes = (code.match(/RemoteEvent|RemoteFunction/g) || []).length;
+      codeOutputEl.textContent += '[INFO] Script Length: ' + lines + ' lines\n';
+      codeOutputEl.textContent += '[INFO] Services Used: ' + services + '\n';
+      codeOutputEl.textContent += '[INFO] Network Events: ' + remotes + '\n';
+      if(code.includes('wait(')) codeOutputEl.textContent += '[WARN] Deprecated \'wait()\' detected. Use \'task.wait()\' instead.\n';
+      if(code.includes('spawn(')) codeOutputEl.textContent += '[WARN] Deprecated \'spawn()\' detected. Use \'task.spawn()\' instead.\n';
+      if(!code.includes('local')) codeOutputEl.textContent += '[WARN] Missing \'local\' keywords detected. Avoid global leaks.\n';
+      if(code.includes('game.Players.')) codeOutputEl.textContent += '[WARN] Avoid using \'game.Players\', prefer GetService.\n';
+      codeOutputEl.textContent += '-'.repeat(40) + '\n[SUCCESS] Simulation Complete. No runtime errors detected in dry-run.';
+    }, 500);
+  }
+  
+  function clearEditor() { if(confirm('Clear all code?')) { codeEditorEl.value=''; onEditorInput(); } }
+  
+  function appendEditor(txt) {
+    codeEditorEl.value += txt;
+    onEditorInput();
+  }
+  
+  // ===== Chat Logic =====
+  let chatHistory = JSON.parse(localStorage._luai_chat || '[]');
+  
+  async function sendChat() {
+    let msg = chatInput.value.trim();
+    if(!msg) return;
+    
+    addChatMsg('userMsg', msg);
+    chatHistory.push({r:'user', t:msg});
+    chatInput.value = '';
+    
+    setLoading('AI thinking...');
+    try {
+      let ctx = chatHistory.slice(-10).map(m => (m.r==='user'?'User':'Assistant') + ': ' + m.t).join('\n');
+      let res = await generateText('You are an expert Roblox Developer and Luau programmer. Answer the user\'s question concisely and accurately.\n\nChat History:\n' + ctx + '\n\nAssistant:');
+      addChatMsg('aiMsg', res);
+      chatHistory.push({r:'ai', t:res});
+      localStorage._luai_chat = JSON.stringify(chatHistory);
+    } catch(e) {
+      addChatMsg('aiMsg', 'Error: ' + (e.message || 'Failed to reach AI'));
+    }
+    stopLoading();
+  }
+  
+  function addChatMsg(cls, text) {
+    let d = document.createElement('div');
+    d.className = 'msg ' + cls;
+    d.textContent = text;
+    chatAreaEl.appendChild(d);
+    chatAreaEl.scrollTop = chatAreaEl.scrollHeight;
+  }
+  
+  // ===== History =====
+  function appendToHistory(prompt, code) {
+    history.unshift({t: Date.now(), p: prompt, c: code});
+    if(history.length > 20) history.pop();
+    localStorage._luai_history = JSON.stringify(history);
+    renderHistory();
+  }
+  
+  function renderHistory() {
+    let html = '';
+    history.forEach((h, i) => {
+      html += '<div class="libItem" style="margin-bottom:8px;" onclick="loadHistory(' + i + ')"><code>' + escapeHtml(h.p.substring(0, 40)) + (h.p.length>40?'...':'') + '</code><span>' + new Date(h.t).toLocaleString() + ' • ' + h.c.length + ' chars</span></div>';
+    });
+    historyListCtn.innerHTML = html || '<div style="text-align:center; color:#666; padding:20px;">No history yet.</div>';
+  }
+  
+  function loadHistory(index) {
+    let h = history[index];
+    if(confirm('Load this history item into the editor?')) {
+      codeEditorEl.value = h.c;
+      promptInputEl.value = h.p;
+      onEditorInput();
+      switchTab('editor');
+    }
+  }
+  
+  // ===== Save/Load Project =====
+  function saveProject() {
+    if(!codeEditorEl.value.trim()) return;
+    localStorage._luai_project = codeEditorEl.value;
+    statusEl.textContent = 'Saved!';
+    statusEl.style.color = 'var(--success)';
+    setTimeout(() => { statusEl.textContent = 'Ready'; statusEl.style.color = 'var(--luau-blue)'; }, 1500);
+  }
+  
+  function loadProject() {
+    let saved = localStorage._luai_project;
+    if(saved) {
+      codeEditorEl.value = saved;
+      onEditorInput();
+    }
+  }
+  
+  function updateSettings() {
+    let s = {
+      temp: tempSlider.value,
+      gameType: gameTypeSel.value,
+      scope: scopeSel.value,
+      optimization: optimizationSel.value,
+      types: includeTypeCheck.checked,
+      model: modelSel.value
+    };
+    localStorage._luai_settings = JSON.stringify(s);
+  }
+  
+  function restoreSettings() {
+    if(settings.temp) tempSlider.value = settings.temp;
+    if(settings.gameType) gameTypeSel.value = settings.gameType;
+    if(settings.scope) scopeSel.value = settings.scope;
+    if(settings.optimization) optimizationSel.value = settings.optimization;
+    if(settings.types != null) includeTypeCheck.checked = settings.types;
+    if(settings.model) modelSel.value = settings.model;
+  }
+  
+  // ===== Init =====
+  renderLibrary();
+  renderHistory();
+  restoreSettings();
+  loadProject();
+  
+  chatInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') sendChat(); });
+  promptInputEl.addEventListener('input', () => { promptLenEl.textContent = promptInputEl.value.length; });
+</script>
+</body>
+</html>

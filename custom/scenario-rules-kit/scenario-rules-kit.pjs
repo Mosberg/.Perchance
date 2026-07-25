@@ -1,0 +1,288 @@
+$meta
+  title = Scenario Rules Kit
+  description = Priority-based rule evaluation with matching, effects, and stop controls for dynamic scenarios.
+  image = https://user.uploads.dev/file/8c7563d0ece7c9ed36c8a83f8361a7a7.webp
+  tags = rules engine, branching logic, scenario systems, conditions
+
+ensureScenarioRulesStore() =>
+  if(!window.__scenarioRulesKitV1) {
+    window.__scenarioRulesKitV1 = {};
+  }
+  return window.__scenarioRulesKitV1;
+
+normalizeScope(scope) =>
+  const raw = scope === undefined || scope === null ? "default" : String(scope).trim();
+  return raw === "" ? "default" : raw;
+
+normalizeRuleId(ruleId) =>
+  const raw = ruleId === undefined || ruleId === null ? "" : String(ruleId).trim();
+  return raw;
+
+toObject(value) =>
+  if(value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return {};
+
+ensureScope(scope) =>
+  const scopeName = normalizeScope(scope);
+  const store = ensureScenarioRulesStore();
+
+  if(!store[scopeName]) {
+    store[scopeName] = {
+      rules: []
+    };
+  }
+
+  return store[scopeName];
+
+ruleIndex(scopeData, ruleId) =>
+  for(let i = 0; i < scopeData.rules.length; i += 1) {
+    if(scopeData.rules[i].id === ruleId) {
+      return i;
+    }
+  }
+  return -1;
+
+sortRules(scopeData) =>
+  scopeData.rules.sort((a, b) => {
+    if(a.priority === b.priority) {
+      return a.id > b.id ? 1 : -1;
+    }
+    return b.priority - a.priority;
+  });
+
+add(scope, ruleId, condition, effect, options, mode) =>
+  const id = normalizeRuleId(ruleId);
+  if(id === "") return "error: empty rule id";
+
+  const scopeData = ensureScope(scope);
+  const index = ruleIndex(scopeData, id);
+
+  if(index !== -1 && mode !== "replace") {
+    return "error: rule exists";
+  }
+
+  const opt = toObject(options);
+  let priority = Number(opt.priority);
+  if(!Number.isFinite(priority)) {
+    priority = 0;
+  }
+
+  const nextRule = {
+    id: id,
+    enabled: opt.enabled === undefined ? true : Boolean(opt.enabled),
+    stop: Boolean(opt.stop),
+    priority: priority,
+    condition: condition,
+    effect: effect
+  };
+
+  if(index !== -1) {
+    scopeData.rules[index] = nextRule;
+  } else {
+    scopeData.rules.push(nextRule);
+  }
+
+  sortRules(scopeData);
+  return id;
+
+remove(scope, ruleId) =>
+  const id = normalizeRuleId(ruleId);
+  if(id === "") return false;
+
+  const scopeData = ensureScope(scope);
+  const index = ruleIndex(scopeData, id);
+  if(index === -1) return false;
+
+  scopeData.rules.splice(index, 1);
+  return true;
+
+enable(scope, ruleId) =>
+  return setEnabled(scope, ruleId, true);
+
+disable(scope, ruleId) =>
+  return setEnabled(scope, ruleId, false);
+
+setEnabled(scope, ruleId, enabled) =>
+  const id = normalizeRuleId(ruleId);
+  if(id === "") return false;
+
+  const scopeData = ensureScope(scope);
+  const index = ruleIndex(scopeData, id);
+  if(index === -1) return false;
+
+  scopeData.rules[index].enabled = Boolean(enabled);
+  return true;
+
+matchesCondition(condition, facts) =>
+  if(condition === undefined || condition === null) {
+    return false;
+  }
+
+  if(typeof condition === "function") {
+    return Boolean(condition(facts));
+  }
+
+  if(typeof condition === "string") {
+    const parts = condition.split("&&").map(item => item.trim()).filter(Boolean);
+    if(parts.length === 0) {
+      return false;
+    }
+
+    for(let i = 0; i < parts.length; i += 1) {
+      const pair = parts[i].split("=");
+      const keyName = String(pair[0] || "").trim();
+      const expected = String(pair[1] || "").trim();
+      if(keyName === "") {
+        return false;
+      }
+      if(String(facts[keyName]) !== expected) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  if(condition && typeof condition === "object" && !Array.isArray(condition)) {
+    const keys = Object.keys(condition);
+    if(keys.length === 0) {
+      return false;
+    }
+
+    for(let i = 0; i < keys.length; i += 1) {
+      const keyName = keys[i];
+      if(String(facts[keyName]) !== String(condition[keyName])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  return false;
+
+applyEffect(effect, facts, currentOutput, rule) =>
+  if(typeof effect === "function") {
+    return effect(facts, currentOutput, rule);
+  }
+
+  if(effect && typeof effect === "object" && !Array.isArray(effect)) {
+    const output = toObject(currentOutput);
+    const patch = effect;
+    for(const keyName of Object.keys(patch)) {
+      output[keyName] = patch[keyName];
+    }
+    return output;
+  }
+
+  return effect;
+
+evaluate(scope, facts, mode) =>
+  const scopeData = ensureScope(scope);
+  const factData = toObject(facts);
+
+  const matches = [];
+  let output = {};
+
+  for(let i = 0; i < scopeData.rules.length; i += 1) {
+    const rule = scopeData.rules[i];
+    if(rule.enabled !== true) {
+      continue;
+    }
+
+    let matched = false;
+    try {
+      matched = matchesCondition(rule.condition, factData);
+    } catch(error) {
+      matched = false;
+    }
+
+    if(!matched) {
+      continue;
+    }
+
+    output = applyEffect(rule.effect, factData, output, rule);
+    matches.push(rule.id);
+
+    if(rule.stop === true || mode === "first") {
+      break;
+    }
+  }
+
+  return {
+    ok: true,
+    scope: normalizeScope(scope),
+    matches: matches,
+    output: output
+  };
+
+first(scope, facts, fallback) =>
+  const report = evaluate(scope, facts, "first");
+  if(report.matches.length === 0) {
+    return fallback === undefined ? "" : fallback;
+  }
+
+  return report.output;
+
+list(scope, separator) =>
+  const sep = separator === undefined ? "," : String(separator);
+  const scopeData = ensureScope(scope);
+  return scopeData.rules.map(rule => rule.id).join(sep);
+
+count(scope) =>
+  return ensureScope(scope).rules.length;
+
+clear(scope) =>
+  const scopeName = normalizeScope(scope);
+  const store = ensureScenarioRulesStore();
+
+  if(!store[scopeName]) {
+    return 0;
+  }
+
+  const removed = store[scopeName].rules.length;
+  delete store[scopeName];
+  return removed;
+
+exportJson(scope) =>
+  const scopeData = ensureScope(scope);
+  return JSON.stringify({
+    rules: scopeData.rules.map(rule => ({
+      id: rule.id,
+      enabled: rule.enabled,
+      stop: rule.stop,
+      priority: rule.priority,
+      condition: rule.condition,
+      effect: rule.effect
+    }))
+  });
+
+importJson(scope, jsonText, mode) =>
+  let parsed;
+  try {
+    parsed = JSON.parse(String(jsonText));
+  } catch(error) {
+    return "error: invalid json";
+  }
+
+  if(!parsed || typeof parsed !== "object" || !Array.isArray(parsed.rules)) {
+    return "error: invalid rules payload";
+  }
+
+  const scopeData = ensureScope(scope);
+  if(mode === "replace") {
+    scopeData.rules = [];
+  }
+
+  for(let i = 0; i < parsed.rules.length; i += 1) {
+    const rule = parsed.rules[i];
+    add(scope, rule.id, rule.condition, rule.effect, {
+      enabled: rule.enabled,
+      stop: rule.stop,
+      priority: rule.priority
+    }, "replace");
+  }
+
+  return parsed.rules.length;

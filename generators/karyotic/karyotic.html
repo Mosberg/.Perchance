@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>karyotic — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#000; overflow:hidden;
+    font-family: "Segoe UI", system-ui, sans-serif; color:#cfe0f5; }
+  body { text-align:center; }
+  #stage { position:fixed; inset:0; }
+  canvas { display:block; width:100%; height:100%; touch-action:none; }
+
+  #hud { position:absolute; inset:0; pointer-events:none; }
+  #titleEl {
+    position:absolute; top:14px; left:0; right:0; text-align:center;
+    font-size:clamp(18px,3.4vw,30px); letter-spacing:.42em; font-weight:300;
+    color:#7fa9e6; text-shadow:0 0 18px rgba(40,90,200,.55); opacity:.92;
+    text-transform:uppercase; padding-left:.42em;
+  }
+  #subEl {
+    position:absolute; top:calc(14px + clamp(20px,3.6vw,34px)); left:0; right:0;
+    text-align:center; font-size:clamp(9px,1.5vw,12px); letter-spacing:.3em;
+    color:#4d6c9c; text-transform:uppercase;
+  }
+  #hintEl {
+    position:absolute; bottom:14px; left:0; right:0; text-align:center;
+    font-size:clamp(9px,1.6vw,12px); color:#3d567c; letter-spacing:.12em;
+  }
+
+  .joy {
+    position:absolute; width:130px; height:130px; border-radius:50%;
+    pointer-events:auto; touch-action:none;
+    background:radial-gradient(circle, rgba(60,110,200,.10), rgba(10,20,40,.02) 70%);
+    border:1px solid rgba(120,160,220,.18);
+  }
+  .joyBase { position:absolute; inset:0; border-radius:50%; border:1px dashed rgba(130,170,230,.22); }
+  .joyKnob {
+    position:absolute; left:50%; top:50%; width:58px; height:58px; margin:-29px 0 0 -29px;
+    border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #9fc2f0, #2a5cb0 70%, #15306a);
+    box-shadow:0 0 16px rgba(60,120,220,.45), inset 0 0 10px rgba(0,0,0,.4);
+    transition:transform .03s linear;
+  }
+  #moveJoy { left:28px; bottom:28px; }
+  #aimJoy  { right:28px; bottom:28px; }
+  .joyLabel {
+    position:absolute; bottom:-18px; left:0; right:0; text-align:center;
+    font-size:9px; letter-spacing:.25em; color:#44608a; text-transform:uppercase;
+  }
+
+  #loadEl {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:#05070d; color:#5d7fb8; letter-spacing:.4em; font-size:13px;
+    text-transform:uppercase; z-index:10;
+  }
+  .pulse { animation:pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+</style>
+
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div id="titleEl">Karyotic</div>
+    <div id="subEl">— Sector 7 / Laboratory —</div>
+    <div id="hintEl">Left stick: move &nbsp;·&nbsp; Right stick: aim light &nbsp;·&nbsp; WASD / Mouse also work</div>
+    <div id="moveJoy" class="joy"><div class="joyBase"></div><div class="joyKnob" id="moveKnob"></div><div class="joyLabel">Move</div></div>
+    <div id="aimJoy" class="joy"><div class="joyBase"></div><div class="joyKnob" id="aimKnob"></div><div class="joyLabel">Aim</div></div>
+  </div>
+  <div id="loadEl" class="pulse">Initializing laboratory…</div>
+</div>
+
+<script>
+"use strict";
+
+const CFG = {
+  tile: 40, mapW: 56, mapH: 40,
+  playerSpeed: 2.6, playerRadius: 12,
+  darkness: 0.94,
+  flashlightRange: 360, flashlightSpread: 0.62, flashlightStrength: 1.0,
+  ambientRange: 150, flickerChance: 0.012,
+  rayCount: 140,
+};
+
+const PAL = {
+  floor: "#eef2f7", floorLine: "#2a6fd6",
+  wall: "#aab4c4", wallEdge: "#3c4658", wallTop: "#c4cedd",
+  void: "#000000",
+  accent: "#1f4fa8",
+};
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d", { alpha: false });
+const lightCanvas = document.createElement("canvas");
+const lctx = lightCanvas.getContext("2d");
+
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  lightCanvas.width = W * DPR; lightCanvas.height = H * DPR;
+  lctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+resize();
+
+// ===== Map =====
+const T = CFG.tile;
+const GW = CFG.mapW, GH = CFG.mapH;
+const grid = new Uint8Array(GW * GH); // 0 floor, 1 wall
+const idx = (x, y) => y * GW + x;
+const isWall = (x, y) => x < 0 || y < 0 || x >= GW || y >= GH || grid[idx(x, y)] === 1;
+
+const lights = [];
+const rooms = [];
+
+function carveRoom(rx, ry, rw, rh) {
+  for (let y = ry; y < ry + rh; y++)
+    for (let x = rx; x < rx + rw; x++)
+      if (x > 0 && y > 0 && x < GW - 1 && y < GH - 1) grid[idx(x, y)] = 0;
+  rooms.push({ x: rx, y: ry, w: rw, h: rh });
+}
+function carveHall(x1, y1, x2, y2) {
+  const x0 = Math.min(x1, x2), x1m = Math.max(x1, x2);
+  const y0 = Math.min(y1, y2), y1m = Math.max(y1, y2);
+  if (y1 === y2) {
+    for (let x = x0; x <= x1m; x++) for (let dy = 0; dy < 2; dy++) {
+      const xx = x, yy = y1 + dy;
+      if (xx > 0 && yy > 0 && xx < GW - 1 && yy < GH - 1) grid[idx(xx, yy)] = 0;
+    }
+  } else if (x1 === x2) {
+    for (let y = y0; y <= y1m; y++) for (let dx = 0; dx < 2; dx++) {
+      const xx = x1 + dx, yy = y;
+      if (xx > 0 && yy > 0 && xx < GW - 1 && yy < GH - 1) grid[idx(xx, yy)] = 0;
+    }
+  } else {
+    for (let y = y0; y <= y1m; y++) for (let dx = 0; dx < 2; dx++) {
+      const xx = x1 + dx, yy = y;
+      if (xx > 0 && yy > 0 && xx < GW - 1 && yy < GH - 1) grid[idx(xx, yy)] = 0;
+    }
+    for (let x = x0; x <= x1m; x++) for (let dy = 0; dy < 2; dy++) {
+      const xx = x, yy = y2 + dy;
+      if (xx > 0 && yy > 0 && xx < GW - 1 && yy < GH - 1) grid[idx(xx, yy)] = 0;
+    }
+  }
+}
+function generateMap() {
+  grid.fill(1);
+  for (let i = 0; i < 26; i++) {
+    const rw = 4 + Math.floor(Math.random() * 7);
+    const rh = 4 + Math.floor(Math.random() * 6);
+    const rx = 1 + Math.floor(Math.random() * (GW - rw - 2));
+    const ry = 1 + Math.floor(Math.random() * (GH - rh - 2));
+    let ok = true;
+    for (const r of rooms) {
+      if (rx < r.x + r.w + 1 && rx + rw + 1 > r.x &&
+          ry < r.y + r.h + 1 && ry + rh + 1 > r.y) { ok = false; break; }
+    }
+    if (!ok) continue;
+    carveRoom(rx, ry, rw, rh);
+    lights.push({
+      x: rx + rw / 2 + (Math.random() - 0.5),
+      y: ry + rh / 2 + (Math.random() - 0.5),
+      base: 0.5 + Math.random() * 0.5,
+      flicker: Math.random() < 0.45,
+      phase: Math.random() * Math.PI * 2,
+    });
+  }
+  for (let i = 1; i < rooms.length; i++) {
+    const a = rooms[i - 1], b = rooms[i];
+    carveHall(a.x + Math.floor(a.w/2), a.y + Math.floor(a.h/2),
+              b.x + Math.floor(b.w/2), b.y + Math.floor(b.h/2));
+  }
+  for (let k = 0; k < 3 && rooms.length > 4; k++) {
+    const a = rooms[Math.floor(Math.random() * rooms.length)];
+    const b = rooms[Math.floor(Math.random() * rooms.length)];
+    if (a === b) continue;
+    carveHall(a.x + Math.floor(a.w/2), a.y + Math.floor(a.h/2),
+              b.x + Math.floor(b.w/2), b.y + Math.floor(b.h/2));
+  }
+}
+generateMap();
+
+// ===== Furniture =====
+// {x,y,w,h,type,variant} pixel coords, solid colliders
+const furniture = [];
+
+function rectFree(px, py, pw, ph, pad=4) {
+  // check all tiles under rect are floor and no furniture overlap
+  const tx0 = Math.floor((px-pad)/T), ty0 = Math.floor((py-pad)/T);
+  const tx1 = Math.floor((px+pw+pad)/T), ty1 = Math.floor((py+ph+pad)/T);
+  for (let ty=ty0; ty<=ty1; ty++) for (let tx=tx0; tx<=tx1; tx++) {
+    if (isWall(tx,ty)) return false;
+  }
+  for (const f of furniture) {
+    if (px-pad < f.x+f.w && px+pw+pad > f.x && py-pad < f.y+f.h && py+ph+pad > f.y) return false;
+  }
+  return true;
+}
+
+function placeFurniture() {
+  const types = ["table","desk","server"];
+  rooms.forEach((r, ri) => {
+    if (ri === 0) return; // keep spawn room clear-ish
+    const cx = r.x + Math.floor(r.w/2);
+    const cy = r.y + Math.floor(r.h/2);
+    const count = 1 + Math.floor(Math.random()*3);
+    for (let n=0; n<count; n++) {
+      const type = types[Math.floor(Math.random()*types.length)];
+      let w, h;
+      if (type === "server") { w = 26; h = 34; }
+      else if (type === "desk") { w = 46; h = 26; }
+      else { w = 40; h = 26; }
+      // try positions: along walls or center
+      let placed = false;
+      for (let attempt=0; attempt<12 && !placed; attempt++) {
+        const edge = Math.floor(Math.random()*4);
+        let px, py;
+        const margin = T*0.7;
+        if (edge === 0) { px = r.x*T + margin + Math.random()*(r.w*T - w - margin*2); py = r.y*T + margin; }
+        else if (edge === 1) { px = r.x*T + margin + Math.random()*(r.w*T - w - margin*2); py = (r.y+r.h)*T - margin - h; }
+        else if (edge === 2) { px = r.x*T + margin; py = r.y*T + margin + Math.random()*(r.h*T - h - margin*2); }
+        else { px = (r.x+r.w)*T - margin - w; py = r.y*T + margin + Math.random()*(r.h*T - h - margin*2); }
+        if (rectFree(px,py,w,h)) {
+          furniture.push({x:px,y:py,w,h,type,variant:Math.floor(Math.random()*3),seed:Math.random()*1000});
+          placed = true;
+        }
+      }
+    }
+  });
+}
+placeFurniture();
+
+// ===== Ambience: stains & claw marks (decor, non-solid) =====
+// {x,y,r,kind,color,rots}
+const ambience = [];
+function placeAmbience() {
+  // collect floor tiles
+  const floorTiles = [];
+  for (let y=1;y<GH-1;y++) for (let x=1;x<GW-1;x++) if (grid[idx(x,y)]===0) floorTiles.push([x,y]);
+  const stainCount = 55, clawCount = 18;
+  for (let i=0;i<stainCount && floorTiles.length;i++) {
+    const [tx,ty] = floorTiles[Math.floor(Math.random()*floorTiles.length)];
+    const kind = Math.random();
+    let color;
+    if (kind < 0.55) color = "#3a0606";      // dark dried blood
+    else if (kind < 0.8) color = "#6a0b0b";  // red blood
+    else color = "#0a0a0c";                  // black/oil
+    ambience.push({
+      x: (tx+0.5)*T + (Math.random()-0.5)*T*0.6,
+      y: (ty+0.5)*T + (Math.random()-0.5)*T*0.6,
+      r: 10 + Math.random()*22,
+      color, blobs: 3+Math.floor(Math.random()*4), seed: Math.random()*1000,
+      kind: "stain",
+    });
+  }
+  for (let i=0;i<clawCount && floorTiles.length;i++) {
+    const [tx,ty] = floorTiles[Math.floor(Math.random()*floorTiles.length)];
+    ambience.push({
+      x: (tx+0.5)*T + (Math.random()-0.5)*T*0.5,
+      y: (ty+0.5)*T + (Math.random()-0.5)*T*0.5,
+      rot: Math.random()*Math.PI*2,
+      len: 18+Math.random()*16,
+      kind: "claw",
+    });
+  }
+}
+placeAmbience();
+
+// ===== Player =====
+const player = { x:0, y:0, angle:0, radius:CFG.playerRadius };
+{
+  const r = rooms[0];
+  player.x = (r.x + r.w/2) * T;
+  player.y = (r.y + r.h/2) * T;
+}
+
+// ===== Controls =====
+const input = { mx:0, my:0, ax:0, ay:0, mouse:{x:0,y:0,active:false} };
+function makeJoy(el, knobEl, out) {
+  let active=false, id=null, cx=0, cy=0;
+  const R=54;
+  function start(e){ const t=e.changedTouches?e.changedTouches[0]:e; const rect=el.getBoundingClientRect(); cx=rect.left+rect.width/2; cy=rect.top+rect.height/2; active=true; id=e.changedTouches?t.identifier:"mouse"; move(e); el.style.opacity="1"; e.preventDefault(); }
+  function move(e){ if(!active)return; let t; if(e.changedTouches){ for(const tt of e.changedTouches) if(tt.identifier===id){t=tt;break;} if(!t)return; } else t=e; let dx=t.clientX-cx, dy=t.clientY-cy; const d=Math.hypot(dx,dy); if(d>R){dx=dx/d*R; dy=dy/d*R;} knobEl.style.transform=`translate(${dx}px,${dy}px)`; out.x=dx/R; out.y=dy/R; e.preventDefault(); }
+  function end(e){ if(e.changedTouches){ let m=false; for(const tt of e.changedTouches) if(tt.identifier===id)m=true; if(!m)return; } active=false; id=null; out.x=0; out.y=0; knobEl.style.transform="translate(0,0)"; el.style.opacity=""; }
+  el.addEventListener("touchstart",start,{passive:false});
+  el.addEventListener("touchmove",move,{passive:false});
+  el.addEventListener("touchend",end,{passive:false});
+  el.addEventListener("touchcancel",end,{passive:false});
+  el.addEventListener("mousedown",start);
+  window.addEventListener("mousemove",move);
+  window.addEventListener("mouseup",end);
+  el.style.opacity="0.6";
+}
+makeJoy(document.getElementById("moveJoy"), document.getElementById("moveKnob"), { get x(){return input.mx},set x(v){input.mx=v},get y(){return input.my},set y(v){input.my=v} });
+makeJoy(document.getElementById("aimJoy"),  document.getElementById("aimKnob"),  { get x(){return input.ax},set x(v){input.ax=v},get y(){return input.ay},set y(v){input.ay=v} });
+
+const keys = {};
+window.addEventListener("keydown", e=>{ keys[e.key.toLowerCase()]=true; });
+window.addEventListener("keyup",   e=>{ keys[e.key.toLowerCase()]=false; });
+canvas.addEventListener("mousemove", e=>{ input.mouse.x=e.clientX; input.mouse.y=e.clientY; input.mouse.active=true; });
+
+// ===== Collision =====
+function rectHit(px,py,r,rx,ry,rw,rh){
+  const cx = Math.max(rx, Math.min(px, rx+rw));
+  const cy = Math.max(ry, Math.min(py, ry+rh));
+  return (px-cx)**2 + (py-cy)**2 < r*r;
+}
+function collides(px, py, r) {
+  const minTx=Math.floor((px-r)/T), maxTx=Math.floor((px+r)/T);
+  const minTy=Math.floor((py-r)/T), maxTy=Math.floor((py+r)/T);
+  for (let ty=minTy; ty<=maxTy; ty++) for (let tx=minTx; tx<=maxTx; tx++) {
+    if (isWall(tx,ty)) {
+      const rx=tx*T, ry=ty*T;
+      const cx=Math.max(rx,Math.min(px,rx+T)), cy=Math.max(ry,Math.min(py,ry+T));
+      if ((px-cx)**2+(py-cy)**2 < r*r) return true;
+    }
+  }
+  for (const f of furniture) if (rectHit(px,py,r,f.x,f.y,f.w,f.h)) return true;
+  return false;
+}
+function tryMove(nx, ny) {
+  if (!collides(nx, player.y, player.radius)) player.x = nx;
+  if (!collides(player.x, ny, player.radius)) player.y = ny;
+}
+
+// ===== Ray casting (shadow) =====
+function rayRect(ox,oy,dx,dy,minX,minY,maxX,maxY) {
+  let tmin=-Infinity, tmax=Infinity;
+  if (Math.abs(dx)>1e-9){ let t1=(minX-ox)/dx, t2=(maxX-ox)/dx; if(t1>t2){const tmp=t1;t1=t2;t2=tmp;} tmin=Math.max(tmin,t1); tmax=Math.min(tmax,t2); }
+  else if (ox<minX||ox>maxX) return null;
+  if (Math.abs(dy)>1e-9){ let t1=(minY-oy)/dy, t2=(maxY-oy)/dy; if(t1>t2){const tmp=t1;t1=t2;t2=tmp;} tmin=Math.max(tmin,t1); tmax=Math.min(tmax,t2); }
+  else if (oy<minY||oy>maxY) return null;
+  if (tmax < 0) return null;
+  return tmin >= 0 ? tmin : 0;
+}
+function castRay(ox, oy, dx, dy, maxDist) {
+  // DDA across walls
+  let tx = Math.floor(ox/T), ty = Math.floor(oy/T);
+  const stepX = dx>0?1:-1, stepY = dy>0?1:-1;
+  const tDeltaX = dx!==0 ? Math.abs(T/dx) : Infinity;
+  const tDeltaY = dy!==0 ? Math.abs(T/dy) : Infinity;
+  let tMaxX = dx!==0 ? ((dx>0 ? (tx+1) : tx)*T - ox)/dx : Infinity;
+  let tMaxY = dy!==0 ? ((dy>0 ? (ty+1) : ty)*T - oy)/dy : Infinity;
+  if (tMaxX<0) tMaxX+=tDeltaX;
+  if (tMaxY<0) tMaxY+=tDeltaY;
+  let dist = 0;
+  while (dist < maxDist) {
+    if (tMaxX < tMaxY) { tx += stepX; dist = tMaxX; tMaxX += tDeltaX; }
+    else { ty += stepY; dist = tMaxY; tMaxY += tDeltaY; }
+    if (tx<0||ty<0||tx>=GW||ty>=GH) break;
+    if (grid[idx(tx,ty)]===1) return Math.min(dist, maxDist);
+  }
+  let best = Math.min(dist, maxDist);
+  // furniture shadows
+  for (const f of furniture) {
+    const t = rayRect(ox,oy,dx,dy,f.x,f.y,f.x+f.w,f.y+f.h);
+    if (t !== null && t < best) best = t;
+  }
+  return best;
+}
+
+// ===== Rendering =====
+function drawWorld(camX, camY) {
+  ctx.fillStyle = PAL.void;
+  ctx.fillRect(0,0,W,H);
+
+  const minTx=Math.max(0,Math.floor(camX/T)-1), maxTx=Math.min(GW-1,Math.ceil((camX+W)/T)+1);
+  const minTy=Math.max(0,Math.floor(camY/T)-1), maxTy=Math.min(GH-1,Math.ceil((camY+H)/T)+1);
+
+  // floor tiles + blue center seam lines
+  ctx.lineWidth = 1;
+  for (let ty=minTy; ty<=maxTy; ty++) {
+    for (let tx=minTx; tx<=maxTx; tx++) {
+      if (isWall(tx,ty)) continue;
+      const sx=Math.round(tx*T-camX), sy=Math.round(ty*T-camY);
+      ctx.fillStyle = PAL.floor;
+      ctx.fillRect(sx, sy, T, T);
+      // blue seam line through tile middle (connects into a grid on the floor)
+      ctx.strokeStyle = PAL.floorLine;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy+T/2+0.5); ctx.lineTo(sx+T, sy+T/2+0.5);
+      ctx.moveTo(sx+T/2+0.5, sy); ctx.lineTo(sx+T/2+0.5, sy+T);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+  // walls (drawn after floor so edges sit on top)
+  for (let ty=minTy; ty<=maxTy; ty++) {
+    for (let tx=minTx; tx<=maxTx; tx++) {
+      if (!isWall(tx,ty)) continue;
+      const sx=Math.round(tx*T-camX), sy=Math.round(ty*T-camY);
+      ctx.fillStyle = PAL.wall;
+      ctx.fillRect(sx, sy, T, T);
+      // inner top highlight
+      ctx.fillStyle = PAL.wallTop;
+      ctx.fillRect(sx+2, sy+2, T-4, 3);
+      // dark edge only where bordering floor
+      ctx.strokeStyle = PAL.wallEdge;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      if (!isWall(tx,ty-1)) { ctx.moveTo(sx, sy+1); ctx.lineTo(sx+T, sy+1); }
+      if (!isWall(tx,ty+1)) { ctx.moveTo(sx, sy+T-1); ctx.lineTo(sx+T, sy+T-1); }
+      if (!isWall(tx-1,ty)) { ctx.moveTo(sx+1, sy); ctx.lineTo(sx+1, sy+T); }
+      if (!isWall(tx+1,ty)) { ctx.moveTo(sx+T-1, sy); ctx.lineTo(sx+T-1, sy+T); }
+      ctx.stroke();
+    }
+  }
+
+  // ambience (stains & claw marks) — drawn on the floor
+  for (const a of ambience) {
+    const wx = a.x - camX, wy = a.y - camY;
+    if (wx<-60||wx>W+60||wy<-60||wy>H+60) continue;
+    if (a.kind === "stain") {
+      ctx.save();
+      ctx.translate(wx, wy);
+      ctx.globalAlpha = 0.78;
+      ctx.fillStyle = a.color;
+      for (let b=0;b<a.blobs;b++) {
+        const ang = (b/a.blobs)*Math.PI*2 + a.seed;
+        const dist = a.r*0.4*Math.sin(a.seed+b*1.7);
+        const bx = Math.cos(ang)*dist, by = Math.sin(ang)*dist;
+        const br = a.r*(0.6 + 0.4*Math.abs(Math.sin(a.seed*2+b)));
+        ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    } else { // claw
+      ctx.save();
+      ctx.translate(wx, wy);
+      ctx.rotate(a.rot);
+      ctx.strokeStyle = "rgba(15,8,8,0.8)";
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = "round";
+      for (let k=-1;k<=1;k++) {
+        const off = k*5;
+        ctx.beginPath();
+        ctx.moveTo(off, -a.len/2);
+        ctx.quadraticCurveTo(off+3, 0, off, a.len/2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  // furniture
+  for (const f of furniture) {
+    const sx = f.x - camX, sy = f.y - camY;
+    if (sx<-60||sx>W+60||sy<-60||sy>H+60) continue;
+    drawFurniture(f, sx, sy);
+  }
+
+  // ceiling light fixtures
+  for (const L of lights) {
+    const wx = L.x*T-camX, wy = L.y*T-camY;
+    if (wx<-30||wx>W+30||wy<-30||wy>H+30) continue;
+    ctx.save();
+    ctx.translate(wx, wy);
+    ctx.fillStyle = "#1b2a44";
+    ctx.fillRect(-9, -9, 18, 18);
+    ctx.strokeStyle = PAL.accent;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(-9, -9, 18, 18);
+    let b = L.base;
+    if (L.flicker) b = Math.max(0, b + (Math.random()<CFG.flickerChance?-0.8:0) + Math.sin(performance.now()*0.004+L.phase)*0.05);
+    ctx.fillStyle = `rgba(190,220,255,${0.4+b*0.6})`;
+    ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawFurniture(f, sx, sy) {
+  const w=f.w, h=f.h;
+  if (f.type === "table") {
+    // table top
+    ctx.fillStyle = "#cdd6e2";
+    ctx.fillRect(sx, sy, w, h);
+    ctx.fillStyle = "#6a7898";
+    ctx.fillRect(sx, sy, w, 2);
+    ctx.fillRect(sx, sy+h-2, w, 2);
+    // legs (corners)
+    ctx.fillStyle = "#56627a";
+    ctx.fillRect(sx+2, sy+2, 3,3); ctx.fillRect(sx+w-5, sy+2, 3,3);
+    ctx.fillRect(sx+2, sy+h-5, 3,3); ctx.fillRect(sx+w-5, sy+h-5, 3,3);
+    // scientific artifact on top
+    const cx = sx+w/2, cy = sy+h/2;
+    if (f.variant === 0) {
+      // beaker + liquid
+      ctx.fillStyle = "#3a4660";
+      ctx.fillRect(cx-6, cy-8, 12, 16);
+      ctx.fillStyle = "#5fc8e0";
+      ctx.fillRect(cx-5, cy-1, 10, 8);
+      ctx.strokeStyle = "#1f2a3d"; ctx.lineWidth=1;
+      ctx.strokeRect(cx-6, cy-8, 12, 16);
+    } else if (f.variant === 1) {
+      // microscope
+      ctx.fillStyle = "#2a3346";
+      ctx.fillRect(cx-5, cy-6, 10, 12);
+      ctx.fillStyle = "#9fb4d0";
+      ctx.fillRect(cx-3, cy-8, 6, 4);
+      ctx.fillStyle = "#1a2030";
+      ctx.beginPath(); ctx.arc(cx, cy+2, 3, 0, Math.PI*2); ctx.fill();
+    } else {
+      // petri dish + tube rack
+      ctx.fillStyle = "#b8c4d6";
+      ctx.beginPath(); ctx.arc(cx-6, cy, 5, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#d04a4a";
+      ctx.beginPath(); ctx.arc(cx-6, cy, 3, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#3a4660";
+      ctx.fillRect(cx+1, cy-6, 10, 12);
+      for (let i=0;i<3;i++){ ctx.fillStyle=["#5fc8e0","#d04a4a","#cfe04a"][i]; ctx.fillRect(cx+2+i*3, cy-5, 2, 10); }
+    }
+  } else if (f.type === "desk") {
+    // desk body
+    ctx.fillStyle = "#b8c2d2";
+    ctx.fillRect(sx, sy, w, h);
+    ctx.fillStyle = "#7c8aa3";
+    ctx.fillRect(sx, sy, w, 3);
+    // monitor
+    const mw=20, mh=14;
+    const mx = sx+w/2-mw/2, my = sy+4;
+    ctx.fillStyle = "#11161f";
+    ctx.fillRect(mx, my, mw, mh);
+    // glowing screen
+    const scr = ctx.createLinearGradient(mx,my,mx,my+mh);
+    scr.addColorStop(0,"#2a5cb0"); scr.addColorStop(1,"#0a1a3a");
+    ctx.fillStyle = scr;
+    ctx.fillRect(mx+2, my+2, mw-4, mh-4);
+    // screen flicker lines
+    ctx.fillStyle = "rgba(120,180,255,0.25)";
+    for (let i=0;i<3;i++) ctx.fillRect(mx+2, my+3+i*4, mw-4, 1);
+    // stand
+    ctx.fillStyle = "#2a3346";
+    ctx.fillRect(sx+w/2-2, my+mh, 4, 3);
+    // keyboard
+    ctx.fillStyle = "#3a4660";
+    ctx.fillRect(sx+w/2-9, sy+h-8, 18, 5);
+  } else { // server rack
+    ctx.fillStyle = "#1a2030";
+    ctx.fillRect(sx, sy, w, h);
+    ctx.fillStyle = "#2a3550";
+    ctx.fillRect(sx+1, sy+1, w-2, h-2);
+    // server units with LEDs
+    const units = 5;
+    const uh = (h-4)/units;
+    for (let i=0;i<units;i++) {
+      const uy = sy+2 + i*uh;
+      ctx.fillStyle = "#0c1018";
+      ctx.fillRect(sx+3, uy, w-6, uh-2);
+      // blinking LEDs
+      const blink = (Math.sin(performance.now()*0.003 + f.seed + i) > 0.3);
+      ctx.fillStyle = blink ? "#39d96b" : "#0a3a1a";
+      ctx.fillRect(sx+w-8, uy+2, 2, 2);
+      ctx.fillStyle = (i%2===0) ? "#d93939" : "#3a1414";
+      ctx.fillRect(sx+w-12, uy+2, 2, 2);
+      // vent lines
+      ctx.strokeStyle = "#1a2030"; ctx.lineWidth=1;
+      for (let v=0; v<3; v++) { ctx.beginPath(); ctx.moveTo(sx+5+v*4, uy+2); ctx.lineTo(sx+5+v*4, uy+uh-4); ctx.stroke(); }
+    }
+  }
+}
+
+function drawPlayer(camX, camY) {
+  const px=player.x-camX, py=player.y-camY;
+  ctx.save();
+  ctx.translate(px,py);
+  ctx.rotate(player.angle);
+  ctx.fillStyle = "#23344f";
+  ctx.beginPath(); ctx.arc(0,0,player.radius,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle = "#7fa9e6"; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle = "#cfe0f5";
+  ctx.fillRect(player.radius-2, -3, 10, 6);
+  ctx.restore();
+}
+
+// ===== Lighting (with shadow-cast flashlight) =====
+function drawLighting(camX, camY, frame) {
+  const lc = lctx;
+  lc.setTransform(DPR,0,0,DPR,0,0);
+  lc.globalCompositeOperation = "source-over";
+  lc.fillStyle = `rgba(5,7,13,${CFG.darkness})`;
+  lc.fillRect(0,0,W,H);
+  lc.globalCompositeOperation = "destination-out";
+
+  // ambient ceiling light pools
+  for (const L of lights) {
+    const wx=L.x*T-camX, wy=L.y*T-camY;
+    if (wx<-CFG.ambientRange||wx>W+CFG.ambientRange||wy<-CFG.ambientRange||wy>H+CFG.ambientRange) continue;
+    let b=L.base;
+    if (L.flicker) b = Math.max(0, b + Math.sin(frame*0.4+L.phase)*0.06 + (Math.random()<CFG.flickerChance?-0.7:0));
+    if (b<=0.02) continue;
+    const rad = CFG.ambientRange*(0.7+b*0.3);
+    const g=lc.createRadialGradient(wx,wy,0,wx,wy,rad);
+    g.addColorStop(0,`rgba(0,0,0,${0.85*b})`);
+    g.addColorStop(0.6,`rgba(0,0,0,${0.35*b})`);
+    g.addColorStop(1,"rgba(0,0,0,0)");
+    lc.fillStyle=g;
+    lc.beginPath(); lc.arc(wx,wy,rad,0,Math.PI*2); lc.fill();
+  }
+
+  // flashlight: build shadow polygon via ray fan, clip, fill gradient
+  const px = player.x - camX, py = player.y - camY;
+  const range = CFG.flashlightRange;
+  const spread = CFG.flashlightSpread;
+  const N = CFG.rayCount;
+  const a0 = player.angle - spread, a1 = player.angle + spread;
+  lc.save();
+  lc.beginPath();
+  lc.moveTo(px, py);
+  for (let i=0;i<=N;i++) {
+    const a = a0 + (a1-a0)*(i/N);
+    const dx=Math.cos(a), dy=Math.sin(a);
+    const d = castRay(player.x, player.y, dx, dy, range);
+    lc.lineTo(px + dx*d, py + dy*d);
+  }
+  lc.closePath();
+  lc.clip();
+  // gradient falloff
+  const g = lc.createRadialGradient(px, py, 8, px, py, range);
+  const s = CFG.flashlightStrength;
+  g.addColorStop(0, `rgba(0,0,0,${0.98*s})`);
+  g.addColorStop(0.4, `rgba(0,0,0,${0.82*s})`);
+  g.addColorStop(0.75, `rgba(0,0,0,${0.4*s})`);
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  lc.fillStyle = g;
+  lc.fillRect(px-range, py-range, range*2, range*2);
+  lc.restore();
+
+  // small aura around player so feet are visible
+  const pg = lc.createRadialGradient(px,py,0,px,py,55);
+  pg.addColorStop(0,"rgba(0,0,0,0.6)");
+  pg.addColorStop(1,"rgba(0,0,0,0)");
+  lc.fillStyle = pg;
+  lc.beginPath(); lc.arc(px,py,55,0,Math.PI*2); lc.fill();
+
+  lc.globalCompositeOperation = "source-over";
+}
+
+// ===== Loop =====
+let lastT = performance.now();
+let frame = 0;
+function loop(t) {
+  const dt = Math.min(33, t-lastT)/16.6667; lastT=t; frame++;
+
+  let mvx=input.mx, mvy=input.my;
+  let kx=0,ky=0;
+  if (keys["w"]||keys["arrowup"]) ky-=1;
+  if (keys["s"]||keys["arrowdown"]) ky+=1;
+  if (keys["a"]||keys["arrowleft"]) kx-=1;
+  if (keys["d"]||keys["arrowright"]) kx+=1;
+  if (kx||ky){ const m=Math.hypot(kx,ky); mvx=kx/m; mvy=ky/m; }
+
+  const sp = CFG.playerSpeed*dt;
+  tryMove(player.x + mvx*sp, player.y + mvy*sp);
+
+  const aimActive = Math.hypot(input.ax,input.ay) > 0.18;
+  if (aimActive) player.angle = Math.atan2(input.ay, input.ax);
+  else if (mvx||mvy) player.angle = Math.atan2(mvy, mvx);
+
+  const mapPixW=GW*T, mapPixH=GH*T;
+  let camX = player.x - W/2, camY = player.y - H/2;
+  if (mapPixW>W) camX=Math.max(0,Math.min(mapPixW-W,camX)); else camX=(mapPixW-W)/2;
+  if (mapPixH>H) camY=Math.max(0,Math.min(mapPixH-H,camY)); else camY=(mapPixH-H)/2;
+
+  drawWorld(camX, camY);
+  drawPlayer(camX, camY);
+  drawLighting(camX, camY, frame);
+  ctx.drawImage(lightCanvas, 0, 0, W, H);
+
+  requestAnimationFrame(loop);
+}
+
+document.getElementById("loadEl").style.display="none";
+requestAnimationFrame(loop);
+window.addEventListener("orientationchange", ()=>setTimeout(resize,200));
+</script>
+
+</body>
+</html>

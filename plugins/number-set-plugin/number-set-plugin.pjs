@@ -1,0 +1,229 @@
+$output(n, max, weights, conditions) =>
+  let debug = false;
+  
+  if(!max) max = 100;
+  else if(typeof max !== "number") max = max.evaluateItem;
+  
+  if(weights) {
+    if(typeof weights !== "string") weights = weights.toString();
+    weights = weights.split(",").map(n => Number(n));
+    if(weights.filter(n => isNaN(n)).length > 0) return {n1:`(ERROR (number-set-plugin): one or more of the weights are invalid?)`};
+    if(weights.length !== n) return {n1:`(ERROR (number-set-plugin): first input was ${n}, but you only gave ${weights.length} weights?)`};
+  }
+  if(weights && weights.filter(n => n !== 1).length === 0) weights = undefined; // if they've passed in all 1's as the weights, we remove them, since it's default, and our search algorithm is faster if the weights aren't specified
+  
+  let conditionsSatisfied;
+  if(conditions) conditionsSatisfied = new Function('nums', 'return '+conditions.replace(/n([0-9]{1,2})/g,"nums[$1-1]"));
+  
+  // To speed up the search in cases like this: https://www.reddit.com/r/perchance/comments/iwtcn7/problems_with_numberset
+  // we parse the conditions and generate valid ranges for the numbers *where possible* (e.g. with simple conditions like `n1 < 100`).
+  // We then use these valid ranges during random generation.
+  // Edit: Oh, but we only use this optimisation if they didn't pass any weights - otherwise things get tricky.
+  let knownRanges = new Array(n).fill(null).map(n => ({min:0, max:max}));
+  if(conditions) {
+    // First we need to remove all the bracketed groups:
+    let chars = conditions.split("");
+    let bracketsDepth = 0;
+    for(let i = 0; i < chars.length; i++) {
+      if(chars[i] === "(") bracketsDepth++;
+      if(chars[i] === ")") bracketsDepth--;
+      if(bracketsDepth > 0 || chars[i] === ")") chars[i] = "𝕓";
+    }
+    let topLevelConditionsStr = chars.join("").replace(/𝕓+/g, "true");
+    if(!topLevelConditionsStr.includes("||")) {
+      let topLevelAndConditions = topLevelConditionsStr.split("&&");
+      for(let cond of topLevelAndConditions) {
+        // note that we don't match != or !== because we can't make a range out of them
+        let m1 = cond.match(/\bn([0-9]{1,3})[ ]*(<|>|<=|>=|==|===)[ ]*([0-9]+)\b/);
+        let m2 = cond.match(/\b([0-9]+)[ ]*(<|>|<=|>=|==|===)[ ]*n([0-9]{1,3})\b/);
+        
+        let op, nX, num;
+        
+        if(m1) {
+          nX = m1[1];
+          op = m1[2];
+          num = Number(m1[3]);
+        } else if(m2) {
+          num = Number(m2[1]);
+          op = m2[2];
+          nX = m2[3];
+          // invert the operator since the order was swapped:
+          if(op === "<") op = ">";
+          if(op === ">") op = "<";
+          if(op === "<=") op = ">=";
+          if(op === ">=") op = "<=";
+        }
+        
+        if(m1 || m2) {
+          if(op === "<") knownRanges[nX-1].max = num-1;
+          if(op === ">") knownRanges[nX-1].min = num+1;
+          if(op === "<=") knownRanges[nX-1].max = num;
+          if(op === ">=") knownRanges[nX-1].min = num;
+        }
+      }
+    }
+  }
+  console.log("known ranges:", knownRanges);
+  
+  let sumOfMins = knownRanges.map(r => r.min).reduce((a,v) => a+v, 0);
+  if(sumOfMins > max) return {n1:`(ERROR (number-set-plugin): Couldn't satisfy the specified conditions given that the ${n} numbers need to add up to ${max}.)`};
+  
+  
+  let t = performance.now(); 
+  let nums = new Array(n).fill(0);
+  let attempts = 0;
+  let maxAttempts = 10000;
+  
+  let numIndexesRandomOrder = new Array(n).fill(0).map((n, i) => ({i, rand:Math.random()})).sort((a,b) => a.rand-b.rand).map(o => o.i); // used for allocating batches in a random order in the case where we use the knownRanges
+  
+  while(attempts < maxAttempts) { 
+    nums.fill(0);
+    
+    if(weights || !conditions) {
+      
+      
+      let sum = 0;
+      for(let i = 0; i < nums.length; i++) { 
+        nums[i] = Math.random() * (weights ? weights[i] : 1);
+        sum += nums[i];
+      }
+      for(let i = 0; i < nums.length; i++) {
+        nums[i] = Math.round((nums[i]/sum)*max);
+      }
+      // rounding could cause numbers to not sum to `max`, so we choose a random num to add/subtract the remainder to/from.
+      let scaledSum = nums.reduce((a,v) => a+v, 0);
+      let diff = max-scaledSum;
+      // if diff is negative, we need to find a num that is large enough so it's not negative when we subtract the diff
+      if(diff > 0) {
+        nums[Math.floor(Math.random()*nums.length)] += diff;
+      } else {
+        for(let ii = 0; ii < numIndexesRandomOrder.length; ii++) {
+          let i = numIndexesRandomOrder[ii];
+          if(nums[i] >= diff*-1) {
+            nums[i] += diff;
+            break;
+          }
+        }
+      }
+      
+    } else {
+    
+      // if no weights, and there are conditions, then we use the ranges learned from the input conditions (if any) to try and speed up search.
+      // think about this example when reasoning through the code below: https://www.reddit.com/r/perchance/comments/iwtcn7/problems_with_numberset/
+      
+      // first we set nums randomly within their known ranges:
+      for(let i = 0; i < nums.length; i++) {
+        let constraints = knownRanges[i];
+        let rangeSize = constraints.max - constraints.min;
+        nums[i] = constraints.min + Math.round(Math.random() * rangeSize);
+      }
+      let alreadyAllocated = nums.reduce((a,v) => a+v, 0);
+      
+      // but we may already be over the max, so we scale down to ensure we're below the max:
+      if(alreadyAllocated > max) {
+        // we need to compute the scale-down factor, but some nums may not be able to scale down that far
+        // because they hit their minimums. so we do this iteratively recomputing the
+        // scale-down factor each time.
+        // I do the scaling nums.length*2 times, and scale them a bit more than needed (scaleDownFactor*0.9) because it seemed to not work sometimes ¯\_(ツ)_/¯ i'm tired, and it's harmless
+        for(let _ = 0; _ < nums.length*2; _++) {
+          let scaleDownFactor = max / nums.reduce((a,v) => a+v, 0);
+          scaleDownFactor = scaleDownFactor*0.9;
+          for(let i = 0; i < nums.length; i++) {
+            nums[i] = Math.floor(nums[i] * scaleDownFactor);
+            if(nums[i] < knownRanges[i].min) {
+              nums[i] = knownRanges[i].min; // but now the scale-down factor is too small, which is why we have the outer loop to run the scaling again
+            }
+          }
+        }
+      }
+      
+      alreadyAllocated = nums.reduce((a,v) => a+v, 0);
+      let remainderToAllocate = max - alreadyAllocated;
+      let toAllocatePerNum = Math.floor(remainderToAllocate / nums.length);
+      
+      if(attempts === 5000 || debug && attempts === 0) console.log("nums before:", nums, nums.reduce((a,v) => a+v, 0));
+      if(attempts === 5000 || debug && attempts === 0) console.log("alreadyAllocated:", alreadyAllocated);
+      if(attempts === 5000 || debug && attempts === 0) console.log("remainderToAllocate 1:", remainderToAllocate);
+      if(remainderToAllocate < 0) console.error(`remainderToAllocate: ${remainderToAllocate}`);
+      
+      
+      // we split the remainder into reasonably-sized batches and make allocations:
+      let remainderAllocBatchSize = Math.floor(remainderToAllocate / nums.length) || 1;
+      while(remainderToAllocate > 0) {
+        let didAllocate = false;
+        for(let ii = 0; ii < numIndexesRandomOrder.length; ii++) {
+          let i = numIndexesRandomOrder[ii];
+          if(nums[i] < knownRanges[i].max) {
+            let alloc = Math.min(remainderAllocBatchSize, knownRanges[i].max - nums[i]); // this Math.min(...) is so we don't go over knownRanges[i].max
+            alloc = (alloc > remainderToAllocate) ? remainderToAllocate : alloc;
+            
+            if(attempts === 5000 || debug && attempts === 0) console.log(nums[i], alloc, i, "rem:", remainderToAllocate);
+            
+            nums[i] += alloc;
+            remainderToAllocate -= alloc;
+            didAllocate = true;
+            if(remainderToAllocate === 0) break;
+          }
+        }
+        if(!didAllocate) break; // failed to allocate - conditions unsatisfy-able? i.e. the less-than conditions constrain numbers to a sum that's lower than `max`?
+      }
+      if(attempts === 5000 || debug && attempts === 0) console.log("remainderToAllocate 3:", remainderToAllocate);
+      nums[Math.floor(Math.random()*nums.length)] += remainderToAllocate; // <-- due to flooring above, in some cases `remainderToAllocate` could be >0, so we choose a random one to add it to
+      if(attempts === 5000 || debug && attempts === 0) console.log("nums after:", nums, nums.reduce((a,v) => a+v, 0));
+    }
+    
+    
+    if(attempts === 5000 || debug && attempts === 0) console.log("attempt:", nums, nums.reduce((a,v) => a+v, 0));
+    if(!conditions || conditionsSatisfied(nums)) break;
+    attempts++;
+  }
+  console.log(`numberSet: ${attempts+1} attempts in ${Math.round(performance.now()-t)}ms`, nums, nums.reduce((a,v) => a+v, 0));
+  if(attempts === maxAttempts) return {n1:`(ERROR (number-set-plugin): Couldn't satisfy conditions after 10k attempts.)`};
+  
+  for(let i = 0; i < nums.length; i++) {
+    if(nums[i] < 0) return {n1:`ERROR (number-set-plugin): There was an error with the plugin that's likely a bug. If you could report it at reddit.com/r/perchance that'd be great! Debug info: ${n} ${max} ${weights.join(",")} ${conditions}.`};
+  }
+  
+  nums = nums.reduce((a,v,i) => (a["n"+(i+1)]=v, a), {}); // easier than array access
+  return nums;
+  
+// OLD VERSION:
+// $output(n, max, weights, conditions) =>
+// 	if(!max) max = 100;
+	
+//   if(!weights) {
+//     weights = new Array(n).fill(1);
+//   } else {
+//     if(typeof weights !== "string") weights = weights.toString(); // <-- Note, that this function can't take a weights string as input if it has square blocks in it, since those blocks would be executed under the wrong root, but it can accept a list, so in that case we evaluate it:
+//     weights = weights.split(",").map(n => Number(n));
+//     if(weights.filter(n => isNaN(n)).length > 0) return {n1:`(ERROR (number-set-plugin): one or more of the weights are invalid?)`};
+//   }
+//   if(weights.length !== n) return {n1:`(ERROR (number-set-plugin): first input was ${n}, but you only gave ${weights.length} weights.)`};
+  
+// 	let conditionsSatisfied;
+// 	if(conditions) conditionsSatisfied = new Function('nums', 'return '+conditions.replace(/n([0-9]{1,2})/g,"nums[$1-1]"));
+// 	//let t = performance.now(); 
+// 	let nums = new Array(n).fill(0);
+// 	let attempts = 0;
+// 	let maxAttempts = 10000;
+// 	while(attempts < maxAttempts) { 
+//     nums.fill(0);
+// 		let sum = 0;
+// 		for(let i = 0; i < nums.length; i++) { 
+// 			nums[i] = Math.random()*weights[i];
+// 			sum += nums[i];
+// 		}
+// 		for(let i = 0; i < nums.length; i++) {
+// 			nums[i] = Math.round((nums[i]/sum)*max);
+// 		}
+// 		// rounding could cause numbers to not sum to `max`, so:
+// 		let scaledSum = nums.reduce((a,v) => a+v, 0);
+// 		nums[Math.floor(Math.random()*nums.length)] += max-scaledSum;
+// 		if(!conditions || conditionsSatisfied(nums)) break;
+// 		attempts++;
+// 	}
+// 	if(attempts === maxAttempts) return {n1:`(ERROR (number-set-plugin): couldn't satisfy conditions.)`};
+// 	//console.log(performance.now()-t)
+//   nums = nums.reduce((a,v,i) => (a["n"+(i+1)]=v, a), {}); // easier than array access
+	
+//   return nums;

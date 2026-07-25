@@ -1,0 +1,3592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>starfall-vector — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="gameContainerEl" style="position:relative; width:100%; height:100vh; overflow:hidden; background:#000;">
+  <canvas id="gameCanvasEl" style="position:absolute; top:0; left:0; width:100%; height:100%;"></canvas>
+  <div id="scoreEl" style="position:absolute; top:10px; left:10px; color:#0f0; font-family:monospace; font-size:20px; z-index:10;">SCORE: 0</div>
+  <div id="weaponEl" style="position:absolute; top:10px; right:10px; color:#0ff; font-family:monospace; font-size:16px; z-index:10;">WEAPON: Bullet Lv1</div>
+  <div id="bombCounterEl" style="position:absolute; top:40px; right:10px; color:#f00; font-family:monospace; font-size:16px; z-index:10;">BOMBS: 0</div>
+  <div id="shieldEl" style="position:absolute; top:70px; right:10px; color:#3ff; font-family:monospace; font-size:16px; z-index:10;" hidden>SHIELD: 0</div>
+  <div id="biomeEl" style="position:absolute; top:70px; right:10px; color:#ff0; font-family:monospace; font-size:16px; z-index:10;" hidden>BIOME: Space</div>
+  <div id="gameOverEl" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#f00; font-family:monospace; font-size:40px; text-align:center; z-index:20;">
+  STARFALL VECTOR
+  <br>Press SPACE to start
+  </div>
+</div>
+
+<script>
+  // Background music setup
+  let spaceMusic = new Audio("https://user.uploads.dev/file/6ab3376808ca013fe8fc219c0ec1cb33.mp3");
+  spaceMusic.loop = true;
+  spaceMusic.volume = 0.3;
+  
+  // Add biome-specific background music
+  let mechaMusic = new Audio("https://user.uploads.dev/file/52de15597e5c73cf9b9a2bb43f04988b.mp3");
+  mechaMusic.loop = true;
+  mechaMusic.volume = 0.3;
+  
+  let bioMusic = new Audio("https://user.uploads.dev/file/2ea638cc48deb53a3c5bd7549ab14a8c.mp3");
+  bioMusic.loop = true;
+  bioMusic.volume = 0.3;
+  
+  let astralMusic = new Audio("https://user.uploads.dev/file/3f8136cb9c9046a3cac47261e7a11262.mp3");
+  astralMusic.loop = true;
+  astralMusic.volume = 0.3;
+  
+  let cyberMusic = new Audio("https://user.uploads.dev/file/8329c0b2fd4aef8e62f9687b5aca51f3.mp3");
+  cyberMusic.loop = true;
+  cyberMusic.volume = 0.3;
+  
+  let audioStarted = false;
+  
+  // Sound effects setup
+  let bulletSound = new Audio("https://user.uploads.dev/file/aab4a9d2715b688604282e2cd3186a96.mp3");
+  bulletSound.volume = 0.1;
+  
+  let laserSound = new Audio("https://user.uploads.dev/file/5682f35ad3a0c4f77c7cba025fff4430.mp3");
+  laserSound.volume = 0.1;
+  
+  let bombExplosionSound = new Audio("https://user.uploads.dev/file/2946dd31c2832c8bd51fdfa4cc70e525.mp3");
+  bombExplosionSound.volume = 0.25;
+  
+  let enemyProjectileSound = new Audio("https://user.uploads.dev/file/2946dd31c2832c8bd51fdfa4cc70e525.mp3");
+  enemyProjectileSound.volume = 0.2;
+  
+  let enemyExplosionSound = new Audio("https://user.uploads.dev/file/73a073a276371d5b5134003692572ce5.mp3");
+  enemyExplosionSound.volume = 0.2;
+  
+  // Game setup
+  let canvas = gameCanvasEl;
+  let ctx = canvas.getContext('2d');
+  let score = 0;
+  let gameRunning = false; // Changed to false to prevent auto-start
+  
+  // Set canvas size
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+  
+  // Background stars array - separate from enemies
+  let backgroundStars = [];
+  
+  // Procedural Stage Generation System
+  class StageSegment {
+    constructor(config) {
+      this.terrainPattern = config.terrainPattern || null;
+      // Initialize enemyGroups with spawned flag
+      this.enemyGroups = config.enemyGroups ? config.enemyGroups.map(group => ({...group, spawned: false})) : [];
+      this.hazardZones = config.hazardZones || [];
+      this.bossZones = config.bossZones || [];
+      this.length = config.length || 1000;
+    }
+  }
+  
+  class ProceduralStageBuilder {
+    constructor() {
+      this.biomeSegments = {
+        space: [
+          new StageSegment({
+            terrainPattern: 'open',
+            enemyGroups: [
+              { type: 'space_asteroid', count: 12, spread: 100 }, // Increased count, decreased spread
+              { type: 'space_alien_ship', count: 8, spread: 150 } // Increased count, decreased spread
+            ],
+            length: 800
+          }),
+          new StageSegment({
+            terrainPattern: 'nebula',
+            enemyGroups: [
+              { type: 'space_snake', count: 15, spread: 80 }, // Increased count, decreased spread
+              { type: 'space_comet', count: 10, spread: 120 } // Increased count, decreased spread
+            ],
+            hazardZones: [{ type: 'asteroid', x: 400, y: 300, size: 50 }],
+            length: 1200
+          }),
+          new StageSegment({
+            terrainPattern: 'debris',
+            enemyGroups: [
+              { type: 'space_drone', count: 20, spread: 80 }, // Increased count, decreased spread
+              { type: 'space_alien_ship', count: 12, spread: 100 } // Increased count, decreased spread
+            ],
+            length: 1000
+          })
+        ],
+        mecha: [
+          new StageSegment({
+            terrainPattern: 'factory',
+            enemyGroups: [
+              { type: 'mecha_gear', count: 15, spread: 80 }, // Increased count, decreased spread
+              { type: 'mecha_drone', count: 10, spread: 100 } // Increased count, decreased spread
+            ],
+            hazardZones: [{ type: 'laserWall', x: 300, width: 100, gapY: canvas.height/2 - 50, gapHeight: 100 }],
+            length: 1000
+          }),
+          new StageSegment({
+            terrainPattern: 'junkyard',
+            enemyGroups: [
+              { type: 'mecha_spider', count: 18, spread: 60 }, // Increased count, decreased spread
+              { type: 'mecha_turret', count: 12, spread: 80 } // Increased count, decreased spread
+            ],
+            bossZones: [{ type: 'mechaBoss', x: 800, y: 200 }],
+            length: 1500
+          })
+        ],
+        bio: [
+          new StageSegment({
+            terrainPattern: 'hive',
+            enemyGroups: [
+              { type: 'bio_cell', count: 15, spread: 80 }, // Increased count, decreased spread
+              { type: 'bio_spore', count: 12, spread: 100 } // Increased count, decreased spread
+            ],
+            hazardZones: [{ type: 'acidPool', x: 500, y: 400, size: 80 }],
+            length: 1100
+          }),
+          new StageSegment({
+            terrainPattern: 'tunnel',
+            enemyGroups: [
+              { type: 'bio_tentacle', count: 18, spread: 50 }, // Increased count, decreased spread
+              { type: 'bio_parasite', count: 12, spread: 70 } // Increased count, decreased spread
+            ],
+            bossZones: [{ type: 'bioBoss', x: 900, y: 300 }],
+            length: 1400
+          }),
+          new StageSegment({
+            terrainPattern: 'flesh',
+            enemyGroups: [
+              { type: 'bio_mutant', count: 15, spread: 60 }, // Increased count, decreased spread
+              { type: 'bio_virus', count: 20, spread: 40 } // Increased count, decreased spread
+            ],
+            length: 1300
+          })
+        ],
+        astral: [
+          new StageSegment({
+            terrainPattern: 'void',
+            enemyGroups: [
+              { type: 'astral_crystal', count: 12, spread: 100 }, // Increased count, decreased spread
+              { type: 'astral_wisp', count: 8, spread: 150 } // Increased count, decreased spread
+            ],
+            hazardZones: [{ type: 'blackHole', x: 600, y: 300, size: 60 }],
+            length: 900
+          }),
+          new StageSegment({
+            terrainPattern: 'crystal',
+            enemyGroups: [
+              { type: 'astral_phantom', count: 15, spread: 60 }, // Increased count, decreased spread
+              { type: 'astral_wisp', count: 10, spread: 80 } // Increased count, decreased spread
+            ],
+            bossZones: [{ type: 'astralBoss', x: 1000, y: 200 }],
+            length: 1300
+          })
+        ],
+        cyber: [
+          new StageSegment({
+            terrainPattern: 'cathedral',
+            enemyGroups: [
+              { type: 'cyber_drone', count: 15, spread: 80 }, // Increased count, decreased spread
+              { type: 'cyber_sentinel', count: 10, spread: 100 } // Increased count, decreased spread
+            ],
+            hazardZones: [{ type: 'dataStorm', x: 400, width: 150 }],
+            length: 1000
+          }),
+          new StageSegment({
+            terrainPattern: 'mainframe',
+            enemyGroups: [
+              { type: 'cyber_virus', count: 18, spread: 60 }, // Increased count, decreased spread
+              { type: 'cyber_sentinel', count: 12, spread: 80 } // Increased count, decreased spread
+            ],
+            bossZones: [{ type: 'cyberBoss', x: 1100, y: 250 }],
+            length: 1600
+          })
+        ]
+      };
+      
+      this.currentStage = [];
+      this.stagePosition = 0;
+      this.currentBiome = 'space';
+      this.biomeProgress = 0;
+    }
+    
+    generateStageSequence() {
+      this.currentStage = [];
+      const biomeSequence = ['space', 'mecha', 'space', 'bio', 'space', 'astral', 'space', 'cyber'];
+      
+      biomeSequence.forEach(biome => {
+        const segments = this.biomeSegments[biome];
+        const segment = segments[Math.floor(Math.random() * segments.length)];
+        this.currentStage.push({...segment, biome});
+      });
+    }
+    
+    getCurrentSegment() {
+      let accumulatedLength = 0;
+      for (const segment of this.currentStage) {
+        if (this.stagePosition >= accumulatedLength && 
+            this.stagePosition < accumulatedLength + segment.length) {
+          return {
+            segment: segment,
+            relativePosition: this.stagePosition - accumulatedLength,
+            biome: segment.biome
+          };
+        }
+        accumulatedLength += segment.length;
+      }
+      return null;
+    }
+    
+    update(deltaTime) {
+      this.stagePosition += deltaTime * 0.025; // Reduced scroll speed by 4x to increase biome duration
+      
+      // Check if we need to progress to next biome
+      const currentSegment = this.getCurrentSegment();
+      if (currentSegment && currentSegment.biome !== this.currentBiome) {
+        this.currentBiome = currentSegment.biome;
+        this.biomeProgress = 0;
+      }
+      
+      if (currentSegment) {
+        this.biomeProgress = currentSegment.relativePosition / currentSegment.segment.length;
+      }
+      
+      // Reset stage if completed
+      if (this.stagePosition > this.getTotalStageLength()) {
+        this.stagePosition = 0;
+        this.generateStageSequence();
+        
+        // Reset spawned flags for all segments in the currentStage
+        for (let segment of this.currentStage) {
+          if (segment.enemyGroups) {
+            for (let group of segment.enemyGroups) {
+              group.spawned = false;
+            }
+          }
+        }
+      }
+    }
+    
+    getTotalStageLength() {
+      return this.currentStage.reduce((total, segment) => total + segment.length, 0);
+    }
+  }
+  
+  // AI-Driven Adaptation System
+  class AdaptationAI {
+    constructor() {
+      this.playerStats = {
+        shotsFired: 0,
+        hits: 0,
+        survivalTime: 0,
+        deaths: 0
+      };
+      this.adaptationFactors = {
+        enemySpawnRate: 1.0,
+        projectileDensity: 1.0,
+        powerUpDropRate: 1.0
+      };
+    }
+    
+    update(deltaTime, firedShot, hit) {
+      this.playerStats.survivalTime += deltaTime;
+      if (firedShot) this.playerStats.shotsFired++;
+      if (hit) this.playerStats.hits++;
+      
+      // Calculate hit ratio
+      const hitRatio = this.playerStats.shotsFired > 0 ? 
+        this.playerStats.hits / this.playerStats.shotsFired : 0;
+      
+      // Adapt based on performance
+      if (hitRatio < 0.3) {
+        // Player struggling - make game easier
+        this.adaptationFactors.enemySpawnRate = Math.max(0.5, this.adaptationFactors.enemySpawnRate - 0.01);
+        this.adaptationFactors.projectileDensity = Math.max(0.7, this.adaptationFactors.projectileDensity - 0.005);
+        this.adaptationFactors.powerUpDropRate = Math.min(2.0, this.adaptationFactors.powerUpDropRate + 0.01);
+      } else if (hitRatio > 0.7 && this.playerStats.survivalTime > 30000) {
+        // Player doing well - increase difficulty
+        this.adaptationFactors.enemySpawnRate = Math.min(2.0, this.adaptationFactors.enemySpawnRate + 0.01);
+        this.adaptationFactors.projectileDensity = Math.min(1.5, this.adaptationFactors.projectileDensity + 0.005);
+        this.adaptationFactors.powerUpDropRate = Math.max(0.5, this.adaptationFactors.powerUpDropRate - 0.005);
+      }
+    }
+    
+    reset() {
+      this.playerStats = {
+        shotsFired: 0,
+        hits: 0,
+        survivalTime: 0,
+        deaths: 0
+      };
+      this.adaptationFactors = {
+        enemySpawnRate: 1.0,
+        projectileDensity: 1.0,
+        powerUpDropRate: 1.0
+      };
+    }
+  }
+  
+  // Initialize procedural systems
+  const stageBuilder = new ProceduralStageBuilder();
+  const adaptationAI = new AdaptationAI();
+  stageBuilder.generateStageSequence();
+  
+  // Base Enemy class with shooting capability
+  // movementPattern: 'straight' | 'sine' | 'dive' | 'circle' | 'hover' | 'zigzag'
+  let enemyMovementPatterns = ['straight', 'sine', 'dive', 'circle', 'hover', 'zigzag'];
+  class Enemy {
+    constructor(opts = {}) {
+      this.x = canvas.width;
+      this.y = Math.random() * canvas.height;
+      this.size = 5 + Math.random() * 15;
+      this.speed = 2 + Math.random() * 5;
+      this.rotation = Math.random() * Math.PI * 2;
+      this.rotationSpeed = (Math.random() - 0.5) * 0.2;
+      
+      // R-Type style movement pattern
+      this.movementPattern = opts.pattern || enemyMovementPatterns[Math.floor(Math.random() * enemyMovementPatterns.length)];
+      this.baseY = this.y;
+      this.phase = Math.random() * Math.PI * 2;
+      this.amplitude = 40 + Math.random() * 80;
+      this.frequency = 0.02 + Math.random() * 0.03;
+      this.diveTriggered = false;
+      this.diveDir = Math.random() < 0.5 ? -1 : 1;
+      this.circleAngle = 0;
+      this.circleRadius = 50 + Math.random() * 60;
+      this.hoverStopX = canvas.width - 150 - Math.random() * 200;
+      this.hovering = false;
+      this.hoverBob = 0;
+      this.zigzagTimer = 0;
+      this.zigzagDir = 1;
+      
+      // Hit flash for damage feedback
+      this.hitFlash = 0;
+      this.thrusterPhase = Math.random() * Math.PI * 2;
+      
+      // Shooting properties
+      this.lastShotTime = 0;
+      this.shootCooldown = 1500 + Math.random() * 2500; // 1.5-4 seconds (was 1-3s)
+    }
+    
+    update() {
+      this.thrusterPhase += 0.4;
+      if (this.hitFlash > 0) this.hitFlash -= 0.08;
+      
+      switch (this.movementPattern) {
+        case 'sine': {
+          this.x -= this.speed;
+          this.phase += this.frequency;
+          this.y = this.baseY + Math.sin(this.phase) * this.amplitude;
+          break;
+        }
+        case 'dive': {
+          this.x -= this.speed;
+          // Once on screen, dive toward player's Y then curve away
+          if (!this.diveTriggered && this.x < canvas.width - 50) {
+            this.diveTriggered = true;
+            this.diveDir = (player.y < this.y) ? -1 : 1;
+          }
+          if (this.diveTriggered) {
+            this.y += this.diveDir * this.speed * 0.8;
+            this.diveDir *= 0.985; // ease out the dive
+          }
+          break;
+        }
+        case 'circle': {
+          this.x -= this.speed * 0.6;
+          this.circleAngle += 0.04;
+          this.y = this.baseY + Math.sin(this.circleAngle) * this.circleRadius;
+          break;
+        }
+        case 'hover': {
+          if (!this.hovering && this.x <= this.hoverStopX) {
+            this.hovering = true;
+          }
+          if (this.hovering) {
+            this.hoverBob += 0.05;
+            this.y = this.baseY + Math.sin(this.hoverBob) * 25;
+            // slowly drift left after hovering a while
+            this.x -= this.speed * 0.15;
+          } else {
+            this.x -= this.speed;
+          }
+          break;
+        }
+        case 'zigzag': {
+          this.x -= this.speed;
+          this.zigzagTimer++;
+          if (this.zigzagTimer > 25) {
+            this.zigzagTimer = 0;
+            this.zigzagDir *= -1;
+          }
+          this.y += this.zigzagDir * 2.5;
+          break;
+        }
+        default: {
+          this.x -= this.speed;
+        }
+      }
+      
+      this.rotation += this.rotationSpeed;
+      // Keep enemies roughly in vertical bounds for patterned movement
+      if (this.y < this.size) this.y = this.size;
+      if (this.y > canvas.height - this.size) this.y = canvas.height - this.size;
+    }
+    
+    // Apply a brief hit flash (called when grazed by a projectile)
+    flash() { this.hitFlash = 1; }
+    
+    // Check if enemy should shoot - only when on-screen and roughly level with player (fairer)
+    shouldShoot(currentTime) {
+      if (this.x < 0 || this.x > canvas.width) return false;
+      // Avoid point-blank shots: only fire when a reasonable distance away
+      let dist = Math.hypot(player.x - this.x, player.y - this.y);
+      if (dist < 120) return false;
+      return currentTime - this.lastShotTime > this.shootCooldown;
+    }
+    
+    // Create enemy bullet aimed at player (with a small lead-aim tolerance for fairness)
+    createBullet() {
+      this.lastShotTime = performance.now();
+      
+      // Play enemy projectile sound
+      enemyProjectileSound.currentTime = 0;
+      enemyProjectileSound.play().catch(e => console.log("Enemy projectile sound failed:", e));
+      
+      // Calculate direction towards player (no perfect tracking — straight-line shot)
+      let dx = player.x - this.x;
+      let dy = player.y - this.y;
+      let angle = Math.atan2(dy, dx);
+      
+      // Spawn slightly in front of the enemy so it doesn't overlap the body
+      let sx = this.x - this.size * 0.6;
+      let sy = this.y;
+      return new EnemyBullet(sx, sy, angle);
+    }
+  }
+  
+  // Enemy Bullet class - slow, bright, glowing orb with a warning charge flash
+  class EnemyBullet {
+    constructor(x, y, angle) {
+      this.x = x;
+      this.y = y;
+      this.angle = angle;
+      this.speed = 3;       // slower than before (was 4) — easier to dodge
+      this.size = 7;        // bigger, easier to see (was 4)
+      this.color = '#ff4040';
+      this.coreColor = '#fff5b0';
+      this.trail = [];      // motion trail
+    }
+    
+    update() {
+      // record trail position
+      this.trail.push({ x: this.x, y: this.y });
+      if (this.trail.length > 8) this.trail.shift();
+      
+      this.x += Math.cos(this.angle) * this.speed;
+      this.y += Math.sin(this.angle) * this.speed;
+    }
+    
+    draw() {
+      // Motion trail (fades toward the tail)
+      for (let i = 0; i < this.trail.length; i++) {
+        let t = this.trail[i];
+        let a = (i / this.trail.length) * 0.5;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, this.size * (i / this.trail.length) * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      
+      // Outer glow halo
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = this.color;
+      ctx.globalAlpha = 0.8;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      
+      // Inner core (bright)
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = this.coreColor;
+      ctx.fillStyle = this.coreColor;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // White-hot center
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Check if bullet is off screen
+    isOffScreen() {
+      return this.x < -20 || this.x > canvas.width + 20 || 
+             this.y < -20 || this.y > canvas.height + 20;
+    }
+  }
+  
+  // Star Enemy (background stars) - now separate from enemies
+  class StarEnemy {
+    constructor() {
+      this.x = canvas.width;
+      this.y = Math.random() * canvas.height;
+      this.size = 1 + Math.random() * 3;
+      this.speed = 0.5 + Math.random() * 1.5;
+      this.rotation = Math.random() * Math.PI * 2;
+      this.rotationSpeed = (Math.random() - 0.5) * 0.05;
+      this.color = `hsl(${Math.random() * 60}, 100%, 70%)`; // Yellow to white
+    }
+    
+    update() {
+      this.x -= this.speed;
+      this.rotation += this.rotationSpeed;
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      
+      // Draw star shape
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const angle = (i * 2 * Math.PI / 5) - Math.PI/2;
+        const innerAngle = angle + Math.PI/5;
+        
+        if (i === 0) {
+          ctx.moveTo(
+            Math.cos(angle) * this.size, 
+            Math.sin(angle) * this.size
+          );
+        } else {
+          ctx.lineTo(
+            Math.cos(angle) * this.size, 
+            Math.sin(angle) * this.size
+          );
+        }
+        
+        ctx.lineTo(
+          Math.cos(innerAngle) * this.size/2, 
+          Math.sin(innerAngle) * this.size/2
+        );
+      }
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.restore();
+    }
+  }
+  
+  // Mecha Wasteland Enemy
+  class MechaEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${15 + Math.random() * 15}, 100%, 50%)`; // Orange-red
+      this.gearTeeth = 6 + Math.floor(Math.random() * 4);
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      
+      // Draw gear shape
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      let teeth = this.gearTeeth;
+      let innerRadius = this.size * 0.7;
+      let outerRadius = this.size;
+      for (let i = 0; i < teeth * 2; i++) {
+        let radius = i % 2 === 0 ? outerRadius : innerRadius;
+        let angle = (i * Math.PI) / teeth;
+        let x = Math.cos(angle) * radius;
+        let y = Math.sin(angle) * radius;
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.closePath();
+      ctx.fill();
+      
+      // Draw center hole
+      ctx.fillStyle = '#222';
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
+    }
+  }
+  
+  // Bio-Organic Hive Enemy
+  class BioEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${280 + Math.random() * 40}, 100%, 50%)`; // Purple to crimson
+      this.pulsePhase = Math.random() * Math.PI * 2;
+    }
+    
+    update() {
+      super.update();
+      this.pulsePhase += 0.05;
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      
+      // Pulsating size
+      let pulseFactor = 1 + Math.sin(this.pulsePhase) * 0.2;
+      let size = this.size * pulseFactor;
+      
+      // Draw organic blob shape
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      let points = 8;
+      for (let i = 0; i < points; i++) {
+        let angle = (i / points) * Math.PI * 2;
+        let radius = size * (0.8 + Math.random() * 0.4);
+        let x = Math.cos(angle) * radius;
+        let y = Math.sin(angle) * radius;
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.closePath();
+      ctx.fill();
+      
+      // Draw nucleus
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(0, 0, size * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
+    }
+  }
+  
+  // Astral Void Enemy
+  class AstralEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${200 + Math.random() * 60}, 100%, 70%)`; // Deep blues to violet
+      this.crystals = 3 + Math.floor(Math.random() * 3);
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      
+      // Draw crystal cluster
+      ctx.fillStyle = this.color;
+      for (let i = 0; i < this.crystals; i++) {
+        let angle = (i / this.crystals) * Math.PI * 2;
+        let distance = this.size * 0.7;
+        let x = Math.cos(angle) * distance;
+        let y = Math.sin(angle) * distance;
+        
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - this.size * 0.3, y - this.size * 0.3);
+        ctx.lineTo(x - this.size * 0.3, y + this.size * 0.3);
+        ctx.closePath();
+        ctx.fill();
+      }
+      
+      // Draw center
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
+    }
+  }
+  
+  // Cyber Cathedral Enemy
+  class CyberEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${180 + Math.random() * 60}, 100%, 50%)`; // Cyan to magenta
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      
+      // Draw holographic cross
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      // Horizontal beam
+      ctx.moveTo(-this.size, 0);
+      ctx.lineTo(this.size, 0);
+      // Vertical beam
+      ctx.moveTo(0, -this.size);
+      ctx.lineTo(0, this.size);
+      ctx.stroke();
+      
+      // Draw circuit nodes
+      ctx.fillStyle = this.color;
+      for (let i = 0; i < 4; i++) {
+        let angle = (i / 4) * Math.PI * 2;
+        let x = Math.cos(angle) * this.size * 0.8;
+        let y = Math.sin(angle) * this.size * 0.8;
+        ctx.beginPath();
+        ctx.arc(x, y, this.size * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      ctx.restore();
+    }
+  }
+  
+  // ===== NEW SPACE ENEMY TYPES =====
+  class SpaceAsteroidEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = '#888'; // Gray
+      this.rotationSpeed = (Math.random() - 0.5) * 0.1;
+      this.vertices = 8;
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      
+      // Draw asteroid shape
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      for (let i = 0; i < this.vertices; i++) {
+        let angle = (i / this.vertices) * Math.PI * 2;
+        let radius = this.size * (0.8 + Math.random() * 0.4);
+        let x = Math.cos(angle) * radius;
+        let y = Math.sin(angle) * radius;
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.restore();
+    }
+  }
+  
+  class SpaceAlienShipEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${120 + Math.random() * 60}, 100%, 50%)`; // Green to cyan
+      this.wingSpan = this.size * 1.5;
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      
+      // Draw alien ship body
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      // Main body
+      ctx.ellipse(0, 0, this.size, this.size * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw wings
+      ctx.beginPath();
+      ctx.moveTo(-this.size * 0.8, 0);
+      ctx.lineTo(-this.size * 0.8 - this.wingSpan * 0.5, -this.wingSpan * 0.3);
+      ctx.lineTo(-this.size * 0.8 - this.wingSpan, 0);
+      ctx.lineTo(-this.size * 0.8 - this.wingSpan * 0.5, this.wingSpan * 0.3);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Draw cockpit
+      ctx.fillStyle = '#0ff';
+      ctx.beginPath();
+      ctx.arc(this.size * 0.3, 0, this.size * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
+    }
+  }
+  
+  class SpaceSnakeEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${60 + Math.random() * 30}, 100%, 50%)`; // Yellow to orange
+      this.segments = 5 + Math.floor(Math.random() * 3);
+      this.segmentSize = this.size * 0.6;
+      this.wavePhase = Math.random() * Math.PI * 2;
+    }
+    
+    update() {
+      super.update();
+      this.wavePhase += 0.1;
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      
+      // Draw snake body
+      ctx.fillStyle = this.color;
+      for (let i = 0; i < this.segments; i++) {
+        let segmentX = -i * this.segmentSize * 0.8;
+        let segmentY = Math.sin(this.wavePhase + i * 0.5) * this.segmentSize * 0.5;
+        
+        ctx.beginPath();
+        ctx.arc(segmentX, segmentY, this.segmentSize * (1 - i * 0.05), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Draw head
+      ctx.fillStyle = '#ff0';
+      ctx.beginPath();
+      ctx.arc(0, 0, this.segmentSize, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw eyes
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(this.segmentSize * 0.3, -this.segmentSize * 0.3, this.segmentSize * 0.2, 0, Math.PI * 2);
+      ctx.arc(this.segmentSize * 0.3, this.segmentSize * 0.3, this.segmentSize * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
+    }
+  }
+  
+  class SpaceCometEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${180 + Math.random() * 60}, 100%, 70%)`; // Light blue to cyan
+      this.tailLength = this.size * 3;
+      this.tailParticles = 20;
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      
+      // Draw comet head
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw glow
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 15;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      
+      // Draw tail
+      ctx.fillStyle = `rgba(100, 200, 255, 0.6)`;
+      for (let i = 0; i < this.tailParticles; i++) {
+        let progress = i / this.tailParticles;
+        let x = -progress * this.tailLength;
+        let y = (Math.random() - 0.5) * this.size * 0.5;
+        let size = this.size * (1 - progress * 0.8);
+        
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      ctx.restore();
+    }
+  }
+  
+  class SpaceDroneEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${300 + Math.random() * 60}, 100%, 50%)`; // Purple to pink
+      this.propellers = 3;
+      this.propellerRotation = 0;
+    }
+    
+    update() {
+      super.update();
+      this.propellerRotation += 0.3;
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      
+      // Draw drone body
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, this.size, this.size * 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw propellers
+      ctx.fillStyle = '#aaa';
+      for (let i = 0; i < this.propellers; i++) {
+        let angle = (i / this.propellers) * Math.PI * 2;
+        let x = Math.cos(angle) * this.size * 0.8;
+        let y = Math.sin(angle) * this.size * 0.8;
+        
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(this.propellerRotation);
+        
+        // Propeller blade
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(this.size * 0.8, -this.size * 0.1);
+        ctx.lineTo(this.size * 0.8, this.size * 0.1);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.restore();
+      }
+      
+      // Draw center light
+      ctx.fillStyle = '#f0f';
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
+    }
+  }
+  
+  // ===== R-TYPE STYLE FIGHTER ENEMY =====
+  // A sleek alien interceptor that flies in classic R-Type wave/dive formations
+  class RTypeFighterEnemy extends Enemy {
+    constructor(opts = {}) {
+      super(opts);
+      this.size = 18 + Math.random() * 8;
+      this.speed = 1.6 + Math.random() * 2.2;
+      this.color = `hsl(${330 + Math.random() * 30}, 90%, 55%)`; // crimson/pink
+      this.accent = `hsl(${180 + Math.random() * 40}, 100%, 60%)`; // cyan cockpit
+      this.rotationSpeed = 0; // ships don't spin
+      this.shootCooldown = 1500 + Math.random() * 1500;
+      this.wingFlap = 0;
+    }
+    update() {
+      super.update();
+      this.wingFlap += 0.15;
+    }
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      // face left (toward player) - mirror based on travel direction
+      let bank = 0;
+      if (this.movementPattern === 'sine' || this.movementPattern === 'circle' || this.movementPattern === 'zigzag') {
+        bank = Math.cos(this.phase || this.circleAngle || 0) * 0.3;
+      }
+      ctx.rotate(bank);
+      
+      // Engine thruster glow (right side, since ship faces left)
+      let flicker = 0.7 + Math.random() * 0.3;
+      let tg = ctx.createLinearGradient(this.size * 0.4, 0, this.size * 1.6, 0);
+      tg.addColorStop(0, `rgba(255,180,60,${flicker})`);
+      tg.addColorStop(1, 'rgba(255,80,0,0)');
+      ctx.fillStyle = tg;
+      ctx.beginPath();
+      ctx.moveTo(this.size * 0.4, -this.size * 0.25);
+      ctx.lineTo(this.size * 1.6, 0);
+      ctx.lineTo(this.size * 0.4, this.size * 0.25);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Wing flex
+      let wingY = Math.sin(this.wingFlap) * this.size * 0.08;
+      
+      // Lower wing
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.moveTo(-this.size * 0.2, this.size * 0.2);
+      ctx.lineTo(this.size * 0.3, this.size * 0.9 + wingY);
+      ctx.lineTo(this.size * 0.7, this.size * 0.5);
+      ctx.lineTo(this.size * 0.2, this.size * 0.1);
+      ctx.closePath();
+      ctx.fill();
+      // Upper wing (mirrored)
+      ctx.beginPath();
+      ctx.moveTo(-this.size * 0.2, -this.size * 0.2);
+      ctx.lineTo(this.size * 0.3, -this.size * 0.9 - wingY);
+      ctx.lineTo(this.size * 0.7, -this.size * 0.5);
+      ctx.lineTo(this.size * 0.2, -this.size * 0.1);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Main fuselage (pointed nose to the left)
+      let bodyGrad = ctx.createLinearGradient(0, -this.size * 0.4, 0, this.size * 0.4);
+      bodyGrad.addColorStop(0, this.color);
+      bodyGrad.addColorStop(0.5, '#fff');
+      bodyGrad.addColorStop(1, this.color);
+      ctx.fillStyle = bodyGrad;
+      ctx.beginPath();
+      ctx.moveTo(-this.size, 0); // nose
+      ctx.lineTo(this.size * 0.2, -this.size * 0.4);
+      ctx.lineTo(this.size * 0.6, -this.size * 0.15);
+      ctx.lineTo(this.size * 0.6, this.size * 0.15);
+      ctx.lineTo(this.size * 0.2, this.size * 0.4);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Cockpit
+      ctx.fillStyle = this.accent;
+      ctx.shadowColor = this.accent;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.ellipse(-this.size * 0.1, 0, this.size * 0.25, this.size * 0.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      
+      // Hit flash overlay
+      if (this.hitFlash > 0) {
+        ctx.globalAlpha = this.hitFlash;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(-this.size, 0);
+        ctx.lineTo(this.size * 0.6, -this.size * 0.4);
+        ctx.lineTo(this.size * 0.6, this.size * 0.4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      
+      ctx.restore();
+    }
+  }
+  
+  // ===== NEW BIO ENEMY TYPES =====
+  class BioSporeEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${270 + Math.random() * 60}, 100%, 50%)`; // Purple
+      this.spores = 3 + Math.floor(Math.random() * 3);
+      this.sporeRotation = 0;
+    }
+    
+    update() {
+      super.update();
+      this.sporeRotation += 0.05;
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      
+      // Draw central organism
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw spores around it
+      for (let i = 0; i < this.spores; i++) {
+        let angle = (i / this.spores) * Math.PI * 2 + this.sporeRotation;
+        let distance = this.size * 0.9;
+        let x = Math.cos(angle) * distance;
+        let y = Math.sin(angle) * distance;
+        
+        ctx.fillStyle = `hsl(${300 + Math.random() * 60}, 100%, 60%)`;
+        ctx.beginPath();
+        ctx.arc(x, y, this.size * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      ctx.restore();
+    }
+  }
+  
+  class BioTentacleEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${300 + Math.random() * 40}, 100%, 50%)`; // Magenta
+      this.tentacles = 4 + Math.floor(Math.random() * 3);
+      this.tentacleLength = this.size * 2;
+      this.wavePhase = Math.random() * Math.PI * 2;
+    }
+    
+    update() {
+      super.update();
+      this.wavePhase += 0.1;
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      
+      // Draw central body
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw tentacles
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = 3;
+      for (let i = 0; i < this.tentacles; i++) {
+        let angle = (i / this.tentacles) * Math.PI * 2;
+        
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        
+        for (let j = 0; j < 5; j++) {
+          let progress = j / 5;
+          let length = this.tentacleLength * progress;
+          let wave = Math.sin(this.wavePhase + i + j) * this.size * 0.3;
+          
+          let x = Math.cos(angle) * length;
+          let y = Math.sin(angle) * length;
+          x += Math.cos(angle + Math.PI/2) * wave;
+          y += Math.sin(angle + Math.PI/2) * wave;
+          
+          ctx.lineTo(x, y);
+        }
+        
+        ctx.stroke();
+      }
+      
+      ctx.restore();
+    }
+  }
+  
+  class BioMutantEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${0 + Math.random() * 60}, 100%, 50%)`; // Red to orange
+      this.mutationPhase = Math.random() * Math.PI * 2;
+      this.limbs = 3 + Math.floor(Math.random() * 3);
+    }
+    
+    update() {
+      super.update();
+      this.mutationPhase += 0.05;
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      
+      // Draw main body
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw mutating limbs
+      for (let i = 0; i < this.limbs; i++) {
+        let angle = (i / this.limbs) * Math.PI * 2 + this.mutationPhase;
+        let length = this.size * (1.2 + Math.sin(this.mutationPhase * 2 + i) * 0.3);
+        let x = Math.cos(angle) * length;
+        let y = Math.sin(angle) * length;
+        
+        ctx.fillStyle = `hsl(${20 + Math.random() * 40}, 100%, 60%)`;
+        ctx.beginPath();
+        ctx.arc(x, y, this.size * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Draw eye
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(this.size * 0.3, -this.size * 0.2, this.size * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#f00';
+      ctx.beginPath();
+      ctx.arc(this.size * 0.3, -this.size * 0.2, this.size * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
+    }
+  }
+  
+  class BioParasiteEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${90 + Math.random() * 30}, 100%, 50%)`; // Green to yellow
+      this.hostSize = this.size * 1.5;
+      this.parasites = 2 + Math.floor(Math.random() * 2);
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      
+      // Draw host organism
+      ctx.fillStyle = `hsl(${120 + Math.random() * 60}, 100%, 40%)`;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.hostSize, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw parasites on host
+      for (let i = 0; i < this.parasites; i++) {
+        let angle = (i / this.parasites) * Math.PI * 2;
+        let x = Math.cos(angle) * this.hostSize * 0.7;
+        let y = Math.sin(angle) * this.hostSize * 0.7;
+        
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(x, y, this.size * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw parasite tendrils into host
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(0, 0);
+        ctx.stroke();
+      }
+      
+      ctx.restore();
+    }
+  }
+  
+  class BioVirusEnemy extends Enemy {
+    constructor() {
+      super();
+      this.color = `hsl(${0}, 100%, 50%)`; // Red
+      this.spikes = 8 + Math.floor(Math.random() * 5);
+      this.spikeLength = this.size * 0.7;
+      this.rotationSpeed = (Math.random() - 0.5) * 0.1;
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      
+      // Draw virus core
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw virus spikes
+      for (let i = 0; i < this.spikes; i++) {
+        let angle = (i / this.spikes) * Math.PI * 2;
+        let x = Math.cos(angle) * this.size * 0.6;
+        let y = Math.sin(angle) * this.size * 0.6;
+        let spikeX = Math.cos(angle) * (this.size * 0.6 + this.spikeLength);
+        let spikeY = Math.sin(angle) * (this.size * 0.6 + this.spikeLength);
+        
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(spikeX, spikeY);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        
+        // Draw spike tip
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(spikeX, spikeY, this.size * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      ctx.restore();
+    }
+  }
+  
+  // Biome system
+  const biomes = [
+    {
+      name: "Space",
+      threshold: 0,
+      background: drawSpaceBackground,
+      enemyClass: StarEnemy
+    },
+    {
+      name: "Mecha Wasteland",
+      threshold: 500,
+      background: drawMechaBackground,
+      enemyClass: MechaEnemy
+    },
+    {
+      name: "Bio-Organic Hive",
+      threshold: 1000,
+      background: drawBioBackground,
+      enemyClass: BioEnemy
+    },
+    {
+      name: "Astral Void",
+      threshold: 1500,
+      background: drawAstralBackground,
+      enemyClass: AstralEnemy
+    },
+    {
+      name: "Cyber Cathedral",
+      threshold: 2000,
+      background: drawCyberBackground,
+      enemyClass: CyberEnemy
+    }
+  ];
+  
+  let currentBiomeIndex = 0;
+  let currentBiome = biomes[currentBiomeIndex];
+  
+  // Update biome based on score
+  function updateBiome() {
+    // Use procedural biome system instead of score thresholds
+    const proceduralBiome = stageBuilder.currentBiome;
+    const biomeIndex = biomes.findIndex(b => b.name.toLowerCase().includes(proceduralBiome));
+    
+    if (biomeIndex !== -1 && currentBiomeIndex !== biomeIndex) {
+      currentBiomeIndex = biomeIndex;
+      currentBiome = biomes[currentBiomeIndex];
+      biomeEl.textContent = `BIOME: ${currentBiome.name}`;
+      
+      // Handle background music for all biomes
+      if (currentBiome.name === "Space") {
+        if (audioStarted && spaceMusic.paused) {
+          spaceMusic.play().catch(e => console.log("Audio resume failed:", e));
+        }
+        // Pause other music
+        mechaMusic.pause();
+        bioMusic.pause();
+        astralMusic.pause();
+        cyberMusic.pause();
+      } else if (currentBiome.name === "Mecha Wasteland") {
+        if (audioStarted && mechaMusic.paused) {
+          mechaMusic.play().catch(e => console.log("Audio resume failed:", e));
+        }
+        spaceMusic.pause();
+        bioMusic.pause();
+        astralMusic.pause();
+        cyberMusic.pause();
+      } else if (currentBiome.name === "Bio-Organic Hive") {
+        if (audioStarted && bioMusic.paused) {
+          bioMusic.play().catch(e => console.log("Audio resume failed:", e));
+        }
+        spaceMusic.pause();
+        mechaMusic.pause();
+        astralMusic.pause();
+        cyberMusic.pause();
+      } else if (currentBiome.name === "Astral Void") {
+        if (audioStarted && astralMusic.paused) {
+          astralMusic.play().catch(e => console.log("Audio resume failed:", e));
+        }
+        spaceMusic.pause();
+        mechaMusic.pause();
+        bioMusic.pause();
+        cyberMusic.pause();
+      } else if (currentBiome.name === "Cyber Cathedral") {
+        if (audioStarted && cyberMusic.paused) {
+          cyberMusic.play().catch(e => console.log("Audio resume failed:", e));
+        }
+        spaceMusic.pause();
+        mechaMusic.pause();
+        bioMusic.pause();
+        astralMusic.pause();
+      }
+    }
+  }
+  
+  // Background drawing functions
+  // Persistent parallax field shared across biomes (so stars don't pop on biome change)
+  let bgStarLayers = [
+    { stars: [], speed: 0.15, count: 90, size: [0.5, 1.2], alpha: [0.2, 0.45] },
+    { stars: [], speed: 0.45, count: 60, size: [0.8, 1.8], alpha: [0.4, 0.75] },
+    { stars: [], speed: 0.9,  count: 30, size: [1.2, 2.4], alpha: [0.6, 1.0] },
+  ];
+  function initBgStars() {
+    for (let layer of bgStarLayers) {
+      layer.stars = [];
+      for (let i = 0; i < layer.count; i++) {
+        layer.stars.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          s: layer.size[0] + Math.random() * (layer.size[1] - layer.size[0]),
+          a: layer.alpha[0] + Math.random() * (layer.alpha[1] - layer.alpha[0]),
+          tw: Math.random() * Math.PI * 2,
+        });
+      }
+    }
+  }
+  initBgStars();
+  window.addEventListener('resize', () => { resizeCanvas(); initBgStars(); });
+  
+  function drawParallaxStars(tint = '#ffffff') {
+    for (let layer of bgStarLayers) {
+      for (let s of layer.stars) {
+        s.x -= layer.speed;
+        s.tw += 0.05;
+        if (s.x < -2) { s.x = canvas.width + 2; s.y = Math.random() * canvas.height; }
+        let twinkle = 0.7 + Math.sin(s.tw) * 0.3;
+        ctx.globalAlpha = s.a * twinkle;
+        ctx.fillStyle = tint;
+        ctx.fillRect(s.x, s.y, s.s, s.s);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  
+  function drawNebulaClouds(hues, t) {
+    // Soft drifting colored blobs for atmosphere
+    for (let i = 0; i < 5; i++) {
+      let cx = ((i * 320 - t * 0.02 * (i % 3 + 1)) % (canvas.width + 400)) - 200;
+      let cy = (i * 137 + Math.sin(t * 0.0003 + i) * 60) % canvas.height;
+      let r = 180 + (i % 3) * 60;
+      let g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      let h = hues[i % hues.length];
+      g.addColorStop(0, `hsla(${h}, 80%, 50%, 0.22)`);
+      g.addColorStop(1, `hsla(${h}, 80%, 50%, 0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    }
+  }
+  
+  // Overscan margin so screen-shake never reveals canvas edges
+  const SHAKE_MARGIN = 30;
+  
+  function drawSpaceBackground() {
+    let t = Date.now();
+    // Deep space gradient
+    let g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    g.addColorStop(0, '#02030f');
+    g.addColorStop(0.5, '#070a1f');
+    g.addColorStop(1, '#02030f');
+    ctx.fillStyle = g;
+    ctx.fillRect(-SHAKE_MARGIN, -SHAKE_MARGIN, canvas.width + SHAKE_MARGIN*2, canvas.height + SHAKE_MARGIN*2);
+    // Distant nebulae
+    drawNebulaClouds([210, 260, 190], t);
+    // Parallax starfield (white)
+    drawParallaxStars('#ffffff');
+    // Occasional shooting star
+    if (Math.random() < 0.012) {
+      let sx = Math.random() * canvas.width, sy = Math.random() * canvas.height * 0.5;
+      ctx.strokeStyle = 'rgba(180,220,255,0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx - 80, sy + 40);
+      ctx.stroke();
+    }
+  }
+  
+  function drawMechaBackground() {
+    let t = Date.now();
+    // Smoky industrial gradient
+    let g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    g.addColorStop(0, '#1a0d05');
+    g.addColorStop(0.5, '#241006');
+    g.addColorStop(1, '#0c0603');
+    ctx.fillStyle = g;
+    ctx.fillRect(-SHAKE_MARGIN, -SHAKE_MARGIN, canvas.width + SHAKE_MARGIN*2, canvas.height + SHAKE_MARGIN*2);
+    // Drifting embers (parallax)
+    drawParallaxStars('#ffaa55');
+    // Rusted factory silhouettes (two parallax layers)
+    for (let layer = 0; layer < 2; layer++) {
+      let sp = layer === 0 ? 0.3 : 0.7;
+      let baseH = layer === 0 ? 140 : 220;
+      ctx.fillStyle = layer === 0 ? 'rgba(60,30,15,0.7)' : 'rgba(35,18,8,0.95)';
+      for (let i = 0; i < 14; i++) {
+        let x = (i * 180 - (t * sp * 0.05) % (14 * 180));
+        let h = baseH + Math.sin(i * 1.7) * 50;
+        ctx.fillRect(x, canvas.height - h, 60, h);
+        // chimney cap
+        ctx.fillRect(x - 8, canvas.height - h - 8, 76, 8);
+      }
+    }
+    // Flickering warning beacons
+    for (let i = 0; i < 4; i++) {
+      let bx = ((i * 400 - t * 0.05) % canvas.width + canvas.width) % canvas.width;
+      let on = Math.sin(t * 0.006 + i) > 0.3;
+      if (on) {
+        ctx.fillStyle = 'rgba(255,40,0,0.9)';
+        ctx.shadowColor = '#f00';
+        ctx.shadowBlur = 20;
+        ctx.beginPath();
+        ctx.arc(bx, 70, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+  }
+  
+  function drawBioBackground() {
+    let t = Date.now();
+    let pulse = Math.sin(t * 0.0012) * 0.15 + 0.85;
+    // Flesh-toned organic gradient
+    let g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 50, canvas.width/2, canvas.height/2, canvas.width * 0.7);
+    g.addColorStop(0, `rgba(70,10,50,${pulse})`);
+    g.addColorStop(0.6, 'rgba(30,0,30,1)');
+    g.addColorStop(1, 'rgba(10,0,15,1)');
+    ctx.fillStyle = g;
+    ctx.fillRect(-SHAKE_MARGIN, -SHAKE_MARGIN, canvas.width + SHAKE_MARGIN*2, canvas.height + SHAKE_MARGIN*2);
+    // Spore motes drifting
+    drawParallaxStars('#ff99cc');
+    // Pulsing veins
+    ctx.strokeStyle = `rgba(180,0,90,${0.25 + Math.sin(t*0.002)*0.1})`;
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 8; i++) {
+      let yBase = (i / 8) * canvas.height;
+      ctx.beginPath();
+      ctx.moveTo(-SHAKE_MARGIN, yBase);
+      for (let x = 0; x <= canvas.width + SHAKE_MARGIN; x += 24) {
+        ctx.lineTo(x, yBase + Math.sin(x * 0.015 + t * 0.0015 + i) * 40);
+      }
+      ctx.stroke();
+    }
+    // Floating organic blobs
+    for (let i = 0; i < 6; i++) {
+      let bx = ((i * 260 - t * 0.04) % (canvas.width + 200)) - 100;
+      let by = 80 + (i * 90) % (canvas.height - 160) + Math.sin(t * 0.001 + i) * 30;
+      let r = 30 + (i % 3) * 14;
+      let bg = ctx.createRadialGradient(bx, by, 0, bx, by, r);
+      bg.addColorStop(0, 'rgba(200,40,120,0.5)');
+      bg.addColorStop(1, 'rgba(200,40,120,0)');
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      ctx.arc(bx, by, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  
+  function drawAstralBackground() {
+    let t = Date.now();
+    // Deep violet void
+    let g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    g.addColorStop(0, '#0a0418');
+    g.addColorStop(0.5, '#120628');
+    g.addColorStop(1, '#080214');
+    ctx.fillStyle = g;
+    ctx.fillRect(-SHAKE_MARGIN, -SHAKE_MARGIN, canvas.width + SHAKE_MARGIN*2, canvas.height + SHAKE_MARGIN*2);
+    // Glowing nebulae
+    drawNebulaClouds([270, 220, 300], t);
+    // Bright astral starfield (bluish)
+    drawParallaxStars('#aabbff');
+    // Cosmic lightning
+    if (Math.random() < 0.08) {
+      ctx.strokeStyle = `rgba(170,120,255,${Math.random() * 0.5 + 0.4})`;
+      ctx.lineWidth = 1 + Math.random() * 2;
+      ctx.shadowColor = '#a0f';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      let sx = Math.random() * canvas.width, sy = Math.random() * canvas.height;
+      ctx.moveTo(sx, sy);
+      for (let i = 0; i < 6; i++) {
+        ctx.lineTo(sx + (Math.random() - 0.5) * 220, sy + (Math.random() - 0.5) * 220);
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    // Slow-rotating distant portal ring
+    let px = canvas.width * 0.8, py = canvas.height * 0.3;
+    ctx.strokeStyle = 'rgba(150,100,255,0.18)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(px, py, 120, t * 0.0005, t * 0.0005 + Math.PI * 1.5);
+    ctx.stroke();
+  }
+  
+  function drawCyberBackground() {
+    let t = Date.now();
+    // Digital cathedral gradient
+    let g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    g.addColorStop(0, '#0a0a28');
+    g.addColorStop(0.5, '#0e1038');
+    g.addColorStop(1, '#06061c');
+    ctx.fillStyle = g;
+    ctx.fillRect(-SHAKE_MARGIN, -SHAKE_MARGIN, canvas.width + SHAKE_MARGIN*2, canvas.height + SHAKE_MARGIN*2);
+    // Data-grid floor (perspective)
+    ctx.strokeStyle = 'rgba(80,180,255,0.25)';
+    ctx.lineWidth = 1;
+    let horizon = canvas.height * 0.55;
+    let scroll = (t * 0.08) % 60;
+    for (let i = 0; i < 16; i++) {
+      let prog = (i * 60 + scroll) / (16 * 60);
+      let y = horizon + prog * (canvas.height - horizon);
+      ctx.globalAlpha = Math.min(1, prog * 2);
+      ctx.beginPath();
+      ctx.moveTo(-SHAKE_MARGIN, y);
+      ctx.lineTo(canvas.width + SHAKE_MARGIN, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    // Vertical grid lines converging to horizon
+    for (let i = -8; i <= 8; i++) {
+      ctx.beginPath();
+      ctx.moveTo(canvas.width/2 + i * (canvas.width/8), canvas.height);
+      ctx.lineTo(canvas.width/2 + i * 12, horizon);
+      ctx.stroke();
+    }
+    // Neon gothic arches
+    ctx.strokeStyle = `rgba(120,220,255,${0.4 + Math.sin(t*0.003)*0.15})`;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#0af';
+    ctx.shadowBlur = 10;
+    for (let i = 0; i < 10; i++) {
+      let x = i * 160 - (t * 0.03) % 160;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x - 32, canvas.height * 0.55);
+      ctx.lineTo(x + 32, canvas.height * 0.55);
+      ctx.lineTo(x, 0);
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    // Floating data glyphs
+    ctx.fillStyle = `rgba(255,120,255,${0.5 + Math.sin(t * 0.005) * 0.3})`;
+    for (let i = 0; i < 8; i++) {
+      let x = (i * 200 - (t * 0.015) % 1600);
+      let y = 100 + Math.sin(t * 0.001 + i) * 50;
+      ctx.fillRect(x, y, 30, 5);
+      ctx.fillRect(x + 12.5, y - 15, 5, 35);
+    }
+  }
+  
+  // Weapon system
+  let weapons = {
+    bullet: { layer: 1, name: "Bullet" },
+    laser:  { layer: 0, name: "Laser" },
+    helix:  { layer: 0, name: "Helix" },
+    oval:   { layer: 0, name: "Oval" },
+    curve:  { layer: 0, name: "Curve" },
+    bomb:   { count: 0, name: "Bomb" },
+    drone:  { layer: 0, name: "Drone", missileLevel: 0 },
+    shield: { level: 0, name: "Shield" }
+  };
+  let currentWeapon = 'bullet';
+  
+  // List of "standard" weapons that revert each other to level 1 when switched
+  const standardWeapons = ['bullet', 'laser', 'helix', 'oval', 'curve'];
+  
+  function updateShieldDisplay() {
+    if (weapons.shield.level > 0) {
+      shieldEl.hidden = false;
+      shieldEl.textContent = `SHIELD: ${weapons.shield.level}`;
+    } else {
+      shieldEl.hidden = true;
+    }
+  }
+  
+  // Player ship
+  let player = {
+    x: 100,
+    y: canvas.height / 2,
+    width: 60,
+    height: 30,
+    speed: 5,
+    color: '#0f0',
+    tilt: 0,           // current visual bank
+    targetTilt: 0,     // desired bank from input
+    invuln: 0,         // invulnerability frames after spawn
+    thrusterPhase: 0,
+    draw: function() {
+      this.thrusterPhase += 0.5;
+      // ease tilt toward target for smooth banking
+      this.tilt += (this.targetTilt - this.tilt) * 0.2;
+      if (this.invuln > 0) this.invuln--;
+      
+      let W = this.width, H = this.height;
+      ctx.save();
+      ctx.translate(this.x + W * 0.5, this.y);
+      ctx.rotate(this.tilt);
+      
+      // Invulnerability flicker
+      if (this.invuln > 0 && Math.floor(this.invuln / 4) % 2 === 0) {
+        ctx.globalAlpha = 0.4;
+      }
+      
+      // ---- Engine exhaust plume (back/left) ----
+      let flicker = 0.7 + Math.random() * 0.3;
+      let flameLen = 26 + Math.sin(this.thrusterPhase) * 8;
+      let plumeGrad = ctx.createLinearGradient(-W * 0.42, 0, -W * 0.42 - flameLen, 0);
+      plumeGrad.addColorStop(0, `rgba(255,220,120,${flicker})`);
+      plumeGrad.addColorStop(0.4, `rgba(255,140,40,${flicker * 0.8})`);
+      plumeGrad.addColorStop(1, 'rgba(255,40,0,0)');
+      ctx.fillStyle = plumeGrad;
+      ctx.beginPath();
+      ctx.moveTo(-W * 0.42, -H * 0.18);
+      ctx.lineTo(-W * 0.42 - flameLen, 0);
+      ctx.lineTo(-W * 0.42, H * 0.18);
+      ctx.closePath();
+      ctx.fill();
+      // Inner bright core flame
+      ctx.fillStyle = `rgba(200,245,255,${flicker})`;
+      ctx.beginPath();
+      ctx.moveTo(-W * 0.42, -H * 0.07);
+      ctx.lineTo(-W * 0.42 - flameLen * 0.55, 0);
+      ctx.lineTo(-W * 0.42, H * 0.07);
+      ctx.closePath();
+      ctx.fill();
+      
+      // ---- Exhaust nozzle (between body and plume) ----
+      ctx.fillStyle = '#222';
+      ctx.fillRect(-W * 0.48, -H * 0.16, W * 0.08, H * 0.32);
+      ctx.fillStyle = '#444';
+      ctx.fillRect(-W * 0.48, -H * 0.16, W * 0.08, H * 0.04);
+      ctx.fillRect(-W * 0.48, H * 0.12, W * 0.08, H * 0.04);
+      
+      // ---- Wings (swept back, drawn behind fuselage) ----
+      let wingGrad = ctx.createLinearGradient(0, -H * 0.6, 0, H * 0.6);
+      wingGrad.addColorStop(0, '#0a5');
+      wingGrad.addColorStop(0.5, '#0d8');
+      wingGrad.addColorStop(1, '#0a5');
+      ctx.fillStyle = wingGrad;
+      // Top wing
+      ctx.beginPath();
+      ctx.moveTo(W * 0.05, -H * 0.15);              // root front
+      ctx.lineTo(-W * 0.1, -H * 0.85);               // swept tip
+      ctx.lineTo(-W * 0.3, -H * 0.8);                // swept back
+      ctx.lineTo(-W * 0.2, -H * 0.15);               // root back
+      ctx.closePath();
+      ctx.fill();
+      // Bottom wing (mirrored)
+      ctx.beginPath();
+      ctx.moveTo(W * 0.05, H * 0.15);
+      ctx.lineTo(-W * 0.1, H * 0.85);
+      ctx.lineTo(-W * 0.3, H * 0.8);
+      ctx.lineTo(-W * 0.2, H * 0.15);
+      ctx.closePath();
+      ctx.fill();
+      // Wing edge highlights
+      ctx.strokeStyle = 'rgba(150,255,200,0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(W * 0.05, -H * 0.15);
+      ctx.lineTo(-W * 0.1, -H * 0.85);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(W * 0.05, H * 0.15);
+      ctx.lineTo(-W * 0.1, H * 0.85);
+      ctx.stroke();
+      
+      // ---- Twin tail fins (smaller, further back) ----
+      ctx.fillStyle = '#0a6';
+      ctx.beginPath();
+      ctx.moveTo(-W * 0.2, -H * 0.1);
+      ctx.lineTo(-W * 0.4, -H * 0.5);
+      ctx.lineTo(-W * 0.42, -H * 0.1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-W * 0.2, H * 0.1);
+      ctx.lineTo(-W * 0.4, H * 0.5);
+      ctx.lineTo(-W * 0.42, H * 0.1);
+      ctx.closePath();
+      ctx.fill();
+      
+      // ---- Main fuselage (sleek dart, nose at right) ----
+      // Horizontal gradient gives a rounded/cylindrical 3D look
+      ctx.shadowColor = '#0f0';
+      ctx.shadowBlur = 10;
+      let bodyGrad = ctx.createLinearGradient(0, -H * 0.4, 0, H * 0.4);
+      bodyGrad.addColorStop(0, '#063');
+      bodyGrad.addColorStop(0.3, '#0d8');
+      bodyGrad.addColorStop(0.5, '#2fb');
+      bodyGrad.addColorStop(0.7, '#0d8');
+      bodyGrad.addColorStop(1, '#063');
+      ctx.fillStyle = bodyGrad;
+      ctx.beginPath();
+      ctx.moveTo(W * 0.5, 0);                 // sharp nose
+      ctx.quadraticCurveTo(W * 0.35, -H * 0.22, W * 0.1, -H * 0.28);   // nose shoulder
+      ctx.lineTo(-W * 0.35, -H * 0.22);       // mid body top
+      ctx.lineTo(-W * 0.45, -H * 0.1);        // tail top
+      ctx.lineTo(-W * 0.45, H * 0.1);         // tail bottom
+      ctx.lineTo(-W * 0.35, H * 0.22);        // mid body bottom
+      ctx.lineTo(W * 0.1, H * 0.28);          // nose shoulder bottom
+      ctx.quadraticCurveTo(W * 0.35, H * 0.22, W * 0.5, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      
+      // Fuselage center spine highlight
+      ctx.strokeStyle = 'rgba(200,255,220,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(W * 0.48, 0);
+      ctx.lineTo(-W * 0.4, 0);
+      ctx.stroke();
+      
+      // Panel detail line
+      ctx.strokeStyle = 'rgba(0,80,40,0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(W * 0.15, -H * 0.18);
+      ctx.lineTo(-W * 0.3, -H * 0.15);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(W * 0.15, H * 0.18);
+      ctx.lineTo(-W * 0.3, H * 0.15);
+      ctx.stroke();
+      
+      // ---- Cockpit canopy ----
+      let canopyGrad = ctx.createLinearGradient(0, -H * 0.12, 0, H * 0.12);
+      canopyGrad.addColorStop(0, '#9df');
+      canopyGrad.addColorStop(0.5, '#05f');
+      canopyGrad.addColorStop(1, '#036');
+      ctx.fillStyle = canopyGrad;
+      ctx.shadowColor = '#0af';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.ellipse(W * 0.18, 0, W * 0.1, H * 0.16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // Canopy specular highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.beginPath();
+      ctx.ellipse(W * 0.21, -H * 0.06, W * 0.04, H * 0.04, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // ---- Nose tip accent ----
+      ctx.fillStyle = '#ff3';
+      ctx.beginPath();
+      ctx.arc(W * 0.46, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      
+      // ---- Support drones if active (orbit the ship) ----
+      if (weapons.drone.layer > 0) {
+        let t = this.thrusterPhase;
+        let droneOffsets = [
+          { ang: t * 0.3, r: 28 },
+          { ang: t * 0.3 + Math.PI, r: 28 },
+        ];
+        if (weapons.drone.layer >= 2) {
+          droneOffsets.push({ ang: t * 0.3 + Math.PI / 2, r: 34 });
+        }
+        if (weapons.drone.layer >= 3) {
+          droneOffsets.push({ ang: t * 0.3 - Math.PI / 2, r: 34 });
+        }
+        for (let d of droneOffsets) {
+          let dx = this.x + this.width * 0.5 + Math.cos(d.ang) * d.r;
+          let dy = this.y + Math.sin(d.ang) * d.r;
+          ctx.save();
+          ctx.shadowColor = '#aaf';
+          ctx.shadowBlur = 10;
+          ctx.fillStyle = '#aaf';
+          ctx.beginPath();
+          ctx.arc(dx, dy, 7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(dx, dy, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+      
+      // ---- Shield bubble ----
+      if (weapons.shield.level > 0) {
+        let cx = this.x + this.width * 0.5;
+        let cy = this.y;
+        let baseR = this.width * 0.75;
+        let pulse = 0.9 + Math.sin(this.thrusterPhase * 0.3) * 0.1;
+        // Draw concentric shield rings = shield level
+        for (let s = 0; s < weapons.shield.level; s++) {
+          let r = (baseR + s * 8) * pulse;
+          ctx.save();
+          ctx.strokeStyle = `rgba(80,255,255,${0.7 - s * 0.2})`;
+          ctx.lineWidth = 3 - s * 0.5;
+          ctx.shadowColor = '#3ff';
+          ctx.shadowBlur = 15;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        // Inner shimmer
+        ctx.save();
+        ctx.globalAlpha = 0.15 + Math.sin(this.thrusterPhase * 0.4) * 0.05;
+        ctx.fillStyle = '#3ff';
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseR * 0.9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  };
+  
+  // Game objects arrays
+  let particles = [];
+  let projectiles = []; // Replaces bullets array to handle all projectile types
+  let powerUps = [];
+  let explosions = []; // For explosion effects
+  let hazards = []; // For environmental hazards
+  let enemyProjectiles = []; // For enemy projectiles
+  let floatingTexts = []; // Score popups & combo feedback
+  
+  // Screen shake system
+  let screenShake = 0;
+  function shake(amount) { screenShake = Math.max(screenShake, amount); }
+  
+  // Hazard classes for environmental threats
+  class LaserWall {
+    constructor(x, width, gapY = canvas.height/2 - 50, gapHeight = 100) {
+      this.x = x;
+      this.width = width;
+      this.height = canvas.height;
+      this.active = true;
+      this.pulsePhase = 0;
+      // Gap properties - added to create a passage
+      this.gapY = gapY; // Starting Y position of the gap
+      this.gapHeight = gapHeight; // Height of the gap
+    }
+    
+    update() {
+      this.pulsePhase += 0.05;
+      this.x -= 2; // Move left with the stage
+      
+      // Deactivate when off-screen
+      if (this.x + this.width < 0) {
+        this.active = false;
+      }
+    }
+    
+    draw() {
+      if (!this.active) return;
+      
+      // Pulsating laser wall
+      let intensity = Math.sin(this.pulsePhase) * 0.3 + 0.7;
+      ctx.fillStyle = `rgba(255, 0, 100, ${intensity * 0.7})`;
+      
+      // Draw top part (above gap)
+      ctx.fillRect(this.x, 0, this.width, this.gapY);
+      
+      // Draw bottom part (below gap)
+      ctx.fillRect(this.x, this.gapY + this.gapHeight, this.width, canvas.height - (this.gapY + this.gapHeight));
+      
+      // Laser glow for both parts
+      ctx.shadowColor = '#f0f';
+      ctx.shadowBlur = 15;
+      ctx.fillRect(this.x, 0, this.width, this.gapY);
+      ctx.fillRect(this.x, this.gapY + this.gapHeight, this.width, canvas.height - (this.gapY + this.gapHeight));
+      ctx.shadowBlur = 0;
+    }
+    
+    checkCollision(player) {
+      if (!this.active) return false;
+      
+      // Check if player is within the wall's horizontal bounds
+      if (player.x < this.x + this.width && player.x + player.width > this.x) {
+        // Check if player is above the gap
+        if (player.y - player.height/2 < this.gapY) {
+          return true;
+        }
+        
+        // Check if player is below the gap
+        if (player.y + player.height/2 > this.gapY + this.gapHeight) {
+          return true;
+        }
+      }
+      
+      return false; // Player is in the gap area
+    }
+  }
+  
+  class Asteroid {
+    constructor(x, y, size) {
+      this.x = x;
+      this.y = y;
+      this.size = size;
+      this.rotation = Math.random() * Math.PI * 2;
+      this.rotationSpeed = (Math.random() - 0.5) * 0.05;
+      this.active = true;
+    }
+    
+    update() {
+      this.rotation += this.rotationSpeed;
+      this.x -= 1.5; // Move slower than enemies
+      
+      // Deactivate when off-screen
+      if (this.x + this.size < 0) {
+        this.active = false;
+      }
+    }
+    
+    draw() {
+      if (!this.active) return;
+      
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      
+      // Draw asteroid
+      ctx.fillStyle = '#555';
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        let angle = (i / 8) * Math.PI * 2;
+        let radius = this.size * (0.8 + Math.random() * 0.4);
+        let x = Math.cos(angle) * radius;
+        let y = Math.sin(angle) * radius;
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.restore();
+    }
+    
+    checkCollision(player) {
+      if (!this.active) return false;
+      let dx = player.x - this.x;
+      let dy = player.y - this.y;
+      let distance = Math.sqrt(dx * dx + dy * dy);
+      return distance < this.size + Math.max(player.width, player.height) / 2;
+    }
+  }
+  
+  // Bullet class (basic projectile)
+  class Bullet {
+    constructor(x, y, angle = 0) {
+      this.x = x;
+      this.y = y;
+      this.width = 15;
+      this.height = 4;
+      this.speed = 10;
+      this.color = '#0ff';
+      this.angle = angle;
+    }
+    
+    update() {
+      this.x += this.speed * Math.cos(this.angle);
+      this.y += this.speed * Math.sin(this.angle);
+      return true; // Keep this projectile
+    }
+    
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.angle);
+      ctx.fillStyle = this.color;
+      ctx.fillRect(-this.width/2, -this.height/2, this.width, this.height);
+      
+      // Draw bullet glow
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 10;
+      ctx.fillRect(-this.width/2, -this.height/2, this.width, this.height);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+  }
+  
+  // Laser class (beam weapon) - a continuous, piercing, multi-layered energy beam.
+  // Stays active long enough to overlap the fire cooldown, so holding fire = steady beam.
+  class Laser {
+    constructor(x, y, angle = 0, opts = {}) {
+      this.startX = x;
+      this.y = y;
+      this.baseY = y;                  // for sweep mode
+      this.endX = canvas.width;        // beam reaches the right edge
+      this.angle = angle;
+      this.createdAt = performance.now();
+      this.lifetime = opts.lifetime || 550;  // overlaps 500ms fire cooldown -> seamless
+      this.coreWidth = opts.coreWidth || 4;  // bright core thickness
+      this.glowWidth = opts.glowWidth || 14; // outer glow thickness (also the hit band)
+      this.color = opts.color || '#ff0';
+      this.glowColor = opts.glowColor || 'rgba(255,220,80,';
+      this.power = opts.power || 1;          // damage multiplier (score per kill)
+      this.sweep = opts.sweep || false;      // Lv5: beam Y sweeps vertically
+      this.sweepPhase = 0;
+      // Track already-hit enemies by reference (not index) so splicing can't corrupt it
+      this.hasHit = new Set();
+      this.pulsePhase = 0;
+    }
+    
+    update() {
+      let elapsed = performance.now() - this.createdAt;
+      if (elapsed >= this.lifetime) return false; // expired
+      
+      this.pulsePhase += 0.3;
+      // Sweep mode: beam Y oscillates across the screen (but allows re-hitting cleared enemies)
+      if (this.sweep) {
+        this.sweepPhase += 0.04;
+        this.y = this.baseY + Math.sin(this.sweepPhase) * (canvas.height * 0.35);
+        // In sweep mode, reset hit list periodically so swept enemies can be hit
+        if (Math.sin(this.sweepPhase) > 0.95 || Math.sin(this.sweepPhase) < -0.95) {
+          this.hasHit.clear();
+        }
+      }
+      // Re-follow the player's Y so the beam tracks the ship while active
+      this.y = player.y + (this.y - player.y) * 0; // (kept simple: beam is static at fire Y)
+      
+      // Pierce all enemies currently intersecting the beam (once each)
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let particle = particles[i];
+        if (this.hasHit.has(particle)) continue;
+        
+        // Horizontal: enemy must be within the beam's span
+        let inX = particle.x + particle.size >= this.startX && particle.x - particle.size <= this.endX;
+        // Vertical: enemy within the glow band
+        let inY = Math.abs(particle.y - this.y) <= particle.size + this.glowWidth / 2;
+        
+        if (inX && inY) {
+          particles.splice(i, 1);
+          this.hasHit.add(particle);
+          let gain = 10 * this.power;
+          score += gain;
+          scoreEl.textContent = `SCORE: ${score}`;
+          // Feedback
+          shake(2);
+          floatingTexts.push(new FloatingText(particle.x, particle.y, `+${gain}`, this.color));
+          for (let k = 0; k < 6; k++) explosions.push(new ExplosionParticle(particle.x, particle.y));
+          adaptationAI.update(0, false, true);
+          // Chance to drop a powerup
+          if (Math.random() < 0.05 * adaptationAI.adaptationFactors.powerUpDropRate) {
+            powerUps.push(new PowerUp());
+          }
+        }
+      }
+      return true;
+    }
+    
+    draw() {
+      let elapsed = performance.now() - this.createdAt;
+      // Fade in fast, hold, fade out at the very end
+      let fadeIn = Math.min(1, elapsed / 40);
+      let fadeOut = Math.max(0, 1 - Math.max(0, elapsed - (this.lifetime - 80)) / 80);
+      let opacity = Math.min(fadeIn, fadeOut);
+      let pulse = 0.85 + Math.sin(this.pulsePhase) * 0.15;
+      
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      
+      // Outer wide glow
+      ctx.strokeStyle = this.glowColor + (0.35 * pulse) + ')';
+      ctx.lineWidth = this.glowWidth;
+      ctx.lineCap = 'round';
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 20;
+      ctx.beginPath();
+      ctx.moveTo(this.startX, this.y);
+      ctx.lineTo(this.endX, this.y);
+      ctx.stroke();
+      
+      // Mid beam
+      ctx.strokeStyle = this.glowColor + (0.7 * pulse) + ')';
+      ctx.lineWidth = this.coreWidth + 4;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.moveTo(this.startX, this.y);
+      ctx.lineTo(this.endX, this.y);
+      ctx.stroke();
+      
+      // Bright hot core
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = this.coreWidth;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.moveTo(this.startX, this.y);
+      ctx.lineTo(this.endX, this.y);
+      ctx.stroke();
+      
+      // Emitter flare at the ship muzzle
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(this.startX, this.y, this.glowWidth * 0.45 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(this.startX, this.y, this.coreWidth * 0.7 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
+    }
+  }
+  
+  // Missile class (homing projectile) - now with limited fuel & softer homing for balance
+  class Missile {
+    constructor(x, y, target = null) {
+      this.x = x;
+      this.y = y;
+      this.width = 12;
+      this.height = 6;
+      this.speed = 6;             // slightly slower (was 8)
+      this.color = '#ff0';
+      this.angle = 0;
+      this.target = target;
+      this.homing = true;
+      this.fuel = 180;            // frames of guided flight before it flies straight & expires
+      this.turnRate = 0.06;       // softer homing (was 0.1)
+      this.trail = [];
+    }
+    
+    update() {
+      this.fuel--;
+      
+      // Re-acquire target only if lost
+      if (this.homing && (!this.target || !particles.includes(this.target))) {
+        let minDist = Infinity;
+        for (let p of particles) {
+          let dist = Math.hypot(p.x - this.x, p.y - this.y);
+          if (dist < minDist) { minDist = dist; this.target = p; }
+        }
+      }
+      
+      // Only home while fuel remains
+      if (this.homing && this.fuel > 0 && this.target) {
+        let targetAngle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+        let angleDiff = targetAngle - this.angle;
+        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+        this.angle += Math.sign(angleDiff) * this.turnRate;
+      } else {
+        this.homing = false; // out of fuel - flies straight
+      }
+      
+      // Trail
+      this.trail.push({ x: this.x, y: this.y });
+      if (this.trail.length > 6) this.trail.shift();
+      
+      this.x += this.speed * Math.cos(this.angle);
+      this.y += this.speed * Math.sin(this.angle);
+      
+      // Expire after fuel runs out + a short coast, or if way off screen
+      if (this.fuel < -60) return false;
+      return true;
+    }
+    
+    draw() {
+      // Trail
+      for (let i = 0; i < this.trail.length; i++) {
+        let t = this.trail[i];
+        let a = (i / this.trail.length) * 0.5;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, 2.5 * (i / this.trail.length), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.angle);
+      
+      // Missile body
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.moveTo(this.width/2, 0);
+      ctx.lineTo(-this.width/2, -this.height/2);
+      ctx.lineTo(-this.width/2, this.height/2);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Glow
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+  }
+  
+  // ===== HELIX SHOT =====
+  // Bullets that travel in a spiral/helix pattern. Each shot spawns a helix particle
+  // that oscillates perpendicular to its forward motion.
+  class HelixBullet {
+    constructor(x, y, opts = {}) {
+      this.x = x;
+      this.y = y;
+      this.startY = y;
+      this.speed = 8;
+      this.width = 8;
+      this.height = 8;
+      this.color = opts.color || '#0ff';
+      this.amplitude = opts.amplitude || 30;   // how far it swings
+      this.frequency = opts.frequency || 0.08;  // how fast it oscillates
+      this.direction = opts.direction || 1;     // 1 = down-first, -1 = up-first
+      this.phase = 0;
+      this.angle = 0;
+    }
+    update() {
+      this.phase += this.frequency;
+      this.x += this.speed;
+      this.y = this.startY + Math.sin(this.phase) * this.amplitude * this.direction;
+      return true;
+    }
+    draw() {
+      ctx.save();
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.width * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.width * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  
+  // ===== OVAL SHOT =====
+  // A single large penetrating oval that pierces multiple enemies.
+  // Tracks hit enemies by reference so it can pierce cleanly.
+  class OvalBullet {
+    constructor(x, y, opts = {}) {
+      this.x = x;
+      this.y = y;
+      this.speed = 7;
+      this.radiusX = opts.radiusX || 14;  // horizontal radius
+      this.radiusY = opts.radiusY || 8;   // vertical radius
+      this.color = opts.color || '#fa0';
+      this.pierce = opts.pierce || 1;     // number of enemies it can pass through
+      this.hasHit = new Set();
+      this.angle = 0;
+      this.width = this.radiusX * 2;
+      this.height = this.radiusY * 2;
+    }
+    update() {
+      this.x += this.speed;
+      // Check collision with enemies (self-managed for piercing)
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let enemy = particles[i];
+        if (this.hasHit.has(enemy)) continue;
+        let dx = this.x - enemy.x;
+        let dy = this.y - enemy.y;
+        // Elliptical hit test approximation
+        let dist = Math.sqrt((dx / (this.radiusX + enemy.size)) ** 2 + (dy / (this.radiusY + enemy.size)) ** 2);
+        if (dist < 1) {
+          this.hasHit.add(enemy);
+          particles.splice(i, 1);
+          let gain = 10;
+          score += gain;
+          scoreEl.textContent = `SCORE: ${score}`;
+          floatingTexts.push(new FloatingText(enemy.x, enemy.y, `+${gain}`, this.color));
+          for (let k = 0; k < 6; k++) explosions.push(new ExplosionParticle(enemy.x, enemy.y));
+          enemyExplosionSound.currentTime = 0;
+          enemyExplosionSound.play().catch(() => {});
+          this.pierce--;
+          if (this.pierce <= 0) return false; // exhausted, remove
+        }
+      }
+      return true;
+    }
+    draw() {
+      ctx.save();
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 15;
+      // Outer glow
+      ctx.fillStyle = this.color;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.ellipse(this.x, this.y, this.radiusX, this.radiusY, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Inner bright
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(this.x, this.y, this.radiusX * 0.5, this.radiusY * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  
+  // ===== CURVE SHOT =====
+  // Bullets that launch forward then curve toward the nearest enemy.
+  class CurveBullet {
+    constructor(x, y, opts = {}) {
+      this.x = x;
+      this.y = y;
+      this.speed = 7;
+      this.width = 10;
+      this.height = 10;
+      this.color = opts.color || '#f8f';
+      this.angle = 0;
+      this.curveStrength = opts.curveStrength || 0.04;
+      this.seekDelay = opts.seekDelay || 15;  // frames before curving starts
+      this.age = 0;
+      this.maxLife = 120;
+    }
+    update() {
+      this.age++;
+      // After seek delay, curve toward nearest enemy
+      if (this.age > this.seekDelay) {
+        let nearest = null;
+        let minDist = Infinity;
+        for (let p of particles) {
+          let d = Math.hypot(p.x - this.x, p.y - this.y);
+          if (d < minDist) { minDist = d; nearest = p; }
+        }
+        if (nearest) {
+          let targetAngle = Math.atan2(nearest.y - this.y, nearest.x - this.x);
+          let diff = targetAngle - this.angle;
+          while (diff > Math.PI) diff -= 2 * Math.PI;
+          while (diff < -Math.PI) diff += 2 * Math.PI;
+          this.angle += diff * this.curveStrength;
+        }
+      }
+      this.x += this.speed * Math.cos(this.angle);
+      this.y += this.speed * Math.sin(this.angle);
+      if (this.age > this.maxLife) return false;
+      return true;
+    }
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.angle);
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, this.width * 0.6, this.height * 0.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(this.width * 0.2, 0, this.width * 0.2, this.height * 0.15, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  
+  // AltBomb class (launched with Alt key)
+  class AltBomb {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      this.radius = 8;
+      this.speed = 12;
+      this.color = '#f00';
+      this.exploded = false;
+      this.explosionRadius = 150;
+      this.explosionDuration = 30; // frames
+      this.explosionFrame = 0;
+    }
+    
+    update() {
+      if (!this.exploded) {
+        this.x += this.speed;
+        
+        // Explode after traveling a certain distance
+        if (this.x > player.x + 200) {
+          this.explode();
+        }
+      } else {
+        this.explosionFrame++;
+        
+        // Remove explosion after duration
+        if (this.explosionFrame > this.explosionDuration) {
+          return false; // Signal for removal
+        }
+      }
+      
+      return true; // Keep projectile
+    }
+    
+    explode() {
+      this.exploded = true;
+      shake(14);
+      
+      // Play bomb explosion sound
+      bombExplosionSound.currentTime = 0;
+      bombExplosionSound.play().catch(e => console.log("Bomb explosion sound failed:", e));
+      
+      // Damage enemies in explosion radius
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let particle = particles[i];
+        let dist = Math.hypot(particle.x - this.x, particle.y - this.y);
+        
+        if (dist < this.explosionRadius) {
+          particles.splice(i, 1);
+          score += 10;
+          scoreEl.textContent = `SCORE: ${score}`;
+          
+          // Create explosion particles
+          for (let j = 0; j < 5; j++) {
+            explosions.push(new ExplosionParticle(particle.x, particle.y));
+          }
+        }
+      }
+      
+      // Create main explosion particles
+      for (let i = 0; i < 20; i++) {
+        explosions.push(new ExplosionParticle(this.x, this.y));
+      }
+    }
+    
+    draw() {
+      if (!this.exploded) {
+        // Draw bomb
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw bomb glow
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 15;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      } else {
+        // Draw explosion effect
+        let progress = this.explosionFrame / this.explosionDuration;
+        let radius = this.explosionRadius * progress;
+        let opacity = 1 - progress;
+        
+        ctx.save();
+        ctx.globalAlpha = opacity * 0.5;
+        ctx.fillStyle = '#f50';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.globalAlpha = opacity;
+        ctx.strokeStyle = '#fa0';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+  
+  // Explosion particle class
+  class ExplosionParticle {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      this.size = 3 + Math.random() * 5;
+      this.speed = 2 + Math.random() * 5;
+      this.angle = Math.random() * Math.PI * 2;
+      this.color = `hsl(${Math.random() * 60}, 100%, 70%)`;
+      this.duration = 20 + Math.random() * 20;
+      this.frame = 0;
+    }
+    
+    update() {
+      this.x += Math.cos(this.angle) * this.speed;
+      this.y += Math.sin(this.angle) * this.speed;
+      this.frame++;
+      
+      return this.frame < this.duration;
+    }
+    
+    draw() {
+      let opacity = 1 - (this.frame / this.duration);
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  
+  // Floating score/combo text
+  class FloatingText {
+    constructor(x, y, text, color = '#ff0') {
+      this.x = x;
+      this.y = y;
+      this.text = text;
+      this.color = color;
+      this.life = 50;
+      this.maxLife = 50;
+      this.vy = -1.2;
+    }
+    update() {
+      this.y += this.vy;
+      this.vy *= 0.95;
+      this.life--;
+      return this.life > 0;
+    }
+    draw() {
+      let alpha = Math.min(1, this.life / 20);
+      let scale = 1 + (1 - this.life / this.maxLife) * 0.3;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(this.x, this.y);
+      ctx.scale(scale, scale);
+      ctx.font = 'bold 18px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.strokeText(this.text, 0, 0);
+      ctx.fillStyle = this.color;
+      ctx.fillText(this.text, 0, 0);
+      ctx.restore();
+    }
+  }
+  
+  // PowerUp class (weapon upgrades)
+  class PowerUp {
+    constructor(forcedType = null) {
+      this.x = canvas.width;
+      this.y = Math.random() * (canvas.height - 100) + 50;
+      this.size = 20;
+      this.speed = 3;
+      this.type = forcedType || this.getRandomType();
+      this.color = this.getColor();
+      this.bob = Math.random() * Math.PI * 2;
+    }
+    
+    getRandomType() {
+      // Weighted for fairness: standard weapons more common, shield/drone/bomb rarer
+      const pool = [
+        'bullet', 'bullet', 'bullet',
+        'laser', 'laser',
+        'helix', 'helix',
+        'oval', 'oval',
+        'curve', 'curve',
+        'bomb',
+        'drone',
+        'shield'
+      ];
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    
+    getColor() {
+      const colors = {
+        bullet: '#0ff',
+        laser: '#f0f',
+        helix: '#0fa',
+        oval: '#fa0',
+        curve: '#f8f',
+        bomb: '#f00',
+        drone: '#aaf',
+        shield: '#3ff'
+      };
+      return colors[this.type] || '#fff';
+    }
+    
+    update() {
+      this.x -= this.speed;
+      this.bob += 0.05;
+    }
+    
+    draw() {
+      let yOff = Math.sin(this.bob) * 3;
+      // Outer pulsing glow
+      ctx.save();
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 15 + Math.sin(this.bob * 2) * 5;
+      ctx.fillStyle = this.color;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y + yOff, this.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      
+      // Inner core
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y + yOff, this.size * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw power-up icon letter
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 16px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(this.type.charAt(0).toUpperCase(), this.x, this.y + yOff);
+    }
+  }
+  
+  // Input handling
+  let keys = {};
+  let lastFireTime = 0; // Track last fire time for cooldown
+  let lastDroneFireTime = 0; // Track last drone fire time for automatic firing
+  const fireCooldown = 500; // Cooldown period in milliseconds
+  const droneFireCooldown = 1400; // base; actual gate is level-scaled below
+  
+  window.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+    
+    // Start audio on first key press if game is running
+    if (!audioStarted && gameRunning) {
+      spaceMusic.play().catch(e => console.log("Audio play failed:", e));
+      audioStarted = true;
+    }
+    
+    // Handle space bar for firing and game start/restart
+    if (e.code === 'Space') {
+      e.preventDefault(); // Prevent default (scrolling) when space bar is pressed
+      if (!gameRunning) {
+        resetGame();
+      }
+      // Note: Firing is handled in the game loop with cooldown
+    }
+    
+    // Handle weapon switching
+    if (e.code === 'Digit1') currentWeapon = 'bullet';
+    if (e.code === 'Digit2') currentWeapon = 'laser';
+    if (e.code === 'Digit3') currentWeapon = 'helix';
+    if (e.code === 'Digit4' && weapons.bomb.count > 0) useBomb();
+    if (e.code === 'Digit5') currentWeapon = 'drone';
+    if (e.code === 'Digit6') currentWeapon = 'oval';
+    if (e.code === 'Digit7') currentWeapon = 'curve';
+    
+    // Handle Alt key for bomb launch
+    if ((e.code === 'AltLeft' || e.code === 'AltRight') && weapons.bomb.count > 0) {
+      e.preventDefault();
+      launchAltBomb();
+    }
+  });
+  
+  window.addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+  });
+  
+  // Launch Alt bomb
+  function launchAltBomb() {
+    if (weapons.bomb.count > 0) {
+      weapons.bomb.count--;
+      projectiles.push(new AltBomb(player.x + player.width, player.y));
+      updateBombCounter();
+    }
+  }
+  
+  // Fire current weapon
+  function fireWeapon() {
+    const weapon = weapons[currentWeapon];
+    let newProjectiles = [];
+    const muzzleX = player.x + player.width - 10;
+    
+    switch (currentWeapon) {
+      case 'bullet':
+        bulletSound.currentTime = 0;
+        bulletSound.play().catch(e => console.log("Bullet sound failed:", e));
+        
+        if (weapon.layer === 1) {
+          // Lv1: single bullet
+          newProjectiles.push(new Bullet(muzzleX, player.y));
+        } else if (weapon.layer === 2) {
+          // Lv2: double bullets
+          newProjectiles.push(new Bullet(muzzleX, player.y - 5));
+          newProjectiles.push(new Bullet(muzzleX, player.y + 5));
+        } else if (weapon.layer === 3) {
+          // Lv3: three forked arching shots
+          newProjectiles.push(new Bullet(muzzleX, player.y, -0.15));
+          newProjectiles.push(new Bullet(muzzleX, player.y, 0));
+          newProjectiles.push(new Bullet(muzzleX, player.y, 0.15));
+        } else if (weapon.layer === 4) {
+          // Lv4: four arching shots
+          newProjectiles.push(new Bullet(muzzleX, player.y, -0.2));
+          newProjectiles.push(new Bullet(muzzleX, player.y, -0.07));
+          newProjectiles.push(new Bullet(muzzleX, player.y, 0.07));
+          newProjectiles.push(new Bullet(muzzleX, player.y, 0.2));
+        } else if (weapon.layer >= 5) {
+          // Lv5: five-way spread (the old level 3)
+          for (let i = -2; i <= 2; i++) {
+            newProjectiles.push(new Bullet(muzzleX, player.y, i * 0.2));
+          }
+        }
+        break;
+        
+      case 'laser':
+        laserSound.currentTime = 0;
+        laserSound.play().catch(e => console.log("Laser sound failed:", e));
+        
+        if (weapon.layer === 1) {
+          newProjectiles.push(new Laser(muzzleX, player.y, 0, {
+            lifetime: 550, coreWidth: 4, glowWidth: 14, power: 1
+          }));
+        } else if (weapon.layer === 2) {
+          newProjectiles.push(new Laser(muzzleX, player.y - 12, 0, {
+            lifetime: 620, coreWidth: 5, glowWidth: 18, power: 1
+          }));
+          newProjectiles.push(new Laser(muzzleX, player.y + 12, 0, {
+            lifetime: 620, coreWidth: 5, glowWidth: 18, power: 1
+          }));
+        } else if (weapon.layer === 3) {
+          newProjectiles.push(new Laser(muzzleX, player.y - 18, 0, {
+            lifetime: 700, coreWidth: 6, glowWidth: 22, power: 2
+          }));
+          newProjectiles.push(new Laser(muzzleX, player.y, 0, {
+            lifetime: 700, coreWidth: 6, glowWidth: 22, power: 2
+          }));
+          newProjectiles.push(new Laser(muzzleX, player.y + 18, 0, {
+            lifetime: 700, coreWidth: 6, glowWidth: 22, power: 2
+          }));
+        } else if (weapon.layer === 4) {
+          // Lv4: dual wide beam split - two very wide heavy beams
+          newProjectiles.push(new Laser(muzzleX, player.y - 16, 0, {
+            lifetime: 750, coreWidth: 8, glowWidth: 30, power: 2, color: '#f0a', glowColor: 'rgba(255,80,180,'
+          }));
+          newProjectiles.push(new Laser(muzzleX, player.y + 16, 0, {
+            lifetime: 750, coreWidth: 8, glowWidth: 30, power: 2, color: '#f0a', glowColor: 'rgba(255,80,180,'
+          }));
+        } else if (weapon.layer >= 5) {
+          // Lv5: AI-decided - oscillating sweeping beam that tracks vertically
+          // A single massive beam whose Y sweeps up and down across the screen
+          newProjectiles.push(new Laser(muzzleX, player.y, 0, {
+            lifetime: 900, coreWidth: 10, glowWidth: 36, power: 3, color: '#fff', glowColor: 'rgba(255,255,255,',
+            sweep: true  // flag for sweeping behavior
+          }));
+        }
+        break;
+      
+      case 'helix':
+        bulletSound.currentTime = 0;
+        bulletSound.play().catch(e => console.log("Bullet sound failed:", e));
+        
+        if (weapon.layer === 1) {
+          // Lv1: single helix stream
+          newProjectiles.push(new HelixBullet(muzzleX, player.y, { amplitude: 25, frequency: 0.08, direction: 1 }));
+        } else if (weapon.layer === 2) {
+          // Lv2: double helix (two intertwining streams)
+          newProjectiles.push(new HelixBullet(muzzleX, player.y, { amplitude: 30, frequency: 0.08, direction: 1 }));
+          newProjectiles.push(new HelixBullet(muzzleX, player.y, { amplitude: 30, frequency: 0.08, direction: -1 }));
+        } else if (weapon.layer === 3) {
+          // Lv3: triple helix (three streams at 120° phase offset)
+          newProjectiles.push(new HelixBullet(muzzleX, player.y, { amplitude: 35, frequency: 0.1, direction: 1 }));
+          newProjectiles.push(new HelixBullet(muzzleX, player.y, { amplitude: 35, frequency: 0.1, direction: -1 }));
+          newProjectiles.push(new HelixBullet(muzzleX, player.y, { amplitude: 20, frequency: 0.12, direction: 1 }));
+        } else if (weapon.layer === 4) {
+          // Lv4: double helix, wider amplitude + faster
+          newProjectiles.push(new HelixBullet(muzzleX, player.y - 8, { amplitude: 50, frequency: 0.12, direction: 1, color: '#0fc' }));
+          newProjectiles.push(new HelixBullet(muzzleX, player.y + 8, { amplitude: 50, frequency: 0.12, direction: -1, color: '#0fc' }));
+        } else if (weapon.layer >= 5) {
+          // Lv5: triple helix, wide + fast, staggered
+          newProjectiles.push(new HelixBullet(muzzleX, player.y, { amplitude: 55, frequency: 0.14, direction: 1, color: '#0ff' }));
+          newProjectiles.push(new HelixBullet(muzzleX, player.y, { amplitude: 55, frequency: 0.14, direction: -1, color: '#0ff' }));
+          newProjectiles.push(new HelixBullet(muzzleX, player.y, { amplitude: 30, frequency: 0.16, direction: 1, color: '#0ff' }));
+        }
+        break;
+      
+      case 'oval':
+        laserSound.currentTime = 0;
+        laserSound.play().catch(e => console.log("Laser sound failed:", e));
+        
+        {
+          let lvl = weapon.layer;
+          // Penetrating oval that grows in size and pierces more enemies per level
+          let rx = 10 + lvl * 4;     // 14, 18, 22, 26, 30
+          let ry = 6 + lvl * 2;      // 8, 10, 12, 14, 16
+          let pierce = lvl;          // 1, 2, 3, 4, 5 enemies pierced
+          newProjectiles.push(new OvalBullet(muzzleX, player.y, {
+            radiusX: rx, radiusY: ry, pierce: pierce, color: lvl >= 4 ? '#ff0' : '#fa0'
+          }));
+        }
+        break;
+      
+      case 'curve':
+        bulletSound.currentTime = 0;
+        bulletSound.play().catch(e => console.log("Bullet sound failed:", e));
+        
+        if (weapon.layer === 1) {
+          // Lv1: single curving bullet
+          newProjectiles.push(new CurveBullet(muzzleX, player.y, { curveStrength: 0.05, seekDelay: 10 }));
+        } else if (weapon.layer === 2) {
+          // Lv2: two curving bullets (one curves up, one down)
+          newProjectiles.push(new CurveBullet(muzzleX, player.y - 10, { curveStrength: 0.05, seekDelay: 8 }));
+          newProjectiles.push(new CurveBullet(muzzleX, player.y + 10, { curveStrength: 0.05, seekDelay: 8 }));
+        } else if (weapon.layer === 3) {
+          // Lv3: three curving bullets
+          newProjectiles.push(new CurveBullet(muzzleX, player.y - 12, { curveStrength: 0.06, seekDelay: 6 }));
+          newProjectiles.push(new CurveBullet(muzzleX, player.y, { curveStrength: 0.06, seekDelay: 6 }));
+          newProjectiles.push(new CurveBullet(muzzleX, player.y + 12, { curveStrength: 0.06, seekDelay: 6 }));
+        } else if (weapon.layer === 4) {
+          // Lv4: four curving bullets with stronger seeking
+          newProjectiles.push(new CurveBullet(muzzleX, player.y - 15, { curveStrength: 0.08, seekDelay: 5, color: '#f0f' }));
+          newProjectiles.push(new CurveBullet(muzzleX, player.y - 5, { curveStrength: 0.08, seekDelay: 5, color: '#f0f' }));
+          newProjectiles.push(new CurveBullet(muzzleX, player.y + 5, { curveStrength: 0.08, seekDelay: 5, color: '#f0f' }));
+          newProjectiles.push(new CurveBullet(muzzleX, player.y + 15, { curveStrength: 0.08, seekDelay: 5, color: '#f0f' }));
+        } else if (weapon.layer >= 5) {
+          // Lv5: five homing curving bullets - strong seekers
+          for (let i = -2; i <= 2; i++) {
+            newProjectiles.push(new CurveBullet(muzzleX, player.y + i * 10, {
+              curveStrength: 0.1, seekDelay: 3, color: '#f8f'
+            }));
+          }
+        }
+        break;
+        
+      case 'drone':
+        // Drones are secondary weapons, they fire automatically in update
+        break;
+    }
+    
+    // Add all new projectiles to the game
+    projectiles.push(...newProjectiles);
+    
+    // Track shots fired for AI adaptation
+    adaptationAI.update(0, true, false);
+  }
+  
+  // Use bomb weapon (screen clear)
+  function useBomb() {
+    if (weapons.bomb.count > 0) {
+      weapons.bomb.count--;
+      updateBombCounter();
+      
+      // Play bomb explosion sound
+      bombExplosionSound.currentTime = 0;
+      bombExplosionSound.play().catch(e => console.log("Bomb explosion sound failed:", e));
+      
+      // Create explosion effect
+      for (let i = 0; i < 50; i++) {
+        let angle = Math.random() * Math.PI * 2;
+        let speed = 5 + Math.random() * 10;
+        let x = player.x + Math.cos(angle) * 30;
+        let y = player.y + Math.sin(angle) * 30;
+        explosions.push(new ExplosionParticle(x, y));
+      }
+      
+      // Clear all enemies
+      let enemiesCleared = particles.length;
+      particles = [];
+      score += enemiesCleared * 10;
+      scoreEl.textContent = `SCORE: ${score}`;
+      shake(18);
+      floatingTexts.push(new FloatingText(player.x + 100, player.y, enemiesCleared > 0 ? `CLEAR +${enemiesCleared * 10}!` : 'BOOM!', '#f80'));
+    }
+  }
+  
+  // Update bomb counter display
+  function updateBombCounter() {
+    bombCounterEl.textContent = `BOMBS: ${weapons.bomb.count}`;
+  }
+  
+  // Game loop
+  let lastTime = 0;
+  let nextEnemySpawnTime = 0; // Track when to spawn next enemy group
+  let lastEnemyFireTime = 0;  // Global cap: minimum gap between enemy shots
+  
+  function gameLoop(timestamp) {
+    if (!gameRunning) return;
+    
+    const deltaTime = timestamp - lastTime;
+    lastTime = timestamp;
+    
+    // Update procedural systems
+    stageBuilder.update(deltaTime);
+    adaptationAI.update(deltaTime, false, false);
+    
+    // Update biome
+    updateBiome();
+    
+    // Apply screen shake (decays each frame)
+    ctx.save();
+    if (screenShake > 0.1) {
+      ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+      screenShake *= 0.85;
+    } else {
+      screenShake = 0;
+    }
+    
+    // Draw background
+    currentBiome.background();
+    
+    // Draw background stars (first layer)
+    for (let i = backgroundStars.length - 1; i >= 0; i--) {
+      let star = backgroundStars[i];
+      star.update();
+      
+      // Remove if off-screen
+      if (star.x < -star.size) {
+        backgroundStars.splice(i, 1);
+        continue;
+      }
+      
+      star.draw();
+    }
+    
+    // Update and draw hazards
+    for (let i = hazards.length - 1; i >= 0; i--) {
+      let hazard = hazards[i];
+      hazard.update();
+      
+      if (!hazard.active) {
+        hazards.splice(i, 1);
+        continue;
+      }
+      
+      hazard.draw();
+      
+      // Check collision with player
+      if (player.invuln <= 0 && hazard.checkCollision(player)) {
+        hitPlayer();
+      }
+    }
+    
+    // Spawn enemies continuously at quick intervals
+    if (timestamp >= nextEnemySpawnTime) {
+      spawnEnemyGroup();
+      // Set next spawn time to 2-5 seconds from now
+      nextEnemySpawnTime = timestamp + 2000 + Math.random() * 3000;
+    }
+    
+    // Spawn hazards and bosses from segments (but not regular enemies)
+    const currentSegment = stageBuilder.getCurrentSegment();
+    if (currentSegment) {
+      const segment = currentSegment.segment;
+      
+      // Only spawn hazards and bosses from segments (not regular enemies)
+      for (const hazard of segment.hazardZones) {
+        if (Math.abs(currentSegment.relativePosition - hazard.x) < 5 && Math.random() < 0.01) {
+          if (hazard.type === 'laserWall') {
+            hazards.push(new LaserWall(hazard.x, hazard.width, hazard.gapY, hazard.gapHeight));
+          } else if (hazard.type === 'asteroid') {
+            hazards.push(new Asteroid(hazard.x, hazard.y, hazard.size));
+          }
+        }
+      }
+    }
+    
+    // Additionally, spawn star particles at random intervals throughout the stage
+    if (Math.random() < 0.02) { // Increased from 0.005 to 0.02 (4x more frequent)
+      backgroundStars.push(new StarEnemy());
+    }
+    
+    // Update and draw enemies
+    for (let i = particles.length - 1; i >= 0; i--) {
+      let enemy = particles[i];
+      enemy.update();
+      
+      // Remove if off-screen
+      if (enemy.x < -enemy.size) {
+        particles.splice(i, 1);
+        continue;
+      }
+      
+      // Draw enemy
+      enemy.draw();
+      
+      // Check if enemy should shoot (global cap prevents whole groups firing at once)
+      let globalEnemyFireCap = lastEnemyFireTime + 350;
+      if (timestamp >= globalEnemyFireCap && enemy.shouldShoot(timestamp)) {
+        let bullet = enemy.createBullet();
+        enemyProjectiles.push(bullet);
+        lastEnemyFireTime = timestamp;
+      }
+      
+      // Check collision with player
+      if (player.invuln <= 0 && checkCollision(player, enemy)) {
+        hitPlayer();
+      }
+      
+      // Check collision with projectiles
+      for (let j = projectiles.length - 1; j >= 0; j--) {
+        let projectile = projectiles[j];
+        
+        // Skip if projectile is an explosion (AltBomb)
+        if (projectile.exploded !== undefined && projectile.exploded) continue;
+        // Lasers and OvalBullets handle their own collision in their update() — skip to avoid double hits
+        if (projectile instanceof Laser) continue;
+        if (projectile instanceof OvalBullet) continue;
+        
+        if (checkProjectileCollision(projectile, enemy)) {
+          particles.splice(i, 1);
+          
+          // Play enemy explosion sound
+          enemyExplosionSound.currentTime = 0;
+          enemyExplosionSound.play().catch(e => console.log("Enemy explosion sound failed:", e));
+          
+          // Remove projectile if it's not a laser (lasers persist)
+          if (!(projectile instanceof Laser)) {
+            projectiles.splice(j, 1);
+          }
+          
+          score += 10;
+          scoreEl.textContent = `SCORE: ${score}`;
+          
+          // Track hits for AI adaptation
+          adaptationAI.update(0, false, true);
+          
+          // Screen shake & feedback
+          shake(4);
+          floatingTexts.push(new FloatingText(enemy.x, enemy.y, '+10', '#ff0'));
+          
+          // Create explosion particles (richer bursts)
+          for (let k = 0; k < 8; k++) {
+            explosions.push(new ExplosionParticle(enemy.x, enemy.y));
+          }
+          
+          // Small chance to spawn powerup from defeated enemy
+          if (Math.random() < 0.05 * adaptationAI.adaptationFactors.powerUpDropRate) {
+            powerUps.push(new PowerUp());
+          }
+          
+          break;
+        }
+      }
+    }
+    
+    // Update and draw enemy projectiles
+    for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+      let bullet = enemyProjectiles[i];
+      bullet.update();
+      
+      // Remove if off-screen
+      if (bullet.isOffScreen()) {
+        enemyProjectiles.splice(i, 1);
+        continue;
+      }
+      
+      bullet.draw();
+      
+      // Check collision with player
+      if (player.invuln <= 0 && checkEnemyBulletCollision(player, bullet)) {
+        hitPlayer();
+      }
+    }
+    
+    // Update and draw projectiles
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      let projectile = projectiles[i];
+      
+      if (!projectile.update()) {
+        projectiles.splice(i, 1);
+        continue;
+      }
+      
+      projectile.draw();
+      
+      // Remove projectiles that are off-screen
+      if (projectile.x > canvas.width || projectile.x < 0 || 
+          projectile.y > canvas.height || projectile.y < 0) {
+        if (!(projectile instanceof Laser)) {
+          projectiles.splice(i, 1);
+        }
+      }
+    }
+    
+    // Update and draw power-ups
+    for (let i = powerUps.length - 1; i >= 0; i--) {
+      let powerUp = powerUps[i];
+      powerUp.update();
+      
+      // Remove if off-screen
+      if (powerUp.x < -powerUp.size) {
+        powerUps.splice(i, 1);
+        continue;
+      }
+      
+      powerUp.draw();
+      
+      // Check collision with player - use center of ship for accurate collision
+      if (checkPowerUpCollision(player, powerUp)) {
+        powerUps.splice(i, 1);
+        applyPowerUp(powerUp.type);
+      }
+    }
+    
+    // Update and draw explosion particles
+    for (let i = explosions.length - 1; i >= 0; i--) {
+      let explosion = explosions[i];
+      
+      if (!explosion.update()) {
+        explosions.splice(i, 1);
+        continue;
+      }
+      
+      explosion.draw();
+    }
+    
+    // Handle player input (with banking tilt)
+    player.targetTilt = 0;
+    if (keys['ArrowUp'] || keys['KeyW']) { player.y -= player.speed; player.targetTilt = -0.25; }
+    if (keys['ArrowDown'] || keys['KeyS']) { player.y += player.speed; player.targetTilt = 0.25; }
+    if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
+    if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
+    
+    // Keep player on screen
+    player.x = Math.max(player.width/2, Math.min(canvas.width - player.width/2, player.x));
+    player.y = Math.max(player.height/2, Math.min(canvas.height - player.height/2, player.y));
+    
+    // Auto-fire with space bar (with cooldown)
+    if (keys['Space'] && timestamp - lastFireTime > fireCooldown) {
+      fireWeapon();
+      lastFireTime = timestamp;
+    }
+    
+    // Drone auto-fire (missiles only) - balanced: cooldown & salvo size scale with level
+    // Lv1: 1 missile / 1.8s, Lv2: 1 missile / 1.3s, Lv3: 2 missiles / 1.6s (staggered)
+    let droneCd = weapons.drone.missileLevel >= 3 ? 1600
+                : weapons.drone.missileLevel === 2 ? 1300
+                : 1800;
+    if (weapons.drone.layer > 0 && weapons.drone.missileLevel > 0 &&
+        timestamp - lastDroneFireTime > droneCd) {
+      // Count currently live missiles to cap concurrency (prevents missile spam)
+      let liveMissiles = projectiles.filter(p => p instanceof Missile).length;
+      const maxConcurrent = 2 + weapons.drone.missileLevel; // Lv1=3, Lv2=4, Lv3=5
+      if (liveMissiles < maxConcurrent && particles.length > 0) {
+        // Salvo size: Lv1 & Lv2 fire 1, Lv3 fires 2 (staggered via slight offset)
+        let salvo = weapons.drone.missileLevel >= 3 ? 2 : 1;
+        // Sort enemies by distance and assign each missile a DISTINCT nearest target
+        let sorted = [...particles].sort((a, b) =>
+          Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
+        let assigned = new Set();
+        for (let i = 0; i < salvo && i < sorted.length; i++) {
+          // pick the next-nearest unassigned target
+          let tgt = null;
+          for (let e of sorted) {
+            if (!assigned.has(e)) { tgt = e; assigned.add(e); break; }
+          }
+          if (!tgt) break;
+          let droneY = i % 2 === 0 ? player.y - 15 : player.y + 15;
+          let droneX = i % 2 === 0 ? player.x - 20 : player.x - 20;
+          projectiles.push(new Missile(droneX, droneY, tgt));
+        }
+      }
+      lastDroneFireTime = timestamp;
+    }
+    
+    // Draw player
+    player.draw();
+    
+    // Update and draw floating texts (score popups)
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+      let ft = floatingTexts[i];
+      if (!ft.update()) { floatingTexts.splice(i, 1); continue; }
+      ft.draw();
+    }
+    
+    // End screen-shake transform
+    ctx.restore();
+    
+    // Update weapon display - show current weapon, shield, and drone status
+    let w = weapons[currentWeapon];
+    let weaponText = `WEAPON: ${w.name} Lv${w.layer !== undefined ? w.layer : (w.count !== undefined ? w.count : 0)}`;
+    if (weapons.drone.layer > 0) {
+      weaponText += ` | Drone Lv${weapons.drone.layer}`;
+    }
+    weaponEl.textContent = weaponText;
+    updateShieldDisplay();
+    
+    requestAnimationFrame(gameLoop);
+  }
+  
+  // Spawn enemy group continuously
+  function spawnEnemyGroup() {
+    // Get current biome
+    const currentBiomeName = stageBuilder.currentBiome;
+    
+    // Define enemy types for each biome
+    const biomeEnemyTypes = {
+      space: ['rtype_fighter', 'space_asteroid', 'space_alien_ship', 'space_snake', 'space_comet', 'space_drone'],
+      mecha: ['rtype_fighter', 'mecha_gear', 'mecha_drone', 'mecha_spider', 'mecha_turret'],
+      bio: ['bio_cell', 'bio_spore', 'bio_tentacle', 'bio_mutant', 'bio_parasite', 'bio_virus'],
+      astral: ['rtype_fighter', 'astral_crystal', 'astral_wisp', 'astral_phantom'],
+      cyber: ['rtype_fighter', 'cyber_drone', 'cyber_sentinel', 'cyber_virus']
+    };
+    
+    // Get enemy types for current biome
+    const enemyTypes = biomeEnemyTypes[currentBiomeName] || biomeEnemyTypes.space;
+    
+    // Randomly select an enemy type
+    const enemyType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+    
+    // Get enemy class
+    const EnemyClass = getEnemyClassByType(enemyType);
+    if (!EnemyClass) return;
+    
+    // Spawn random number of enemies (3-10 per group)
+    const groupSize = 3 + Math.floor(Math.random() * 8);
+    
+    // R-Type fighter formations fly in coordinated sine/dive waves
+    if (enemyType === 'rtype_fighter') {
+      const formationPatterns = ['sine', 'sine', 'dive', 'circle', 'zigzag'];
+      const pattern = formationPatterns[Math.floor(Math.random() * formationPatterns.length)];
+      const baseY = 80 + Math.random() * (canvas.height - 160);
+      const direction = Math.random() < 0.5 ? 1 : -1; // wave up or down
+      for (let i = 0; i < groupSize; i++) {
+        const enemy = new EnemyClass({ pattern });
+        enemy.x = canvas.width + i * 70 + Math.random() * 30;
+        enemy.baseY = baseY;
+        enemy.y = baseY;
+        // stagger phase so the formation ripples like a snake
+        enemy.phase = i * 0.6;
+        enemy.amplitude = (50 + Math.random() * 30) * direction;
+        enemy.circleAngle = i * 0.5;
+        particles.push(enemy);
+      }
+      return;
+    }
+    
+    for (let i = 0; i < groupSize; i++) {
+      const enemy = new EnemyClass();
+      
+      // Position enemies at right side of screen with some spread
+      enemy.x = canvas.width + Math.random() * 100;
+      
+      // Ensure enemies spawn within screen bounds vertically
+      enemy.y = enemy.size + Math.random() * (canvas.height - enemy.size * 2);
+      enemy.baseY = enemy.y; // keep baseY in sync for patterned movement
+      
+      // Star enemies go to background array, others to particles array
+      if (EnemyClass === StarEnemy) {
+        backgroundStars.push(enemy);
+      } else {
+        particles.push(enemy);
+      }
+    }
+  }
+  
+  // Helper function to get enemy class by type
+  function getEnemyClassByType(type) {
+    switch (type) {
+      // Space enemies
+      case 'star': return StarEnemy;
+      case 'rtype_fighter': return RTypeFighterEnemy;
+      case 'space_asteroid': return SpaceAsteroidEnemy;
+      case 'space_alien_ship': return SpaceAlienShipEnemy;
+      case 'space_snake': return SpaceSnakeEnemy;
+      case 'space_comet': return SpaceCometEnemy;
+      case 'space_drone': return SpaceDroneEnemy;
+      
+      // Mecha enemies
+      case 'mecha_gear':
+      case 'mecha_drone':
+      case 'mecha_spider':
+      case 'mecha_turret': return MechaEnemy;
+      
+      // Bio enemies
+      case 'bio_cell': return BioEnemy;
+      case 'bio_spore': return BioSporeEnemy;
+      case 'bio_tentacle': return BioTentacleEnemy;
+      case 'bio_mutant': return BioMutantEnemy;
+      case 'bio_parasite': return BioParasiteEnemy;
+      case 'bio_virus': return BioVirusEnemy;
+      
+      // Astral enemies
+      case 'astral_crystal':
+      case 'astral_wisp':
+      case 'astral_phantom': return AstralEnemy;
+      
+      // Cyber enemies
+      case 'cyber_drone':
+      case 'cyber_sentinel':
+      case 'cyber_virus': return CyberEnemy;
+      
+      default: return StarEnemy;
+    }
+  }
+  
+  // Collision detection functions
+  function checkCollision(player, enemy) {
+    let dx = player.x - enemy.x;
+    let dy = player.y - enemy.y;
+    let distance = Math.sqrt(dx * dx + dy * dy);
+    return distance < enemy.size + Math.max(player.width, player.height) / 2;
+  }
+  
+  function checkProjectileCollision(projectile, enemy) {
+    // For laser, check if enemy is within beam path
+    if (projectile instanceof Laser) {
+      return enemy.x >= projectile.startX && 
+             enemy.x <= projectile.endX && 
+             Math.abs(enemy.y - projectile.y) <= enemy.size + projectile.height/2;
+    }
+    
+    // For other projectiles, use distance-based collision
+    let dx = projectile.x - enemy.x;
+    let dy = projectile.y - enemy.y;
+    let distance = Math.sqrt(dx * dx + dy * dy);
+    return distance < enemy.size + Math.max(projectile.width || projectile.radius, projectile.height || projectile.radius) / 2;
+  }
+  
+  function checkPowerUpCollision(player, powerUp) {
+    // Use center of ship for accurate collision detection
+    let playerCenterX = player.x + player.width/2;
+    let playerCenterY = player.y;
+    
+    let dx = playerCenterX - powerUp.x;
+    let dy = playerCenterY - powerUp.y;
+    let distance = Math.sqrt(dx * dx + dy * dy);
+    return distance < powerUp.size + Math.max(player.width, player.height) / 2;
+  }
+  
+  function checkEnemyBulletCollision(player, bullet) {
+    let dx = player.x - bullet.x;
+    let dy = player.y - bullet.y;
+    let distance = Math.sqrt(dx * dx + dy * dy);
+    return distance < bullet.size + Math.max(player.width, player.height) / 2;
+  }
+  
+  // Apply power-up effect
+  function applyPowerUp(type) {
+    // Shield is independent - doesn't revert other weapons
+    if (type === 'shield') {
+      weapons.shield.level = Math.min(3, weapons.shield.level + 1);
+      updateShieldDisplay();
+      floatingTexts.push(new FloatingText(player.x + player.width/2, player.y - 30,
+        `SHIELD Lv${weapons.shield.level}!`, '#3ff'));
+      return;
+    }
+    
+    // Bomb is independent
+    if (type === 'bomb') {
+      weapons.bomb.count = Math.min(3, weapons.bomb.count + 1);
+      updateBombCounter();
+      return;
+    }
+    
+    // Drone is independent (secondary weapon)
+    if (type === 'drone') {
+      weapons.drone.layer = Math.min(3, weapons.drone.layer + 1);
+      weapons.drone.missileLevel = Math.min(3, weapons.drone.missileLevel + 1);
+      return;
+    }
+    
+    // Standard weapons: collecting one reverts ALL other standard weapons to level 0/1
+    if (standardWeapons.includes(type)) {
+      for (let w of standardWeapons) {
+        if (w !== type) {
+          weapons[w].layer = (w === 'bullet') ? 1 : 0; // bullet starts at 1, others at 0
+        }
+      }
+      // Upgrade the collected weapon (bullet starts at 1, so cap differs)
+      let maxLevel = 5;
+      if (weapons[type].layer === 0) weapons[type].layer = 1; // first pickup activates
+      else weapons[type].layer = Math.min(maxLevel, weapons[type].layer + 1);
+      currentWeapon = type;
+      const wpnColors = { bullet: '#0ff', laser: '#f0f', helix: '#0fa', oval: '#fa0', curve: '#f8f' };
+      floatingTexts.push(new FloatingText(player.x + player.width/2, player.y - 30,
+        `${weapons[type].name} Lv${weapons[type].layer}!`, wpnColors[type] || '#ff0'));
+    }
+  }
+  
+  // Handle player hit - shield absorbs damage, otherwise game over
+  function hitPlayer() {
+    if (player.invuln > 0) return;
+    if (weapons.shield.level > 0) {
+      weapons.shield.level--;
+      updateShieldDisplay();
+      player.invuln = 60; // brief invulnerability after shield absorbs a hit
+      shake(10);
+      floatingTexts.push(new FloatingText(player.x + player.width/2, player.y - 20,
+        weapons.shield.level > 0 ? `SHIELD! (${weapons.shield.level} left)` : 'SHIELD BROKEN!', '#3ff'));
+      // Shield break burst
+      for (let i = 0; i < 12; i++) {
+        explosions.push(new ExplosionParticle(player.x + player.width/2, player.y));
+      }
+    } else {
+      gameOver();
+    }
+  }
+  
+  // Game over
+  function gameOver() {
+    gameRunning = false;
+    gameOverEl.innerHTML = "GAME OVER<br><span style='font-size:20px;'>Press SPACE to restart</span>";
+    gameOverEl.hidden = false;
+    adaptationAI.playerStats.deaths++;
+    shake(20);
+    // Big explosion at player position
+    for (let i = 0; i < 30; i++) {
+      explosions.push(new ExplosionParticle(player.x + player.width/2, player.y));
+    }
+    floatingTexts.push(new FloatingText(player.x + player.width/2, player.y, 'GAME OVER', '#f33'));
+    
+    // Pause all music when game is over
+    spaceMusic.pause();
+    mechaMusic.pause();
+    bioMusic.pause();
+    astralMusic.pause();
+    cyberMusic.pause();
+  }
+  
+  // Reset game
+  function resetGame() {
+    gameRunning = true;
+    gameOverEl.hidden = true; // Hide the start screen
+    score = 0;
+    scoreEl.textContent = `SCORE: ${score}`;
+    
+    // Reset player position
+    player.x = 100;
+    player.y = canvas.height / 2;
+    player.tilt = 0;
+    player.targetTilt = 0;
+    player.invuln = 90; // brief spawn protection
+    
+    // Clear game objects
+    particles = [];
+    projectiles = [];
+    powerUps = [];
+    explosions = [];
+    hazards = [];
+    backgroundStars = [];
+    enemyProjectiles = []; // Reset enemy projectiles array
+    floatingTexts = []; // Reset score popups
+    screenShake = 0;
+    
+    // Reset weapons
+    weapons = {
+      bullet: { layer: 1, name: "Bullet" },
+      laser:  { layer: 0, name: "Laser" },
+      helix:  { layer: 0, name: "Helix" },
+      oval:   { layer: 0, name: "Oval" },
+      curve:  { layer: 0, name: "Curve" },
+      bomb:   { count: 0, name: "Bomb" },
+      drone:  { layer: 0, name: "Drone", missileLevel: 0 },
+      shield: { level: 0, name: "Shield" }
+    };
+    currentWeapon = 'bullet';
+    updateBombCounter();
+    updateShieldDisplay();
+    
+    // Reset fire times
+    lastFireTime = 0;
+    lastDroneFireTime = 0;
+    
+    // Reset procedural systems
+    stageBuilder.stagePosition = 0;
+    stageBuilder.currentBiome = 'space';
+    stageBuilder.biomeProgress = 0;
+    stageBuilder.generateStageSequence();
+    
+    // Mark all enemy groups as spawned to prevent segment-based spawning
+    for (let segment of stageBuilder.currentStage) {
+      if (segment.enemyGroups) {
+        for (let group of segment.enemyGroups) {
+          group.spawned = true;
+        }
+      }
+    }
+    
+    // Reset AI
+    adaptationAI.reset();
+    
+    // Reset biome
+    currentBiomeIndex = 0;
+    currentBiome = biomes[currentBiomeIndex];
+    biomeEl.textContent = `BIOME: ${currentBiome.name}`;
+    
+    // Reset audioStarted flag
+    audioStarted = false;
+    
+    // Reset enemy spawn timer - ensure same spawn rate on restart
+    nextEnemySpawnTime = performance.now() + 2000 + Math.random() * 3000;
+    
+    // Start game loop
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+  }
+  
+  // Game will start when space is pressed (handled in keydown event)
+</script>
+</body>
+</html>

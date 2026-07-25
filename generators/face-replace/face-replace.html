@@ -1,0 +1,3201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>face-replace — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Completed:
+  [x] Create UI for image uploading and face swapping
+  [x] Implement face detection using face-api.js
+  [x] Implement face landmark detection
+  [x] Create face replacement algorithm with triangulation
+  [x] Add color correction and seamless blending
+  [x] Optimize for GPU acceleration
+  [x] Add progress indicators and status updates
+  [x] Enhanced facial landmark mapping (68 points)
+  [x] Improved Delaunay triangulation for precise mapping
+  [x] Added perspective-corrected warping
+  [x] Enhanced color correction and skin tone matching
+  [x] Advanced edge blending for seamless transitions
+  [x] Enhanced UI with dark mode and color themes
+  [x] Added responsive design for mobile devices
+  [x] Added image editing tools for final face swap refinement
+-->
+
+<style>
+  :root {
+    --bg-color: #1a1a1a;
+    --element-bg: #333333;
+    --border-color: #444444;
+    --text-color: #cccccc;
+    --light-text: #eeeeee;
+    --accent-color: #4285f4;
+    --shadow-color: rgba(0,0,0,0.3);
+    --tool-active-color: #ff5722;
+  }
+  
+  body {
+    margin: 0;
+    padding: 20px;
+    background-color: var(--bg-color);
+    text-align: left;
+    color: var(--text-color);
+    transition: all 0.3s ease;
+  }
+  
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: var(--element-bg);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px var(--shadow-color);
+    padding: 20px;
+    border: 1px solid var(--border-color);
+  }
+  
+  .rainbow-border {
+    position: relative;
+  }
+  
+  .rainbow-border:hover {
+    box-shadow: 0 2px 10px var(--accent-color);
+  }
+  
+  .rainbow-border:hover::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    right: -1px;
+    bottom: -1px;
+    border-radius: inherit;
+    background: linear-gradient(90deg, 
+      rgba(255,0,0,1) 0%, 
+      rgba(255,154,0,1) 10%, 
+      rgba(208,222,33,1) 20%, 
+      rgba(79,220,74,1) 30%, 
+      rgba(63,218,216,1) 40%, 
+      rgba(47,201,226,1) 50%, 
+      rgba(28,127,238,1) 60%, 
+      rgba(95,21,242,1) 70%, 
+      rgba(186,12,248,1) 80%, 
+      rgba(251,7,217,1) 90%, 
+      rgba(255,0,0,1) 100%);
+    background-size: 300% 300%;
+    animation: rainbow-border 2s linear infinite;
+    z-index: -1;
+  }
+  
+  @keyframes rainbow-border {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 100% 50%; }
+  }
+  
+  H5,
+  h1 {
+    text-align: center;
+    color: var(--light-text);
+    margin-bottom: 20px;
+  }
+  
+  h1 {
+    position: relative;
+    display: inline-block;
+    padding: 10px;
+    margin: 0 auto;
+  }
+  
+  h1:hover::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    right: -1px;
+    bottom: -1px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, 
+      rgba(255,0,0,1) 0%, 
+      rgba(255,154,0,1) 10%, 
+      rgba(208,222,33,1) 20%, 
+      rgba(79,220,74,1) 30%, 
+      rgba(63,218,216,1) 40%, 
+      rgba(47,201,226,1) 50%, 
+      rgba(28,127,238,1) 60%, 
+      rgba(95,21,242,1) 70%, 
+      rgba(186,12,248,1) 80%, 
+      rgba(251,7,217,1) 90%, 
+      rgba(255,0,0,1) 100%);
+    background-size: 300% 300%;
+    animation: rainbow-border 2s linear infinite;
+    z-index: -1;
+  }
+  
+  .upload-container {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  
+  .image-upload {
+    flex: 1;
+    margin: 0 10px 20px;
+    min-width: 300px;
+  }
+  
+  .image-preview {
+    width: 100%;
+    height: 300px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin-bottom: 10px;
+    background-color: rgba(0, 0, 0, 0.2);
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    position: relative;
+    transition: all 0.3s ease;
+  }
+  
+  button {
+    background-color: var(--element-bg);
+    color: var(--light-text);
+    border: 1px solid var(--border-color);
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+  
+  button:hover:not(:disabled) {
+    background-color: var(--element-bg);
+    border-color: var(--accent-color);
+  }
+  
+  button:disabled {
+    background-color: #333;
+    color: #666;
+    cursor: not-allowed;
+  }
+  
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  
+  .result-container {
+    margin-top: 20px;
+  }
+  
+  .canvas-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+  }
+  
+  canvas {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    max-width: 100%;
+    height: auto;
+    background-color: rgba(0, 0, 0, 0.2);
+  }
+  
+  .status {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: var(--element-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    text-align: center;
+    color: var(--text-color);
+  }
+  
+  .loading-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.8);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  
+  .spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #333;
+    border-top: 5px solid var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  #progressEl {
+    color: var(--light-text);
+    font-size: 18px;
+    text-align: center;
+  }
+  
+  .face-detection-box {
+    position: absolute;
+    border: 2px solid lime;
+    pointer-events: none;
+  }
+  
+  .face-number {
+    position: absolute;
+    background-color: lime;
+    color: black;
+    padding: 2px 6px;
+    font-size: 12px;
+    border-radius: 10px;
+    pointer-events: none;
+  }
+
+  .section-title {
+    margin-top: 20px;
+    margin-bottom: 10px;
+    color: var(--light-text);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 5px;
+  }
+  
+  .info-panel {
+    background-color: rgba(66, 133, 244, 0.1);
+    border-left: 4px solid var(--accent-color);
+    padding: 10px 15px;
+    margin-bottom: 20px;
+    border-radius: 0 4px 4px 0;
+    color: var(--text-color);
+  }
+  
+  .theme-controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 10px 0;
+  }
+  
+  #darkModeToggleBtn, #randomizeBtn {
+    padding: 5px 10px;
+    font-size: 14px;
+  }
+  
+  /* Image Editing Tools Styles */
+  .image-editing-tools {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: var(--element-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+  }
+  
+  .tools-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+  
+  .tool-btn {
+    padding: 8px 12px;
+    background-color: var(--element-bg);
+    border: 1px solid var(--border-color);
+    color: var(--light-text);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  }
+  
+  .tool-btn.active {
+    background-color: var(--tool-active-color);
+    border-color: var(--tool-active-color);
+  }
+  
+  .tool-settings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 15px;
+    align-items: center;
+  }
+  
+  .setting-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .setting-label {
+    font-size: 12px;
+    color: var(--text-color);
+  }
+  
+  .setting-value {
+    font-size: 12px;
+    color: var(--light-text);
+    width: 30px;
+    text-align: center;
+    display: inline-block;
+  }
+  
+  .color-palette {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+  }
+  
+  .color-swatch {
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+  }
+  
+  .color-swatch.active {
+    border: 2px solid var(--light-text);
+  }
+  
+  .color-swatch.empty {
+    background-image: linear-gradient(45deg, #444 25%, transparent 25%, transparent 75%, #444 75%, #444),
+                      linear-gradient(45deg, #444 25%, transparent 25%, transparent 75%, #444 75%, #444);
+    background-size: 10px 10px;
+    background-position: 0 0, 5px 5px;
+  }
+  
+  .canvas-wrapper {
+    position: relative;
+    margin: 0 auto;
+    display: inline-block;
+  }
+  
+  .history-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+  
+  /* Face color adjustment styles */
+  .face-color-adjustment {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 15px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: rgba(0,0,0,0.2);
+  }
+  
+  .adjustment-title {
+    font-size: 14px;
+    color: var(--light-text);
+    margin-bottom: 5px;
+  }
+  
+  .slider-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .slider-label {
+    min-width: 80px;
+    font-size: 12px;
+    color: var(--text-color);
+  }
+  
+  .slider-input {
+    flex: 1;
+  }
+  
+  .slider-value {
+    min-width: 40px;
+    font-size: 12px;
+    color: var(--light-text);
+    text-align: center;
+  }
+  
+  .apply-btn {
+    margin-top: 10px;
+    align-self: flex-end;
+  }
+  
+  /* Responsive design for mobile */
+  @media (max-width: 768px) {
+    .container {
+      padding: 10px;
+    }
+    
+    .image-upload {
+      min-width: 100%;
+      margin: 0 0 15px;
+    }
+    
+    .image-preview {
+      height: 200px;
+    }
+    
+    .controls {
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    button {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    
+    .canvas-container {
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .canvas-container div {
+      width: 100%;
+    }
+    
+    canvas {
+      width: 100%;
+    }
+    
+    .tools-container {
+      justify-content: center;
+    }
+    
+    .tool-settings {
+      justify-content: center;
+    }
+    
+    .color-palette {
+      justify-content: center;
+    }
+    
+    .face-color-adjustment {
+      width: 100%;
+    }
+  }
+</style>
+
+<div class="container">
+  <div style="text-align: center;">
+    <h1 class="rainbow-border">FACE TO FACE REPLACE</h1>
+    <H5>BY UFO</H5>
+  </div>
+  
+  <div class="theme-controls">
+    <button id="darkModeToggleBtn" class="rainbow-border">Dark/Light Mode</button>
+    <button id="randomizeBtn" class="rainbow-border">Randomize</button>
+  </div>
+  
+  <div class="info-panel">
+    <p>This tool uses advanced face detection and replacement technology to swap faces between images.<BR>Upload a source face image and target image, then follow the steps below.<BR>Results may vary depending on perspective, differing range, colour contrast, vivid edge differences.<br>The face detection will instant fail if the image has a face in it that is looking<br>too much to the side or is an abstract (fractal) art face or other hard to detect face.<br>This facility still has alot of work to do yet. It works very well in some cases ATM. Ty for visiting.</p>
+  </div>
+  
+  <div class="upload-container">
+    <div class="image-upload">
+      <h3>Source Face Image</h3>
+      <div class="image-preview rainbow-border" id="sourcePreviewCtn"></div>
+      <button id="uploadSourceBtn" class="rainbow-border">Upload Source Image</button>
+      <p>This face will be placed onto the target image</p>
+    </div>
+    <div class="image-upload">
+      <h3>Target Image</h3>
+      <div class="image-preview rainbow-border" id="targetPreviewCtn"></div>
+      <button id="uploadTargetBtn" class="rainbow-border">Upload Target Image</button>
+      <p>The face in this image will be replaced</p>
+    </div>
+  </div>
+  
+  <div class="controls">
+    <button id="detectFacesBtn" class="rainbow-border" disabled>1. Detect Faces</button>
+    <button id="swapFacesBtn" class="rainbow-border" disabled>2. Swap Faces</button>
+    <button id="downloadBtn" class="rainbow-border" disabled>3. Download Result</button>
+  </div>
+  
+  <h2 class="section-title">Face Detection Results</h2>
+  <div class="canvas-container">
+    <div>
+      <h3>Source Image</h3>
+      <canvas id="sourceCanvasEl" class="rainbow-border" width="400" height="300"></canvas>
+    </div>
+    <div>
+      <h3>Target Image</h3>
+      <canvas id="targetCanvasEl" class="rainbow-border" width="400" height="300"></canvas>
+    </div>
+  </div>
+  
+  <h2 class="section-title">Face Swap Result</h2>
+  <div class="canvas-container">
+    <div class="canvas-wrapper">
+      <canvas id="outputCanvasEl" class="rainbow-border" width="800" height="600"></canvas>
+    </div>
+  </div>
+  
+  <div class="image-editing-tools" id="imageEditingToolsEl">
+    <h3 class="section-title">Final Image Touches</h3>
+    <p>Refine your face swap result with these editing tools</p>
+    
+    <div class="face-color-adjustment" id="faceColorAdjustmentEl">
+      <div class="adjustment-title">Face Color Adjustment</div>
+      
+      <div class="slider-container">
+        <div class="slider-label">Brightness:</div>
+        <input type="range" id="brightnessSliderEl" class="slider-input" min="-100" max="100" value="0">
+        <div class="slider-value" id="brightnessValueEl">0</div>
+      </div>
+      
+      <div class="slider-container">
+        <div class="slider-label">Skin Tone:</div>
+        <input type="range" id="skinToneSliderEl" class="slider-input" min="-100" max="100" value="0">
+        <div class="slider-value" id="skinToneValueEl">0</div>
+      </div>
+      
+      <div class="slider-container">
+        <div class="slider-label">Saturation:</div>
+        <input type="range" id="saturationSliderEl" class="slider-input" min="-100" max="100" value="0">
+        <div class="slider-value" id="saturationValueEl">0</div>
+      </div>
+      
+      <button id="applyColorAdjustmentBtn" class="tool-btn apply-btn">Apply Adjustments</button>
+    </div>
+    
+    <div class="history-controls">
+      <button id="undoBtn" class="tool-btn" disabled>Undo</button>
+      <button id="redoBtn" class="tool-btn" disabled>Redo</button>
+      <button id="downloadEditedBtn" class="tool-btn">Download Edited Image</button>
+    </div>
+    
+    <div class="tools-container">
+      <button id="blurBtn" class="tool-btn">Blur</button>
+      <button id="smudgeBtn" class="tool-btn">Smudge</button>
+      <button id="dropperBtn" class="tool-btn">Dropper</button>
+      <button id="paintBtn" class="tool-btn">Paint</button>
+      <button id="lightenBtn" class="tool-btn">Lighten</button>
+      <button id="darkenBtn" class="tool-btn">Darken</button>
+      <button id="sharpenBtn" class="tool-btn">Sharpen</button>
+    </div>
+    
+    <div class="tool-settings">
+      <div class="setting-group">
+        <label class="setting-label">Radius: <span id="radiusValueEl" class="setting-value">10</span>px</label>
+        <input type="range" id="radiusSliderEl" min="2" max="40" value="10">
+      </div>
+      
+      <div class="setting-group">
+        <label class="setting-label">Strength: <span id="strengthValueEl" class="setting-value">0.5</span></label>
+        <input type="range" id="strengthSliderEl" min="0.1" max="2" step="0.1" value="0.5">
+      </div>
+    </div>
+    
+    <div class="color-palette" id="colorPaletteEl">
+      <div class="color-swatch empty" data-index="0"></div>
+      <div class="color-swatch empty" data-index="1"></div>
+      <div class="color-swatch empty" data-index="2"></div>
+      <div class="color-swatch empty" data-index="3"></div>
+      <div class="color-swatch empty" data-index="4"></div>
+      <div class="color-swatch empty" data-index="5"></div>
+      <div class="color-swatch empty" data-index="6"></div>
+      <div class="color-swatch empty" data-index="7"></div>
+    </div>
+  </div>
+  
+  <div id="statusEl" class="status rainbow-border">Initializing face swap application...</div>
+  
+  <div id="loadingIndicatorEl" class="loading-indicator" hidden>
+    <div class="spinner"></div>
+    <div id="progressEl">Processing...</div>
+  </div>
+</div>
+
+<script>
+  // Global variables for images and detections
+  let sourceImage = null;
+  let targetImage = null;
+  let sourceDetections = null;
+  let targetDetections = null;
+  let faceModelsLoaded = false;
+  let selectedSourceFaceIndex = 0;
+  let selectedTargetFaceIndex = 0;
+  let isDarkMode = true; // Default to dark mode
+  let originalFaceSwapCanvas = null; // Store original face swap result for color adjustments
+  
+  // Color adjustment variables
+  let brightnessValue = 0;
+  let skinToneValue = 0;
+  let saturationValue = 0;
+  
+  // Initialize the application
+  async function initApp() {
+    try {
+      updateStatus("Looking for best face detection and swap libraries...");
+      showLoading(true);
+      
+      // Check for best face detection and face swap libraries using superFetch
+      const libraries = await findBestLibraries();
+      
+      // Set up event listeners
+      setupEventListeners();
+      
+      // Load TensorFlow.js and face-api.js
+      await loadScripts([
+        'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js',
+        'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js'
+      ]);
+      
+      // Check for GPU support and optimize for GPU acceleration
+      let gpuInfo = "";
+      try {
+        await tf.setBackend('webgl');
+        
+        // Configure TensorFlow.js for performance
+        tf.env().set('WEBGL_FORCE_F16_TEXTURES', true);
+        tf.env().set('WEBGL_PACK', true);
+        tf.env().set('WEBGL_PACK_DEPTHWISECONV', true);
+        
+        const backend = tf.getBackend();
+        if (backend === 'webgl') {
+          const gpu = await tf.backend().getGPGPUContext().gl.getParameter(
+            tf.backend().getGPGPUContext().gl.getExtension('WEBGL_debug_renderer_info').UNMASKED_RENDERER_WEBGL);
+          gpuInfo = "GPU acceleration enabled via WebGL. " + gpu;
+          
+          // Check if we can use WebGL 2.0 for better performance
+          const isWebGL2 = tf.backend().getGPGPUContext().gl instanceof WebGL2RenderingContext;
+          if (isWebGL2) {
+            gpuInfo += " (WebGL 2.0)";
+          } else {
+            gpuInfo += " (WebGL 1.0)";
+          }
+        } else {
+          gpuInfo = "Using CPU for computations.";
+        }
+      } catch (e) {
+        gpuInfo = "GPU acceleration not available. Using CPU instead.";
+        console.error(e);
+      }
+      
+      // Load face detection models
+      updateStatus("Loading face detection models...");
+      await loadFaceDetectionModels();
+      
+      // Initialize image editing tools
+      initImageEditingTools();
+      
+      // Setup color adjustment controls
+      setupColorAdjustmentControls();
+      
+      updateStatus("Ready! Upload images to begin. " + gpuInfo);
+      showLoading(false);
+    } catch (error) {
+      updateStatus("Initialization error: " + error.message);
+      showLoading(false);
+      console.error(error);
+    }
+  }
+  
+  // Find best libraries for face detection and face swap
+  async function findBestLibraries() {
+    try {
+      // Using superFetch to look for any better or newer libraries
+      const response = await root.superFetch('https://api.cdnjs.com/libraries?search=face-api.js&fields=version,description').then(r => r.json());
+      console.log("Available face libraries:", response);
+      
+      // Check GitHub for face-swap libraries
+      const githubResponse = await root.superFetch('https://api.github.com/search/repositories?q=face+swap+javascript&sort=stars&order=desc').then(r => r.json());
+      console.log("GitHub face swap libraries:", githubResponse);
+      
+      return {
+        faceDetection: 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
+        faceSwap: 'custom' // We'll implement our own face swap algorithm
+      };
+    } catch (error) {
+      console.error("Error finding libraries:", error);
+      // Fallback to known working libraries
+      return {
+        faceDetection: 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
+        faceSwap: 'custom'
+      };
+    }
+  }
+  
+  // Load face detection models
+  async function loadFaceDetectionModels() {
+    try {
+      const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+      
+      // Load all required models for comprehensive face detection
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+      
+      faceModelsLoaded = true;
+      return true;
+    } catch (error) {
+      console.error("Error loading face detection models:", error);
+      throw new Error("Failed to load face detection models");
+    }
+  }
+  
+  // Set up event listeners
+  function setupEventListeners() {
+    uploadSourceBtn.addEventListener('click', () => createImageUpload('source'));
+    uploadTargetBtn.addEventListener('click', () => createImageUpload('target'));
+    detectFacesBtn.addEventListener('click', detectFaces);
+    swapFacesBtn.addEventListener('click', swapFaces);
+    downloadBtn.addEventListener('click', downloadResult);
+    darkModeToggleBtn.addEventListener('click', toggleDarkMode);
+    randomizeBtn.addEventListener('click', randomizeTheme);
+    
+    // Image editing tools event listeners are set up in initImageEditingTools()
+  }
+  
+  // Set up color adjustment controls
+  function setupColorAdjustmentControls() {
+    brightnessSliderEl.addEventListener('input', function() {
+      brightnessValue = parseInt(this.value);
+      brightnessValueEl.textContent = brightnessValue;
+    });
+    
+    skinToneSliderEl.addEventListener('input', function() {
+      skinToneValue = parseInt(this.value);
+      skinToneValueEl.textContent = skinToneValue;
+    });
+    
+    saturationSliderEl.addEventListener('input', function() {
+      saturationValue = parseInt(this.value);
+      saturationValueEl.textContent = saturationValue;
+    });
+    
+    applyColorAdjustmentBtn.addEventListener('click', applyColorAdjustments);
+  }
+  
+  // Apply color adjustments to the face
+  function applyColorAdjustments() {
+    if (!originalFaceSwapCanvas) {
+      updateStatus("No face swap result to adjust.");
+      return;
+    }
+    
+    try {
+      updateStatus("Applying color adjustments...");
+      showLoading(true);
+      
+      // Create a copy of the original canvas
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = originalFaceSwapCanvas.width;
+      tempCanvas.height = originalFaceSwapCanvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(originalFaceSwapCanvas, 0, 0);
+      
+      // Get the data of the original face
+      const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+      const pixels = imageData.data;
+      
+      // Apply adjustments to the image data
+      const faceMask = getFaceMask(targetDetections, selectedTargetFaceIndex, tempCanvas.width, tempCanvas.height);
+      
+      // Process image data with adjustments
+      for (let i = 0; i < pixels.length; i += 4) {
+        const maskValue = faceMask[i / 4];
+        if (maskValue > 0.05) { // Only modify pixels within the face mask
+          // Apply adjustments proportional to the mask value
+          const factor = maskValue;
+          
+          // Convert RGB to HSL for better color adjustments
+          const [h, s, l] = rgbToHsl(pixels[i], pixels[i + 1], pixels[i + 2]);
+          
+          // Apply brightness adjustment
+          let newL = l * (1 + (brightnessValue / 200) * factor);
+          newL = Math.max(0, Math.min(1, newL));
+          
+          // Apply skin tone adjustment - shift hue towards warmer or cooler
+          let newH = h;
+          if (skinToneValue !== 0) {
+            // Shift towards warmer (redder/orange) or cooler (less red/more blue)
+            const hueShift = (skinToneValue / 500) * factor;
+            newH = h + hueShift;
+            if (newH > 1) newH -= 1;
+            if (newH < 0) newH += 1;
+          }
+          
+          // Apply saturation adjustment
+          let newS = s * (1 + (saturationValue / 200) * factor);
+          newS = Math.max(0, Math.min(1, newS));
+          
+          // Convert back to RGB
+          const [r, g, b] = hslToRgb(newH, newS, newL);
+          
+          pixels[i] = r;
+          pixels[i + 1] = g;
+          pixels[i + 2] = b;
+        }
+      }
+      
+      // Put the modified image data back
+      tempCtx.putImageData(imageData, 0, 0);
+      
+      // Draw the result on the output canvas
+      const outputCtx = outputCanvasEl.getContext('2d');
+      outputCtx.clearRect(0, 0, outputCanvasEl.width, outputCanvasEl.height);
+      outputCtx.drawImage(tempCanvas, 0, 0);
+      
+      // Save to history for undo/redo
+      saveState();
+      
+      updateStatus("Color adjustments applied successfully!");
+      showLoading(false);
+    } catch (error) {
+      updateStatus("Error applying color adjustments: " + error.message);
+      showLoading(false);
+      console.error(error);
+    }
+  }
+  
+  // Get face mask array based on target face landmarks
+  function getFaceMask(detections, faceIndex, width, height) {
+    if (!detections || detections.length === 0) {
+      return new Array(width * height).fill(0);
+    }
+    
+    const face = detections[faceIndex];
+    const landmarks = face.landmarks.positions;
+    
+    // Create a canvas to draw the mask
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = width;
+    maskCanvas.height = height;
+    const maskCtx = maskCanvas.getContext('2d');
+    
+    // Draw a face shape using the landmarks
+    maskCtx.fillStyle = 'white';
+    maskCtx.beginPath();
+    
+    // Jawline
+    const jawLine = landmarks.slice(0, 17);
+    maskCtx.moveTo(jawLine[0].x, jawLine[0].y);
+    for (let i = 1; i < jawLine.length; i++) {
+      maskCtx.lineTo(jawLine[i].x, jawLine[i].y);
+    }
+    
+    // Right eyebrow to forehead to left eyebrow
+    const rightEyebrow = landmarks.slice(17, 22);
+    const leftEyebrow = landmarks.slice(22, 27).reverse();
+    
+    // Add forehead points (extend above eyebrows)
+    const foreheadHeight = 30; // Adjust for forehead height
+    
+    // Create forehead path
+    maskCtx.lineTo(rightEyebrow[0].x, rightEyebrow[0].y - foreheadHeight);
+    maskCtx.lineTo(leftEyebrow[0].x, leftEyebrow[0].y - foreheadHeight);
+    
+    // Continue with left eyebrow
+    for (let i = 0; i < leftEyebrow.length; i++) {
+      maskCtx.lineTo(leftEyebrow[i].x, leftEyebrow[i].y);
+    }
+    
+    maskCtx.closePath();
+    maskCtx.fill();
+    
+    // Create a gradient around the face for smooth edges
+    const center = {
+      x: (landmarks[0].x + landmarks[16].x) / 2,
+      y: (landmarks[0].y + landmarks[16].y) / 2
+    };
+    
+    const faceWidth = Math.max(
+      Math.abs(landmarks[0].x - landmarks[16].x),
+      Math.abs(landmarks[8].y - landmarks[27].y)
+    );
+    
+    const gradient = maskCtx.createRadialGradient(
+      center.x, center.y, faceWidth * 0.4, // Inner radius
+      center.x, center.y, faceWidth * 0.7  // Outer radius
+    );
+    
+    gradient.addColorStop(0, 'rgba(255,255,255,1)');
+    gradient.addColorStop(0.7, 'rgba(255,255,255,0.8)');
+    gradient.addColorStop(1, 'rgba(255,255,255,0)');
+    
+    maskCtx.globalCompositeOperation = 'source-in';
+    maskCtx.fillStyle = gradient;
+    maskCtx.fillRect(0, 0, width, height);
+    
+    // Get mask data
+    const maskData = maskCtx.getImageData(0, 0, width, height).data;
+    const maskArray = new Array(width * height);
+    
+    for (let i = 0; i < maskArray.length; i++) {
+      maskArray[i] = maskData[i * 4 + 3] / 255; // Alpha channel normalized to 0-1
+    }
+    
+    return maskArray;
+  }
+  
+  // Convert RGB to HSL
+  function rgbToHsl(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    
+    if (max === min) {
+      h = s = 0; // achromatic
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      
+      h /= 6;
+    }
+    
+    return [h, s, l];
+  }
+  
+  // Convert HSL to RGB
+  function hslToRgb(h, s, l) {
+    let r, g, b;
+    
+    if (s === 0) {
+      r = g = b = l; // achromatic
+    } else {
+      const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      };
+      
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
+    }
+    
+    return [
+      Math.round(r * 255),
+      Math.round(g * 255),
+      Math.round(b * 255)
+    ];
+  }
+  
+  // Toggle between dark and light mode
+  function toggleDarkMode() {
+    isDarkMode = !isDarkMode;
+    
+    if (isDarkMode) {
+      document.documentElement.style.setProperty('--bg-color', '#1a1a1a');
+      document.documentElement.style.setProperty('--element-bg', '#333333');
+      document.documentElement.style.setProperty('--border-color', '#444444');
+      document.documentElement.style.setProperty('--text-color', '#cccccc');
+      document.documentElement.style.setProperty('--light-text', '#eeeeee');
+      document.documentElement.style.setProperty('--shadow-color', 'rgba(0,0,0,0.3)');
+    } else {
+      document.documentElement.style.setProperty('--bg-color', '#f5f5f5');
+      document.documentElement.style.setProperty('--element-bg', '#ffffff');
+      document.documentElement.style.setProperty('--border-color', '#dddddd');
+      document.documentElement.style.setProperty('--text-color', '#333333');
+      document.documentElement.style.setProperty('--light-text', '#000000');
+      document.documentElement.style.setProperty('--shadow-color', 'rgba(0,0,0,0.1)');
+    }
+  }
+  
+  // Randomize theme colors
+  function randomizeTheme() {
+    // Generate a random hue value (0-360)
+    const hue = Math.floor(Math.random() * 360);
+    
+    // Set the base color based on the hue
+    const baseColor = `hsl(${hue}, 70%, 50%)`;
+    
+    // Apply darker and lighter variations for different elements
+    if (isDarkMode) {
+      document.documentElement.style.setProperty('--bg-color', `hsl(${hue}, 30%, 10%)`);
+      document.documentElement.style.setProperty('--element-bg', `hsl(${hue}, 20%, 20%)`);
+      document.documentElement.style.setProperty('--border-color', `hsl(${hue}, 30%, 30%)`);
+      document.documentElement.style.setProperty('--text-color', `hsl(${hue}, 15%, 80%)`);
+      document.documentElement.style.setProperty('--light-text', `hsl(${hue}, 10%, 90%)`);
+      document.documentElement.style.setProperty('--accent-color', baseColor);
+    } else {
+      document.documentElement.style.setProperty('--bg-color', `hsl(${hue}, 30%, 95%)`);
+      document.documentElement.style.setProperty('--element-bg', `hsl(${hue}, 20%, 98%)`);
+      document.documentElement.style.setProperty('--border-color', `hsl(${hue}, 30%, 80%)`);
+      document.documentElement.style.setProperty('--text-color', `hsl(${hue}, 15%, 20%)`);
+      document.documentElement.style.setProperty('--light-text', `hsl(${hue}, 10%, 10%)`);
+      document.documentElement.style.setProperty('--accent-color', baseColor);
+    }
+  }
+  
+  // Create a file input for image upload
+  function createImageUpload(type) {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.onchange = (event) => handleImageUpload(event, type);
+    fileInput.click();
+  }
+  
+  // Handle the image upload
+  async function handleImageUpload(event, type) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const previewContainer = type === 'source' ? sourcePreviewCtn : targetPreviewCtn;
+    
+    try {
+      updateStatus(`Loading ${type} image...`);
+      showLoading(true);
+      
+      const imgUrl = URL.createObjectURL(file);
+      
+      // Load image
+      const img = new Image();
+      img.onload = () => {
+        // Update preview
+        previewContainer.style.backgroundImage = `url(${imgUrl})`;
+        
+        // Store image
+        if (type === 'source') {
+          sourceImage = img;
+          // Draw on canvas
+          const canvas = sourceCanvasEl;
+          canvas.width = Math.min(400, img.width);
+          canvas.height = Math.min(300, img.height * (canvas.width / img.width));
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        } else {
+          targetImage = img;
+          // Draw on canvas
+          const canvas = targetCanvasEl;
+          canvas.width = Math.min(400, img.width);
+          canvas.height = Math.min(300, img.height * (canvas.width / img.width));
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        }
+        
+        // Enable detect faces button if both images are loaded
+        detectFacesBtn.disabled = !(sourceImage && targetImage && faceModelsLoaded);
+        
+        updateStatus("Image loaded successfully. Click 'Detect Faces' to continue.");
+        showLoading(false);
+      };
+      
+      img.onerror = () => {
+        throw new Error("Failed to load image");
+      };
+      
+      img.src = imgUrl;
+    } catch (error) {
+      updateStatus(`Error loading ${type} image: ${error.message}`);
+      showLoading(false);
+    }
+  }
+  
+  // Detect faces in both images
+  async function detectFaces() {
+    if (!sourceImage || !targetImage) {
+      updateStatus("Please upload both images first.");
+      return;
+    }
+    
+    try {
+      updateStatus("Detecting faces... This may take a moment.");
+      showLoading(true);
+      
+      // Clear previous detections
+      sourceDetections = null;
+      targetDetections = null;
+      
+      // Use GPU optimization for face detection
+      if (tf.getBackend() === 'webgl') {
+        tf.engine().startScope(); // Start memory scope for better GPU memory management
+      }
+      
+      // Detect faces in source image with full parameters
+      sourceDetections = await faceapi.detectAllFaces(sourceImage, new faceapi.TinyFaceDetectorOptions({scoreThreshold: 0.5}))
+        .withFaceLandmarks()
+        .withFaceDescriptors();
+      
+      // Detect faces in target image with full parameters
+      targetDetections = await faceapi.detectAllFaces(targetImage, new faceapi.TinyFaceDetectorOptions({scoreThreshold: 0.5}))
+        .withFaceLandmarks()
+        .withFaceDescriptors();
+      
+      if (tf.getBackend() === 'webgl') {
+        tf.engine().endScope(); // End memory scope and clean up GPU memory
+      }
+      
+      // Check if faces were detected
+      if (sourceDetections.length === 0) {
+        throw new Error("No faces detected in source image. Please try another image.");
+      }
+      
+      if (targetDetections.length === 0) {
+        throw new Error("No faces detected in target image. Please try another image.");
+      }
+      
+      // Draw detections on canvases
+      drawDetections(sourceCanvasEl, sourceDetections, sourceImage, 'source');
+      drawDetections(targetCanvasEl, targetDetections, targetImage, 'target');
+      
+      // Enable face swap button
+      swapFacesBtn.disabled = false;
+      
+      updateStatus(`Detected ${sourceDetections.length} face(s) in source image and ${targetDetections.length} face(s) in target image. Click 'Swap Faces' to continue.`);
+      showLoading(false);
+    } catch (error) {
+      updateStatus("Error detecting faces: " + error.message);
+      showLoading(false);
+      console.error(error);
+    }
+  }
+  
+  // Draw face detections on canvas
+  function drawDetections(canvas, detections, img, type) {
+    const ctx = canvas.getContext('2d');
+    
+    // Clear canvas and redraw image
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    
+    // Calculate scale factors
+    const scaleX = canvas.width / img.width;
+    const scaleY = canvas.height / img.height;
+    
+    // Draw boxes and landmarks for each face
+    detections.forEach((detection, index) => {
+      const box = detection.detection.box;
+      const landmarks = detection.landmarks.positions;
+      
+      // Scale box coordinates
+      const scaledBox = {
+        x: box.x * scaleX,
+        y: box.y * scaleY,
+        width: box.width * scaleX,
+        height: box.height * scaleY
+      };
+      
+      // Draw face rectangle
+      ctx.strokeStyle = (type === 'source' && index === selectedSourceFaceIndex) || 
+                         (type === 'target' && index === selectedTargetFaceIndex) 
+                         ? '#ff0000' : '#00ff00';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(scaledBox.x, scaledBox.y, scaledBox.width, scaledBox.height);
+      
+      // Draw face number
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.font = '16px Arial';
+      ctx.fillText(`Face ${index + 1}`, scaledBox.x, scaledBox.y - 5);
+      
+      // Draw landmarks
+      ctx.fillStyle = '#ffffff';
+      landmarks.forEach(point => {
+        ctx.beginPath();
+        ctx.arc(point.x * scaleX, point.y * scaleY, 1, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+      
+      // Make face selectable by clicking
+      canvas.onclick = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        
+        detections.forEach((det, idx) => {
+          const box = det.detection.box;
+          const scaledBox = {
+            x: box.x * scaleX,
+            y: box.y * scaleY,
+            width: box.width * scaleX,
+            height: box.height * scaleY
+          };
+          
+          if (x >= scaledBox.x && 
+              x <= scaledBox.x + scaledBox.width && 
+              y >= scaledBox.y && 
+              y <= scaledBox.y + scaledBox.height) {
+            if (type === 'source') {
+              selectedSourceFaceIndex = idx;
+              drawDetections(sourceCanvasEl, sourceDetections, sourceImage, 'source');
+            } else {
+              selectedTargetFaceIndex = idx;
+              drawDetections(targetCanvasEl, targetDetections, targetImage, 'target');
+            }
+          }
+        });
+      };
+    });
+  }
+  
+  // Perform face swap
+  async function swapFaces() {
+    if (!sourceDetections || !targetDetections) {
+      updateStatus("Please detect faces first.");
+      return;
+    }
+    
+    try {
+      updateStatus("Swapping faces... This may take a moment.");
+      showLoading(true);
+      
+      // Reset color adjustment sliders
+      brightnessValue = 0;
+      skinToneValue = 0;
+      saturationValue = 0;
+      brightnessSliderEl.value = 0;
+      skinToneSliderEl.value = 0;
+      saturationSliderEl.value = 0;
+      brightnessValueEl.textContent = "0";
+      skinToneValueEl.textContent = "0";
+      saturationValueEl.textContent = "0";
+      
+      // Get selected faces
+      const sourceFace = sourceDetections[selectedSourceFaceIndex];
+      const targetFace = targetDetections[selectedTargetFaceIndex];
+      
+      // Set output canvas dimensions
+      outputCanvasEl.width = targetImage.width;
+      outputCanvasEl.height = targetImage.height;
+      const outputCtx = outputCanvasEl.getContext('2d');
+      outputCtx.drawImage(targetImage, 0, 0);
+      
+      // Extract face information
+      const sourceLandmarks = sourceFace.landmarks.positions;
+      const targetLandmarks = targetFace.landmarks.positions;
+      const sourceBox = sourceFace.detection.box;
+      const targetBox = targetFace.detection.box;
+      
+      // Use GPU optimization if available
+      if (tf.getBackend() === 'webgl') {
+        tf.engine().startScope(); // Start memory scope for better GPU memory management
+      }
+      
+      // Perform enhanced face swap with advanced techniques
+      await performEnhancedFaceSwap(
+        sourceImage, targetImage, outputCanvasEl,
+        sourceLandmarks, targetLandmarks,
+        sourceBox, targetBox
+      );
+      
+      if (tf.getBackend() === 'webgl') {
+        tf.engine().endScope(); // End memory scope and clean up GPU memory
+      }
+      
+      // Store the original face swap result for color adjustments
+      originalFaceSwapCanvas = document.createElement('canvas');
+      originalFaceSwapCanvas.width = outputCanvasEl.width;
+      originalFaceSwapCanvas.height = outputCanvasEl.height;
+      const originalCtx = originalFaceSwapCanvas.getContext('2d');
+      originalCtx.drawImage(outputCanvasEl, 0, 0);
+      
+      // Initialize editing history
+      initEditHistory();
+      
+      // Enable download button
+      downloadBtn.disabled = false;
+      
+      updateStatus("Face swap completed! You can adjust skin tone and brightness, or use the editing tools below for final touches.");
+      showLoading(false);
+    } catch (error) {
+      updateStatus("Error swapping faces: " + error.message);
+      showLoading(false);
+      console.error(error);
+    }
+  }
+  
+  // Perform enhanced face swap with comprehensive mapping and seamless blending
+  async function performEnhancedFaceSwap(sourceImg, targetImg, outputCanvas, sourceLandmarks, targetLandmarks, sourceBox, targetBox) {
+    const outputCtx = outputCanvas.getContext('2d');
+    
+    // Step 1: Create temporary canvases for processing
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = sourceImg.width;
+    sourceCanvas.height = sourceImg.height;
+    const sourceCtx = sourceCanvas.getContext('2d');
+    sourceCtx.drawImage(sourceImg, 0, 0);
+    
+    const targetCanvas = document.createElement('canvas');
+    targetCanvas.width = targetImg.width;
+    targetCanvas.height = targetImg.height;
+    const targetCtx = targetCanvas.getContext('2d');
+    targetCtx.drawImage(targetImg, 0, 0);
+    
+    // Step 2: Analyze facial features for better alignment
+    const facialFeatures = analyzeFacialFeatures(sourceLandmarks, targetLandmarks);
+    
+    // Step 3: Determine face orientation and perspective
+    const perspectiveInfo = calculateFacePerspective(sourceLandmarks, targetLandmarks);
+    
+    // Step 4: Create warped canvas for result
+    const warpedCanvas = document.createElement('canvas');
+    warpedCanvas.width = targetImg.width;
+    warpedCanvas.height = targetImg.height;
+    const warpedCtx = warpedCanvas.getContext('2d');
+    
+    // Draw target image as base
+    warpedCtx.drawImage(targetImg, 0, 0);
+    
+    // Step 5: Create comprehensive triangulation of face landmarks
+    // This creates a more detailed mesh for better face mapping
+    const triangles = createEnhancedDelaunayTriangulation(sourceLandmarks);
+    
+    // Step 6: Apply triangulation to warp source face onto target face with perspective correction
+    for (let i = 0; i < triangles.length; i++) {
+      const triangle = triangles[i];
+      await warpTriangleWithPerspective(
+        sourceCanvas, warpedCanvas, sourceImg, targetImg,
+        [sourceLandmarks[triangle[0]], sourceLandmarks[triangle[1]], sourceLandmarks[triangle[2]]],
+        [targetLandmarks[triangle[0]], targetLandmarks[triangle[1]], targetLandmarks[triangle[2]]],
+        facialFeatures, perspectiveInfo
+      );
+      
+      // Update progress
+      const progress = Math.round((i / triangles.length) * 100);
+      updateProgress(`Warping face triangles: ${progress}%`);
+    }
+    
+    // Step 7: Create advanced face mask for blending - improved to only include the face area
+    const maskCanvas = await createEnhancedFaceMask(targetLandmarks, targetImg.width, targetImg.height);
+    
+    // Step 8: Apply advanced color correction for more natural blending - enhanced for better skin tone matching
+    const correctedCanvas = await applyAdvancedColorCorrection(warpedCanvas, targetCanvas, maskCanvas, targetLandmarks);
+    
+    // Step 9: Apply enhanced edge blending for seamless transitions - improved to eliminate jaggy edges
+    const blendedCanvas = await applyEnhancedEdgeBlending(correctedCanvas, targetCanvas, maskCanvas, targetLandmarks);
+    
+    // Step 10: Final composition
+    outputCtx.drawImage(targetImg, 0, 0);
+    outputCtx.save();
+    outputCtx.globalCompositeOperation = 'source-over';
+    outputCtx.drawImage(blendedCanvas, 0, 0);
+    outputCtx.restore();
+    
+    return outputCanvas;
+  }
+  
+  // Analyze facial features for better alignment
+  function analyzeFacialFeatures(sourceLandmarks, targetLandmarks) {
+    // Extract key facial features
+    const sourceEyes = {
+      left: avgPoint(sourceLandmarks.slice(36, 42)),
+      right: avgPoint(sourceLandmarks.slice(42, 48))
+    };
+    
+    const targetEyes = {
+      left: avgPoint(targetLandmarks.slice(36, 42)),
+      right: avgPoint(targetLandmarks.slice(42, 48))
+    };
+    
+    const sourceNose = avgPoint(sourceLandmarks.slice(27, 36));
+    const targetNose = avgPoint(targetLandmarks.slice(27, 36));
+    
+    const sourceMouth = avgPoint(sourceLandmarks.slice(48, 68));
+    const targetMouth = avgPoint(targetLandmarks.slice(48, 68));
+    
+    // Calculate proportions
+    const sourceEyeDistance = distance(sourceEyes.left, sourceEyes.right);
+    const targetEyeDistance = distance(targetEyes.left, targetEyes.right);
+    
+    const sourceEyeToNose = distance(avgPoint([sourceEyes.left, sourceEyes.right]), sourceNose);
+    const targetEyeToNose = distance(avgPoint([targetEyes.left, targetEyes.right]), targetNose);
+    
+    const sourceNoseToMouth = distance(sourceNose, sourceMouth);
+    const targetNoseToMouth = distance(targetNose, targetMouth);
+    
+    // Calculate scaling factors for different facial regions
+    const eyeScaleFactor = targetEyeDistance / sourceEyeDistance;
+    const midFaceScaleFactor = targetEyeToNose / sourceEyeToNose;
+    const lowerFaceScaleFactor = targetNoseToMouth / sourceNoseToMouth;
+    
+    // Calculate skin tone samples for better color matching
+    const sourceSkinTone = getSkinToneSample(sourceLandmarks);
+    const targetSkinTone = getSkinToneSample(targetLandmarks);
+    
+    return {
+      sourceEyes, targetEyes,
+      sourceNose, targetNose,
+      sourceMouth, targetMouth,
+      eyeScaleFactor,
+      midFaceScaleFactor,
+      lowerFaceScaleFactor,
+      sourceSkinTone,
+      targetSkinTone
+    };
+  }
+  
+  // Get representative skin tone from facial landmarks
+  function getSkinToneSample(landmarks) {
+    // Use cheek points as representative skin tone areas
+    const leftCheek = {
+      x: (landmarks[1].x + landmarks[2].x + landmarks[3].x) / 3,
+      y: (landmarks[1].y + landmarks[2].y + landmarks[3].y) / 3
+    };
+    
+    const rightCheek = {
+      x: (landmarks[13].x + landmarks[14].x + landmarks[15].x) / 3,
+      y: (landmarks[13].y + landmarks[14].y + landmarks[15].y) / 3
+    };
+    
+    // Return cheek points for sampling
+    return { leftCheek, rightCheek };
+  }
+  
+  // Calculate face perspective for better warping
+  function calculateFacePerspective(sourceLandmarks, targetLandmarks) {
+    // Use eye and jaw points to determine face orientation
+    const sourceLeftEye = avgPoint(sourceLandmarks.slice(36, 42));
+    const sourceRightEye = avgPoint(sourceLandmarks.slice(42, 48));
+    const sourceJawLeft = sourceLandmarks[0];
+    const sourceJawRight = sourceLandmarks[16];
+    
+    const targetLeftEye = avgPoint(targetLandmarks.slice(36, 42));
+    const targetRightEye = avgPoint(targetLandmarks.slice(42, 48));
+    const targetJawLeft = targetLandmarks[0];
+    const targetJawRight = targetLandmarks[16];
+    
+    // Calculate face tilt angles
+    const sourceEyeAngle = Math.atan2(sourceRightEye.y - sourceLeftEye.y, sourceRightEye.x - sourceLeftEye.x);
+    const targetEyeAngle = Math.atan2(targetRightEye.y - targetLeftEye.y, targetRightEye.x - targetLeftEye.x);
+    
+    const sourceJawAngle = Math.atan2(sourceJawRight.y - sourceJawLeft.y, sourceJawRight.x - sourceJawLeft.x);
+    const targetJawAngle = Math.atan2(targetJawRight.y - targetJawLeft.y, targetJawRight.x - targetJawLeft.x);
+    
+    // Calculate face width and height ratios for perspective adjustment
+    const sourceFaceWidth = distance(sourceJawLeft, sourceJawRight);
+    const targetFaceWidth = distance(targetJawLeft, targetJawRight);
+    
+    const sourceFaceHeight = distance(avgPoint([sourceLeftEye, sourceRightEye]), avgPoint([sourceLandmarks[8], sourceLandmarks[57]]));
+    const targetFaceHeight = distance(avgPoint([targetLeftEye, targetRightEye]), avgPoint([targetLandmarks[8], targetLandmarks[57]]));
+    
+    return {
+      eyeAngleDiff: targetEyeAngle - sourceEyeAngle,
+      jawAngleDiff: targetJawAngle - sourceJawAngle,
+      widthRatio: targetFaceWidth / sourceFaceWidth,
+      heightRatio: targetFaceHeight / sourceFaceHeight,
+      sourceLeftEye, sourceRightEye,
+      targetLeftEye, targetRightEye
+    };
+  }
+  
+  // Create a more comprehensive Delaunay triangulation for better face mapping
+  function createEnhancedDelaunayTriangulation(landmarks) {
+    // This enhanced triangulation creates a more detailed mesh for better mapping
+    // It covers all facial regions including forehead, eyes, nose, mouth, jaw, etc.
+    
+    // Basic triangulation with additional points for more detail
+    const triangles = [
+      // Forehead and upper face
+      [0, 17, 18], [0, 18, 19], [0, 19, 20], [0, 20, 21],
+      [0, 21, 22], [0, 22, 23], [0, 23, 24], [0, 24, 25],
+      [0, 25, 26], [0, 26, 16], [0, 16, 17],
+      
+      // Eyes - detailed triangulation
+      [17, 36, 18], [18, 36, 37], [18, 37, 19], [19, 37, 38],
+      [19, 38, 20], [20, 38, 39], [20, 39, 21], [21, 39, 27],
+      [22, 27, 42], [22, 42, 43], [22, 43, 23], [23, 43, 44],
+      [23, 44, 24], [24, 44, 45], [24, 45, 25], [25, 45, 46],
+      [25, 46, 26], [26, 46, 35], [26, 35, 16], [16, 35, 17],
+      
+      // Eye details - iris and eyelids
+      [36, 37, 41], [37, 41, 40], [37, 38, 40], [38, 40, 39],
+      [42, 43, 47], [43, 47, 46], [43, 44, 46], [44, 46, 45],
+      
+      // Nose - detailed bridge and tip
+      [27, 28, 39], [39, 28, 38], [28, 29, 38], [29, 38, 37],
+      [29, 30, 37], [30, 37, 36], [30, 31, 36], [31, 48, 36],
+      [31, 32, 48], [32, 42, 48], [32, 33, 42], [33, 43, 42],
+      [33, 34, 43], [34, 44, 43], [34, 35, 44], [35, 45, 44],
+      
+      // Nose details
+      [27, 28, 29], [27, 29, 30], [30, 31, 32], [30, 32, 33], 
+      [33, 34, 35], [27, 30, 33], [27, 33, 35],
+      
+      // Mouth - detailed lip structure
+      [48, 49, 50], [48, 50, 51], [48, 51, 52], [48, 52, 53],
+      [48, 53, 54], [48, 54, 55], [48, 55, 56], [48, 56, 57],
+      [48, 57, 58], [48, 58, 59], [48, 59, 60], [48, 60, 61],
+      [48, 61, 62], [48, 62, 63], [48, 63, 64], [48, 64, 65],
+      [48, 65, 66], [48, 66, 67], [48, 67, 59],
+      
+      // Upper lip details
+      [48, 49, 59], [49, 50, 59], [50, 51, 59], [51, 52, 59],
+      [52, 53, 59], [53, 54, 59], [54, 55, 59], [55, 56, 59],
+      [56, 57, 59], [57, 58, 59],
+      
+      // Lower lip details
+      [48, 59, 60], [59, 60, 61], [59, 61, 62], [59, 62, 63],
+      [59, 63, 64], [59, 64, 65], [59, 65, 66], [59, 66, 67],
+      
+      // Jaw and cheeks
+      [0, 1, 36], [1, 2, 36], [2, 31, 36], [2, 3, 31],
+      [3, 4, 31], [4, 5, 31], [5, 6, 31], [6, 7, 31],
+      [7, 8, 31], [8, 9, 31], [9, 10, 31], [10, 11, 31],
+      [11, 12, 31], [12, 13, 31], [13, 14, 31], [14, 15, 31],
+      [15, 16, 31], [16, 26, 31], [26, 35, 31],
+      
+      // Connect nose to mouth
+      [31, 32, 48], [32, 33, 48], [33, 34, 48], [34, 35, 48],
+      
+      // Additional face contour triangles for better blending
+      [0, 1, 17], [1, 17, 18], [1, 2, 18], [2, 18, 19],
+      [2, 3, 19], [3, 19, 20], [3, 4, 20], [4, 20, 21],
+      [4, 5, 21], [5, 21, 22], [5, 6, 22], [6, 22, 23],
+      [6, 7, 23], [7, 23, 24], [7, 8, 24], [8, 24, 25],
+      [8, 9, 25], [9, 25, 26], [9, 10, 26], [10, 26, 16],
+      [10, 11, 16], [11, 16, 15], [11, 12, 15], [12, 15, 14], 
+      [12, 13, 14]
+    ];
+    
+    // Remove any invalid triangles (where indices are out of bounds)
+    return triangles.filter(triangle => 
+      triangle[0] < landmarks.length && 
+      triangle[1] < landmarks.length && 
+      triangle[2] < landmarks.length
+    );
+  }
+  
+  // Warp triangle with perspective correction
+  async function warpTriangleWithPerspective(sourceCanvas, targetCanvas, sourceImg, targetImg, sourceTriangle, targetTriangle, facialFeatures, perspectiveInfo) {
+    const sourceCtx = sourceCanvas.getContext('2d');
+    const targetCtx = targetCanvas.getContext('2d');
+    
+    // Get bounding box of target triangle
+    const [rawMinX, rawMinY, rawMaxX, rawMaxY] = getBoundingBox(targetTriangle);
+    
+    // Clamp to image bounds instead of skipping — skipping causes missing face parts
+    const minX = Math.max(0, rawMinX);
+    const minY = Math.max(0, rawMinY);
+    const maxX = Math.min(targetImg.width - 1, rawMaxX);
+    const maxY = Math.min(targetImg.height - 1, rawMaxY);
+    
+    // Skip only if the triangle is entirely outside the image
+    if (maxX < 0 || maxY < 0 || minX >= targetImg.width || minY >= targetImg.height) {
+      return;
+    }
+    
+    // Create a small canvas for the triangle
+    const triangleCanvas = document.createElement('canvas');
+    triangleCanvas.width = maxX - minX + 1;
+    triangleCanvas.height = maxY - minY + 1;
+    const triangleCtx = triangleCanvas.getContext('2d');
+    
+    // Offset target triangle to the canvas
+    const offsetTargetTriangle = targetTriangle.map(point => ({
+      x: point.x - minX,
+      y: point.y - minY
+    }));
+    
+    // Draw target triangle shape
+    triangleCtx.beginPath();
+    triangleCtx.moveTo(offsetTargetTriangle[0].x, offsetTargetTriangle[0].y);
+    triangleCtx.lineTo(offsetTargetTriangle[1].x, offsetTargetTriangle[1].y);
+    triangleCtx.lineTo(offsetTargetTriangle[2].x, offsetTargetTriangle[2].y);
+    triangleCtx.closePath();
+    triangleCtx.clip();
+    
+    // Apply perspective correction to source triangle based on region
+    const adjustedSourceTriangle = applyPerspectiveCorrection(sourceTriangle, targetTriangle, facialFeatures, perspectiveInfo);
+    
+    // Calculate the affine transform from adjusted source to target triangle
+    const warpMatrix = calculateAffineTransform(adjustedSourceTriangle, offsetTargetTriangle);
+    
+    // Apply the transform and draw the warped source triangle
+    triangleCtx.transform(
+      warpMatrix[0], warpMatrix[3],
+      warpMatrix[1], warpMatrix[4],
+      warpMatrix[2], warpMatrix[5]
+    );
+    
+    triangleCtx.drawImage(sourceImg, 0, 0);
+    
+    // Draw the warped triangle onto the target canvas
+    targetCtx.drawImage(triangleCanvas, minX, minY);
+  }
+  
+  // Apply perspective correction based on facial region
+  // The triangulation warp already handles geometric mapping from source to target
+  // via affine transforms per-triangle. The previous code distorted source landmarks
+  // by rotating/stretching around eye centers, which caused misalignment and artifacts.
+  // Now we just return the source triangle unchanged — the per-triangle affine transform
+  // from source landmarks to target landmarks is the correct geometric mapping.
+  function applyPerspectiveCorrection(sourceTriangle, targetTriangle, facialFeatures, perspectiveInfo) {
+    return sourceTriangle.map(p => ({ x: p.x, y: p.y }));
+  }
+  
+  // Get bounding box for a triangle
+  function getBoundingBox(triangle) {
+    const minX = Math.min(triangle[0].x, triangle[1].x, triangle[2].x);
+    const minY = Math.min(triangle[0].y, triangle[1].y, triangle[2].y);
+    const maxX = Math.max(triangle[0].x, triangle[1].x, triangle[2].x);
+    const maxY = Math.max(triangle[0].y, triangle[1].y, triangle[2].y);
+    
+    return [Math.floor(minX), Math.floor(minY), Math.ceil(maxX), Math.ceil(maxY)];
+  }
+  
+  // Calculate affine transform between two triangles
+  function calculateAffineTransform(sourceTriangle, targetTriangle) {
+    // Source triangle coordinates
+    const x1 = sourceTriangle[0].x;
+    const y1 = sourceTriangle[0].y;
+    const x2 = sourceTriangle[1].x;
+    const y2 = sourceTriangle[1].y;
+    const x3 = sourceTriangle[2].x;
+    const y3 = sourceTriangle[2].y;
+    
+    // Target triangle coordinates
+    const u1 = targetTriangle[0].x;
+    const v1 = targetTriangle[0].y;
+    const u2 = targetTriangle[1].x;
+    const v2 = targetTriangle[1].y;
+    const u3 = targetTriangle[2].x;
+    const v3 = targetTriangle[2].y;
+    
+    // Calculate matrix coefficients
+    const det = (x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1);
+    
+    // Create transformation matrix
+    const a = ((u2 - u1) * (y3 - y1) - (u3 - u1) * (y2 - y1)) / det;
+    const b = ((u3 - u1) * (x2 - x1) - (u2 - u1) * (x3 - x1)) / det;
+    const c = u1 - a * x1 - b * y1;
+    const d = ((v2 - v1) * (y3 - y1) - (v3 - v1) * (y2 - y1)) / det;
+    const e = ((v3 - v1) * (x2 - x1) - (v2 - v1) * (x3 - x1)) / det;
+    const f = v1 - d * x1 - e * y1;
+    
+    return [a, b, c, d, e, f];
+  }
+  
+  // Create enhanced face mask for blending with better edge transitions
+  async function createEnhancedFaceMask(landmarks, width, height) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    
+    // Calculate face bounds
+    const jawLine = landmarks.slice(0, 17);
+    const leftEyebrow = landmarks.slice(17, 22);
+    const rightEyebrow = landmarks.slice(22, 27);
+    const nose = landmarks.slice(27, 36);
+    const leftEye = landmarks.slice(36, 42);
+    const rightEye = landmarks.slice(42, 48);
+    const mouth = landmarks.slice(48, 68);
+    
+    // Create a path for the face with more precise edges
+    ctx.beginPath();
+    
+    // Draw jawline with smoothing
+    ctx.moveTo(jawLine[0].x, jawLine[0].y);
+    for (let i = 1; i < jawLine.length; i++) {
+      // Use quadratic curves for smoother jaw line
+      if (i % 2 === 0 && i < jawLine.length - 1) {
+        const xc = (jawLine[i].x + jawLine[i + 1].x) / 2;
+        const yc = (jawLine[i].y + jawLine[i + 1].y) / 2;
+        ctx.quadraticCurveTo(jawLine[i].x, jawLine[i].y, xc, yc);
+      } else if (i === jawLine.length - 1) {
+        ctx.lineTo(jawLine[i].x, jawLine[i].y);
+      }
+    }
+    
+    // Connect to right eyebrow with a smoother transition
+    const rightTemple = {
+      x: (jawLine[16].x * 0.7 + rightEyebrow[0].x * 0.3),
+      y: (jawLine[16].y * 0.3 + rightEyebrow[0].y * 0.7) - 5
+    };
+    ctx.quadraticCurveTo(jawLine[16].x, jawLine[16].y - 5, rightTemple.x, rightTemple.y);
+    
+    // Draw right eyebrow with curve
+    ctx.lineTo(rightEyebrow[0].x, rightEyebrow[0].y);
+    for (let i = 1; i < rightEyebrow.length; i++) {
+      if (i % 2 === 0 && i < rightEyebrow.length - 1) {
+        const xc = (rightEyebrow[i].x + rightEyebrow[i + 1].x) / 2;
+        const yc = (rightEyebrow[i].y + rightEyebrow[i + 1].y) / 2;
+        ctx.quadraticCurveTo(rightEyebrow[i].x, rightEyebrow[i].y, xc, yc);
+      } else if (i === rightEyebrow.length - 1) {
+        ctx.lineTo(rightEyebrow[i].x, rightEyebrow[i].y);
+      }
+    }
+    
+    // Draw forehead with a natural curve
+    const foreheadPoint = {
+      x: (leftEyebrow[0].x + rightEyebrow[rightEyebrow.length - 1].x) / 2,
+      y: Math.min(leftEyebrow[0].y, rightEyebrow[rightEyebrow.length - 1].y) - 30 // Extended forehead height
+    };
+    
+    // Create a curved forehead line
+    const rightControl = {
+      x: rightEyebrow[rightEyebrow.length - 1].x,
+      y: rightEyebrow[rightEyebrow.length - 1].y - 20 // Increased height
+    };
+    const leftControl = {
+      x: leftEyebrow[0].x,
+      y: leftEyebrow[0].y - 20 // Increased height
+    };
+    
+    ctx.quadraticCurveTo(rightControl.x, rightControl.y, foreheadPoint.x, foreheadPoint.y);
+    ctx.quadraticCurveTo(leftControl.x, leftControl.y, leftEyebrow[0].x, leftEyebrow[0].y);
+    
+    // Draw left eyebrow with curve
+    for (let i = 1; i < leftEyebrow.length; i++) {
+      const idx = leftEyebrow.length - 1 - i;
+      if (i % 2 === 0 && i < leftEyebrow.length - 1) {
+        const xc = (leftEyebrow[idx].x + leftEyebrow[idx + 1].x) / 2;
+        const yc = (leftEyebrow[idx].y + leftEyebrow[idx + 1].y) / 2;
+        ctx.quadraticCurveTo(leftEyebrow[idx].x, leftEyebrow[idx].y, xc, yc);
+      } else if (i === leftEyebrow.length - 1) {
+        ctx.lineTo(leftEyebrow[idx].x, leftEyebrow[idx].y);
+      }
+    }
+    
+    // Connect to left temple with a smoother transition
+    const leftTemple = {
+      x: (jawLine[0].x * 0.7 + leftEyebrow[leftEyebrow.length - 1].x * 0.3),
+      y: (jawLine[0].y * 0.3 + leftEyebrow[leftEyebrow.length - 1].y * 0.7) - 5
+    };
+    ctx.quadraticCurveTo(leftEyebrow[leftEyebrow.length - 1].x, leftEyebrow[leftEyebrow.length - 1].y, leftTemple.x, leftTemple.y);
+    
+    // Close the path back to jawline with a curve
+    ctx.quadraticCurveTo(jawLine[0].x, jawLine[0].y - 5, jawLine[0].x, jawLine[0].y);
+    ctx.closePath();
+    
+    // Create gradient for feathered edges with wider, more gradual transitions
+    const nosePoint = nose[3]; // Center of nose
+    const faceRadius = distance(nosePoint, jawLine[8]) * 1.5; // Increased face radius for better coverage
+    
+    // Enhanced adaptive feathering with much wider gradual blend for seamless transitions
+    const featherAmount = Math.max(50, faceRadius * 0.4); // Significantly increased feathering
+    const gradient = ctx.createRadialGradient(
+      nosePoint.x, nosePoint.y, // Center on nose
+      faceRadius - featherAmount * 2.5, // Start feathering much further inside the face
+      nosePoint.x, nosePoint.y,
+      faceRadius + featherAmount * 1.2 // Extend feathering further beyond face edge
+    );
+    
+    // Create a more gradual gradient with multiple stops for smoother transitions
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');      // Solid at center
+    gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.98)');  // Nearly solid
+    gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.95)');  // Start slight fade
+    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.9)');   // More noticeable fade
+    gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.8)');   // Significant transparency start
+    gradient.addColorStop(0.8, 'rgba(255, 255, 255, 0.6)');   // More transparent
+    gradient.addColorStop(0.9, 'rgba(255, 255, 255, 0.3)');   // Mostly transparent
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');       // Completely transparent at edge
+    
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    
+    // Apply blur for even smoother edges using a separate canvas to avoid self-draw artifact
+    const blurredMaskCanvas = document.createElement('canvas');
+    blurredMaskCanvas.width = width;
+    blurredMaskCanvas.height = height;
+    const blurredMaskCtx = blurredMaskCanvas.getContext('2d');
+    blurredMaskCtx.filter = 'blur(3px)';
+    blurredMaskCtx.drawImage(canvas, 0, 0);
+    blurredMaskCtx.filter = 'none';
+    
+    // Copy blurred result back
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(blurredMaskCanvas, 0, 0);
+    
+    return canvas;
+  }
+  
+  // Apply advanced color correction with skin tone matching
+  // Uses per-pixel color transfer: samples mean/std of skin pixels from both
+  // source (warped face) and target, then shifts source toward target color
+  // statistics while preserving the source face's natural variation and identity.
+  async function applyAdvancedColorCorrection(warpedCanvas, targetCanvas, maskCanvas, targetLandmarks) {
+    const resultCanvas = document.createElement('canvas');
+    resultCanvas.width = warpedCanvas.width;
+    resultCanvas.height = warpedCanvas.height;
+    const resultCtx = resultCanvas.getContext('2d');
+    
+    // Draw warped face
+    resultCtx.drawImage(warpedCanvas, 0, 0);
+    
+    // Apply mask to isolate just the face region for color sampling
+    const maskedCanvas = document.createElement('canvas');
+    maskedCanvas.width = warpedCanvas.width;
+    maskedCanvas.height = warpedCanvas.height;
+    const maskedCtx = maskedCanvas.getContext('2d');
+    maskedCtx.drawImage(warpedCanvas, 0, 0);
+    maskedCtx.globalCompositeOperation = 'destination-in';
+    maskedCtx.drawImage(maskCanvas, 0, 0);
+    maskedCtx.globalCompositeOperation = 'source-over';
+    
+    // Get mask data to identify which pixels are face
+    const maskCtx = maskCanvas.getContext('2d');
+    const maskData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height).data;
+    
+    // Sample skin tones from both the warped source face and target
+    const warpedSamples = getSkinToneSamples(warpedCanvas, targetLandmarks);
+    const targetSamples = getSkinToneSamples(targetCanvas, targetLandmarks);
+    
+    // Calculate color statistics in RGB (mean and std-dev per channel)
+    const warpedStats = calculateColorStats(warpedSamples);
+    const targetStats = calculateColorStats(targetSamples);
+    
+    // Calculate scale and shift for each channel
+    // This performs a Reinhard color transfer: output = (input - mean_s) * (std_t / std_s) + mean_t
+    const scale = [
+      targetStats.std[0] / Math.max(1, warpedStats.std[0]),
+      targetStats.std[1] / Math.max(1, warpedStats.std[1]),
+      targetStats.std[2] / Math.max(1, warpedStats.std[2])
+    ];
+    const shift = [
+      targetStats.mean[0] - warpedStats.mean[0] * scale[0],
+      targetStats.mean[1] - warpedStats.mean[1] * scale[1],
+      targetStats.mean[2] - warpedStats.mean[2] * scale[2]
+    ];
+    
+    // Clamp scale to avoid extreme transformations
+    const clampedScale = scale.map(s => Math.max(0.5, Math.min(2.0, s)));
+    
+    // Apply per-pixel color transfer, modulated by the mask alpha
+    const imageData = resultCtx.getImageData(0, 0, resultCanvas.width, resultCanvas.height);
+    const pixels = imageData.data;
+    
+    for (let i = 0; i < pixels.length; i += 4) {
+      const maskAlpha = maskData[i + 3] / 255; // 0 to 1 from mask
+      if (maskAlpha > 0.01) {
+        // Blend factor: apply color correction proportional to mask, but keep it subtle
+        // to preserve the source face's identity while matching overall tone
+        const blend = maskAlpha * 0.75; // 75% color correction strength at full mask
+        
+        for (let c = 0; c < 3; c++) {
+          const original = pixels[i + c];
+          const corrected = (original - warpedStats.mean[c]) * clampedScale[c] + targetStats.mean[c];
+          pixels[i + c] = Math.round(original * (1 - blend) + Math.max(0, Math.min(255, corrected)) * blend);
+        }
+      }
+    }
+    
+    resultCtx.putImageData(imageData, 0, 0);
+    
+    // Subtle luminance harmonization: blend a small amount of target luminosity
+    // at the edges to match lighting without destroying facial features
+    const lumCanvas = document.createElement('canvas');
+    lumCanvas.width = resultCanvas.width;
+    lumCanvas.height = resultCanvas.height;
+    const lumCtx = lumCanvas.getContext('2d');
+    lumCtx.drawImage(targetCanvas, 0, 0);
+    lumCtx.globalCompositeOperation = 'destination-in';
+    // Use a heavily blurred version of the mask so only edge luminance is affected
+    const blurredMask = document.createElement('canvas');
+    blurredMask.width = maskCanvas.width;
+    blurredMask.height = maskCanvas.height;
+    const blurredMaskCtx = blurredMask.getContext('2d');
+    blurredMaskCtx.filter = 'blur(40px)';
+    blurredMaskCtx.drawImage(maskCanvas, 0, 0);
+    blurredMaskCtx.filter = 'none';
+    lumCtx.drawImage(blurredMask, 0, 0);
+    lumCtx.globalCompositeOperation = 'source-over';
+    
+    resultCtx.globalCompositeOperation = 'soft-light';
+    resultCtx.globalAlpha = 0.3;
+    resultCtx.drawImage(lumCanvas, 0, 0);
+    resultCtx.globalCompositeOperation = 'source-over';
+    resultCtx.globalAlpha = 1.0;
+    
+    return resultCanvas;
+  }
+  
+  // Calculate mean and std-dev of color samples (per channel)
+  function calculateColorStats(samples) {
+    if (samples.length === 0) {
+      return { mean: [220, 180, 160], std: [30, 25, 20] };
+    }
+    
+    let sumR = 0, sumG = 0, sumB = 0;
+    for (const s of samples) {
+      sumR += s.r;
+      sumG += s.g;
+      sumB += s.b;
+    }
+    const mean = [sumR / samples.length, sumG / samples.length, sumB / samples.length];
+    
+    let sumSqR = 0, sumSqG = 0, sumSqB = 0;
+    for (const s of samples) {
+      sumSqR += (s.r - mean[0]) ** 2;
+      sumSqG += (s.g - mean[1]) ** 2;
+      sumSqB += (s.b - mean[2]) ** 2;
+    }
+    const std = [
+      Math.sqrt(sumSqR / samples.length) || 1,
+      Math.sqrt(sumSqG / samples.length) || 1,
+      Math.sqrt(sumSqB / samples.length) || 1
+    ];
+    
+    return { mean, std };
+  }
+  
+  // Draw region-specific color gradient
+  function drawRegionGradient(ctx, landmarks, region, color) {
+    let centerX, centerY, radius;
+    
+    if (region === 'cheek') {
+      // Left cheek
+      centerX = landmarks[1].x;
+      centerY = landmarks[1].y;
+      radius = distance(landmarks[1], landmarks[2]) * 1.8; // Increased radius
+      
+      const gradient = ctx.createRadialGradient(
+        centerX, centerY, 0,
+        centerX, centerY, radius
+      );
+      
+      gradient.addColorStop(0, `rgba(${color.r}, ${color.g}, ${color.b}, 0.5)`); // Increased opacity
+      gradient.addColorStop(1, `rgba(${color.r}, ${color.g}, ${color.b}, 0)`);
+      
+      ctx.fillStyle = gradient;
+      ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+      
+      // Right cheek
+      centerX = landmarks[15].x;
+      centerY = landmarks[15].y;
+      radius = distance(landmarks[14], landmarks[15]) * 1.8; // Increased radius
+      
+      const gradient2 = ctx.createRadialGradient(
+        centerX, centerY, 0,
+        centerX, centerY, radius
+      );
+      
+      gradient2.addColorStop(0, `rgba(${color.r}, ${color.g}, ${color.b}, 0.5)`); // Increased opacity
+      gradient2.addColorStop(1, `rgba(${color.r}, ${color.g}, ${color.b}, 0)`);
+      
+      ctx.fillStyle = gradient2;
+      ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+    } 
+    else if (region === 'forehead') {
+      centerX = (landmarks[19].x + landmarks[24].x) / 2;
+      centerY = (landmarks[19].y + landmarks[24].y) / 2 - 10;
+      radius = distance(landmarks[19], landmarks[24]) * 0.9; // Increased coverage
+      
+      const gradient = ctx.createRadialGradient(
+        centerX, centerY, 0,
+        centerX, centerY, radius
+      );
+      
+      gradient.addColorStop(0, `rgba(${color.r}, ${color.g}, ${color.b}, 0.4)`); // Increased opacity
+      gradient.addColorStop(1, `rgba(${color.r}, ${color.g}, ${color.b}, 0)`);
+      
+      ctx.fillStyle = gradient;
+      ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+    }
+    else if (region === 'chin') {
+      centerX = landmarks[8].x;
+      centerY = landmarks[8].y;
+      radius = distance(landmarks[7], landmarks[9]) * 1.5; // Increased radius
+      
+      const gradient = ctx.createRadialGradient(
+        centerX, centerY, 0,
+        centerX, centerY, radius
+      );
+      
+      gradient.addColorStop(0, `rgba(${color.r}, ${color.g}, ${color.b}, 0.4)`); // Increased opacity
+      gradient.addColorStop(1, `rgba(${color.r}, ${color.g}, ${color.b}, 0)`);
+      
+      ctx.fillStyle = gradient;
+      ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+    }
+  }
+  
+  // Sample color from specific face region
+  function sampleSpecificRegion(canvas, landmarks, region) {
+    const ctx = canvas.getContext('2d');
+    let x, y, width, height;
+    
+    if (region === 'cheek') {
+      // Average of left and right cheek with larger sample area
+      const leftX = Math.round(landmarks[1].x);
+      const leftY = Math.round(landmarks[1].y);
+      const rightX = Math.round(landmarks[15].x);
+      const rightY = Math.round(landmarks[15].y);
+      
+      // Sample larger areas (3x3 pixels) for better color averaging
+      const leftSamples = [];
+      const rightSamples = [];
+      
+      for (let offsetY = -1; offsetY <= 1; offsetY++) {
+        for (let offsetX = -1; offsetX <= 1; offsetX++) {
+          const lx = leftX + offsetX;
+          const ly = leftY + offsetY;
+          const rx = rightX + offsetX;
+          const ry = rightY + offsetY;
+          
+          if (lx >= 0 && lx < canvas.width && ly >= 0 && ly < canvas.height) {
+            leftSamples.push(ctx.getImageData(lx, ly, 1, 1).data);
+          }
+          
+          if (rx >= 0 && rx < canvas.width && ry >= 0 && ry < canvas.height) {
+            rightSamples.push(ctx.getImageData(rx, ry, 1, 1).data);
+          }
+        }
+      }
+      
+      // Average the samples
+      let totalR = 0, totalG = 0, totalB = 0;
+      let count = 0;
+      
+      leftSamples.forEach(pixel => {
+        totalR += pixel[0];
+        totalG += pixel[1];
+        totalB += pixel[2];
+        count++;
+      });
+      
+      rightSamples.forEach(pixel => {
+        totalR += pixel[0];
+        totalG += pixel[1];
+        totalB += pixel[2];
+        count++;
+      });
+      
+      if (count === 0) return {r: 255, g: 220, b: 200}; // Default fallback
+      
+      return {
+        r: Math.round(totalR / count),
+        g: Math.round(totalG / count),
+        b: Math.round(totalB / count)
+      };
+    }
+    else if (region === 'forehead') {
+      x = Math.round((landmarks[19].x + landmarks[24].x) / 2);
+      y = Math.round((landmarks[19].y + landmarks[24].y) / 2) - 10;
+      
+      // Sample larger area for better averaging
+      const samples = [];
+      
+      for (let offsetY = -2; offsetY <= 2; offsetY++) {
+        for (let offsetX = -2; offsetX <= 2; offsetX++) {
+          const sx = x + offsetX;
+          const sy = y + offsetY;
+          
+          if (sx >= 0 && sx < canvas.width && sy >= 0 && sy < canvas.height) {
+            samples.push(ctx.getImageData(sx, sy, 1, 1).data);
+          }
+        }
+      }
+      
+      // Average the samples
+      let totalR = 0, totalG = 0, totalB = 0;
+      let count = samples.length;
+      
+      samples.forEach(pixel => {
+        totalR += pixel[0];
+        totalG += pixel[1];
+        totalB += pixel[2];
+      });
+      
+      if (count === 0) return {r: 255, g: 220, b: 200}; // Default fallback
+      
+      return {
+        r: Math.round(totalR / count),
+        g: Math.round(totalG / count),
+        b: Math.round(totalB / count)
+      };
+    }
+    else if (region === 'chin') {
+      x = Math.round(landmarks[8].x);
+      y = Math.round(landmarks[8].y);
+      
+      // Sample larger area for better averaging
+      const samples = [];
+      
+      for (let offsetY = -2; offsetY <= 2; offsetY++) {
+        for (let offsetX = -2; offsetX <= 2; offsetX++) {
+          const sx = x + offsetX;
+          const sy = y + offsetY;
+          
+          if (sx >= 0 && sx < canvas.width && sy >= 0 && sy < canvas.height) {
+            samples.push(ctx.getImageData(sx, sy, 1, 1).data);
+          }
+        }
+      }
+      
+      // Average the samples
+      let totalR = 0, totalG = 0, totalB = 0;
+      let count = samples.length;
+      
+      samples.forEach(pixel => {
+        totalR += pixel[0];
+        totalG += pixel[1];
+        totalB += pixel[2];
+      });
+      
+      if (count === 0) return {r: 255, g: 220, b: 200}; // Default fallback
+      
+      return {
+        r: Math.round(totalR / count),
+        g: Math.round(totalG / count),
+        b: Math.round(totalB / count)
+      };
+    }
+    
+    // Default fallback
+    return {r: 255, g: 220, b: 200};
+  }
+  
+  // Get detailed skin tone samples from the face for accurate color matching
+  function getSkinToneSamples(canvas, landmarks) {
+    const ctx = canvas.getContext('2d');
+    const samples = [];
+    
+    // Define even more comprehensive sample points covering different face regions
+    // This provides better coverage of skin tones across the face for perfect matching
+    const sampleRegions = [
+      // Cheeks - multiple points at different depths
+      {x: (landmarks[1].x + landmarks[2].x) / 2, y: (landmarks[1].y + landmarks[2].y) / 2},
+      {x: (landmarks[2].x + landmarks[3].x) / 2, y: (landmarks[2].y + landmarks[3].y) / 2},
+      {x: (landmarks[14].x + landmarks[15].x) / 2, y: (landmarks[14].y + landmarks[15].y) / 2},
+      {x: (landmarks[13].x + landmarks[14].x) / 2, y: (landmarks[13].y + landmarks[14].y) / 2},
+      {x: (landmarks[1].x * 0.7 + landmarks[31].x * 0.3), y: (landmarks[1].y * 0.7 + landmarks[31].y * 0.3)},
+      {x: (landmarks[15].x * 0.7 + landmarks[35].x * 0.3), y: (landmarks[15].y * 0.7 + landmarks[35].y * 0.3)},
+      
+      // Forehead - more points across forehead for better sampling
+      {x: (landmarks[19].x + landmarks[20].x) / 2, y: (landmarks[19].y + landmarks[20].y) / 2 - 10},
+      {x: (landmarks[23].x + landmarks[24].x) / 2, y: (landmarks[23].y + landmarks[24].y) / 2 - 10},
+      {x: (landmarks[21].x + landmarks[22].x) / 2, y: (landmarks[21].y + landmarks[22].y) / 2 - 15},
+      {x: landmarks[19].x, y: landmarks[19].y - 15},
+      {x: landmarks[24].x, y: landmarks[24].y - 15},
+      {x: (landmarks[19].x + landmarks[24].x) / 2, y: ((landmarks[19].y + landmarks[24].y) / 2) - 20},
+      
+      // Nose
+      landmarks[30],
+      {x: (landmarks[31].x + landmarks[35].x) / 2, y: (landmarks[31].y + landmarks[35].y) / 2},
+      landmarks[27],
+      landmarks[28],
+      landmarks[29],
+      
+      // Chin and jaw area - expanded
+      {x: landmarks[8].x, y: landmarks[8].y + 5},
+      {x: (landmarks[7].x + landmarks[9].x) / 2, y: (landmarks[7].y + landmarks[9].y) / 2},
+      {x: (landmarks[6].x + landmarks[10].x) / 2, y: (landmarks[6].y + landmarks[10].y) / 2},
+      {x: (landmarks[5].x + landmarks[11].x) / 2, y: (landmarks[5].y + landmarks[11].y) / 2},
+      
+      // Sides of face - more points for better coverage
+      {x: (landmarks[0].x + landmarks[1].x) / 2, y: (landmarks[0].y + landmarks[1].y) / 2},
+      {x: (landmarks[15].x + landmarks[16].x) / 2, y: (landmarks[15].y + landmarks[16].y) / 2},
+      landmarks[2],
+      landmarks[14],
+      {x: (landmarks[3].x + landmarks[4].x) / 2, y: (landmarks[3].y + landmarks[4].y) / 2},
+      {x: (landmarks[12].x + landmarks[13].x) / 2, y: (landmarks[12].y + landmarks[13].y) / 2}
+    ];
+    
+    // Sample a larger region around each point for better averaging and micro-detail capture
+    for (const point of sampleRegions) {
+      const x = Math.floor(point.x);
+      const y = Math.floor(point.y);
+      
+      if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
+        // Sample a 7x7 area around each point for much better averaging
+        for (let offsetY = -3; offsetY <= 3; offsetY++) {
+          for (let offsetX = -3; offsetX <= 3; offsetX++) {
+            const sampleX = x + offsetX;
+            const sampleY = y + offsetY;
+            
+            if (sampleX >= 0 && sampleX < canvas.width && sampleY >= 0 && sampleY < canvas.height) {
+              const pixel = ctx.getImageData(sampleX, sampleY, 1, 1).data;
+              // Improved filtering to exclude non-skin elements while keeping natural variation
+              if (!isExtremeColor(pixel[0], pixel[1], pixel[2]) && isSkinTone(pixel[0], pixel[1], pixel[2])) {
+                samples.push({r: pixel[0], g: pixel[1], b: pixel[2]});
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    return samples;
+  }
+  
+  // Check if a color is extreme (too dark or too bright) to exclude from skin samples
+  function isExtremeColor(r, g, b) {
+    const brightness = (r + g + b) / 3;
+    return brightness < 30 || brightness > 245;
+  }
+  
+  // Enhanced check if a color is likely to be a skin tone
+  function isSkinTone(r, g, b) {
+    // Refined skin tone detection
+    
+    // Convert to HSV for better skin tone checking
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const delta = max - min;
+    
+    // Calculate hue
+    let h = 0;
+    if (delta !== 0) {
+      if (max === r) {
+        h = ((g - b) / delta) % 6;
+      } else if (max === g) {
+        h = (b - r) / delta + 2;
+      } else {
+        h = (r - g) / delta + 4;
+      }
+      h = Math.round(h * 60);
+      if (h < 0) h += 360;
+    }
+    
+    // Calculate saturation
+    const s = max === 0 ? 0 : delta / max;
+    
+    // Calculate value
+    const v = max / 255;
+    
+    // Check basic skin tone rule (red > green > blue)
+    const isRedDominant = r > g && r > b;
+    
+    // Skin tones typically have hues between 0 and 50 (reddish to yellowish)
+    // Low to moderate saturation, and moderate to high value
+    const isHueOk = (h >= 0 && h <= 50) || (h >= 340 && h <= 360);
+    const isSatOk = s >= 0.05 && s <= 0.7;
+    const isValOk = v >= 0.2 && v <= 0.95;
+    
+    // Additional checks for better skin tone detection
+    const rgDiff = Math.abs(r - g);
+    const rbDiff = Math.abs(r - b);
+    const gbDiff = Math.abs(g - b);
+    
+    // Skin tones typically have a small r-g difference and larger r-b difference
+    const isColorDiffOk = rgDiff < 45 && rbDiff > 15 && gbDiff > 10;
+    
+    return isRedDominant && isHueOk && isSatOk && isValOk && isColorDiffOk;
+  }
+  
+  // Calculate detailed color statistics from samples
+  function calculateDetailedColorStats(samples) {
+    if (samples.length === 0) return {
+      avgR: 255, avgG: 200, avgB: 180,
+      medianR: 255, medianG: 200, medianB: 180,
+      saturation: 0.3, luminance: 0.8
+    };
+    
+    // Sort samples by brightness to identify outliers
+    const brightnessSorted = samples.map(sample => ({
+      sample,
+      brightness: (sample.r + sample.g + sample.b) / 3
+    })).sort((a, b) => a.brightness - b.brightness);
+    
+    // Remove top and bottom 10% to eliminate outliers
+    const trimmedSamples = brightnessSorted.slice(
+      Math.floor(brightnessSorted.length * 0.1),
+      Math.ceil(brightnessSorted.length * 0.9)
+    ).map(item => item.sample);
+    
+    // Calculate averages
+    let totalR = 0, totalG = 0, totalB = 0;
+    for (const sample of trimmedSamples) {
+      totalR += sample.r;
+      totalG += sample.g;
+      totalB += sample.b;
+    }
+    
+    const avgR = Math.round(totalR / trimmedSamples.length);
+    const avgG = Math.round(totalG / trimmedSamples.length);
+    const avgB = Math.round(totalB / trimmedSamples.length);
+    
+    // Calculate medians
+    const sortedR = trimmedSamples.map(s => s.r).sort((a, b) => a - b);
+    const sortedG = trimmedSamples.map(s => s.g).sort((a, b) => a - b);
+    const sortedB = trimmedSamples.map(s => s.b).sort((a, b) => a - b);
+    
+    const medianR = sortedR[Math.floor(sortedR.length / 2)];
+    const medianG = sortedG[Math.floor(sortedG.length / 2)];
+    const medianB = sortedB[Math.floor(sortedB.length / 2)];
+    
+    // Calculate saturation and luminance
+    let totalSaturation = 0;
+    let totalLuminance = 0;
+    
+    for (const sample of trimmedSamples) {
+      const r = sample.r / 255;
+      const g = sample.g / 255;
+      const b = sample.b / 255;
+      
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const delta = max - min;
+      
+      // Saturation
+      const saturation = max === 0 ? 0 : delta / max;
+      totalSaturation += saturation;
+      
+      // Luminance (perceived brightness)
+      const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      totalLuminance += luminance;
+    }
+    
+    const saturation = totalSaturation / trimmedSamples.length;
+    const luminance = totalLuminance / trimmedSamples.length;
+    
+    return {
+      avgR, avgG, avgB,
+      medianR, medianG, medianB,
+      saturation, luminance
+    };
+  }
+  
+  // Apply enhanced edge blending for seamless transitions
+  // The corrected face already has proper color. We need to:
+  //   1. Start with the target image as the base
+  //   2. Composite the corrected face on top, using the feathered mask for alpha
+  //   3. Apply subtle edge-region blending to smooth the seam
+  async function applyEnhancedEdgeBlending(correctedCanvas, targetCanvas, maskCanvas, targetLandmarks) {
+    const resultCanvas = document.createElement('canvas');
+    resultCanvas.width = correctedCanvas.width;
+    resultCanvas.height = correctedCanvas.height;
+    const resultCtx = resultCanvas.getContext('2d');
+    
+    // Start with the target image as the full base — this ensures no transparency
+    resultCtx.drawImage(targetCanvas, 0, 0);
+    
+    // Create the corrected face with mask applied as alpha
+    // correctedCanvas already has color correction but no mask alpha
+    const faceCanvas = document.createElement('canvas');
+    faceCanvas.width = correctedCanvas.width;
+    faceCanvas.height = correctedCanvas.height;
+    const faceCtx = faceCanvas.getContext('2d');
+    faceCtx.drawImage(correctedCanvas, 0, 0);
+    faceCtx.globalCompositeOperation = 'destination-in';
+    faceCtx.drawImage(maskCanvas, 0, 0);
+    faceCtx.globalCompositeOperation = 'source-over';
+    
+    // Composite the masked face directly onto the target
+    // The mask's feathered edges create the seamless transition
+    resultCtx.drawImage(faceCanvas, 0, 0);
+    
+    // Now do subtle edge-zone blending to smooth any visible seam
+    // Create an edge-only mask (ring around the face boundary)
+    const edgeMaskCanvas = document.createElement('canvas');
+    edgeMaskCanvas.width = maskCanvas.width;
+    edgeMaskCanvas.height = maskCanvas.height;
+    const edgeMaskCtx = edgeMaskCanvas.getContext('2d');
+    
+    // Draw the original mask
+    edgeMaskCtx.drawImage(maskCanvas, 0, 0);
+    
+    // Subtract a slightly shrunk version to leave only the edge ring
+    edgeMaskCtx.globalCompositeOperation = 'destination-out';
+    edgeMaskCtx.filter = 'blur(10px)';
+    // Draw mask scaled down slightly
+    edgeMaskCtx.drawImage(maskCanvas, 0, 0,
+      maskCanvas.width, maskCanvas.height,
+      8, 8, maskCanvas.width - 16, maskCanvas.height - 16);
+    edgeMaskCtx.filter = 'none';
+    edgeMaskCtx.globalCompositeOperation = 'source-over';
+    
+    // Apply target texture at edges for seamless skin-texture transition
+    const edgeTextureCanvas = document.createElement('canvas');
+    edgeTextureCanvas.width = targetCanvas.width;
+    edgeTextureCanvas.height = targetCanvas.height;
+    const edgeTextureCtx = edgeTextureCanvas.getContext('2d');
+    edgeTextureCtx.drawImage(targetCanvas, 0, 0);
+    edgeTextureCtx.globalCompositeOperation = 'destination-in';
+    edgeTextureCtx.drawImage(edgeMaskCanvas, 0, 0);
+    edgeTextureCtx.globalCompositeOperation = 'source-over';
+    
+    // Blend edge target texture using overlay for subtle skin detail
+    resultCtx.save();
+    resultCtx.globalCompositeOperation = 'overlay';
+    resultCtx.globalAlpha = 0.3;
+    resultCtx.drawImage(edgeTextureCanvas, 0, 0);
+    resultCtx.restore();
+    
+    // Preserve target luminance at edges for lighting match
+    resultCtx.save();
+    resultCtx.globalCompositeOperation = 'luminosity';
+    resultCtx.globalAlpha = 0.2;
+    resultCtx.drawImage(edgeTextureCanvas, 0, 0);
+    resultCtx.restore();
+    
+    return resultCanvas;
+  }
+  
+  // Calculate average point
+  function avgPoint(points) {
+    let sumX = 0;
+    let sumY = 0;
+    for (const point of points) {
+      sumX += point.x;
+      sumY += point.y;
+    }
+    return {
+      x: sumX / points.length,
+      y: sumY / points.length
+    };
+  }
+  
+  // Calculate distance between two points
+  function distance(p1, p2) {
+    return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+  }
+  
+  // Download the result image
+  function downloadResult() {
+    const link = document.createElement('a');
+    link.download = 'face-swap-result.png';
+    link.href = outputCanvasEl.toDataURL('image/png');
+    link.click();
+  }
+  
+  // UI helper functions
+  function updateStatus(message) {
+    statusEl.textContent = message;
+  }
+  
+  function showLoading(show, message) {
+    loadingIndicatorEl.hidden = !show;
+    if (message) {
+      updateProgress(message);
+    }
+  }
+  
+  function updateProgress(message) {
+    progressEl.textContent = message;
+  }
+  
+  // Load scripts dynamically
+  async function loadScripts(urls) {
+    const promises = urls.map(url => {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = url;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    });
+    
+    return Promise.all(promises);
+  }
+  
+  // Image Editing Tools Functions
+  let currentTool = null;
+  let isDrawing = false;
+  let lastX, lastY;
+  let radius = 10; // Default radius
+  let strength = 0.5; // Default strength
+  let selectedColor = null;
+  let colorPalette = Array(8).fill(null);
+  let selectedColorIndex = null;
+  let editHistory = [];
+  let editHistoryIndex = -1;
+  let maxHistorySteps = 10;
+  let affectedPixels = new Set(); // Track affected pixels during a drag operation
+  
+  // Initialize image editing tools
+  function initImageEditingTools() {
+    // Set up tool buttons
+    blurBtn.addEventListener('click', () => selectTool('blur'));
+    smudgeBtn.addEventListener('click', () => selectTool('smudge'));
+    dropperBtn.addEventListener('click', () => selectTool('dropper'));
+    paintBtn.addEventListener('click', () => selectTool('paint'));
+    lightenBtn.addEventListener('click', () => selectTool('lighten'));
+    darkenBtn.addEventListener('click', () => selectTool('darken'));
+    sharpenBtn.addEventListener('click', () => selectTool('sharpen'));
+    
+    // Set up tool settings
+    radiusSliderEl.addEventListener('input', function() {
+      radius = parseInt(this.value);
+      radiusValueEl.textContent = radius;
+    });
+    
+    strengthSliderEl.addEventListener('input', function() {
+      strength = parseFloat(this.value);
+      strengthValueEl.textContent = strength.toFixed(1);
+    });
+    
+    // Set up color palette
+    const colorSwatches = colorPaletteEl.querySelectorAll('.color-swatch');
+    colorSwatches.forEach(swatch => {
+      swatch.addEventListener('click', function() {
+        const index = parseInt(this.dataset.index);
+        if (colorPalette[index]) {
+          selectColorFromPalette(index);
+        }
+      });
+    });
+    
+    // Set up canvas events
+    outputCanvasEl.addEventListener('mousedown', startDrawing);
+    outputCanvasEl.addEventListener('mousemove', draw);
+    outputCanvasEl.addEventListener('mouseup', stopDrawing);
+    outputCanvasEl.addEventListener('mouseout', stopDrawing);
+    
+    // Set up history controls
+    undoBtn.addEventListener('click', undoEdit);
+    redoBtn.addEventListener('click', redoEdit);
+    downloadEditedBtn.addEventListener('click', downloadEditedImage);
+    
+    // Disable editing tools initially (they'll be enabled after face swap)
+    imageEditingToolsEl.style.opacity = '0.7';
+    imageEditingToolsEl.style.pointerEvents = 'none';
+  }
+  
+  // Initialize edit history when a new face swap is performed
+  function initEditHistory() {
+    // Save initial state
+    const initialState = outputCanvasEl.toDataURL();
+    editHistory = [initialState];
+    editHistoryIndex = 0;
+    
+    // Update undo/redo buttons
+    updateHistoryButtons();
+    
+    // Enable editing tools
+    imageEditingToolsEl.style.opacity = '1';
+    imageEditingToolsEl.style.pointerEvents = 'auto';
+  }
+  
+  // Select a tool
+  function selectTool(tool) {
+    // Remove active class from all tools
+    document.querySelectorAll('.tool-btn').forEach(btn => {
+      btn.classList.remove('active');
+    });
+    
+    // Set current tool
+    currentTool = tool;
+    
+    // Add active class to selected tool
+    document.getElementById(`${tool}Btn`).classList.add('active');
+    
+    // Update cursor based on tool
+    if (tool === 'dropper') {
+      outputCanvasEl.style.cursor = 'crosshair';
+    } else {
+      outputCanvasEl.style.cursor = 'pointer';
+    }
+  }
+  
+  // Start drawing
+  function startDrawing(e) {
+    if (!currentTool) return;
+    
+    isDrawing = true;
+    
+    const rect = outputCanvasEl.getBoundingClientRect();
+    const scaleX = outputCanvasEl.width / rect.width;
+    const scaleY = outputCanvasEl.height / rect.height;
+    
+    lastX = (e.clientX - rect.left) * scaleX;
+    lastY = (e.clientY - rect.top) * scaleY;
+    
+    // Clear the set of affected pixels for a new drag operation
+    affectedPixels.clear();
+    
+    // For dropper tool, select color immediately
+    if (currentTool === 'dropper') {
+      const ctx = outputCanvasEl.getContext('2d');
+      const pixel = ctx.getImageData(lastX, lastY, 1, 1).data;
+      addColorToPalette(`rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`);
+    }
+  }
+  
+  // Draw on canvas
+  function draw(e) {
+    if (!isDrawing || !currentTool) return;
+    
+    const rect = outputCanvasEl.getBoundingClientRect();
+    const scaleX = outputCanvasEl.width / rect.width;
+    const scaleY = outputCanvasEl.height / rect.height;
+    
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    
+    const ctx = outputCanvasEl.getContext('2d');
+    
+    // Create a path between last point and current point
+    const dx = x - lastX;
+    const dy = y - lastY;
+    const steps = Math.max(Math.abs(dx), Math.abs(dy));
+    
+    for (let i = 0; i <= steps; i++) {
+      const px = lastX + dx * (i / steps);
+      const py = lastY + dy * (i / steps);
+      
+      // Apply the current tool
+      applyTool(ctx, px, py);
+    }
+    
+    lastX = x;
+    lastY = y;
+  }
+  
+  // Stop drawing
+  function stopDrawing() {
+    if (isDrawing && currentTool !== 'dropper') {
+      // Save state for undo/redo
+      saveState();
+    }
+    isDrawing = false;
+    affectedPixels.clear();
+  }
+  
+  // Apply the selected tool at the given coordinates
+  function applyTool(ctx, x, y) {
+    // Skip if not drawing or using dropper tool
+    if (!isDrawing || currentTool === 'dropper') return;
+    
+    // Skip already processed pixels in this drag
+    const pixelKey = `${Math.round(x)},${Math.round(y)}`;
+    if (affectedPixels.has(pixelKey)) return;
+    affectedPixels.add(pixelKey);
+    
+    switch (currentTool) {
+      case 'blur':
+        applyBlur(ctx, x, y);
+        break;
+      case 'smudge':
+        applySmudge(ctx, x, y);
+        break;
+      case 'paint':
+        if (selectedColor) {
+          applyPaint(ctx, x, y);
+        }
+        break;
+      case 'lighten':
+        applyLighten(ctx, x, y);
+        break;
+      case 'darken':
+        applyDarken(ctx, x, y);
+        break;
+      case 'sharpen':
+        applySharpen(ctx, x, y);
+        break;
+    }
+  }
+  
+  // Apply blur effect
+  function applyBlur(ctx, x, y) {
+    // Create a temporary canvas for the blur operation
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = outputCanvasEl.width;
+    tempCanvas.height = outputCanvasEl.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Copy the current canvas to the temp canvas
+    tempCtx.drawImage(outputCanvasEl, 0, 0);
+    
+    // Apply blur filter to the temp canvas
+    tempCtx.filter = `blur(${strength * 5}px)`;
+    tempCtx.globalAlpha = 0.9;
+    
+    // Draw a circle around the current point on the temp canvas
+    tempCtx.beginPath();
+    tempCtx.arc(x, y, radius, 0, Math.PI * 2);
+    tempCtx.closePath();
+    tempCtx.clip();
+    tempCtx.drawImage(outputCanvasEl, 0, 0);
+    
+    // Reset filters
+    tempCtx.filter = 'none';
+    tempCtx.globalAlpha = 1;
+    
+    // Draw the blurred region back to the main canvas
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(tempCanvas, 0, 0);
+    ctx.restore();
+  }
+  
+  // Apply smudge effect
+  function applySmudge(ctx, x, y) {
+    // Get a larger area around the current point for smudging
+    const smudgeSize = radius * 2;
+    const sourceX = Math.max(0, Math.floor(x - smudgeSize / 2));
+    const sourceY = Math.max(0, Math.floor(y - smudgeSize / 2));
+    const sourceWidth = Math.min(smudgeSize, outputCanvasEl.width - sourceX);
+    const sourceHeight = Math.min(smudgeSize, outputCanvasEl.height - sourceY);
+    
+    // Skip if dimensions are invalid
+    if (sourceWidth <= 0 || sourceHeight <= 0) return;
+    
+    // Get the pixels from this area
+    const imageData = ctx.getImageData(sourceX, sourceY, sourceWidth, sourceHeight);
+    const pixels = imageData.data;
+    
+    // Apply smudge by averaging pixels in the direction of movement
+    const dx = x - lastX;
+    const dy = y - lastY;
+    const angle = Math.atan2(dy, dx);
+    
+    // Calculate smudge direction vector
+    const smudgeX = Math.cos(angle) * strength * 5;
+    const smudgeY = Math.sin(angle) * strength * 5;
+    
+    // Create smudged image data
+    const smudgedImageData = ctx.createImageData(sourceWidth, sourceHeight);
+    const smudgedPixels = smudgedImageData.data;
+    
+    // Apply smudge effect
+    for (let iy = 0; iy < sourceHeight; iy++) {
+      for (let ix = 0; ix < sourceWidth; ix++) {
+        // Distance from center of brush
+        const dist = Math.sqrt(Math.pow(ix - sourceWidth / 2, 2) + Math.pow(iy - sourceHeight / 2, 2));
+        
+        if (dist <= radius) {
+          // Calculate position in the image data array
+          const i = (iy * sourceWidth + ix) * 4;
+          
+          // Calculate smudge source position
+          const srcX = Math.max(0, Math.min(sourceWidth - 1, ix - smudgeX));
+          const srcY = Math.max(0, Math.min(sourceHeight - 1, iy - smudgeY));
+          
+          // Bilinear interpolation for smoother smudging
+          const x0 = Math.floor(srcX);
+          const y0 = Math.floor(srcY);
+          const x1 = Math.min(x0 + 1, sourceWidth - 1);
+          const y1 = Math.min(y0 + 1, sourceHeight - 1);
+          
+          const wx = srcX - x0;
+          const wy = srcY - y0;
+          
+          const i00 = (y0 * sourceWidth + x0) * 4;
+          const i01 = (y0 * sourceWidth + x1) * 4;
+          const i10 = (y1 * sourceWidth + x0) * 4;
+          const i11 = (y1 * sourceWidth + x1) * 4;
+          
+          // Make sure all indices are within bounds
+          if (i00 >= 0 && i00 < pixels.length && 
+              i01 >= 0 && i01 < pixels.length && 
+              i10 >= 0 && i10 < pixels.length && 
+              i11 >= 0 && i11 < pixels.length) {
+            
+            // Interpolate colors
+            for (let c = 0; c < 4; c++) {
+              const c00 = pixels[i00 + c];
+              const c01 = pixels[i01 + c];
+              const c10 = pixels[i10 + c];
+              const c11 = pixels[i11 + c];
+              
+              const c0 = c00 * (1 - wx) + c01 * wx;
+              const c1 = c10 * (1 - wx) + c11 * wx;
+              
+              smudgedPixels[i + c] = c0 * (1 - wy) + c1 * wy;
+            }
+          } else {
+            // If we're out of bounds, just copy the original pixel
+            smudgedPixels[i] = pixels[i];
+            smudgedPixels[i + 1] = pixels[i + 1];
+            smudgedPixels[i + 2] = pixels[i + 2];
+            smudgedPixels[i + 3] = pixels[i + 3];
+          }
+        } else {
+          // Outside brush radius, copy original pixel
+          const i = (iy * sourceWidth + ix) * 4;
+          smudgedPixels[i] = pixels[i];
+          smudgedPixels[i + 1] = pixels[i + 1];
+          smudgedPixels[i + 2] = pixels[i + 2];
+          smudgedPixels[i + 3] = pixels[i + 3];
+        }
+      }
+    }
+    
+    // Draw the smudged image data back to the canvas
+    ctx.putImageData(smudgedImageData, sourceX, sourceY);
+  }
+  
+  // Apply paint effect
+  function applyPaint(ctx, x, y) {
+    if (!selectedColor) return;
+    
+    // Parse the selected color
+    const colorMatch = selectedColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+    if (!colorMatch) return;
+    
+    const r = parseInt(colorMatch[1]);
+    const g = parseInt(colorMatch[2]);
+    const b = parseInt(colorMatch[3]);
+    
+    // Get the area around the current point
+    const paintSize = radius * 2;
+    const sourceX = Math.max(0, Math.floor(x - paintSize / 2));
+    const sourceY = Math.max(0, Math.floor(y - paintSize / 2));
+    const sourceWidth = Math.min(paintSize, outputCanvasEl.width - sourceX);
+    const sourceHeight = Math.min(paintSize, outputCanvasEl.height - sourceY);
+    
+    // Skip if dimensions are invalid
+    if (sourceWidth <= 0 || sourceHeight <= 0) return;
+    
+    // Get the pixels from this area
+    const imageData = ctx.getImageData(sourceX, sourceY, sourceWidth, sourceHeight);
+    const pixels = imageData.data;
+    
+    // Apply paint
+    for (let iy = 0; iy < sourceHeight; iy++) {
+      for (let ix = 0; ix < sourceWidth; ix++) {
+        // Distance from center of brush
+        const dist = Math.sqrt(Math.pow(ix - sourceWidth / 2, 2) + Math.pow(iy - sourceHeight / 2, 2));
+        
+        if (dist <= radius) {
+          // Calculate brush intensity based on distance from center (soft brush)
+          const intensity = Math.max(0, 1 - dist / radius) * strength;
+          
+          // Calculate position in the image data array
+          const i = (iy * sourceWidth + ix) * 4;
+          
+          // Ensure index is within bounds
+          if (i >= 0 && i + 3 < pixels.length) {
+            // Blend the color with the existing pixel
+            pixels[i] = Math.round(pixels[i] * (1 - intensity) + r * intensity);
+            pixels[i + 1] = Math.round(pixels[i + 1] * (1 - intensity) + g * intensity);
+            pixels[i + 2] = Math.round(pixels[i + 2] * (1 - intensity) + b * intensity);
+          }
+        }
+      }
+    }
+    
+    // Draw the painted image data back to the canvas
+    ctx.putImageData(imageData, sourceX, sourceY);
+  }
+  
+  // Apply lighten effect
+  function applyLighten(ctx, x, y) {
+    // Get the area around the current point
+    const areaSize = radius * 2;
+    const sourceX = Math.max(0, Math.floor(x - areaSize / 2));
+    const sourceY = Math.max(0, Math.floor(y - areaSize / 2));
+    const sourceWidth = Math.min(areaSize, outputCanvasEl.width - sourceX);
+    const sourceHeight = Math.min(areaSize, outputCanvasEl.height - sourceY);
+    
+    // Skip if dimensions are invalid
+    if (sourceWidth <= 0 || sourceHeight <= 0) return;
+    
+    // Get the pixels from this area
+    const imageData = ctx.getImageData(sourceX, sourceY, sourceWidth, sourceHeight);
+    const pixels = imageData.data;
+    
+    // Apply lighten effect
+    for (let iy = 0; iy < sourceHeight; iy++) {
+      for (let ix = 0; ix < sourceWidth; ix++) {
+        // Distance from center of brush
+        const dist = Math.sqrt(Math.pow(ix - sourceWidth / 2, 2) + Math.pow(iy - sourceHeight / 2, 2));
+        
+        if (dist <= radius) {
+          // Calculate brush intensity based on distance from center (soft brush)
+          const intensity = Math.max(0, 1 - dist / radius) * strength;
+          
+          // Calculate position in the image data array
+          const i = (iy * sourceWidth + ix) * 4;
+          
+          // Ensure index is within bounds
+          if (i >= 0 && i + 3 < pixels.length) {
+            // Lighten the pixel
+            pixels[i] = Math.min(255, pixels[i] + Math.round(intensity * 50));
+            pixels[i + 1] = Math.min(255, pixels[i + 1] + Math.round(intensity * 50));
+            pixels[i + 2] = Math.min(255, pixels[i + 2] + Math.round(intensity * 50));
+          }
+        }
+      }
+    }
+    
+    // Draw the lightened image data back to the canvas
+    ctx.putImageData(imageData, sourceX, sourceY);
+  }
+  
+  // Apply darken effect
+  function applyDarken(ctx, x, y) {
+    // Get the area around the current point
+    const areaSize = radius * 2;
+    const sourceX = Math.max(0, Math.floor(x - areaSize / 2));
+    const sourceY = Math.max(0, Math.floor(y - areaSize / 2));
+    const sourceWidth = Math.min(areaSize, outputCanvasEl.width - sourceX);
+    const sourceHeight = Math.min(areaSize, outputCanvasEl.height - sourceY);
+    
+    // Skip if dimensions are invalid
+    if (sourceWidth <= 0 || sourceHeight <= 0) return;
+    
+    // Get the pixels from this area
+    const imageData = ctx.getImageData(sourceX, sourceY, sourceWidth, sourceHeight);
+    const pixels = imageData.data;
+    
+    // Apply darken effect
+    for (let iy = 0; iy < sourceHeight; iy++) {
+      for (let ix = 0; ix < sourceWidth; ix++) {
+        // Distance from center of brush
+        const dist = Math.sqrt(Math.pow(ix - sourceWidth / 2, 2) + Math.pow(iy - sourceHeight / 2, 2));
+        
+        if (dist <= radius) {
+          // Calculate brush intensity based on distance from center (soft brush)
+          const intensity = Math.max(0, 1 - dist / radius) * strength;
+          
+          // Calculate position in the image data array
+          const i = (iy * sourceWidth + ix) * 4;
+          
+          // Ensure index is within bounds
+          if (i >= 0 && i + 3 < pixels.length) {
+            // Darken the pixel
+            pixels[i] = Math.max(0, pixels[i] - Math.round(intensity * 50));
+            pixels[i + 1] = Math.max(0, pixels[i + 1] - Math.round(intensity * 50));
+            pixels[i + 2] = Math.max(0, pixels[i + 2] - Math.round(intensity * 50));
+          }
+        }
+      }
+    }
+    
+    // Draw the darkened image data back to the canvas
+    ctx.putImageData(imageData, sourceX, sourceY);
+  }
+  
+  // Apply sharpen effect
+  function applySharpen(ctx, x, y) {
+    // Get the area around the current point
+    const areaSize = radius * 2;
+    const sourceX = Math.max(0, Math.floor(x - areaSize / 2));
+    const sourceY = Math.max(0, Math.floor(y - areaSize / 2));
+    const sourceWidth = Math.min(areaSize, outputCanvasEl.width - sourceX);
+    const sourceHeight = Math.min(areaSize, outputCanvasEl.height - sourceY);
+    
+    // Skip if dimensions are invalid
+    if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth < 3 || sourceHeight < 3) return;
+    
+    // Get the pixels from this area
+    const imageData = ctx.getImageData(sourceX, sourceY, sourceWidth, sourceHeight);
+    const pixels = imageData.data;
+    
+    // Create a copy of the pixel data for the sharpening calculation
+    const originalPixels = new Uint8ClampedArray(pixels.length);
+    for (let i = 0; i < pixels.length; i++) {
+      originalPixels[i] = pixels[i];
+    }
+    
+    // Apply sharpening by using a simplified unsharp mask algorithm
+    for (let iy = 1; iy < sourceHeight - 1; iy++) {
+      for (let ix = 1; ix < sourceWidth - 1; ix++) {
+        // Distance from center of brush
+        const dist = Math.sqrt(Math.pow(ix - sourceWidth / 2, 2) + Math.pow(iy - sourceHeight / 2, 2));
+        
+        if (dist <= radius) {
+          // Calculate brush intensity based on distance from center (soft brush)
+          const intensity = Math.max(0, 1 - dist / radius) * strength;
+          
+          // Calculate center pixel index
+          const i = (iy * sourceWidth + ix) * 4;
+          
+          // Calculate surrounding pixel indices
+          const top = ((iy - 1) * sourceWidth + ix) * 4;
+          const bottom = ((iy + 1) * sourceWidth + ix) * 4;
+          const left = (iy * sourceWidth + (ix - 1)) * 4;
+          const right = (iy * sourceWidth + (ix + 1)) * 4;
+          
+          // Ensure all indices are within bounds
+          if (i >= 0 && i + 3 < originalPixels.length && 
+              top >= 0 && top + 3 < originalPixels.length &&
+              bottom >= 0 && bottom + 3 < originalPixels.length &&
+              left >= 0 && left + 3 < originalPixels.length &&
+              right >= 0 && right + 3 < originalPixels.length) {
+              
+            // Apply sharpen effect to each color channel
+            for (let c = 0; c < 3; c++) {
+              // Calculate the sharpening value
+              const centerValue = originalPixels[i + c];
+              const blurValue = (originalPixels[top + c] + originalPixels[bottom + c] + 
+                                originalPixels[left + c] + originalPixels[right + c]) / 4;
+              
+              // Apply unsharp mask formula: original + (original - blur) * amount
+              const sharpenValue = centerValue + (centerValue - blurValue) * intensity * 2;
+              
+              // Clamp value to valid range
+              pixels[i + c] = Math.max(0, Math.min(255, Math.round(sharpenValue)));
+            }
+          }
+        }
+      }
+    }
+    
+    // Draw the sharpened image data back to the canvas
+    ctx.putImageData(imageData, sourceX, sourceY);
+  }
+  
+  // Add a color to the palette
+  function addColorToPalette(color) {
+    // Find an empty slot or the selected slot
+    let index = -1;
+    
+    if (selectedColorIndex !== null && selectedColorIndex >= 0 && selectedColorIndex < colorPalette.length) {
+      index = selectedColorIndex;
+    } else {
+      // Find first empty slot
+      for (let i = 0; i < colorPalette.length; i++) {
+        if (colorPalette[i] === null) {
+          index = i;
+          break;
+        }
+      }
+      
+      // If no empty slot, use the first one
+      if (index === -1) {
+        index = 0;
+      }
+    }
+    
+    // Add color to palette
+    colorPalette[index] = color;
+    
+    // Update palette UI
+    updateColorPalette();
+    
+    // Select this color
+    selectColorFromPalette(index);
+    
+    // If using dropper, switch to paint tool
+    if (currentTool === 'dropper') {
+      selectTool('paint');
+    }
+  }
+  
+  // Select a color from the palette
+  function selectColorFromPalette(index) {
+    if (index < 0 || index >= colorPalette.length || colorPalette[index] === null) return;
+    
+    selectedColor = colorPalette[index];
+    selectedColorIndex = index;
+    
+    // Update UI
+    const colorSwatches = colorPaletteEl.querySelectorAll('.color-swatch');
+    colorSwatches.forEach(swatch => {
+      swatch.classList.remove('active');
+    });
+    
+    colorSwatches[index].classList.add('active');
+    
+    // Switch to paint tool
+    selectTool('paint');
+  }
+  
+  // Update color palette UI
+  function updateColorPalette() {
+    const colorSwatches = colorPaletteEl.querySelectorAll('.color-swatch');
+    
+    colorSwatches.forEach((swatch, index) => {
+      if (colorPalette[index]) {
+        swatch.style.backgroundColor = colorPalette[index];
+        swatch.classList.remove('empty');
+      } else {
+        swatch.style.backgroundColor = '';
+        swatch.classList.add('empty');
+      }
+    });
+  }
+  
+  // Save current state for undo/redo
+  function saveState() {
+    // Remove any redo states
+    if (editHistoryIndex < editHistory.length - 1) {
+      editHistory = editHistory.slice(0, editHistoryIndex + 1);
+    }
+    
+    // Add current state
+    const currentState = outputCanvasEl.toDataURL();
+    editHistory.push(currentState);
+    
+    // If we've exceeded max history, remove oldest state
+    if (editHistory.length > maxHistorySteps) {
+      editHistory.shift();
+    }
+    
+    // Update index
+    editHistoryIndex = editHistory.length - 1;
+    
+    // Update buttons
+    updateHistoryButtons();
+  }
+  
+  // Undo the last edit
+  function undoEdit() {
+    if (editHistoryIndex <= 0) return;
+    
+    editHistoryIndex--;
+    loadState(editHistory[editHistoryIndex]);
+    updateHistoryButtons();
+  }
+  
+  // Redo the last undone edit
+  function redoEdit() {
+    if (editHistoryIndex >= editHistory.length - 1) return;
+    
+    editHistoryIndex++;
+    loadState(editHistory[editHistoryIndex]);
+    updateHistoryButtons();
+  }
+  
+  // Load a state from history
+  function loadState(state) {
+    const img = new Image();
+    img.onload = function() {
+      const ctx = outputCanvasEl.getContext('2d');
+      ctx.clearRect(0, 0, outputCanvasEl.width, outputCanvasEl.height);
+      ctx.drawImage(img, 0, 0);
+    };
+    img.src = state;
+  }
+  
+  // Update undo/redo buttons
+  function updateHistoryButtons() {
+    undoBtn.disabled = editHistoryIndex <= 0;
+    redoBtn.disabled = editHistoryIndex >= editHistory.length - 1;
+  }
+  
+  // Download edited image
+  function downloadEditedImage() {
+    const link = document.createElement('a');
+    link.download = 'face-swap-edited.jpg';
+    link.href = outputCanvasEl.toDataURL('image/jpeg', 0.9);
+    link.click();
+  }
+  
+  // Start the application when the page loads
+  window.onload = initApp;
+</script>
+<script>
+     let style = document.createElement('style');
+     style.innerHTML = '#perchance-error-indicator { opacity: 0; pointer-events: none; }';
+     document.head.appendChild(style);
+</script>
+</body>
+</html>

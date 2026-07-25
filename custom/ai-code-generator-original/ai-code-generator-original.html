@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-code-generator-original — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<h1>AI Code Generator</h1>
+
+<script>
+  currentMode = localStorage.currentMode || modes.selectAll[0].getName;
+  let urlMode = new URL(window.location.href).searchParams.get("mode");
+  if (urlMode && urlModeToActualMode[urlMode]) {
+    currentMode = urlModeToActualMode[urlMode];
+  }
+</script>
+
+<div class="container">
+  <div>— Mode —</div>
+  <select
+    id="currentModeEl"
+    onchange="currentMode=this.value; localStorage.currentMode=this.value; modeDescriptionEl.textContent=(modes[currentMode].description||''); instructionEl.placeholder=(modes[currentMode].instructionPlaceholder||instructionEl.dataset.defaultPlaceholder);"
+    class="select-mode">
+    [generateModesHtml()]
+  </select>
+  <div id="modeDescriptionEl" class="mode-description"></div>
+  <script>
+    modeDescriptionEl.textContent = modes[currentMode].description || "";
+  </script>
+  [currentModeEl.value = currentMode, ""]
+
+  <div class="instruction-label">— Instruction —</div>
+  <div class="instruction-wrapper">
+    <textarea
+      id="instructionEl"
+      data-default-placeholder="Type an instruction here."
+      placeholder=""
+      class="instruction-textarea"
+      oninput="if(this.value.trim()=='') { instructionDeleteBtn.style.display='none'; } else { instructionDeleteBtn.style.display=''; }; localStorage.instruction=this.value; generateBtn.textContent='✨ generate'; window.deletedInstruction=''; instructionDeleteBtn.dataset.mode='delete'; "></textarea>
+    <script>
+      if (localStorage.instruction) {
+        instructionEl.value = localStorage.instruction;
+        instructionDeleteBtn.style.display = "";
+      }
+    </script>
+    <script>
+      instructionEl.placeholder =
+        modes[currentMode].instructionPlaceholder ??
+        instructionEl.dataset.defaultPlaceholder;
+    </script>
+    <button
+      id="instructionDeleteBtn"
+      data-mode="delete"
+      onclick="if(this.dataset.mode==='delete') { window.deletedInstruction=instructionEl.value; instructionEl.value=''; this.dataset.mode='undo'; } else { instructionEl.value=window.deletedInstruction; this.dataset.mode='delete'; }; localStorage.instruction=instructionEl.value;"
+      class="delete-btn"></button>
+  </div>
+
+  <div class="generate-wrapper">
+    <div class="generate-controls">
+      <button id="generateBtn" onclick="responseEl.value = ''; generate();">
+        ✨ generate
+      </button>
+      <span id="loaderEl" class="loader"></span>
+      <span class="stop-wrapper"
+        ><button id="stopBtn" class="stop-btn">🛑 stop</button></span
+      >
+    </div>
+  </div>
+
+  <div id="outputTitleEl" class="output-title">— Output —</div>
+  <div class="output-wrapper">
+    <textarea
+      id="responseEl"
+      class="response-textarea"
+      oninput="if(this.value.trim()=='') { continueBtn.disabled=true; bottomContinueBtn.disabled=true; generateBtn.textContent='✨ generate'; responseDeleteBtn.style.display='none'; } else { continueBtn.disabled=false; bottomContinueBtn.disabled=false; generateBtn.textContent='🔁 regenerate'; responseDeleteBtn.style.display=''; }; responseDeleteBtn.dataset.mode='delete'; localStorage.response=this.value; window.deletedResponse=''; retryBtn.disabled=true;">
+    </textarea>
+
+    <script>
+      if (localStorage.response) {
+        responseEl.value = localStorage.response;
+        responseDeleteBtn.style.display = "";
+        continueBtn.disabled = false;
+        bottomContinueBtn.disabled = false;
+      }
+    </script>
+
+    <button
+      id="responseCopyBtn"
+      onclick="navigator.clipboard.writeText(responseEl.value); this.innerText = '✅ copied!'; setTimeout(() => { this.innerText = '📋 copy'; }, 2000);"
+      class="copy-btn">
+      📋 copy
+    </button>
+    <div class="response-controls">
+      <button disabled id="continueBtn">▶️ continue</button>
+      <button
+        disabled
+        id="retryBtn"
+        onclick="responseEl.value=window.responseContentBeforeLastGenerate||responseEl.value; generate()">
+        🔁 retry
+      </button>
+      <button
+        id="responseDeleteBtn"
+        data-mode="delete"
+        onclick="if(this.dataset.mode==='delete') { if(stopBtn.offsetTop) { stopBtn.click(); }; window.deletedResponse=responseEl.value; responseEl.value=''; this.dataset.mode='undo'; } else { responseEl.value=window.deletedResponse; this.dataset.mode='delete'; }; localStorage.response=responseEl.value;"
+        class="delete-btn"></button>
+    </div>
+    <div class="bottom-controls">
+      <button disabled id="bottomContinueBtn">▶️ continue</button>
+      <button id="bottomStopBtn" class="stop-btn">🛑 stop</button>
+    </div>
+  </div>
+</div>
+
+<div id="renderedOutputEl" class="rendered-output"></div>
+
+<div class="dark-mode-toggle">
+  <button
+    id="darkModeBtn"
+    onclick="window.toggleManualDarkMode(); createCommentsSectionHtml();">
+    🌃
+  </button>
+</div>
+
+<script>
+  function toggleManualDarkMode() {
+    let newColorScheme = getCurrentColorScheme() === "dark" ? "light" : "dark";
+    localStorage.forceColorScheme = newColorScheme;
+    setColorScheme(newColorScheme);
+    // if chosen mode matches current OS default, we remove manual "forced" mode:
+    let systemColorScheme =
+      window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    if (systemColorScheme === newColorScheme) {
+      localStorage.removeItem("forceColorScheme");
+    }
+  }
+  function getCurrentColorScheme() {
+    if (localStorage.forceColorScheme !== undefined) {
+      return localStorage.forceColorScheme;
+    } else {
+      return window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    }
+  }
+  function setColorScheme(scheme) {
+    if (scheme !== "dark" && scheme !== "light")
+      throw new Error("scheme should be 'light' or 'dark'");
+    document.querySelector("#darkModeBtn").textContent =
+      scheme === "dark" ? "🌄" : "🌃";
+    if (scheme === "dark") {
+      document.documentElement.style.colorScheme = "dark";
+      document.body.style.color = "#d8d4cf";
+      document.body.style.backgroundColor = "#131516";
+      document.documentElement.style.setProperty("--box-color", "#2a2a2a");
+    } else {
+      document.documentElement.style.colorScheme = "light";
+      document.body.style.color = "black";
+      document.body.style.backgroundColor = "white";
+      document.documentElement.style.setProperty("--box-color", "#ebebeb");
+    }
+  }
+  // during page load, set the chosen mode based on localStorage value if it exists:
+  if (localStorage.forceColorScheme !== undefined) {
+    setColorScheme(localStorage.forceColorScheme);
+  } else {
+    // user has not manually overwritten, so we use OS default:
+    let systemIsInDarkMode = !!(
+      window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+    );
+    setColorScheme(systemIsInDarkMode ? "dark" : "light");
+  }
+</script>
+
+<style>
+  .container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin: 0 auto;
+    inline-size: calc(100% - 0.5rem);
+    max-inline-size: 700px;
+  }
+
+  .select-mode {
+    text-align: start;
+  }
+
+  .mode-description {
+    opacity: 0.6;
+    margin: 0 auto;
+    padding-block-start: 0.25rem;
+    max-inline-size: 500px;
+    font-size: 75%;
+  }
+
+  .instruction-label {
+    margin-block-start: 1rem;
+  }
+
+  .instruction-wrapper {
+    position: relative;
+    inline-size: 100%;
+  }
+
+  .instruction-textarea {
+    padding-block-start: 0.25rem;
+    inline-size: 100%;
+    block-size: 120px;
+    resize: vertical;
+  }
+
+  .delete-btn {
+    display: none;
+    position: absolute;
+    inset-block-start: -0.75rem;
+    inset-inline-end: 0.5rem;
+    font-size: 60%;
+  }
+
+  .delete-btn[data-mode="delete"]::before {
+    content: "🗑️ delete";
+  }
+
+  .delete-btn[data-mode="undo"]::before {
+    content: "↩️ undo";
+  }
+
+  .generate-wrapper {
+    margin-block-start: 0.5rem;
+  }
+
+  .generate-controls {
+    display: inline-block;
+    position: relative;
+  }
+
+  .loader {
+    display: inline-flex;
+    position: absolute;
+    align-items: center;
+    transform: translateX(120%);
+    inset-inline-end: 0;
+    block-size: 100%;
+  }
+
+  .stop-wrapper {
+    display: inline-flex;
+    position: absolute;
+    align-items: center;
+    transform: translateX(-120%);
+    inset-block-end: 0;
+    inset-inline-start: 0;
+    block-size: 100%;
+  }
+
+  .output-title {
+    margin-block-start: 0.5rem;
+  }
+
+  @media only screen and (max-width: 670px) {
+    .output-title {
+      margin-block-end: 1rem;
+    }
+  }
+
+  .output-wrapper {
+    position: relative;
+    inline-size: 100%;
+  }
+
+  .response-textarea {
+    padding: 0.5rem;
+    padding-block-end: 0.75rem;
+    inline-size: 100%;
+    block-size: 800px;
+    max-block-size: 80vh;
+    resize: vertical;
+  }
+
+  .copy-btn {
+    display: none;
+    position: absolute;
+    inset-block-start: -0.75rem;
+    inset-inline-end: 0.5rem;
+    font-size: 60%;
+  }
+
+  .response-controls {
+    position: absolute;
+    inset-block-start: -0.75rem;
+    inset-inline-start: 0.5rem;
+    min-inline-size: max-content;
+    font-size: 60%;
+  }
+
+  .bottom-controls {
+    position: absolute;
+    inset-block-end: -0.5rem;
+    inset-inline-start: 0.5rem;
+    min-inline-size: max-content;
+    font-size: 60%;
+  }
+
+  .rendered-output {
+    margin-block-start: 3rem;
+  }
+
+  .links {
+    font-size: 80%;
+  }
+
+  .dark-mode-toggle {
+    position: fixed;
+    z-index: 10;
+    inset-block-end: 0.5rem;
+    inset-inline-start: 0.5rem;
+  }
+
+  .feedback-toggle {
+    position: fixed;
+    z-index: 100;
+    inset-block-end: 0.5rem;
+    inset-inline-end: 0.5rem;
+    text-align: end;
+  }
+
+  button:disabled {
+    filter: grayscale(1);
+  }
+</style>
+
+</body>
+</html>

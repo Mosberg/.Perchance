@@ -1,0 +1,2052 @@
+backgroundPlugin = {import:background-image-plugin}
+
+title = Selestial-Skies' Random Art Title Generator
+// Upload your background image to imgur and replace the following link with it.
+// It must be *direct* link - i.e. ending in png or jpg, etc. - to get the direct link of an imgur image, right-click on the image and click "copy image address" or "copy image location"
+// Unsplash has great images that are free to use: https://unsplash.com/t/wallpapers  (don't forget to upload them to imgur before using, and make sure you download the high-res version of the unsplash image to upload to imgur)
+// IMPORTANT: The reason you should upload your image to imgur is because if you link to another website, it's likely that the link will eventually "break", or the image will move to a different URL.
+// Imgur never deletes your image, and uploading an image to imgur is as easy as pasting a url on this page:  https://imgur.com/upload
+backgroundImage =  https://i.imgur.com/M3wXrLE.jpg
+// some background images to try:
+//  pastel tiles:       https://i.imgur.com/0CWEecq.jpg
+//  books:              https://i.imgur.com/Hvb6HTy.jpg
+//  pine forest:        https://i.imgur.com/ecKzF9F.jpg
+//  dark leaves:        https://i.imgur.com/785rHFl.jpg
+//  rocky coastline:    https://i.imgur.com/E4a7yi0.jpg
+//  night building:     https://i.imgur.com/9hrHir1.jpg
+//  jelly fish:         https://i.imgur.com/EyLiFMs.jpg
+//  cloud sunset:       https://i.imgur.com/M3wXrLE.jpg
+//  summer sunset:      https://i.imgur.com/YRUgc7j.jpg
+//  desert dunes:       https://i.imgur.com/P4FoRy2.jpg
+//  jagged mountains:   https://i.imgur.com/mSarpKO.jpg
+
+
+needsAn(word) =>
+  word = String(word).trim().toLowerCase();
+  if (!word) return false;
+  if (/^(hour|honest|heir|honor|honour)/.test(word)) return true;
+  let first = word[0];
+  if ('aeiou'.includes(first)) {
+    if (first === 'u' && /^(uni|use|uto|ubi|uru|ula|uve)/.test(word)) return false;
+    return true;
+  }
+  return false;
+
+fixArticles(text) =>
+  text = String(text);
+  return text.replace(/\b([Aa])n?\s+(\w+)/g, (match, art, word) => {
+    let an = needsAn(word);
+    let wasAn = match.trim().toLowerCase().startsWith('an');
+    if (an && !wasAn) return (art === 'A' ? 'An' : 'an') + ' ' + word;
+    if (!an && wasAn) return (art === 'A' ? 'A' : 'a') + ' ' + word;
+    return match;
+  });
+
+buildAgreementCache() =>
+  if (buildAgreementCache._c) return buildAgreementCache._c;
+  let c = {subjects: new Set(), verbs: new Set(), colors: new Set()};
+  let allLists = [subject, subjectsingleonly, time, day];
+  for (let list of allLists) {
+    for (let s of list.selectAll) {
+      let w = String(s.evaluateItem).toLowerCase().trim();
+      c.subjects.add(w);
+      let parts = w.split(/\s+/);
+      if (parts.length > 1) c.subjects.add(parts[parts.length-1]);
+    }
+  }
+  ["thoughts","memories","feelings","emotions","horrors","clouds","skies","heavens"].forEach(w => c.subjects.add(w));
+  for (let v of verb.selectAll) c.verbs.add(String(v.evaluateItem).toLowerCase());
+  ["come","proceed","continue"].forEach(v => c.verbs.add(v));
+  for (let i = 0; i < 15; i++) {
+    for (let item of color.selectAll) {
+      String(item.evaluateItem).toLowerCase().split(/[^a-z]+/).forEach(part => { if (part) c.colors.add(part); });
+    }
+  }
+  buildAgreementCache._c = c;
+  return c;
+
+isPluralWord(word) =>
+  word = word.toLowerCase();
+  if (word === 'christmas') return false;
+  if (/(ss|us|is|os)$/.test(word)) return false;
+  if (/s$/.test(word)) return true;
+  return false;
+
+deconjugateS(w) =>
+  if (/ies$/.test(w)) return w.slice(0,-3)+'y';
+  if (/(oes|ses|xes|zes|ches|shes)$/.test(w)) return w.slice(0,-2);
+  if (/s$/.test(w) && !/ss$/.test(w)) return w.slice(0,-1);
+  return w;
+
+conjugateS(v) =>
+  if (/(s|x|z|ch|sh|o)$/.test(v)) return v+'es';
+  if (/[^aeiou]y$/.test(v)) return v.slice(0,-1)+'ies';
+  return v+'s';
+
+findVerbBase(w, c) =>
+  if (c.verbs.has(w)) return w;
+  let b = deconjugateS(w);
+  if (b !== w && c.verbs.has(b)) return b;
+  return null;
+
+matchCase(tmpl, src) =>
+  if (!src || !src.length) return tmpl;
+  if (src === src.toUpperCase()) return tmpl.toUpperCase();
+  if (src[0] === src[0].toUpperCase()) return tmpl[0].toUpperCase()+tmpl.slice(1);
+  return tmpl;
+
+fixWord(raw, newWord) =>
+  let m = raw.match(/^([^a-zA-Z']*)([a-zA-Z']+)([^a-zA-Z']*)$/);
+  if (!m) return raw;
+  return m[1]+matchCase(newWord, m[2])+m[3];
+
+fixAgreement(text) =>
+  let c = buildAgreementCache();
+  text = fixArticles(text);
+  let words = text.split(/(\s+)/);
+  for (let i = 2; i < words.length; i += 2) {
+    let raw = words[i];
+    if (!raw || !raw.trim()) continue;
+    let lower = raw.toLowerCase().replace(/[^a-z']/g, '');
+    if (!lower) continue;
+    let pi = i - 2;
+    let prevRaw = words[pi];
+    if (!prevRaw) continue;
+    let prev = prevRaw.toLowerCase().replace(/[^a-z']/g, '');
+    if (!prev) continue;
+    let skipRel = false;
+    if (prev === 'that' || prev === 'who' || prev === 'which') {
+      pi -= 2; prevRaw = words[pi];
+      if (!prevRaw) continue;
+      prev = prevRaw.toLowerCase().replace(/[^a-z']/g, '');
+      if (!prev) continue;
+      skipRel = true;
+    }
+    if (lower === 'is' || lower === 'are' || lower === 'has' || lower === 'have') {
+      if (!skipRel) continue;
+      if (!c.subjects.has(prev)) continue;
+      let pl = isPluralWord(prev);
+      if (pl && (lower === 'is' || lower === 'has')) words[i] = fixWord(raw, lower === 'is' ? 'are' : 'have');
+      else if (!pl && (lower === 'are' || lower === 'have')) words[i] = fixWord(raw, lower === 'are' ? 'is' : 'has');
+      continue;
+    }
+    let vb = findVerbBase(lower, c);
+    if (!vb) continue;
+    let isBase = (lower === vb);
+    let ambiguous = c.subjects.has(vb);
+    if (ambiguous && !skipRel) continue;
+    if (c.colors.has(lower) && c.colors.has(prev)) continue;
+    if (c.subjects.has(prev)) {
+      let pl = isPluralWord(prev);
+      if (pl && !isBase) words[i] = fixWord(raw, vb);
+      else if (!pl && isBase) words[i] = fixWord(raw, conjugateS(vb));
+      continue;
+    }
+    if (['i','you','we','they'].includes(prev) && !isBase) words[i] = fixWord(raw, vb);
+    else if (['he','she','it'].includes(prev) && isBase) words[i] = fixWord(raw, conjugateS(vb));
+  }
+  for (let i = 2; i < words.length; i += 2) {
+    let raw = words[i];
+    if (!raw) continue;
+    let lower = raw.toLowerCase().replace(/[^a-z]/g, '');
+    if (lower !== 'was' && lower !== 'were') continue;
+    let prev = (words[i-2]||'').toLowerCase().replace(/[^a-z']/g, '');
+    let prevPrev = (words[i-4]||'').toLowerCase().replace(/[^a-z']/g, '');
+    if (['with','for','to','at','in','on','by','from','of','about','behind','beside','between','among','against','above','below','under','over','through','towards'].includes(prevPrev)) continue;
+    if (['i','he','she','it'].includes(prev) && lower === 'were') words[i] = fixWord(raw, 'was');
+    else if (['you','we','they'].includes(prev) && lower === 'was') words[i] = fixWord(raw, 'were');
+  }
+  return words.join('');
+
+outputFixed() =>
+  let text = output.selectOne.evaluateItem;
+  return fixAgreement(text);
+ 
+output
+  [color] [time] {[subject]|[subject.pluralForm]|[subjectsingleonly]|} 
+  [hours]
+  [hours] on {a|an|} [day]
+  A Little {[time]|[day]|[hours]} {[subject]|[subjectsingleonly]|[subject.pluralForm]|Music}
+  A LOT of Time was Wasted Here
+  A Tip From Artist to Artist: {Use these titles as {painting|writing|editing|drawing} prompts|These titles are free to use where ever and however you want}
+  A {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]} To {Ponder|Contemplate|Reminisce {On|About}}
+  A {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]} Worth {Forgetting|Remembering|Losing|Finding}
+  A {[adjective]|[color]|[ingverb]|^7} {Stroll|Walk} {through|in|with} {the|a|an|} {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[subject.pluralForm]|[time]}
+  A {[adjective]|[color]|[ingverb]} {Cloudscape|Landscape|Skyscape} with {an|the|a|} {[adjective]|[color]|[ingverb]|^3} {[subject]|[subjectsingleonly]|[subject.pluralForm]|Figure} by {the|a|an} [subject]
+  A {[adjective]|[color]|[ingverb]} {Day|[time]|[day]}: [hours] 
+  A {[adjective]|[color]|} {[day]|[subject]|[subjectsingleonly]|[subject.pluralForm]|[time]} {I|You|We|Time} Forgot
+  A {[adjective]|[ingverb]} {Affect|Effect}
+  A {[subject]|[subjectsingleonly]} {Gazing|Looking|Staring|Watching} {across|at} a {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[time]}
+  A {Cloudscape|Landscape|Skyscape} with {an|the|a|} {[adjective]|[color]|[ingverb]|^3} {[subject]|[subjectsingleonly]|[subject.pluralForm]}
+  A {Funeral|Memorial} For A {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[subject.pluralForm]|[time]}
+  A {Glimpse|View|Glance} {at|of} {a|an|the|} {[adjective]|[color]|[ingverb]|^3} {[subject]|[subjectsingleonly]|[time]|[subject.pluralForm]}
+  A {Spring|Summer|Fall|Autumn|Winter|[time]|[day]}{'s|} {Morning|Twilight|Dusk|Sunset|Dawn|Sunrise|Sunlight|Moonlight|Starlight|Early Hours|{Blue|Golden} Hour|[time]}
+  All {Sigh|[verb]} In The {[adjective]|[color]|[ingverb]|} {and|}  {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]|}
+  And Yet {You|We} {Persist|Persevere}
+  Banished To The {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[subject.pluralForm]}
+  Congratulations!!! You found the egg!!! But it isn't easter!!!
+  Despite some of the more {depressing|sad} titles here I'm mostly okay but I hope you're having a good day! :3
+  Don't Forget {That|} {You're|I'm|We're} {Never {Going Back|Coming Back}|Never Leaving|Here {Forever|}}
+  Don't Forget {The|} {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]}
+  Falling {In|On|} {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[subject.pluralForm]}
+  Floating {Through|Above|Aloft|In|On|Beside|Below|Within|Over} {The|} {[subject]|[subjectsingleonly]|[subject.pluralForm]}
+  Forgive The Grammar Errors They Exist For ... reasons...and are hard to fix...
+  Have You Been Here?
+  How Things Used To Be...
+  I Never Promised You {{The|A|An|} {[subjectsingleonly]|[time]|[day]}|Anything|Wouldn't {Lose|Find|Forget} Something|{I|} Could {Fix It|Stay|Make It Better|Make You Forget}|Could {Leave|Stay}}
+  I'll See You Again, Promise?
+  I've Made Peace With It...{Have You?|}
+  If You Could See {It^2|{The|A|An|} {[subjectsingleonly]|[subject]|[subject.pluralForm]}} {Now|During {[time]|[day]|}}
+  Is There Meaning {Here|In This Place|For Me Here|For Us Here}?
+  Is This {{[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]}|[time]|[day]|Thing|Place} Worth {Forgetting|Remembering|Losing|Finding}?
+  It Will Get Better
+  It's Getting {Dark|Light} {Out {There|Here|}|Now|}... {I|You|We} {Better be Getting Home|Better be {Careful|Safe}|Better Prepare|Keep Moving|Don't Want To Get {Lost|Confused} Out Here}
+  It's Not Heaven But The {Lighting|Vibes|Vibe|Atmosphere} {Is|Are} {Nice|Good|Cool}
+  It's Ok, You Are Going To Be Ok
+  Keep {Creating|Writing|Drawing|Painting|Working|Practicing|Going}, I Believe In You!!!
+  Leaving {A|An|} {[subject]|[subjectsingleonly]} Behind
+  Moments In [color] 
+  No one can hear you scream in the art title generator results
+  Past Tense {[subjectsingleonly]|[subject]|[subject.pluralForm]}
+  Remember The {[color]|[ingverb]|[time]|[adjective]|} { [subject] | [subject.pluralForm] |[subjectsingleonly]|[day]}
+  Stop Procrastinating!!! :3 {Do The Thing!!!|Get Back To Work!!!|Keep {Creating|Writing|Drawing|Painting|Working|Practicing|Going}!!!|}
+  The { [subject] | [subject.pluralForm] |[subjectsingleonly] } {Remember|Remembers}
+  The {[adjective]|[color]|[ingverb]|^2}  {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]|} {That Never Was |That Never Existed|That Never Ends|That Never Ceases|That {I|You|He|She|They} {Imagined|Made Up|Dreamed {Up|Of|}|Daydreamed {About|}|Fabricated|Fantasized About}|{That|} Will Never Be}
+  The {[adjective]|[color]|[ingverb]|^3} {[subject]|[subjectsingleonly]|[subject.pluralForm]} and {[adjective]|[color]|[ingverb]|^3} {[subject]|[subjectsingleonly]|[subject.pluralForm]} [ingverb] {with|for|in|on} {the|an|a} {[adjective]|[color]|[ingverb]|^3} {[subject]|[subjectsingleonly]|[subject.pluralForm]}
+  The {[adjective]|[color]|[ingverb]|^6} {[time]|[day]} {I|You|We|She|He|They} [pastverb] {For The Last Time|Forever|}
+  The {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]} {Keeps|Stays|Remains} {Quiet|Silent|Hushed|[adjective]}
+  The {[adjective]|[color]|[ingverb]|} {[subjectsingleonly]|[subject]} {Proceeds|Continues}
+  The {[color] [subject.pluralForm]|[adjective] [subject.pluralForm]|[ingverb] [subject.pluralForm]|[pastverb] [subject.pluralForm] }
+  The {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]}
+  The {[subject]|[subjectsingleonly]|[subject.pluralForm]} and {[subject]|[subjectsingleonly]|[subject.pluralForm]} [ingverb] {with|for|in|on} {the|an|a} {[subject]|[subjectsingleonly]|[subject.pluralForm]}
+  The {Thoughts|Dreams|Daydreams} {I|You|We|She|He|They} {Have|Has|Had} {Here|There|In This {Place|Time|House|Home|Room|Hallway|Level|Floor}|} {Are|Were} {[adjective]|[ingverb]}
+  There is {Something|Nothing} {Wrong|Right} With this {Place|Space|[subject]|{[adjective]|[color]|[ingverb]|} [subject]|[subjectsingleonly]|{[adjective]|[color]|[ingverb]|} [subjectsingleonly]|[time]|{[adjective]|[color]|[ingverb]|} [time]|[day]|{[adjective]|[color]|[ingverb]|} [day]}
+  This {[adjective]|[color]|[ingverb]|^2} {[subjectsingleonly]|[subject]|[subject.pluralForm]|[time]|[day]} That {Took|Stole|Gave|Meant} {So {Much|Little} From|Everything {From|To}|Nothing {From|To}}  {Me|You|Us|Them|Her|Him}
+  This {Place|[subject]|[subjectsingleonly]|[time]} Doesn't Exist 
+  Wander In The {[subject]|[subjectsingleonly]|[subject.pluralForm]}
+  Was It Ever Real?
+  Wasted {[time]|[day]}
+  We All Get {Lost|[adjective]|[pastverb]} Sometimes
+  What The {[adjective]|[color]|[ingverb]|^2} {[subjectsingleonly]|[subject]|[subject.pluralForm]} {Saw|Heard|Felt|Lost|Found|[pastverb]}
+  What The {[adjective]|[color]|[ingverb]|^2} {[subjectsingleonly]|[subject]} {Hides|Conceals|Obscures|Secretes Away|Veils} From {Me|You|Us|Them} 
+  What The {[adjective]|[color]|[ingverb]|^2} {[subjectsingleonly]|[subject]} {Shows|Bears|Reveals|Unveils} To {Me|You|Us|Them}
+  When {It|[subject]|[subjectsingleonly]|[subject.pluralForm]} [verb]
+  Where Will You Go?
+  Where {I|You|We|She|He|They} {[verb]|[pastverb]}
+  {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]|} {Trail|Path|Road|Highway|Hallway|Route|Street|Crossroad|Interstate}
+  {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]|} {Trail|Path|Road|Highway|Hallway|Route|Street|Crossroad|Interstate} {At|In|During {the|}|Before|After|On|Within} {[adjective]|[color]|[ingverb]|} {[time]|[day]}
+  {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]|} {Trail|Path|Road|Highway|Hallway|Route|Street|Crossroad|Interstate} {With|And} {[adjective]|[color]|[ingverb]} {[subject]|[subject.pluralForm]|[subjectsingleonly]} 
+  {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]|} {Whisper{s|}|Whimsy|Wonder{s|}|Dream{s|}|Memory|Memories|Daydream{s|}}
+  {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]} That {[verb]|[verb.pluralForm]|Is [ingverb]|Has [pastverb]}
+  {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]}  {at|in|during {the|}|Before|After|On|Within} {[ingverb]|[color]|[adjective]|} {[adjective]|[color]|[ingverb]|} {[time]|[day]}
+  {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]} {with|and} {[adjective]|[color]|[ingverb]|} {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]}
+  {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^2} {[time]|[day]|[subject]|[subject.pluralForm]|[subjectsingleonly]} { with | and } {[subject.pluralForm]|[subject]|[subjectsingleonly]}
+  {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]} {[time]|[day]|} {Sky|Skies|Atmosphere|Stratosphere|Heavens|Skybox|Heaven|Horizon|Firmament|Dreamscape|Cloudscape|Seascape|Nowhere|Somewhere|Place|Vibe|Sanctuary|Panorama|Aether}
+  {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]} at [hours]
+  {[adjective]|[color]|[ingverb]|^9} {Moonlight|Sunlight|Starlight} {on^6|in} {[adjective]|[color]|[ingverb]|^9} {[subject]|[subjectsingleonly]|[subject.pluralForm]}
+  {[adjective]|[color]|[ingverb]|} {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]} {Scented|Tainted|Filled|Flavored|Tinted|Laden|Charged|Painted} {Dream|Vision|Prophecy|Memory|Nightmare|Haven|Heaven}
+  {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]} 
+  {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]} That {[verb]|[verb.pluralForm]|Is [ingverb]|Has [pastverb]}
+  {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]}  {At|In|During {the|}|Before|After|On|Within} {[ingverb]|[color]|[adjective]|} {[adjective]|[color]|[ingverb]|} {[time]|[day]}
+  {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]} That {[verb]|[verb.pluralForm]|Is [ingverb]|Has [pastverb]} With {[subject]|[subject.pluralForm]|[subjectsingleonly]} {{At|In|During {the|}|Before|After|On|Within} {[adjective]|[color]|[ingverb]|} {[adjective]|[color]|[ingverb]|} {[time]|[day]}|} 
+  {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[subject.pluralForm]} {Echo|Echoes} Here
+  {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[time]} In {Outer|} Space
+  {[adjective]|[color]|[ingverb]|} {[subjectsingleonly]|[subject]} {[adjective]|[color]|[ingverb]|} {[subjectsingleonly]|[subject]|[subject.pluralForm]}
+  {[adjective]|[color]|[ingverb]|} {[time]|[day]|[subject]|[subject.pluralForm]|[subjectsingleonly]} { with | and } {[subject.pluralForm]|[subject]|[subjectsingleonly]}
+  {[adjective]|[color]|[ingverb]} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]} {In|Above|Below|Inside|Within|Beyond} The {Clouds|Sky|Skies|Atmosphere|Stratosphere|Heavens|Skybox|Heaven|Horizon|Firmament|Dreamscape|Cloudscape}
+  {[adjective]|[color]|[ingverb]} {[adjective]|[color]|[ingverb]|} Liminality
+  {[adjective]|[color]|} {[subject]|[subjectsingleonly]|[subject.pluralForm]} That Remain{s|}
+  {[adjective]|[color]|} {[subject]|[subjectsingleonly]|[subject.pluralForm]} {[verb]|[ingverb]|[verb.pluralForm]}
+  {[adjective]|[ingverb]} {but|and} {[adjective]|[ingverb]} {[subjectsingleonly]|[subject]|[subject.pluralForm]|[time]|[day]}
+  {[color] [day]|[adjective] [day]|[ingverb] [day]}
+  {[color] [subject.pluralForm]|[adjective] [subject.pluralForm]|[ingverb] [subject.pluralForm]|[pastverb] [subject.pluralForm] }
+  {[color] [subject]|[adjective] [subject]|[ingverb] [subject]|[pastverb] [subject]} 
+  {[color] [subjectsingleonly]|[adjective] [subjectsingleonly]|[ingverb] [subjectsingleonly]|[pastverb] [subjectsingleonly]}
+  {[color] [time]|[adjective] [time]|[ingverb] [time]|[pastverb] [time]} 
+  {[color] [time]|[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[color] [subject]|[color] [subject.pluralForm]|[color] [subjectsingleonly]} Full of {Regret|Sorrow|Nostalgia|Loss}
+  {[hours]|[time]|[day]} {Thoughts|Memories|Dreams|Daydreams|Nightmares|Visions|Illusions}
+  {[ingverb]|[verb]} In The {Void|Dark|[time]} 
+  {[subject]|[subjectsingleonly]|[time]|[adjective]|[ingverb]} Country
+  {[subject]|[subjectsingleonly]|[time]} Dreamstate
+  {[verb]|[ingverb]|} {Across|Above|Before|Beyond|Towards|Within|Onwards {To|From}|Away From|Behind|Below|Ahead of|Outside {of|}|Far {from|Off|}|Close To|Near|Through|Among|Amidst|In To} {The|A|An} {[adjective]|[color]|[ingverb]|} {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[subject.pluralForm]|[time]|[day]}
+  {[verb]|[ingverb]} For The {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[subject.pluralForm]|[time]}
+  {_|.|}{[adjective.lowerCase]|[color.lowerCase]|[ingverb.lowerCase]|^2}{_|.|}{[subject.lowerCase]|[subject.pluralForm.lowerCase]|[subjectsingleonly.lowerCase]|[day.lowerCase]|[time.lowerCase]|[hours.lowerCase]}{.exe|.jpg|.png|.gif|.mp3|.mp4|.memory|.dream|.world|.mind|.soul} {Failed To Load|Stopped Unexpectedly|Is Corrupted|Has Stopped Responding|Has Encountered An Unexpected Error|Will Not Start|Cannot Be Found|Can't Be Accessed At This Time|Cannot Be Read} {...You Cannot Replace It|...It's Gone {Forever|}|...{I'm|We're|Their|She's|He's} Sorry|...Delete File?|...You Can't Fix It|...Try Again {Later|on [day]}|...Nothing To See Here|...|}
+  {Amid|Amidst|Between|Betwixt} the {[adjective]|[color]|[ingverb]|^9} {[subject]|[subjectsingleonly]|[subject.pluralForm]|[time]} and {[adjective]|[color]|[ingverb]|^9} {[subject]|[subjectsingleonly]|[subject.pluralForm]|[time]}
+  {An|The|A|} {[adjective]|[color]|[ingverb]|^3} {[subject]|[subjectsingleonly]|[subject.pluralForm]} {{{just|} After|{just|} Before} [time]|at [hours]|on [day]}
+  {An|The|A|} {Endless|Eternal|Vast|Never-Ending|Eternal} {Sea|Expanse|Field|Land|Dreamscape|Landscape} of {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]}
+  {At {The|} World's End{...|,|.|}|At The End Of The World{...|,|.|}} {{We|I|She|He|You|They} {[pastverb]|[verb]}|}
+  {A|An|The|} {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^3} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]} {Into|Become{s|}|Transforms {into|}|Turns {into|to}|Emerges from|Remains as|Lingers as|Continues as|Lives On As|Reborn As} {A|An|The|} {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^3} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]}
+  {A|An|The|} {[adjective]|[color]|[ingverb]|^2} {[subjectsingleonly]|[subject]|[subject.pluralForm]|[time]|[day]} {Keeps|Holds|Hides} {Their|Our|Your|My|Her|His} {Secrets|Memories}
+  {A|An|The|} {[adjective]|[color]|[ingverb]|^2} {Something|[subjectsingleonly]|[subject]|[subject.pluralForm]|[time]|[day]} You Can’t Quite {Remember|Forget|Recall|Recognize}
+  {A|An|The|} {[adjective]|[color]|[ingverb]|} {Flicker|Glimmer|Glimpse|Glow|View|Portrait|Memory|Vision|Prophecy|Dream|Daydream|Fantasy|Realm|{Dream|Wonder}land|Land|Study|Still Life|Scent|Allure|Appeal|Nostalgia|Song|Path|Dance|Sigh|Breath|Poetry|Poem|Panorama|Aria|Opera|Operetta|Aroma|Touch} of {[adjective]|[color]|[ingverb]|} {[adjective]|[color]|[ingverb]} {[color]|[subject]|[subjectsingleonly]|[subject.pluralForm]|[time]|[day]} {and {[adjective]|[color]|[ingverb]|} {[adjective]|[color]|[ingverb]} {[subject]|[subject.pluralForm]|[subjectsingleonly]}|}
+  {A|An|The|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]} {Into|Become{s|}|Transforms {into|}|Turns {into|to}|Emerges from|Remains as|Lingers as|Continues as|Lives On As|Reborn As} {A|An|The|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]}
+  {A|An|The|} {[subject]|[subjectsingleonly]|[subject.pluralForm]|[time]} {In|From|Within} {My|Your|Our|Her|His|Their} Eyes
+  {A|An|The|} {Metamorphosis|Transformation|Abstraction|Destruction|Creation|Emergence|Death|[ingverb]|Dreams|Cradle} of {The|A|An} {[adjective]|[color]|[ingverb]|} {[adjective]|[color]|[ingverb]|} {[subject]|[time]|[subjectsingleonly]|[subject.pluralForm]}
+  {A|An|The} {[adjective]|[color]|[ingverb]|^3} {[subject]|[subjectsingleonly]|[subject.pluralForm]} [pastverb] by {[adjective]|[color]|[ingverb]|^3} {[subject]|[subjectsingleonly]|[subject.pluralForm]}
+  {A|An|The} {[adjective]|[color]|[ingverb]|^3} {[subject]|[subjectsingleonly]} {in|with|by|From} {a|an|the} {[adjective]|[color]|[ingverb]|^3} {[subject]|[subjectsingleonly]} {{during|in} [time]|at [hours]|on [day]|}
+  {A|An|The} {[adjective]|[color]|[ingverb]|^3} {View|Scenery|Scene|Sights} {From|Out of} {My|The} {{Bedroom|Living Room|Kitchen|Bathroom|Playroom|Sunroom|Front|Back|Side} Window|{Front|Back|Side} {Door|Porch}} {{during|in} [time]|at [hours]|on [day]|}
+  {A|An|The} {[adjective]|[color]|[ingverb]|^9} {[subject]|[subjectsingleonly]} to [verb]
+  {A|An|The} {[color] [subject]|[adjective] [subject]|[ingverb] [subject]|[pastverb] [subject]}
+  {A|An|The} {[color] [time]|[adjective] [time]|[ingverb] [time]|[pastverb] [time]}
+  {A|An|} [time] of [color]
+  {A|An|} {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]} {from a|in the} Distance
+  {A|An|} {[subject]|[subjectsingleonly]|[time]}{'s|} {Dream|Nightmare|Daydream}
+  {A|An|} {Symphony|Study|Scene} {of|in} {[color]|[ingverb]|[subjectsingleonly]|[subject]|[time]|{A|An|} [day]}
+  {A|An} {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]} Was Once Here
+  {A|An} {[adjective]|[color]|[ingverb]} {[subject]|[subjectsingleonly]} with {[subject]|[subjectsingleonly]} Beyond
+  {A|An} {[color] [day] {at|} [hours]|[adjective] [day] {at|} [hours]|[ingverb] [day] {at|} [hours]}
+  {A|} {[adjective]|[color]|[ingverb]|[pastverb]|} {Polaroid {Photo|Photograph|}|Photo|Photograph|Snapshot} {Of {A|An|The|} {[subjectsingleonly]|[subject]|[subject.pluralForm]|[time]|[day]}|Of Them|Of Us|Of You|Of Me|Of Her|Of Him} {[ingverb]|}
+  {Digital|Analog} {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[time]}
+  {Embrace|Embracing The} {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]} 
+  {From|} {In|With|Within|Above|Below|Before|After|Across|Towards|Behind|Among|Amidst} The {[adjective]|[color]|[ingverb]|} {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]}
+  {How|Why|When|Where} {The|A|An|} {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[time]|[subject.pluralForm]} {[verb]|[pastverb]|[verb.pluralForm]}
+  {How|Why|When} {I|You|We|She|He|They} {{Was|Were}|} {[verb]|[pastverb]}
+  {I'll|} See You Next {[time]|[day]}{, Promise?| }
+  {Inventing^2|Mapping|Charting|Generating|Creating|Rendering} {Imaginary^2|Make-Believe|Dreamt-Up} {[color]|[ingverb]|^3} {Worlds|Realms|Memories|Dimensions}
+  {Is|Was} This {Place|Space|Home|House|Bedroom|} {Heaven|Hell|Limbo|Limbo|Purgatory|A Dream|A Daydream|A Nightmare|A Memory|A Simulation|A Game}?
+  {It's|I'm|We're|You're} {[adjective]|[ingverb]} {Here|{In|For} This {[time]|Place|Dream|Memory}|On This [day]}
+  {It|I|You|We|She|He} Will Soon Be {Near|Here|There|{By|Near {to|}|With|Next to} {[subject]|[subject.pluralForm]|[subjectsingleonly]}}
+  {I|She|He|They|We} Never {Left|Abandoned|Forgot} You 
+  {I|You|We|She|He|They|It} {Will|Won't|Would|Wouldn't|Could|Couldn't} Find {Anything|Something|Nothing|{Anything|Something|Nothing} of {Value|Hers|Yours|His|Theirs}|You|Us|{Any|The|} [subject.pluralForm]|{The|Any|} [subject]|{Any|} [subjectsingleonly]|{The|Any|} [time]|{The|Any|} [day]} {Here|Anywhere|There|{On|In} This {[subject]|[time]|[day]|Place}}
+  {I|You|We|She|He|They|It} {Won't|Can't} {Go Back|Come Back|Leave|Return} {There|Here|{To|} This {Place|Dream|Daydream|Memory|Home|House|Sanctuary|Shelter}}
+  {I|You|We|She|He|They} {Was|} [pastverb] {Here|There|{At|In|} This {Place|Home|Memory|{[subject]|[subjectsingleonly]|[time]}}}
+  {I|You|We|They} {Think|Know|Feel|Guess} this is the {Last|Final} {[time]|[day]|Time} {I|You|We|They} Will {[verb]|Be {Here|In this Place}|See {Each Other|}}
+  {I|You} {Don't|} Want To Go {Home|Back|Back There|There|Back to That {[time]|[day]}^3}
+  {I|You} {Think|Believe} {I|You|She|He|They|We} {Lost|Forgot|Abandoned|Left|Found} {Something|Nothing|[subjectsingleonly]} {Here|In This {House|Place|Space|Home|Hallway|Attic|Room|Road}}
+  {Look|Trapped|Stuck|Lost|Found|Dreaming|[ingverb]} {In|At|In|Within|Between|Among|Amidst|Beyond|Below|Above|Across|Through|Inside|Outside|Near|Far from|Away from|Towards|Into|Out of|On Top Of|Under|Beneath|Underneath|Over|Around|Past|Behind|In Front Of|Beside|Along} {The|An|A|} {[adjective]|[color]|[ingverb]|} {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[subject.pluralForm]|[time]|[day]|Time|Place|Stasis|Stars}
+  {Meet|Greet|} Me {At|In|By} {[time]| The {[subject.pluralForm] | [subject] | [subjectsingleonly]}}
+  {My|The|Your} Last {[ingverb]|} {[time]|[subject]|[subjectsingleonly]|[subject.pluralForm]}
+  {My|Your|Our|} Time Was Wasted Here
+  {My|Your|Their|Her|His} {Body|Memories|Mind|Soul|[subjectsingleonly]|[subject]} {Gave Up On|Abandoned|Left} {Me|You|Her|His|Us|Them|Him} {{in|with|on|} [subjectsingleonly]|{in|with|on|} [subject]|A Long Time Ago|}
+  {Now {Playing|Loading|Viewing|Deleting|Forgetting|Remembering|Reminiscing}:|} {_|.|}{[adjective.lowerCase]|[color.lowerCase]|[ingverb.lowerCase]|^2}{_|.|}{[subject.lowerCase]|[subject.pluralForm.lowerCase]|[subjectsingleonly.lowerCase]|[day.lowerCase]|[time.lowerCase]|[hours.lowerCase]}{.exe|.jpg|.png|.gif|.mp3|.mp4|.memory|.dream|.world|.mind|.soul}
+  {Slow-Motion|Slowed Down|Slow-Mo|Time-lapsed|Pixelated|Obscured|Blurred|Covered|Fast Forwarded|Rewound|Paused|Corrupted} {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]|[hours]}
+  {Something|[subject]|[subjectsingleonly]|{My|Your|Our} [subject]} Was Lost Here
+  {Stirring|Waking|Awaking} From The {[adjective]|[color]|[ingverb]|} Dream
+  {Stop Looking|Don't Look} For {The^3|A|An|} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]} {You Lost|You Forgot|}...{You Might Find {Her|Him|It|Them}|You Might not Like What You Find|You might Lose Something Else|{It|We|They} Won't Be {The Same|Different}| }
+  {Taped Over|Forgotten|Forsaken|Broken|Lost} Memories of {[time]|[subject]|[subjectsingleonly]|[subject.pluralForm]|[day]}
+  {The Time I Spent With You Was|} Time Well Wasted 
+  {The|A|An|My|Your|Our|Her|His|Their} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]} Is {Calling {For|To|}|Crying For|Mourning {For|}|Reaching {For|}|Looking {For|At}|[ingverb] {For|At|To|}}  {Me|You|Us|Them|Her|Him|All}
+  {The|A|An|} {[adjective]|[color]|[ingverb]|^2} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]}
+  {The|A|An|} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]} of {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]}
+  {The|A|An|} {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]}
+  {The|A|An|} {[adjective]|[color]|[ingverb]|} {[subject]|[subjectsingleonly]|[time]} That [pastverb]
+  {The|A|An|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]}  Will Soon Be {Near|Here|There|{By|Near {to|}|With|Next to} {[subject]|[subject.pluralForm]|[subjectsingleonly]}}
+  {The|A|An|} {[subject]|[subjectsingleonly]|[time]|[subject.pluralForm]} Shift {s|^6666}
+  {The|A|An} {Ascent|Descent|Rising|Falling|[ingverb]} of {The|A|An|} {[adjective]|[color]|[ingverb]|^2} {[subject]|[subject.pluralForm]|[subjectsingleonly]}
+  {The|A|An} {Moment|Thought|Memory|[subjectsingleonly]|[subject]|[time]|[day]} {In Between|In The Middle|Between {Worlds|Dreams|Realities|Dimensions|Places|Spaces|Times|Moments|Thoughts|Memories|Daydreams|Nightmares|Visions|Illusions|}}
+  {The|A|This} {Museum|Collection|Hoard|Cache} of {[adjective]|[color]|[ingverb]|} {[subject.pluralForm]|[subjectsingleonly]|[time]|[day]}
+  {The|A} {[subject]|[subjectsingleonly]} [ingverb]{ in|,|:} {Sunlight|Daylight|Starlight|Moonlight}
+  {The|This|} {[time]|[day]} We {Cherish|Cherished|Reminisce}
+  {The|This} {[adjective]|[color]|[ingverb]|} {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]|[hours]^666|Horrors|Haunted} Will Never Leave
+  {The|} [ingverb] Continues
+  {Thoughts|Memories|Nostalgia|Feelings|Emotions|[subject]|[subject.pluralForm]|[subjectsingleonly]} {[verb]|[ingverb]}
+  {Trapped|Caught|Lost|Wrapped|[pastverb]} {In|Within} {Memories|Thoughts|Daydreams|Dreams|Nightmares} {Of {The Past|Yesterday|Yesteryear|Nostalgia}|}
+  {Waiting For|Awaiting} {[subject]|[subjectsingleonly]|[subject.pluralForm]|[time]|Something|Something That Will Never Happen}
+  {Weird|[adjective]|[pastverb]|[ingverb]} {Things|[subject.pluralForm]|[subjectsingleonly]} {Happens|Occurs|Go Down|Transpires|Happen|Occur|Transpire|Appear} {Here|There|{In^2|On} This {Place|Time|House|Home|Room|Hallway|Level|Floor}|}
+  {We|I|You} {Could|Can} Sit Here {Forever|For Hours|For Eternity}...{Nothing {Would|Will} Change|Everything {Would|Will} Change} 
+  {Where|When} {{The|A|An|} [subjectsingleonly]|{The|A|An|} [subject]|{The|} [subject.pluralForm]|{The|A|An|} [time]|{A|An|} [day]} {Come|Comes} to [verb] {Slowly|Sadly|Happily|Desparately|Hopelessly|Without Fear|Resigned To Their Fate|} 
+  {You Have Been|} Disconnected From {Reality|The World|Everything|Everyone|Everyone and Everything|{This |The |}Network|{The|} Simulation|[adjective] Network|{This |The |}Station} {For undefined{ Reason|}|For No Reason|For invalid scenario|...You Know What You Did|For {Corrupting|Corrupted} Data|}. {Please Try Again {Later|Never|at [hours]}|Please Don't Try Again|Please Don't Come Back|}
+  {You|I|She|He|They} {Forgot|Remembered} Why {You|I|She|He|They} {Left|Never Returned|Came Back|[pastverb]|Went Away}
+  {{[adjective]|[color]|} [subject]|{[adjective]|[color]|} [subjectsingleonly]|{[adjective]|[color]|} [subject.pluralForm]|} {[verb]|[ingverb]|[verb.pluralForm]} {Forever|Eternally|Forevermore|Evermore}
+  {{Long|} Forgotten|Abandoned|Half Remembered|Lost|Hidden|Misremembered} {[adjective]|[color]|[ingverb]|} { [subject] | [subject.pluralForm] |[subjectsingleonly] |[time]}
+  {[subject]|[subject.pluralForm]|[subjectsingleonly]|[time]|[day]}
+  
+
+
+
+
+  
+color  
+  Beige
+  Black
+  Burnt {Orange|Sienna|Umber|Ochre}
+  Canary Yellow
+  Candy-colored
+  Charcoal {Gray|Black|}
+  Colorful
+  Cool White
+  Cotton Candy
+  Cotton Candy {Pink|Blue|Purple|Yellow|Green}
+  Cream
+  Creamy
+  Crimson
+  Ebony
+  Gilded
+  Golden {Brown|Yellow|}
+  Heather {Blue|Purple|Gray|}
+  Honey
+  Honeydew
+  Hyacinth
+  Inky {Blue|Black|Violet|Purple|}
+  Iridescent
+  Ivory
+  Jade
+  Latte
+  Marshmallow
+  Midnight {Blue|Violet|Purple|Black}
+  Milk-color{ed|}
+  Milk Glass
+  Milky [color]
+  Mint
+  Minty
+  Moss {Green|}
+  Nacreous
+  Navy Blue
+  Obsidian
+  Ocean {Blue|Green}
+  Off Color
+  Opal
+  Opalescent
+  Opaline
+  Patina
+  Pearl
+  Pearlescent
+  Pearly {White|Gray|}
+  Peppermint {Pink|Green|Red|}
+  Periwinkle
+  Porcelian {White|Cream|Blue|}
+  Primrose {Pink|Yellow|White|Red|}
+  Rose {Red|Pink|White|Yellow|Orange|Gold|}
+  Rosy {Red|Pink|White|Yellow|Orange|}
+  Ruby {Red|}
+  Rust 
+  Rusty {Red|Orange|Brown|}
+  Saffron {Yellow|}
+  Sapphire {Blue|}
+  Seafoam {Blue|Green|White|}
+  Sherbert {Pink|Yellow|Orange|Green|}
+  Silver
+  Slate
+  Taupe
+  Terracotta {Orange|Brown|Red|}
+  Topaz
+  Turquoise {Blue|Green|}
+  Ultramarine {Blue|}
+  Vanilla
+  Violet {Blue|}
+  Viridescent
+  Viridian
+  {Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Burgandy {Red|}
+  {Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Maroon
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Alabaster
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Amaranth
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Amaretto
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Amber {Yellow|Orange|Brown|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Amethyst {Purple|Violet|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Apricot
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Aqua
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Aquamarine
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Blue 
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Blue Green
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Blush 
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Bronze
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Bubblegum {Pink|Blue|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Caramel
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Celadon {Green|Blue|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Cerise
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Cerulean
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Champagne {White|Yellow|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Chartreuse {Yellow|Green}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Cherry {Red|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Chocolate
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Cinnamon
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Citrus {Yellow|Green|Pink|Orange|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Cobalt {Blue|Green|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Coffee
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Copper
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Coral {Pink|Red|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Cyan
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Emerald {Green|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Fuschia
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Gold 
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Green
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Indigo {Blue|Purple|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Lavender
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Lilac
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Lime {Green|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Magenta
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Mango {Orange|Yellow|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Matcha {Green|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Mauve
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Olive {Green|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Orange
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Orchid {Pink|Purple|}
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Peach
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Pink
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Purple
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Red
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Sky Blue
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Teal
+  {Pastel|Dark|Pale|Deep|Light|Vibrant|Muted|Rich|} Yellow {Orange|Green|}
+  {Warm|Cool|Neutral|} {Gray|White|Brown}
+  
+  
+
+  
+time
+  April
+  August
+  Autumn
+  Blue Hour
+  Dawn
+  Day
+  Daybreak
+  Daytime
+  December
+  Dusk
+  Early Afternoon
+  Early Evening
+  Early Hours
+  Early Morning
+  Fall
+  February
+  Golden Hour
+  Harvest
+  Harvest Season
+  January
+  July
+  June
+  Late Afternoon
+  Late Evening
+  Late Hours
+  Late Morning
+  Magic Hour
+  March
+  May
+  Mid-afternoon
+  Mid-autumn
+  Mid-day
+  Mid-morning
+  Mid-spring
+  Mid-summer
+  Mid-winter
+  Midnight
+  Midsommar
+  Night
+  Nighttime
+  November
+  October
+  September
+  Solstice
+  Spring
+  Springtime
+  Summer
+  Summertime
+  Sundown
+  Sunrise
+  Sunset
+  Winter
+  Wintertime
+  Witching Hour
+  Twilight
+
+
+
+verb
+  Abandon 
+  Abstract
+  Ache
+  Adore
+  Advance
+  Alter
+  Anticipate
+  Arise
+  Ascend
+  Await
+  Awake
+  Balance
+  Bathe
+  Beam
+  Believe
+  Billow
+  Blaze
+  Bloom
+  Blossom
+  Blush
+  Bolt
+  Bound
+  Break
+  Brood
+  Burn
+  Burst
+  Call
+  Celebrate
+  Chase
+  Circle
+  Climb
+  Coast
+  Collapse
+  Collect
+  Comfort
+  Console
+  Contemplate
+  Creep
+  Crest
+  Cross
+  Cry
+  Dance
+  Dart
+  Dash
+  Dawn
+  Dazzle
+  Decay
+  Delight
+  Descend
+  Die
+  Dive
+  Dread
+  Dream
+  Drift
+  Drop
+  Dwell
+  Dwindle
+  Ebb
+  Echo
+  Emerge
+  Expand
+  Exult
+  Fade
+  Fall
+  Flash
+  Flicker
+  Flitter
+  Float
+  Flourish
+  Flow
+  Flutter
+  Fly
+  Fracture
+  Gleam
+  Glide
+  Glimmer
+  Glint
+  Glisten
+  Glitter
+  Glow
+  Greet
+  Grieve
+  Grow
+  Guide
+  Halt
+  Haunt
+  Hope
+  Imagine
+  Inspire
+  Invite
+  Isolate
+  Judge
+  Kindle
+  Know
+  Lament
+  Leave
+  Lift
+  Linger
+  Listen
+  Live
+  Long
+  Lurk
+  March
+  Marvel
+  Meander
+  Melt
+  Migrate
+  Mourn
+  Nestle
+  Observe
+  Orbit
+  Paint
+  Pine
+  Play
+  Ponder
+  Radiate
+  Reflect
+  Remain
+  Remember
+  Rend
+  Render
+  Rest
+  Return
+  Reveal
+  Revel
+  Ring
+  Ripple
+  Rise
+  Roam
+  Rustle
+  Scorch
+  Set
+  Shadow
+  Shift
+  Shimmer
+  Shine
+  Shroud
+  Sing
+  Sleep
+  Slumber
+  Smolder
+  Soar
+  Sooth
+  Spark
+  Sparkle
+  Stall
+  Stifle
+  Stir
+  Stream
+  Surround
+  Sway
+  Sweep
+  Swim
+  Swing
+  Thunder
+  Tip-Toe
+  Twinkle
+  Vanish
+  Veil
+  Wake
+  Waltz
+  Wander
+  Wane
+  Watch
+  Weave
+  Weep
+  Wish
+  Wonder
+  Yearn
+  
+ingverb
+  Abandoning
+  Abstracting
+  Aching
+  Adoring
+  Advancing
+  Altering
+  Anticipating
+  Arising
+  Ascending
+  Awaiting
+  Awaking
+  Bathing
+  Balancing
+  Beaming
+  Believing
+  Billowing
+  Blazing
+  Blooming
+  Blossoming
+  Blushing
+  Bolting
+  Bounding
+  Breaking
+  Brooding
+  Burning
+  Bursting
+  Calling
+  Celebrating
+  Chasing
+  Circling
+  Climbing
+  Resting
+  Coasting
+  Collapsing
+  Collecting
+  Comforting
+  Consoling
+  Contemplating
+  Creeping
+  Cresting
+  Crossing
+  Crying
+  Dancing
+  Darting
+  Dashing
+  Dawning
+  Dazzling
+  Decaying
+  Delighting
+  Descending
+  Dying
+  Diving
+  Dreading
+  Dreaming
+  Drifting
+  Dropping
+  Dwelling
+  Dwindling
+  Ebbing
+  Echoing
+  Emerging
+  Expanding
+  Exulting
+  Fading
+  Falling
+  Flashing
+  Flickering
+  Flittering
+  Floating
+  Flourishing
+  Flowing
+  Fluttering
+  Flying
+  Fracturing
+  Gleaming
+  Gliding
+  Glimmering
+  Glinting
+  Glistening
+  Glittering
+  Glowing
+  Greeting
+  Grieving
+  Growing
+  Guiding
+  Halting
+  Haunting
+  Hoping
+  Imagining
+  Inspiring
+  Inviting
+  Isolating
+  Judging
+  Kindling
+  Knowing
+  Lamenting
+  Leaving
+  Lifting
+  Lingering
+  Listening
+  Living
+  Longing
+  Lurking
+  Marching
+  Marveling
+  Meandering
+  Melting
+  Migrating
+  Mourning
+  Observing
+  Orbiting
+  Painting
+  Pining
+  Playing
+  Pondering
+  Radiating
+  Reflecting
+  Remaining
+  Remembering
+  Rending
+  Rendering
+  Resting
+  Returning
+  Revealing
+  Reveling
+  Ringing
+  Rippling
+  Rising
+  Roaming
+  Rustling
+  Scorching
+  Setting
+  Shadowing
+  Shifting
+  Shimmering
+  Shining
+  Shrouding
+  Singing
+  Sleeping
+  Slumbering
+  Smoldering
+  Soaring
+  Soothing
+  Sparking
+  Sparkling
+  Stalling
+  Stifling
+  Stirring
+  Streaming
+  Surrounding
+  Swaying
+  Sweeping
+  Swimming
+  Swinging
+  Thundering
+  Tip-Toeing
+  Twinkling
+  Vanishing
+  Veiling
+  Waking
+  Waltzing
+  Wandering
+  Waning
+  Watching
+  Weaving
+  Weeping
+  Wishing
+  Wondering
+  Yearning
+  
+pastverb
+  Abandoned
+  Abstracted
+  Ached
+  Adored
+  Advanced
+  Altered
+  Anticipated
+  Arose
+  Ascended
+  Awaited
+  Awoke
+  Balanced
+  Bathed
+  Beamed
+  Believed
+  Billowed
+  Blazed
+  Bloomed
+  Blossomed
+  Blushed
+  Bolted
+  Bounded
+  Broke
+  Brooded
+  Burned
+  Burst
+  Called
+  Celebrated
+  Chased
+  Circled
+  Climbed
+  Coasted
+  Collapsed
+  Collected
+  Comforted
+  Consoled
+  Contemplated
+  Creeped
+  Crested
+  Cried
+  Crossed
+  Danced
+  Darted
+  Dashed
+  Dawned
+  Dazzled
+  Decayed
+  Delighted
+  Descended
+  Died
+  Dived
+  Dreaded
+  Dreamed
+  Drifted
+  Dropped
+  Dwelled
+  Dwelt
+  Dwindled
+  Ebbed
+  Echoed
+  Emerged
+  Expanded
+  Exulted
+  Faded
+  Fell
+  Flashed
+  Flew
+  Flickered
+  Flittered
+  Floated
+  Flourished
+  Flowed
+  Fluttered
+  Fractured
+  Gleamed
+  Glided
+  Glimmered
+  Glinted
+  Glistened
+  Glittered
+  Glowed
+  Greeted
+  Grew
+  Grieved
+  Guided
+  Halted
+  Haunted
+  Hoped
+  Imagined
+  Inspired
+  Invited
+  Isolated
+  Judged
+  Kindled
+  Knew
+  Lamented
+  Left
+  Lifted
+  Lingered
+  Listened
+  Lived
+  Longed
+  Lurked
+  Marched
+  Marveled
+  Meandered
+  Melted
+  Migrated
+  Mourned
+  Nestled
+  Observed
+  Orbited
+  Painted
+  Pined
+  Played
+  Pondered
+  Radiated
+  Rang
+  Reflected
+  Remained
+  Remembered
+  Rended
+  Rendered
+  Rested
+  Returned
+  Revealed
+  Reveled
+  Rippled
+  Roamed
+  Rose
+  Rustled
+  Sang
+  Scorched
+  Set
+  Shadowed
+  Shifted
+  Shimmered
+  Shone
+  Shrouded
+  Slept
+  Slumbered
+  Smoldered
+  Soared
+  Soothed
+  Sparked
+  Sparkled
+  Stalled
+  Stifled
+  Stirred
+  Streamed
+  Surrounded
+  Swam
+  Swayed
+  Swept
+  Swung
+  Thundered
+  Tip-Toed
+  Twinkled
+  Vanished
+  Veiled
+  Waltzed
+  Wandered
+  Waned
+  Watched
+  Weaved
+  Wept
+  Wished
+  Woke
+  Wondered
+  Yearned
+
+  
+subject
+  Abnormality
+  Airport
+  Alternate Reality
+  Anomaly 
+  Anxiety
+  Amphora {Vase|}
+  Apartment {Building|Balcony|}
+  Aria
+  Azalea
+  Back Roads
+  Balcony
+  Beacon
+  Beginning
+  Begonia
+  Bells
+  Betrayal
+  Bloom
+  Blossom
+  Bluebells
+  Bluff
+  Bough
+  Boulder
+  Brae
+  Branch
+  Bush
+  Building
+  Bungalow
+  Butte
+  Cabin
+  Cairn
+  Cascade
+  Cascade of Light
+  Castle
+  Cat
+  Cavern
+  Chamber
+  Chandelier
+  Chevelure
+  Cicada 
+  Cicada {Cry|Call|Song|}
+  Clothesline
+  Cloud
+  Cloudscape
+  Comet
+  Constellation
+  Contrail
+  Cornfield
+  Corona
+  Corridor
+  Crest
+  Crystal
+  Cycle
+  Dahlia
+  Daydream
+  Daydreamer
+  Deer
+  Delight
+  Desert
+  Dewdrop
+  Dimension
+  Diva
+  District
+  Dream
+  Dreamer
+  Dreamscape
+  {Snow|Sand|} Drift
+  Dweller
+  Elk
+  Elegy
+  Ending
+  Eternity
+  Existence
+  Fantasy
+  Fawn
+  Field
+  Figure
+  Fireflies
+  Flower
+  Forest
+  Forsythia
+  Freesia
+  Friend
+  Galaxy
+  Garden
+  Gate
+  Ghost
+  Glacier
+  Glade
+  Glitch
+  Glitter
+  Glory
+  Goodbye
+  Guardian
+  Halation
+  Hall
+  Hallway
+  Halo
+  Harmony
+  Haven
+  Heaven
+  Highland
+  Highlander
+  Hill
+  Hillside
+  Home
+  Honeysuckle
+  House
+  Hydrangea
+  Iceberg
+  Identity
+  Illusion
+  Jasmine
+  Jellyfish
+  Lacuna
+  Lake
+  Lantern
+  Light
+  Light Pole
+  Lilac
+  Luminary
+  Magnolia
+  Majesty
+  Masoleum
+  Meadow
+  Megalith
+  Memento
+  Memory
+  Mesa
+  Message
+  Meteor
+  Meteor Shower
+  Mirage
+  Mirror
+  Mist
+  Moment
+  Monolith
+  Monument
+  Moon Gate
+  Moonbeam
+  Moor
+  Moorland
+  Moss
+  Mountain {Peak|Ridge|Range|}
+  Mystery
+  Nebula
+  Nimbus
+  Obelisk
+  Ocean
+  Onsen
+  Outcast
+  Palace
+  Path
+  Peak
+  Petal
+  Phosphene
+  Pillar
+  Pine Forest
+  Pine Tree
+  Place
+  Plain
+  Pond
+  Portal
+  Porch Light
+  Prism
+  Promise
+  Range
+  Reality
+  Realm
+  Reflection
+  Regret
+  Remnant
+  Reverie
+  Rhapsody
+  Ridge
+  River
+  Road
+  Roof
+  Rooftop
+  Rose
+  Ruin
+  Scintilla
+  Sage
+  Sagebrush
+  Sanctuary
+  Satellite
+  Sea
+  Seafoam
+  Secret
+  Sentinel
+  Serenity
+  Shadow
+  Shimmer
+  Shooting Star
+  Shore
+  Shrine
+  Signal
+  Silhouette
+  Sky
+  Slope
+  Sonder
+  Sorrow
+  Space
+  Spectacle
+  Spectra
+  Spectre
+  Spirit
+  Splendor
+  Staircase
+  Star
+  Stargazer
+  Starlight
+  Starshine
+  Stele
+  Storm
+  Storm Cloud
+  Stream
+  Street {Corner|Lamp|Light}
+  Streetlight
+  Structure
+  Summit
+  Sunbeam
+  Sunflower
+  Temple
+  Terrace
+  Thistle
+  Torii Gate
+  Trail
+  Transcendence
+  Tree
+  Tribute
+  Tundra
+  Unicorn
+  Utility Pole
+  Vale
+  Valley
+  Vibe
+  Vision
+  Vista
+  Volcano
+  Wanderer
+  Wanderlust
+  Waste
+  Wasteland
+  Wayside
+  Wild
+  Wildflower
+  Wildwood
+  Willow Tree
+  Wind
+  Window
+  Wishing Star
+  Wisteria
+  Zenith
+  Zephyr
+  {Weeping|} { Apple | Cherry | Almond | Pear | Orange | Peach } Blossom
+  
+  
+  
+  
+  
+  
+subjectsingleonly
+  {[adjective]|[color]} Star
+  Absence
+  Acenesthesia
+  Ache
+  Acquiescence
+  Afterglow
+  Afterlight
+  Airglow
+  Allure
+  Alpenglow
+  Alpine Forest
+  Altocumulus {Cloud|Clouds|}
+  Altostratus {Cloud|Clouds|}
+  Ambition
+  Amnesia
+  Anemoia
+  Anguish
+  Anything
+  Apathy
+  Apricity
+  Apologia
+  Ascendancy
+  Ascended
+  Asthenia
+  Attic
+  Aubade
+  Balance
+  Backrooms
+  Beloved
+  Breeze
+  Bridge
+  Cadence
+  Calamity
+  Catharsis
+  Calm
+  Chaos
+  Childhood {Bedroom|Home}
+  Cicada's {Cry|Call|Song|}
+  Cirrocumulus {Cloud|Clouds|}
+  Cirrocumulus {Cloud|Clouds|}
+  Cirrostratus {Cloud|Clouds|}
+  Cirrus {Cloud|Clouds|}
+  Clarity
+  Clearing
+  Cloudscape
+  Coast
+  Coastline
+  Cottage
+  Crossing
+  Cumulonimbus {Cloud|Clouds|}
+  Cumulus {Cloud|Clouds|}
+  Dark
+  Dawn
+  Dawnlight
+  Daylight
+  Daze
+  Death
+  Decay
+  Delirium
+  Dells
+  Desolation
+  Destiny
+  Dew
+  Diamond Dust
+  Discord
+  Dogma
+  Dreamscape
+  Dreamstate
+  Driftwood
+  Dusk
+  Dysphoria
+  Dsytopia
+  Eclipse
+  Ego
+  Empathy
+  Emptiness
+  Encounter
+  Entropy
+  Ephemera
+  Escape
+  Escapism
+  Eternity
+  Euphoria
+  Evening
+  Everything
+  Expanse
+  Exurbia
+  Faith
+  Fate
+  Firelight
+  Fog
+  Freedom
+  Friend
+  Glow
+  Gorse
+  Grace
+  Grandeur
+  Greif
+  Haze
+  Heartache
+  Heather
+  Hope
+  Horizon
+  Hysteria
+  Imagination
+  Impedimenta
+  Infinity
+  Insomnia
+  Joy
+  Justice
+  Labyrinth
+  Lacunar Amnesia
+  Lakeshore
+  Landscape
+  Lighthouse
+  Lightning
+  Limbo
+  Longing
+  Loss
+  Love
+  Luminescence
+  Lunette
+  Luster
+  Malignance
+  Maze
+  Media
+  Melancholia
+  Melancholy
+  Memorabilia
+  Memory
+  Moon
+  Moonbow
+  Moondust
+  Moonglow
+  Moonlight
+  Movement
+  Mystery
+  Nightfall
+  Nightglow
+  Nimbostratus {Cloud|Clouds|}
+  North Star
+  Northern Lights
+  Nothing
+  Nothingness
+  Oblivion
+  Observer
+  Oceanscape
+  Paracosm
+  Paradise
+  Paranoia
+  Paraphernalia
+  Parhelion
+  Peace
+  Peninsula
+  Penumbra
+  Petrichor
+  Pining
+  Play Place
+  Playground
+  Playset
+  Polaris
+  Porch
+  Prairie
+  Quietude
+  Rain
+  Rainfall
+  Rapture
+  Reconciliation
+  Rejuvination
+  Repose
+  Roadside
+  Sadness
+  Sakura
+  Saudade
+  Scene
+  Scenery
+  Schoolyard
+  Seacoast
+  Seascape
+  Seashore
+  Serein
+  Serendipity
+  Silence
+  Snow
+  Snowfall
+  Snowscape
+  Solace
+  Solitude
+  Solstice
+  Something
+  Sorrow
+  Stagnation
+  Stairs
+  Starburst
+  Stardust
+  Starscape
+  Static
+  Station
+  Station
+  Stillness
+  Stratocumulus {Cloud|Clouds|}
+  Suburbia
+  Sun
+  Sunburst 
+  Sundog
+  Sundown
+  Sunlight
+  Swingset
+  Taiga
+  The Infinite
+  Thunder
+  Time
+  Train Station
+  Truth
+  Unreality
+  Veil
+  Void
+  Wayside {[subject]|^6}
+  Wisdom
+  Wonder
+  Yard
+  {Pacific|Atlantic|Artic|Antartic} Ocean
+  {The|} Fae {Folk|}
+  {TV|Television|VCR} Static
+  {Waxing | Waning} {Crescent | Gibbous | Full | Half | New} Moon 
+ 
+adjective
+  [subject]-kissed
+  Abandoned
+  Aberrant
+  Ablaze
+  Absent
+  Absent-Minded
+  Abstract
+  Abstracted
+  Abundant
+  Abysmal 
+  Abyssal
+  Accidental
+  Acoustic
+  Adrift
+  Aerial
+  Aesthetic
+  Affectionate
+  Aglow
+  Airy
+  Alien
+  Alive
+  Alluring 
+  Aloof
+  Amaranthine
+  Ambient
+  Ambrosial
+  Amorphous
+  Ample
+  Ancient
+  Angelic
+  Angular
+  Animated
+  Anxious
+  Apathetic
+  Apocalyptic
+  Aquatic
+  Arcadian
+  Arcane
+  Archaic
+  Arctic
+  Argent
+  Arid
+  Aromatic
+  Arrested
+  Artificial
+  Ascending
+  Astral
+  Awake
+  Aware
+  Awe-Inspiring
+  Baleful
+  Balmy
+  Beatific
+  Beautiful
+  Bedazzled
+  Bejeweled
+  Beloved
+  Benevolent
+  Benighted
+  Billowing
+  Billowy
+  Bittersweet
+  Bizarre
+  Blazing 
+  Bleak
+  Bleary 
+  Blissful
+  Blithe
+  Blooming
+  Blossoming
+  Blushing
+  Boundless
+  Bounteous
+  Breathtaking
+  Breezy
+  Bright
+  Brilliant
+  Brisk
+  Brittle
+  Broad
+  Brutal
+  Bucolic
+  Bygone
+  Calamitous
+  Calescent
+  Calm
+  Calming
+  Captivating
+  Cascading
+  Ceaseless
+  Celestial
+  Charming
+  Cherished
+  Chiffon
+  Clear
+  Cloudy
+  Cold
+  Comforting
+  Cool
+  Cosmic
+  Coy
+  Cozy
+  Crepuscular
+  Crisp
+  Crystal
+  Crystalline
+  Dancing
+  Dappled
+  Dark
+  Darling
+  Dazzling
+  Deep
+  Defiant
+  Delicate
+  Delightful
+  Derelict
+  Deserted
+  Desperate
+  Desultory
+  Devoid
+  Dewy
+  Diamante
+  Diaphanous
+  Diffuse
+  Dim
+  Disappearing
+  Disillusioned
+  Distant
+  Distrait
+  Diurnal
+  Divine
+  Dolorous
+  Downy
+  Dramatic
+  Dream-Like
+  Dreamy
+  Dreary
+  Drifting
+  Dry
+  Dulcet
+  Dusky
+  Early
+  Earthy
+  East
+  Eastern
+  Effulgent
+  Electric
+  Electrical
+  Electronic
+  Elegant
+  Elusive
+  Emotional
+  Emperyan
+  Empty
+  Empyreal
+  Enchanted
+  Enchanting
+  Enormous
+  Enticing
+  Ephemeral
+  Ethereal
+  Evanescent
+  Evasive
+  Evocative
+  Exquisite
+  Faded
+  Faint
+  Faltering
+  Fanciful
+  Far
+  Fervent
+  Filtered
+  First 
+  Flashing
+  Flashy
+  Fleeting
+  Flickering
+  Floating
+  Flourishing
+  Fluffy
+  Foggy
+  Fragile
+  Fragrant
+  Frail
+  Freezing
+  Fresh
+  Fretful
+  Frigid
+  Frosted
+  Frosty
+  Gentle
+  Gilded
+  Glacial
+  Glaucous
+  Glazed
+  Gleaming
+  Gleamy
+  Glistening
+  Glittering
+  Glorious
+  Glossy
+  Glowing
+  Godly
+  Gossamer
+  Grand
+  Grandiose
+  Greiving
+  Hallowed
+  Hazy
+  Heavenly
+  Hi-Fi
+  Hibernal
+  Hidden
+  High
+  High Fidelity
+  Humid
+  Hushed
+  Icy
+  Idyllic
+  Ill-fated
+  Imaginary
+  Immense
+  Impossible
+  Incandescent
+  Innocent
+  Interstellar
+  Iridescent
+  Jeweled
+  Lakeside
+  Languid
+  Last
+  Late
+  Legendary
+  Liminal
+  Lingering
+  Lo-fi
+  Lofty
+  Lonely
+  Lost
+  Lovely
+  Low
+  Low Fidelity
+  Low-key
+  Lucid
+  Luminous
+  Lunar
+  Lush
+  Lustrous
+  Luxurious
+  Lyrical
+  Magical
+  Majestic
+  Marvelous
+  Meandering
+  Mellow
+  Melodic
+  Melting
+  Melty
+  Mesmeric
+  Mesmerizing
+  Mild
+  Milky
+  Mindless
+  Misty
+  Moody
+  Moonlit
+  Moonstruck
+  Moribund
+  Motionless
+  Mountainous
+  Mystical
+  Mythic
+  Nebulous
+  Nectarous
+  Noble
+  Nocturnal
+  Noiseless
+  North
+  Northeast
+  Northeastern
+  Northern
+  Northwest
+  Northwestern
+  Nostalgic
+  Observant
+  Oceanic
+  Odd
+  Off Beat
+  Old
+  Omniscient
+  Opulent
+  Ornate
+  Otherworldly
+  Painted
+  Pale
+  Panoramic
+  Pastel
+  Peaceful
+  Pearlescent
+  Perfect
+  Perfumed
+  Perpetual
+  Petrichorous
+  Phosphorescent
+  Picturesque
+  Pillowy
+  Piney
+  Pining
+  Placid
+  Playful
+  Pleasant
+  Polished
+  Powerful
+  Pretty
+  Prismatic
+  Pristine
+  Private
+  Profound
+  Puzzling
+  Quaint
+  Quick
+  Quiescent
+  Quiet
+  Quietful
+  Radiant
+  Rainy
+  Rare
+  Reflecting
+  Reflective
+  Refreshing
+  Relaxing
+  Remote
+  Resolute
+  Resplendent
+  Restful
+  Rising
+  Riverside
+  Roadside
+  Romantic
+  Rural
+  Saccharine
+  Satin
+  Seaside
+  Secret
+  Sentimental
+  Selenic
+  Serene
+  Shadowy
+  Shimmering
+  Shimmery
+  Shiny
+  Silent
+  Silken
+  Silky
+  Sleepy
+  Smoky
+  Snowy
+  Soft
+  Soothing
+  South
+  Southeast
+  Southeastern
+  Southern
+  Southwest
+  Southwestern
+  Spangled
+  Sparkling 
+  Spellbinding
+  Spellbound
+  Splendid
+  Stained
+  Stale
+  Standing
+  Starlit
+  Starry
+  Stellar
+  Streaked
+  Subdued
+  Sublime
+  Sudden
+  Sugary
+  Summery
+  Sun-Streaked
+  Sunlit
+  Sunny
+  Superliminal
+  Supernatural
+  Sweet
+  Swift
+  Swirled
+  Swirling
+  Tangible
+  Temporal
+  Temporary
+  Tender
+  Tenuous
+  Thoughtless
+  Thrilling
+  Thundering
+  Timeless
+  Towering
+  Tranquil
+  Translucent
+  Twilit
+  Twinkling
+  Unhealthy
+  Unknown
+  Unnatural
+  Unnerving
+  Unsettling
+  Unused
+  Uplifting
+  Urban
+  Utopian
+  Vacuous
+  Vague
+  Velvet
+  Velveteen
+  Velvety
+  Vibrant
+  Vintage
+  Voiceless
+  Wandering
+  Warm
+  West
+  Western
+  Whimsical
+  Whispering
+  Wild
+  Windswept
+  Windy
+  Wintery
+  Wistful
+  Wonderful
+  Wonderous
+  Wooly
+  Yielding
+
+  
+  
+day
+  Monday
+  Tuesday
+  Monday
+  Tuesday
+  Wednesday
+  Thursday
+  Friday
+  Saturday
+  Sunday
+  School Day
+  School Night
+  Christmas
+  Christmas Eve
+  Birthday
+  Holiday
+  New Year's Eve
+  New Year's Day
+  Vacation
+  Funeral
+  Tomorrow
+  Yesterday
+  Today
+  Tonight
+  Day After Tomorrow
+  Workday
+  Weekend
+  Halloween
+  All Hallow's Eve
+  Monday Morning
+  Tuesday Morning
+  Wednesday Morning
+  Thursday Morning
+  Friday Morning
+  Saturday Morning
+  Sunday Morning
+  Monday Afternoon
+  Tuesday Afternoon
+  Wednesday Afternoon
+  Thursday Afternoon
+  Friday Afternoon
+  Saturday Afternoon
+  Sunday Afternoon
+  Monday Evening
+  Tuesday Evening
+  Wednesday Evening
+  Thursday Evening
+  Friday Evening
+  Saturday Evening
+  Sunday Evening
+  Monday Night
+  Tuesday Night
+  Wednesday Night
+  Thursday Night
+  Friday Night
+  Saturday Night  
+  Sunday Night
+  {January|February|March|April|May|June|July|August|September|October|November|December} [n = Math.floor(Math.random()*31)+1][n%10==1 && n!=11 ? "st" : n%10==2 && n!=12 ? "nd" : n%10==3 && n!=13 ? "rd" : "th"]
+  
+hours
+  {1-12} AM
+  {1-12} PM
+  {1-24}:00

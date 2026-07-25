@@ -1,0 +1,218 @@
+ensureAuditLogStore() =>
+  if(!window.__auditLogKitV1) {
+    window.__auditLogKitV1 = {
+      seq: 0,
+      channels: {}
+    };
+  }
+  return window.__auditLogKitV1;
+
+normalizeChannel(channel) =>
+  const raw = channel === undefined || channel === null ? "default" : String(channel).trim();
+  return raw === "" ? "default" : raw;
+
+normalizeLevel(level) =>
+  const raw = level === undefined || level === null ? "info" : String(level).trim().toLowerCase();
+  return raw === "" ? "info" : raw;
+
+ensureChannel(channel) =>
+  const store = ensureAuditLogStore();
+  const channelName = normalizeChannel(channel);
+  if(!store.channels[channelName]) {
+    store.channels[channelName] = [];
+  }
+  return store.channels[channelName];
+
+matchesFilter(entry, level, source) =>
+  const wantLevel = level === undefined || level === null || String(level).trim() === "" ? "" : normalizeLevel(level);
+  const wantSource = source === undefined || source === null || String(source).trim() === "" ? "" : String(source);
+
+  if(wantLevel !== "" && normalizeLevel(entry.level) !== wantLevel) {
+    return false;
+  }
+  if(wantSource !== "" && String(entry.source || "") !== wantSource) {
+    return false;
+  }
+  return true;
+
+write(channel, level, message, data, source) =>
+  const store = ensureAuditLogStore();
+  const queue = ensureChannel(channel);
+
+  store.seq += 1;
+
+  const entry = {
+    id: store.seq,
+    channel: normalizeChannel(channel),
+    level: normalizeLevel(level),
+    message: message === undefined || message === null ? "" : String(message),
+    data: data,
+    source: source === undefined || source === null ? "" : String(source),
+    at: Date.now()
+  };
+
+  queue.push(entry);
+  return entry.id;
+
+info(channel, message, data, source) =>
+  return write(channel, "info", message, data, source);
+
+warn(channel, message, data, source) =>
+  return write(channel, "warn", message, data, source);
+
+error(channel, message, data, source) =>
+  return write(channel, "error", message, data, source);
+
+debug(channel, message, data, source) =>
+  return write(channel, "debug", message, data, source);
+
+count(channel, level, source) =>
+  const queue = ensureChannel(channel);
+  let total = 0;
+
+  for(let i = 0; i < queue.length; i += 1) {
+    if(matchesFilter(queue[i], level, source)) {
+      total += 1;
+    }
+  }
+
+  return total;
+
+latest(channel, level, source) =>
+  const queue = ensureChannel(channel);
+
+  for(let i = queue.length - 1; i >= 0; i -= 1) {
+    if(matchesFilter(queue[i], level, source)) {
+      return queue[i];
+    }
+  }
+
+  return "";
+
+query(channel, level, source, limit) =>
+  const queue = ensureChannel(channel);
+  let maxItems = Number(limit);
+  if(!Number.isFinite(maxItems) || maxItems <= 0) {
+    maxItems = Number.MAX_SAFE_INTEGER;
+  }
+
+  const out = [];
+  for(let i = queue.length - 1; i >= 0; i -= 1) {
+    if(matchesFilter(queue[i], level, source)) {
+      out.push(queue[i]);
+      if(out.length >= maxItems) {
+        break;
+      }
+    }
+  }
+
+  return out.reverse();
+
+drain(channel, level, source, limit) =>
+  const channelName = normalizeChannel(channel);
+  const store = ensureAuditLogStore();
+  const queue = ensureChannel(channel);
+
+  let maxItems = Number(limit);
+  if(!Number.isFinite(maxItems) || maxItems <= 0) {
+    maxItems = Number.MAX_SAFE_INTEGER;
+  }
+
+  const removed = [];
+  const kept = [];
+
+  for(let i = 0; i < queue.length; i += 1) {
+    if(matchesFilter(queue[i], level, source) && removed.length < maxItems) {
+      removed.push(queue[i]);
+    } else {
+      kept.push(queue[i]);
+    }
+  }
+
+  store.channels[channelName] = kept;
+  return removed;
+
+trim(channel, maxItems) =>
+  const channelName = normalizeChannel(channel);
+  const store = ensureAuditLogStore();
+  const queue = ensureChannel(channel);
+
+  let limit = Number(maxItems);
+  if(!Number.isFinite(limit) || limit < 0) {
+    return 0;
+  }
+
+  if(queue.length <= limit) {
+    return 0;
+  }
+
+  const removed = queue.length - limit;
+  store.channels[channelName] = queue.slice(queue.length - limit);
+  return removed;
+
+clear(channel, level, source) =>
+  const channelName = normalizeChannel(channel);
+  const store = ensureAuditLogStore();
+  const queue = ensureChannel(channel);
+
+  const hasLevel = !(level === undefined || level === null || String(level).trim() === "");
+  const hasSource = !(source === undefined || source === null || String(source).trim() === "");
+
+  if(!hasLevel && !hasSource) {
+    const removed = queue.length;
+    store.channels[channelName] = [];
+    return removed;
+  }
+
+  let removed = 0;
+  store.channels[channelName] = queue.filter((entry) => {
+    if(matchesFilter(entry, level, source)) {
+      removed += 1;
+      return false;
+    }
+    return true;
+  });
+
+  return removed;
+
+exportJson(channel) =>
+  return JSON.stringify(ensureChannel(channel));
+
+importJson(channel, jsonText, mode) =>
+  let parsed;
+
+  try {
+    parsed = JSON.parse(String(jsonText || "[]"));
+  } catch(error) {
+    return "error: invalid json";
+  }
+
+  if(!Array.isArray(parsed)) {
+    return "error: expected array json";
+  }
+
+  const channelName = normalizeChannel(channel);
+  const store = ensureAuditLogStore();
+
+  if(mode === "replace") {
+    store.channels[channelName] = parsed;
+  } else {
+    const queue = ensureChannel(channel);
+    for(let i = 0; i < parsed.length; i += 1) {
+      queue.push(parsed[i]);
+    }
+    store.channels[channelName] = queue;
+  }
+
+  return exportJson(channel);
+
+asJson(value) =>
+  try {
+    return JSON.stringify(value);
+  } catch(error) {
+    return "[]";
+  }
+
+$meta
+  title = Audit Log Kit
+  description = Structured logging lanes for diagnostics, QA, and runtime event auditing in Perchance projects.

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>5cerb5adar — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div style="max-width:640px; margin:0 auto; text-align:left; font-family:sans-serif; padding:20px;">
+  <h2>Pokémon GO — Missing Pokémon Checklist</h2>
+  <p>Select a Pokémon to toggle caught/missing.</p>
+  <ul id="pokemonListEl" style="list-style:none; padding:0;"></ul>
+  <hr>
+  <h3>Summary</h3>
+  <p><b>Total Missing:</b> <span id="missingCountEl"></span></p>
+  <p><b>Total Caught:</b> <span id="caughtCountEl"></span></p>
+  <hr>
+  <h3>Export / Import</h3>
+  <p>Copy your caught list:</p>
+  <textarea id="exportTextareaEl" rows="2" style="width:100%;" readonly></textarea>
+  <p>Paste a caught list to import:</p>
+  <textarea id="importTextareaEl" rows="2" style="width:100%;"></textarea>
+  <button id="importBtn" onclick="importCaught()" style="margin-top:8px;">Import</button>
+</div>
+
+<script>
+let allPokemon = [
+  {id:489, name:"Phione"},
+  {id:490, name:"Manaphy"},
+  {id:493, name:"Arceus"},
+  {id:636, name:"Larvesta"},
+  {id:637, name:"Volcarona"},
+  {id:641, name:"Tornadus"},
+  {id:666, name:"Vivillon"},
+  {id:671, name:"Florges"},
+  {id:680, name:"Doublade"},
+  {id:681, name:"Aegislash"},
+  {id:706, name:"Goodra (Hisuian)"},
+  {id:719, name:"Diancie"},
+  {id:721, name:"Volcanion"},
+  {id:740, name:"Crabominable"},
+  {id:749, name:"Mudbray"},
+  {id:750, name:"Mudsdale"},
+  {id:763, name:"Tsareena"},
+  {id:770, name:"Palossand"},
+  {id:771, name:"Pyukumuku"},
+  {id:772, name:"Type: Null"},
+  {id:773, name:"Silvally"},
+  {id:774, name:"Minior"},
+  {id:776, name:"Turtonator"},
+  {id:780, name:"Drampa"},
+  {id:784, name:"Kommo-o"},
+  {id:787, name:"Tapu Bulu"},
+  {id:791, name:"Lunala"},
+  {id:800, name:"Necrozma"},
+  {id:801, name:"Magearna"},
+  {id:802, name:"Marshadow"},
+  {id:803, name:"Poipole"},
+  {id:804, name:"Naganadel"},
+  {id:805, name:"Stakataka"},
+  {id:806, name:"Blacephalon"},
+  {id:807, name:"Zeraora"}
+];
+
+let caughtIds = new Set();
+
+function init() {
+  let stored = localStorage.pogoCaught;
+  if (stored) {
+    try { JSON.parse(stored).forEach(id => caughtIds.add(id)); } catch(e) {}
+  }
+  renderList();
+  updateSummary();
+  updateExport();
+}
+
+function renderList() {
+  let html = "";
+  for (let p of allPokemon) {
+    let isCaught = caughtIds.has(p.id);
+    let label = isCaught ? "✔️ Caught" : "❌ Missing";
+    let color = isCaught ? "green" : "red";
+    html += `<li style="margin:5px 0; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <button onclick="toggle(${p.id})" style="cursor:pointer; padding:5px 10px; min-width:220px; text-align:left;">
+        ${p.name} — #${p.id}
+      </button>
+      <span id="status${p.id}El" style="color:${color}; font-weight:bold;">${label}</span>
+    </li>`;
+  }
+  pokemonListEl.innerHTML = html;
+}
+
+function toggle(id) {
+  let span = document.getElementById("status" + id + "El");
+  if (caughtIds.has(id)) {
+    caughtIds.delete(id);
+    span.textContent = "❌ Missing";
+    span.style.color = "red";
+  } else {
+    caughtIds.add(id);
+    span.textContent = "✔️ Caught";
+    span.style.color = "green";
+  }
+  localStorage.pogoCaught = JSON.stringify(Array.from(caughtIds));
+  updateSummary();
+  updateExport();
+}
+
+function updateSummary() {
+  missingCountEl.textContent = allPokemon.length - caughtIds.size;
+  caughtCountEl.textContent = caughtIds.size;
+}
+
+function updateExport() {
+  exportTextareaEl.value = Array.from(caughtIds).sort((a,b) => a-b).join(", ");
+}
+
+function importCaught() {
+  let text = importTextareaEl.value;
+  if (!text.trim()) return;
+  text.split(",").forEach(s => {
+    let raw = s.trim();
+    if (!raw) return;
+    let num = parseInt(raw);
+    if (!isNaN(num) && allPokemon.some(p => p.id === num)) {
+      caughtIds.add(num);
+    } else {
+      let matched = allPokemon.find(p => p.name.toLowerCase() === raw.toLowerCase());
+      if (matched) caughtIds.add(matched.id);
+    }
+  });
+  renderList();
+  updateSummary();
+  updateExport();
+  localStorage.pogoCaught = JSON.stringify(Array.from(caughtIds));
+}
+
+init();
+</script>
+</body>
+</html>

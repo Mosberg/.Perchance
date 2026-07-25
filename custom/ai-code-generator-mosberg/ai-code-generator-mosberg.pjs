@@ -1,0 +1,1292 @@
+// https://perchance.org/ai-code-generator-mosberg
+
+ai = {import:ai-text-plugin}
+comments = {import:comments-plugin}
+literal = {import:literal-plugin}
+
+storagePrefix = ["acgMosberg."]
+
+storageKey(name) =>
+  return storagePrefix + name
+
+storageGet(name, fallback) =>
+  let key = storageKey(name)
+  if(localStorage[key] !== undefined) return localStorage[key]
+  return fallback
+
+storageSet(name, value) =>
+  localStorage[storageKey(name)] = value
+
+currentMode = [storageGet("currentMode", "architect")]
+activePendingObj = null
+
+modes
+  architect
+    category = Core
+    label = Architect
+    description = System design, file plans, and implementation sequencing for complex builds.
+    instructionPlaceholder = Describe the feature, product, or system you want to architect...
+    fileExtension = md
+    languageLabel = Markdown
+    codeHints = md,markdown
+    defaultFence = markdown
+    previewType = markdown
+    instruction
+      You are a principal software architect.
+      Design a complete implementation strategy for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Produce:
+      - architecture overview
+      - component and data flow
+      - file/folder structure
+      - step-by-step execution plan
+      - edge cases, risks, and validation checkpoints
+      Keep recommendations practical and immediately actionable.
+      $output = [this.joinItems("\n")]
+  general
+    category = Core
+    label = General Coding
+    description = Default mode for broad coding requests across languages and stacks.
+    instructionPlaceholder = Describe what code you want to generate, fix, or improve...
+    fileExtension = txt
+    languageLabel = Text
+    codeHints = txt
+    defaultFence = txt
+    previewType = text
+    instruction
+      You are an expert software engineer.
+      Complete the user's request with production-quality output:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Prefer robust, correct, maintainable solutions.
+      Include implementation details that are directly usable.
+      $output = [this.joinItems("\n")]
+  html
+    category = Web
+    label = HTML/CSS/JS App
+    description = Builds complete browser apps in one HTML file and can render live previews.
+    instructionPlaceholder = Describe the web UI, component, or browser app you want...
+    fileExtension = html
+    languageLabel = HTML
+    codeHints = html
+    defaultFence = html
+    previewType = html
+    instruction
+      Build a production-quality single-file web app for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Return complete HTML including CSS and JavaScript.
+      - Use semantic markup and responsive layout.
+      - Keep accessibility and keyboard usability in mind.
+      - Avoid unnecessary dependencies unless explicitly requested.
+      $output = [this.joinItems("\n")]
+  javascript
+    category = Web
+    label = JavaScript
+    description = Generates modern JavaScript for browser or server runtime.
+    instructionPlaceholder = Describe the JavaScript logic, module, or tool you need...
+    fileExtension = js
+    languageLabel = JavaScript
+    codeHints = js,javascript
+    defaultFence = javascript
+    previewType = javascript
+    instruction
+      Produce modern JavaScript for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Use clear module boundaries.
+      - Include defensive checks for edge cases.
+      - Keep runtime compatibility aligned with the selected target platform.
+      $output = [this.joinItems("\n")]
+  typescript
+    category = Web
+    label = TypeScript
+    description = Type-safe TypeScript with practical interfaces and runtime checks.
+    instructionPlaceholder = Describe the TypeScript API, component, or utility...
+    fileExtension = ts
+    languageLabel = TypeScript
+    codeHints = ts,typescript
+    defaultFence = typescript
+    previewType = text
+    instruction
+      Produce production-quality TypeScript for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Define precise types and interfaces.
+      - Avoid any unless absolutely necessary.
+      - Include runtime validation where type assumptions can fail.
+      $output = [this.joinItems("\n")]
+  react
+    category = Web
+    label = React
+    description = React components and patterns with strong state and accessibility practices.
+    instructionPlaceholder = Describe the React component, hook, or page to create...
+    fileExtension = tsx
+    languageLabel = TSX
+    codeHints = tsx,jsx,typescript,javascript
+    defaultFence = tsx
+    previewType = text
+    instruction
+      Build React code for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Prefer functional components and hooks.
+      - Keep state predictable and component boundaries clear.
+      - Include accessibility attributes and keyboard behavior when relevant.
+      $output = [this.joinItems("\n")]
+  node
+    category = Backend
+    label = Node.js
+    description = Node.js services, scripts, and APIs with robust error handling.
+    instructionPlaceholder = Describe the Node.js endpoint, service, or script...
+    fileExtension = js
+    languageLabel = JavaScript
+    codeHints = js,javascript
+    defaultFence = javascript
+    previewType = text
+    instruction
+      Build Node.js code for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Handle failure paths and input validation.
+      - Return clear status and error messages.
+      - Keep structure suitable for long-term maintenance.
+      $output = [this.joinItems("\n")]
+  python
+    category = Data
+    label = Python
+    description = Python code with optional in-browser execution preview.
+    instructionPlaceholder = Describe the Python script, function, or data workflow...
+    fileExtension = py
+    languageLabel = Python
+    codeHints = py,python
+    defaultFence = python
+    previewType = python
+    instruction
+      Produce Python code for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Include complete imports.
+      - Keep logic explicit and testable.
+      - If third-party packages are required, include pip install commands.
+      $output = [this.joinItems("\n")]
+  sql
+    category = Data
+    label = SQL
+    description = SQL queries, schema updates, and migration-safe statements.
+    instructionPlaceholder = Describe the query, schema change, or reporting need...
+    fileExtension = sql
+    languageLabel = SQL
+    codeHints = sql
+    defaultFence = sql
+    previewType = text
+    instruction
+      Produce SQL for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Keep SQL valid for the target dialect if provided.
+      - Include assumptions about schema when needed.
+      - Optimize for readability and correctness.
+      $output = [this.joinItems("\n")]
+  bash
+    category = Ops
+    label = Bash/Shell
+    description = Shell scripts and command flows for automation and tooling.
+    instructionPlaceholder = Describe the shell automation or CLI flow...
+    fileExtension = sh
+    languageLabel = Bash
+    codeHints = sh,bash,shell
+    defaultFence = bash
+    previewType = text
+    instruction
+      Produce shell commands/scripts for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Use safe quoting and error checks.
+      - Avoid destructive operations unless explicitly requested.
+      - Explain assumptions in concise comments if needed.
+      $output = [this.joinItems("\n")]
+  powershell
+    category = Ops
+    label = PowerShell
+    description = Windows-native automation and administrative scripting.
+    instructionPlaceholder = Describe the PowerShell script or task...
+    fileExtension = ps1
+    languageLabel = PowerShell
+    codeHints = ps1,powershell
+    defaultFence = powershell
+    previewType = text
+    instruction
+      Produce PowerShell code for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Prefer idiomatic cmdlets over aliases.
+      - Include robust error handling.
+      - Keep scripts clear and maintainable.
+      $output = [this.joinItems("\n")]
+  java
+    category = Backend
+    label = Java
+    description = Java classes/services with clear structure and strong typing.
+    instructionPlaceholder = Describe the Java class, service, or API behavior...
+    fileExtension = java
+    languageLabel = Java
+    codeHints = java
+    defaultFence = java
+    previewType = text
+    instruction
+      Produce Java code for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Use clear class and method design.
+      - Handle nulls and exceptions responsibly.
+      - Keep naming and organization production-grade.
+      $output = [this.joinItems("\n")]
+  csharp
+    category = Backend
+    label = C#
+    description = C# application and API code with practical architecture.
+    instructionPlaceholder = Describe the C# feature, service, or class...
+    fileExtension = cs
+    languageLabel = C#
+    codeHints = cs,csharp
+    defaultFence = csharp
+    previewType = text
+    instruction
+      Produce C# code for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Use clear interfaces and class boundaries.
+      - Include guard clauses and reliable error handling.
+      - Keep code aligned with modern .NET practices.
+      $output = [this.joinItems("\n")]
+  cpp
+    category = Systems
+    label = C++
+    description = C++ implementations with attention to safety and performance.
+    instructionPlaceholder = Describe the C++ module, class, or algorithm...
+    fileExtension = cpp
+    languageLabel = C++
+    codeHints = cpp,c++,cc,hpp,h
+    defaultFence = cpp
+    previewType = text
+    instruction
+      Produce C++ code for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Favor safe ownership patterns.
+      - Keep interfaces clean and explicit.
+      - Explain non-obvious performance choices briefly.
+      $output = [this.joinItems("\n")]
+  go
+    category = Backend
+    label = Go
+    description = Go services and tooling with clean package-level organization.
+    instructionPlaceholder = Describe the Go package, handler, or utility...
+    fileExtension = go
+    languageLabel = Go
+    codeHints = go
+    defaultFence = go
+    previewType = text
+    instruction
+      Produce Go code for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Keep APIs simple and composable.
+      - Handle errors explicitly.
+      - Follow idiomatic Go formatting and structure.
+      $output = [this.joinItems("\n")]
+  rust
+    category = Systems
+    label = Rust
+    description = Rust implementations with ownership-safe architecture.
+    instructionPlaceholder = Describe the Rust crate, module, or feature...
+    fileExtension = rs
+    languageLabel = Rust
+    codeHints = rs,rust
+    defaultFence = rust
+    previewType = text
+    instruction
+      Produce Rust code for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Use explicit types and robust error handling.
+      - Keep ownership and borrowing straightforward.
+      - Favor clarity before micro-optimization.
+      $output = [this.joinItems("\n")]
+  json
+    category = Data
+    label = JSON
+    description = JSON structures, schemas, and machine-readable configs with validation focus.
+    instructionPlaceholder = Describe the JSON structure or schema to generate...
+    fileExtension = json
+    languageLabel = JSON
+    codeHints = json
+    defaultFence = json
+    previewType = json
+    instruction
+      Produce JSON output for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Return valid JSON only.
+      - Keep key names consistent and predictable.
+      - Include representative nested structures when relevant.
+      $output = [this.joinItems("\n")]
+  yaml
+    category = Data
+    label = YAML
+    description = YAML configuration files for CI/CD, infra, and application settings.
+    instructionPlaceholder = Describe the YAML config you need...
+    fileExtension = yml
+    languageLabel = YAML
+    codeHints = yml,yaml
+    defaultFence = yaml
+    previewType = text
+    instruction
+      Produce YAML configuration for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Keep indentation exact and consistent.
+      - Use clear key naming and comments only when needed.
+      - Ensure structure is valid YAML.
+      $output = [this.joinItems("\n")]
+  regex
+    category = Utility
+    label = Regex Builder
+    description = Regular expressions plus explanation and test strings.
+    instructionPlaceholder = Describe what the regex should match and reject...
+    fileExtension = txt
+    languageLabel = Text
+    codeHints = regex,txt
+    defaultFence = txt
+    previewType = text
+    instruction
+      Build a regex solution for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Include:
+      - final regex pattern
+      - flags (if relevant)
+      - positive and negative test examples
+      - notes about edge cases and common pitfalls
+      $output = [this.joinItems("\n")]
+  debug
+    category = Quality
+    label = Debugging Assistant
+    description = Root-cause analysis and fix proposals with verification steps.
+    instructionPlaceholder = Paste the bug details, errors, or failing behavior...
+    fileExtension = md
+    languageLabel = Markdown
+    codeHints = md,markdown
+    defaultFence = markdown
+    previewType = markdown
+    instruction
+      Debug this issue with high precision:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Provide:
+      - likely root causes ranked by probability
+      - targeted fixes
+      - verification checklist
+      - regression-risk notes
+      $output = [this.joinItems("\n")]
+  refactor
+    category = Quality
+    label = Refactor
+    description = Refactors code for readability, structure, and maintainability.
+    instructionPlaceholder = Paste code and describe refactor goals...
+    fileExtension = txt
+    languageLabel = Text
+    codeHints = txt
+    defaultFence = txt
+    previewType = text
+    instruction
+      Refactor this implementation while preserving behavior:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Focus on:
+      - cleaner abstractions
+      - reduced duplication
+      - improved naming and structure
+      - explicit edge-case handling
+      $output = [this.joinItems("\n")]
+  tests
+    category = Quality
+    label = Test Writer
+    description = Generates unit/integration test suites and test plans.
+    instructionPlaceholder = Describe the target code and test framework...
+    fileExtension = txt
+    languageLabel = Text
+    codeHints = test,spec,txt
+    defaultFence = txt
+    previewType = text
+    instruction
+      Generate high-value tests for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Include:
+      - normal path tests
+      - edge and failure tests
+      - setup/mocking strategy if required
+      - assertions that verify meaningful behavior
+      $output = [this.joinItems("\n")]
+  codeReview
+    category = Quality
+    label = Code Review
+    description = Review mode focused on issues, risk ranking, and precise remediation.
+    instructionPlaceholder = Paste code or diff and ask for review findings...
+    fileExtension = md
+    languageLabel = Markdown
+    codeHints = md,markdown
+    defaultFence = markdown
+    previewType = markdown
+    instruction
+      Perform a strict engineering code review:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Output format:
+      - findings first, ordered by severity
+      - each finding with impact and concrete fix
+      - list missing tests and residual risks
+      Keep summaries brief compared to findings.
+      $output = [this.joinItems("\n")]
+  docs
+    category = Docs
+    label = Technical Docs
+    description = Developer documentation, guides, API notes, and architecture docs.
+    instructionPlaceholder = Describe the documentation you want created...
+    fileExtension = md
+    languageLabel = Markdown
+    codeHints = md,markdown
+    defaultFence = markdown
+    previewType = markdown
+    instruction
+      Write technical documentation for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Make it:
+      - structured and scannable
+      - technically accurate
+      - immediately useful for developers
+      $output = [this.joinItems("\n")]
+  markdown
+    category = Docs
+    label = Markdown Writer
+    description = Structured markdown content with headings, lists, and code blocks.
+    instructionPlaceholder = Describe the markdown content to generate...
+    fileExtension = md
+    languageLabel = Markdown
+    codeHints = md,markdown
+    defaultFence = markdown
+    previewType = markdown
+    instruction
+      Generate polished markdown for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Use clear headings, concise prose, and examples where relevant.
+      $output = [this.joinItems("\n")]
+  perchanceLists
+    category = Perchance
+    label = Perchance Lists
+    description = Perchance list syntax, entries, and parser-aware patterns.
+    instructionPlaceholder = Describe the Perchance lists/functionality you need...
+    fileExtension = perchance
+    languageLabel = Perchance
+    codeHints = perchance,list,txt
+    defaultFence = txt
+    previewType = text
+    instruction
+      Produce Perchance lists syntax for this request:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Keep syntax parser-safe.
+      - Use consistent indentation.
+      - Avoid malformed assignment keys and invalid braces.
+      $output = [this.joinItems("\n")]
+  perchanceHtml
+    category = Perchance
+    label = Perchance HTML
+    description = HTML for Perchance HTML panel (body content style).
+    instructionPlaceholder = Describe the Perchance HTML panel content...
+    fileExtension = html
+    languageLabel = HTML
+    codeHints = html
+    defaultFence = html
+    previewType = html
+    instruction
+      Generate HTML for a Perchance HTML panel:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      Requirements:
+      - Return only body content (no html/head/body wrappers unless asked).
+      - Prefer inline CSS/JS when needed.
+      - Keep output compatible with Perchance embedding.
+      $output = [this.joinItems("\n")]
+  brainy
+    category = Utility
+    label = Brainy Reasoning
+    description = Shows deeper stepwise thinking before final implementation output.
+    instructionPlaceholder = Ask a difficult coding question or reasoning-heavy task...
+    fileExtension = md
+    languageLabel = Markdown
+    codeHints = md,markdown
+    defaultFence = markdown
+    previewType = markdown
+    instruction
+      Solve this request with deliberate step-by-step reasoning:
+      <<<instruction>>>
+      Additional context:
+      <<<context>>>
+      If simple, keep concise. If complex, show reasoning and then the final answer.
+      $output = [this.joinItems("\n")]
+
+escapeHtml(text) =>
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+
+syncModeFromUi() =>
+  if(window.currentModeEl && currentModeEl.value) {
+    currentMode = currentModeEl.value
+    storageSet("currentMode", currentMode)
+    localStorage.currentMode = currentMode
+  }
+  if(!modes[currentMode]) currentMode = "general"
+
+getCurrentMode() =>
+  syncModeFromUi()
+  return modes[currentMode] || modes.general
+
+getModeEntries() =>
+  return modes.selectAll
+    .filter(m => m.label !== undefined)
+    .map(m => {
+      return {
+        name: m.getName,
+        label: String(m.label || m.getName),
+        category: String(m.category || "Other"),
+        description: String(m.description || ""),
+        fileExtension: String(m.fileExtension || "txt")
+      }
+    })
+
+uiValue(id, fallback) =>
+  if(window[id] && window[id].value !== undefined) return window[id].value
+  return fallback
+
+uiChecked(id, fallback) =>
+  if(window[id] && window[id].checked !== undefined) return !!window[id].checked
+  return !!fallback
+
+resolveModeStartWith(mode) =>
+  let useFence = uiChecked("useFenceEl", true)
+  if(useFence && mode.defaultFence) {
+    let fenceName = String(mode.defaultFence || "").trim()
+    if(fenceName) return "```" + fenceName + "\n"
+  }
+  if(mode.startWithText) return String(mode.startWithText)
+  return ""
+
+resolveModeHideStartWith(mode, startWithText) =>
+  if(String(startWithText || "").startsWith("```")) return true
+  return mode.hideStartWith === true
+
+shouldStartFresh() =>
+  return uiChecked("startFreshEl", false)
+
+buildInstruction() =>
+  syncModeFromUi()
+
+  let mode = getCurrentMode()
+  let userInstruction = (uiValue("instructionEl", "") || "").trim()
+  let projectContext = (uiValue("contextEl", "") || "").trim()
+  let extraRules = (uiValue("customInstructionEl", "") || "").trim()
+
+  let responseDepth = uiValue("responseDepthEl", "balanced")
+  let outputShape = uiValue("outputShapeEl", "single-file")
+  let targetPlatform = uiValue("targetPlatformEl", "generic")
+  let framework = uiValue("frameworkEl", "auto")
+
+  let includeTests = uiChecked("includeTestsEl", false)
+  let includeComments = uiChecked("includeCommentsEl", false)
+  let includeExplanation = uiChecked("includeExplanationEl", true)
+  let strictLint = uiChecked("strictLintEl", true)
+  let includeChecklist = uiChecked("includeChecklistEl", true)
+  let safeOutput = uiChecked("safeOutputEl", true)
+  let useFence = uiChecked("useFenceEl", true)
+  let deterministic = uiChecked("deterministicEl", false)
+
+  if(!userInstruction) userInstruction = "Generate a useful starter implementation for the selected mode."
+  if(!projectContext) projectContext = "No additional project context provided."
+
+  let template = mode.instruction.toString()
+  template = template.split("<<<instruction>>>").join(userInstruction)
+  template = template.split("<<<context>>>").join(projectContext)
+
+  let parts = [template, "", "Global generation configuration:"]
+
+  let depthNote = "balanced detail"
+  if(responseDepth === "concise") depthNote = "concise output with minimal extra prose"
+  if(responseDepth === "deep") depthNote = "deep output with strong implementation detail"
+  parts.push("- Response depth: " + depthNote + ".")
+
+  parts.push("- Target platform/runtime: " + targetPlatform + ".")
+  if(framework !== "auto") parts.push("- Preferred framework: " + framework + ".")
+
+  if(outputShape === "single-file") {
+    parts.push("- Output shape: single file unless multiple files are strictly needed.")
+  } else if(outputShape === "multi-file") {
+    if(useFence) {
+      parts.push("- Output shape: multi-file. Use this exact file block format for each file:")
+      parts.push("  ```file:path/to/file.ext")
+      parts.push("  file content")
+      parts.push("  ```")
+    } else {
+      parts.push("- Output shape: multi-file. Use this exact delimiter format for each file:")
+      parts.push("  --- FILE: path/to/file.ext ---")
+      parts.push("  file content")
+    }
+  } else if(outputShape === "patch") {
+    parts.push("- Output shape: unified diff patch for changed files.")
+    parts.push("- Include enough context in each hunk for safe application.")
+  }
+
+  if(useFence) {
+    parts.push("- Wrap code in markdown fenced blocks.")
+  } else {
+    parts.push("- Do not use markdown fenced code blocks unless explicitly required.")
+  }
+
+  if(includeTests) {
+    parts.push("- Include tests relevant to the produced code.")
+  } else {
+    parts.push("- Do not add tests unless the request explicitly asks for tests.")
+  }
+
+  if(includeComments) {
+    parts.push("- Include concise comments for non-obvious logic.")
+  } else {
+    parts.push("- Keep comments minimal and only where strictly necessary.")
+  }
+
+  if(includeExplanation) {
+    parts.push("- Add concise implementation notes after the code when helpful.")
+  } else {
+    parts.push("- Output code/artifacts only with no extra explanatory prose.")
+  }
+
+  if(strictLint) {
+    parts.push("- Ensure syntax correctness and lint-friendly style.")
+  }
+
+  if(safeOutput) {
+    parts.push("- Avoid destructive operations and unsafe commands unless explicitly requested.")
+  }
+
+  if(deterministic) {
+    parts.push("- Favor deterministic naming, stable ordering, and predictable behavior.")
+  }
+
+  if(includeChecklist) {
+    parts.push("- End with a short implementation checklist or validation checklist.")
+  }
+
+  if(extraRules) {
+    parts.push("")
+    parts.push("Additional rules:")
+    parts.push(extraRules)
+  }
+
+  return parts.join("\n")
+
+settings
+  instruction() =>
+    this.lastModeUsed = currentMode
+    return buildInstruction()
+  startWith() =>
+    let mode = getCurrentMode()
+    if(shouldStartFresh()) {
+      let freshStart = resolveModeStartWith(mode)
+      this.lastHideStartWith = resolveModeHideStartWith(mode, freshStart)
+      return freshStart
+    }
+    if(responseEl.value.trim() === "") {
+      let initialStart = resolveModeStartWith(mode)
+      this.lastHideStartWith = resolveModeHideStartWith(mode, initialStart)
+      return initialStart
+    }
+    this.lastHideStartWith = false
+    return responseEl.value
+  hideStartWith = [resolveModeHideStartWith(getCurrentMode(), (shouldStartFresh() || responseEl.value.trim() === "") ? resolveModeStartWith(getCurrentMode()) : "")]
+  outputTo = [responseEl]
+  onChunk(data) =>
+    if(responseEl.scrollTop + responseEl.offsetHeight > responseEl.scrollHeight - 70) {
+      responseEl.scrollTop = responseEl.scrollHeight
+    }
+    if(window.updateOutputStats) window.updateOutputStats()
+    if(window.updatePreviewDiff) window.updatePreviewDiff()
+    if(modes[this.lastModeUsed] && modes[this.lastModeUsed].onChunk) modes[this.lastModeUsed].onChunk(data)
+  onStart(data) =>
+    setGeneratingUi(true)
+    if(modes[this.lastModeUsed] && modes[this.lastModeUsed].onStart) modes[this.lastModeUsed].onStart(data)
+  onFinish(data) =>
+    setGeneratingUi(false)
+    storageSet("response", responseEl.value)
+    localStorage.response = responseEl.value
+    if(window.updateOutputStats) window.updateOutputStats()
+    if(window.updatePreviewDiff) window.updatePreviewDiff()
+    if(uiChecked("autoPreviewEl", true)) runPreviewForCurrentMode()
+    if(uiChecked("autoCopyEl", false) && responseEl.value.trim()) {
+      navigator.clipboard.writeText(responseEl.value).catch(e => console.error(e))
+    }
+    if(window.recordHistorySnapshot && uiChecked("autoHistoryEl", true)) {
+      window.recordHistorySnapshot({auto:true, mode: currentMode})
+    }
+    if(modes[this.lastModeUsed] && modes[this.lastModeUsed].onFinish) modes[this.lastModeUsed].onFinish(data)
+  render = [ getCurrentMode().render || null ]
+
+setGeneratingUi(isGenerating) =>
+  if(window.generateBtn) {
+    generateBtn.disabled = isGenerating
+    if(isGenerating) {
+      generateBtn.textContent = "Generating..."
+    } else {
+      generateBtn.textContent = responseEl && responseEl.value.trim() ? "Regenerate" : "Generate"
+    }
+  }
+  if(window.continueBtn) continueBtn.disabled = isGenerating || (responseEl && responseEl.value.trim() === "")
+  if(window.bottomContinueBtn) bottomContinueBtn.disabled = isGenerating || (responseEl && responseEl.value.trim() === "")
+  if(window.retryBtn) retryBtn.disabled = isGenerating
+  if(window.responseCopyBtn && responseEl && responseEl.value.trim()) responseCopyBtn.style.display = ""
+
+async generate() =>
+  window.responseContentBeforeLastGenerate = responseEl.value
+
+  let pendingObj = ai(settings)
+  activePendingObj = pendingObj
+
+  if(window.stopBtn) stopBtn.style.display = ""
+  if(window.bottomStopBtn) bottomStopBtn.style.display = ""
+  if(window.loaderEl) loaderEl.innerHTML = pendingObj.loadingIndicatorHtml || "Generating..."
+
+  function stopClickHandler() {
+    if(activePendingObj && activePendingObj.stop) activePendingObj.stop()
+    if(window.stopBtn) stopBtn.style.display = "none"
+    if(window.bottomStopBtn) bottomStopBtn.style.display = "none"
+    if(window.loaderEl) loaderEl.innerHTML = "Stopped."
+  }
+
+  if(window.stopBtn) stopBtn.onclick = stopClickHandler
+  if(window.bottomStopBtn) bottomStopBtn.onclick = stopClickHandler
+
+  try {
+    let data = await pendingObj.onFinishPromise
+    return data
+  } catch(e) {
+    console.error(e)
+    if(window.loaderEl) loaderEl.innerHTML = "Generation failed. Please retry."
+    setGeneratingUi(false)
+  } finally {
+    activePendingObj = null
+    if(window.stopBtn) stopBtn.style.display = "none"
+    if(window.bottomStopBtn) bottomStopBtn.style.display = "none"
+    if(window.loaderEl && loaderEl.innerHTML === "Stopped.") {
+      // leave stopped text briefly
+    } else if(window.loaderEl) {
+      loaderEl.innerHTML = ""
+    }
+  }
+
+extractCodeBlocks(text) =>
+  let source = String(text || "")
+  let blocks = []
+  let regex = /```([a-zA-Z0-9_+-]*)\s*\n?([\s\S]*?)```/g
+  let match
+  while((match = regex.exec(source))) {
+    blocks.push({
+      lang: String(match[1] || "").toLowerCase(),
+      code: String(match[2] || "").trim()
+    })
+  }
+  return blocks
+
+pickCodeBlockByHint(text, hintsCsv) =>
+  let blocks = extractCodeBlocks(text)
+  if(blocks.length === 0) return String(text || "").trim()
+
+  let hints = String(hintsCsv || "")
+    .split(",")
+    .map(h => h.trim().toLowerCase())
+    .filter(h => h)
+
+  if(hints.length > 0) {
+    for(let hint of hints) {
+      let found = blocks.find(b => b.lang === hint || b.lang.includes(hint) || hint.includes(b.lang))
+      if(found) return found.code
+    }
+  }
+
+  return blocks[0].code
+
+extractHtmlPage(text) =>
+  let source = String(text || "")
+  let blocks = extractCodeBlocks(source)
+  let htmlBlock = blocks.find(b => b.lang === "html" || b.code.includes("<html") || b.code.includes("<body"))
+  if(htmlBlock) return htmlBlock.code
+
+  let docMatch = source.match(/<!DOCTYPE html>[\s\S]*<\/html>/i)
+  if(docMatch) return docMatch[0]
+
+  let bodyMatch = source.match(/<body[^>]*>[\s\S]*<\/body>/i)
+  if(bodyMatch) return bodyMatch[0]
+
+  return source
+
+renderPreviewMessage(title, messageHtml) =>
+  renderedOutputEl.innerHTML = `<div style="border:1px solid var(--mosberg-border,#d5dbe4); border-radius:10px; padding:10px; background:var(--mosberg-card,#ffffff);"><div style="font-weight:700; margin-bottom:8px;">${escapeHtml(title)}</div><div style="font-size:0.95rem; line-height:1.45;">${messageHtml}</div></div>`
+
+renderCodePreview(codeText, title, languageLabel) =>
+  let safeCode = escapeHtml(codeText || "")
+  renderedOutputEl.innerHTML = `<div style="border:1px solid var(--mosberg-border,#d5dbe4); border-radius:10px; overflow:hidden; background:var(--mosberg-card,#ffffff);"><div style="padding:8px 10px; border-bottom:1px solid var(--mosberg-border,#d5dbe4); font-weight:700; display:flex; justify-content:space-between; gap:8px;"><span>${escapeHtml(title || "Code Preview")}</span><span style="opacity:0.7; font-weight:500;">${escapeHtml(languageLabel || "code")}</span></div><pre style="margin:0; padding:12px; max-height:70vh; overflow:auto; background:#11161e; color:#e6edf7; font-size:0.85rem;">${safeCode}</pre></div>`
+
+renderHtmlPreview(text) =>
+  let htmlPage = extractHtmlPage(text)
+  renderedOutputEl.innerHTML = `<div style="font-weight:700; margin-bottom:8px;">Live HTML Preview</div><iframe srcdoc="" style="width:100%; height:760px; max-height:80vh; border:1px solid var(--mosberg-border,#d5dbe4); border-radius:10px; background:#fff;"></iframe>`
+  renderedOutputEl.querySelector("iframe").srcdoc = htmlPage
+
+renderJavaScriptPreview(text) =>
+  let jsCode = pickCodeBlockByHint(text, "javascript,js,ts,typescript")
+  if(!jsCode.trim()) {
+    renderPreviewMessage("JavaScript Preview", "No JavaScript code was detected.")
+    return
+  }
+
+  let payload = encodeURIComponent(JSON.stringify({code: jsCode}))
+  let htmlPage = `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <style>
+        body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 0; padding: 10px; background: #0e1117; color: #d2deee; }
+        #log { white-space: pre-wrap; line-height: 1.45; }
+        .log { color: #d2deee; }
+        .warn { color: #f5cc80; }
+        .error { color: #ff8a8a; }
+      </style>
+    </head>
+    <body>
+      <div id="log">Running JavaScript...\n</div>
+      <script id="payloadEl" type="application/json">${payload}</script>
+      <script>
+        const logEl = document.getElementById("log");
+        const append = (cls, args) => {
+          const line = document.createElement("div");
+          line.className = cls;
+          line.textContent = args.map(a => {
+            if (typeof a === "object") {
+              try { return JSON.stringify(a, null, 2); } catch (e) { return String(a); }
+            }
+            return String(a);
+          }).join(" ");
+          logEl.appendChild(line);
+        };
+
+        const origLog = console.log;
+        const origWarn = console.warn;
+        const origError = console.error;
+
+        console.log = (...args) => { append("log", args); origLog.apply(console, args); };
+        console.warn = (...args) => { append("warn", args); origWarn.apply(console, args); };
+        console.error = (...args) => { append("error", args); origError.apply(console, args); };
+
+        window.onerror = (msg, src, line, col) => {
+          append("error", ["Error:", msg, "at", line + ":" + col]);
+        };
+
+        try {
+          const data = JSON.parse(decodeURIComponent(document.getElementById("payloadEl").textContent));
+          const runner = new Function(data.code);
+          const result = runner();
+          if (result && typeof result.then === "function") {
+            result.then(v => console.log("Promise resolved:", v)).catch(e => console.error("Promise rejected:", e && e.message ? e.message : e));
+          }
+        } catch (e) {
+          console.error("Runtime error:", e && e.message ? e.message : e);
+        }
+      </script>
+    </body>
+  </html>
+  `
+
+  renderedOutputEl.innerHTML = `<div style="font-weight:700; margin-bottom:8px;">JavaScript Sandbox Console</div><iframe srcdoc="" style="width:100%; height:520px; max-height:70vh; border:1px solid var(--mosberg-border,#d5dbe4); border-radius:10px; background:#fff;"></iframe>`
+  renderedOutputEl.querySelector("iframe").srcdoc = htmlPage
+
+renderPythonPreview(text) =>
+  let pythonImports = [...String(text || "").matchAll(/pip install ([^\n`]+)/gs)]
+    .map(m => m[1].split(" "))
+    .flat()
+    .map(p => p.trim())
+    .filter(p => p)
+
+  let pythonCodeBlocks = [...String(text || "").matchAll(/```(py|python)([\s\S]*?)```/gs)].map(m => m[2])
+
+  if(pythonCodeBlocks.length === 0) {
+    pythonCodeBlocks = [...String(text || "").matchAll(/```([\s\S]*?)```/gs)].map(m => m[1])
+  }
+
+  if(pythonCodeBlocks.length === 0 && /(^|\n)import\s+/.test(String(text || ""))) {
+    pythonCodeBlocks = [String(text || "")]
+  }
+
+  if(pythonCodeBlocks.length === 0) {
+    renderPreviewMessage("Python Preview", "No executable Python code was detected.")
+    return
+  }
+
+  let oneOrMoreHasNoTopImports = false
+  for(let block of pythonCodeBlocks) {
+    if(!/(^|\n)import\s+/.test(block.split("\n").slice(0, 6).join("\n"))) {
+      oneOrMoreHasNoTopImports = true
+      break
+    }
+  }
+  if(oneOrMoreHasNoTopImports) {
+    pythonCodeBlocks = [pythonCodeBlocks.join("\n\n")]
+  }
+
+  let matplotlibImportCode = [
+    "import matplotlib",
+    "matplotlib.use(\"module://matplotlib_pyodide.html5_canvas_backend\")",
+    "import matplotlib_pyodide.html5_canvas_backend",
+    "matplotlib_pyodide.html5_canvas_backend._base_fonts_url=\"https://cdn.jsdelivr.net/pyodide/v0.25.1/full/fonts/\""
+  ].join("\n")
+
+  for(let i = 0; i < pythonCodeBlocks.length; i++) {
+    if(pythonCodeBlocks[i].includes("import matplotlib.") && !pythonCodeBlocks[i].includes("import matplotlib\n")) {
+      pythonImports.push("matplotlib")
+      pythonCodeBlocks[i] = matplotlibImportCode + "\n" + pythonCodeBlocks[i]
+    } else if(pythonCodeBlocks[i].includes("import matplotlib\n")) {
+      pythonImports.push("matplotlib")
+      pythonCodeBlocks[i] = pythonCodeBlocks[i].replace(/import matplotlib\n/g, matplotlibImportCode + "\n")
+    }
+
+    if(pythonCodeBlocks[i].includes("np.") && !pythonCodeBlocks[i].includes("import numpy as np")) {
+      pythonImports.push("numpy")
+      pythonCodeBlocks[i] = "import numpy as np\n" + pythonCodeBlocks[i]
+    }
+    if(pythonCodeBlocks[i].includes("pd.") && !pythonCodeBlocks[i].includes("import pandas as pd")) {
+      pythonImports.push("pandas")
+      pythonCodeBlocks[i] = "import pandas as pd\n" + pythonCodeBlocks[i]
+    }
+  }
+
+  for(let i = 0; i < pythonCodeBlocks.length; i++) {
+    let lines = pythonCodeBlocks[i].split("\n")
+    lines = lines.filter(l => !l.startsWith("pip install ") && !l.startsWith("!pip install "))
+    pythonCodeBlocks[i] = lines.join("\n")
+  }
+
+  pythonImports = [...new Set(pythonImports)]
+
+  let payload = encodeURIComponent(JSON.stringify({pythonCodeBlocks, pythonImports}))
+  let htmlPage = `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+      <style>
+        body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 0; padding: 10px; background: #0f1218; color: #d8e2f0; }
+        .stderr { color: #ff8b8b; white-space: pre-wrap; }
+        .stdout { white-space: pre-wrap; }
+      </style>
+    </head>
+    <body>
+      <div id="outputEl">Loading Python runtime...</div>
+      <script id="dataEl" type="application/json">${payload}</script>
+      <script type="module">
+        const outputEl = document.getElementById("outputEl");
+        const data = JSON.parse(decodeURIComponent(document.getElementById("dataEl").textContent));
+        let outputs = [];
+
+        const append = (cls, text) => {
+          outputs.push("<div class='" + cls + "'>" + String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;") + "</div>");
+          outputEl.innerHTML = outputs.join("");
+        };
+
+        try {
+          const pyodide = await loadPyodide({
+            stdout: (line) => append("stdout", line),
+            stderr: (line) => append("stderr", line)
+          });
+
+          if (data.pythonImports.length) {
+            append("stdout", "Loading packages: " + data.pythonImports.join(", "));
+            await pyodide.loadPackage(data.pythonImports).catch(e => append("stderr", e && e.message ? e.message : e));
+          }
+
+          for (const block of data.pythonCodeBlocks) {
+            try {
+              const result = await pyodide.runPythonAsync(block);
+              if (result !== undefined && result !== null && String(result).length > 0) {
+                append("stdout", String(result));
+              }
+            } catch (e) {
+              append("stderr", e && e.message ? e.message : e);
+            }
+          }
+
+          if (!outputs.length) {
+            append("stdout", "Python execution finished with no textual output.");
+          }
+        } catch (e) {
+          append("stderr", "Runtime setup failed: " + (e && e.message ? e.message : e));
+        }
+      </script>
+    </body>
+  </html>
+  `
+
+  renderedOutputEl.innerHTML = `<div style="font-weight:700; margin-bottom:8px;">Executed Python Output</div><iframe srcdoc="" style="width:100%; height:760px; max-height:82vh; border:1px solid var(--mosberg-border,#d5dbe4); border-radius:10px; background:#fff;"></iframe>`
+  renderedOutputEl.querySelector("iframe").srcdoc = htmlPage
+
+renderMarkdownPreview(text) =>
+  let markdownText = pickCodeBlockByHint(text, "markdown,md")
+  if(!markdownText.trim()) markdownText = String(text || "")
+
+  let payload = encodeURIComponent(markdownText)
+  let htmlPage = `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+      <style>
+        body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 16px; line-height: 1.6; color: #172130; background: #ffffff; }
+        pre { background: #0f1520; color: #e5ecf8; padding: 10px; border-radius: 8px; overflow: auto; }
+        code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      </style>
+    </head>
+    <body>
+      <div id="mdOut"></div>
+      <script>
+        const raw = decodeURIComponent("${payload}");
+        document.getElementById("mdOut").innerHTML = marked.parse(raw);
+      </script>
+    </body>
+  </html>
+  `
+
+  renderedOutputEl.innerHTML = `<div style="font-weight:700; margin-bottom:8px;">Markdown Preview</div><iframe srcdoc="" style="width:100%; height:680px; max-height:78vh; border:1px solid var(--mosberg-border,#d5dbe4); border-radius:10px; background:#fff;"></iframe>`
+  renderedOutputEl.querySelector("iframe").srcdoc = htmlPage
+
+renderJsonPreview(text) =>
+  let raw = pickCodeBlockByHint(text, "json")
+  if(!raw.trim()) raw = String(text || "")
+
+  try {
+    let parsed = JSON.parse(raw)
+    renderCodePreview(JSON.stringify(parsed, null, 2), "JSON Validation", "JSON")
+  } catch(e) {
+    renderPreviewMessage("JSON Validation Error", `<div style="color:#b3261e; font-weight:700; margin-bottom:6px;">Invalid JSON</div><pre style="white-space:pre-wrap; background:#f8f9fb; padding:8px; border-radius:8px; border:1px solid #e4e8ef;">${escapeHtml(String(e && e.message ? e.message : e))}</pre>`)
+  }
+
+runPreviewForCurrentMode() =>
+  let mode = getCurrentMode()
+  let outputText = String(responseEl && responseEl.value ? responseEl.value : "")
+  let previewType = String(mode.previewType || "text")
+
+  if(!outputText.trim()) {
+    renderPreviewMessage("Preview", "No generated output yet.")
+    return
+  }
+
+  if(previewType === "html") {
+    renderHtmlPreview(outputText)
+    return
+  }
+
+  if(previewType === "python") {
+    renderPythonPreview(outputText)
+    return
+  }
+
+  if(previewType === "javascript") {
+    if(uiChecked("runJsEl", false)) {
+      renderJavaScriptPreview(outputText)
+    } else {
+      renderCodePreview(pickCodeBlockByHint(outputText, mode.codeHints), "Code Preview", mode.languageLabel || mode.label)
+    }
+    return
+  }
+
+  if(previewType === "markdown") {
+    renderMarkdownPreview(outputText)
+    return
+  }
+
+  if(previewType === "json") {
+    renderJsonPreview(outputText)
+    return
+  }
+
+  renderCodePreview(pickCodeBlockByHint(outputText, mode.codeHints), "Code Preview", mode.languageLabel || mode.label)
+
+clearRenderedOutput() =>
+  renderPreviewMessage("Preview", "Preview cleared.")
+
+generateModesHtml() =>
+  let selectedMode = storageGet("currentMode", currentMode || "architect")
+  return getModeEntries()
+    .map(entry => {
+      let isSelected = entry.name === selectedMode ? "selected" : ""
+      return `<option ${isSelected} value="${escapeHtml(entry.name)}" data-category="${escapeHtml(entry.category)}">${escapeHtml(entry.category + " | " + entry.label)}</option>`
+    })
+    .join("")
+
+generateModeCategoryOptionsHtml() =>
+  let categoryMap = {}
+  for(let entry of getModeEntries()) {
+    categoryMap[entry.category] = true
+  }
+  let categories = Object.keys(categoryMap).sort()
+  let html = `<option value="all">All Categories</option>`
+  for(let category of categories) {
+    html += `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`
+  }
+  return html
+
+urlModeToActualMode
+  html = html
+  javascript = javascript
+  js = javascript
+  typescript = typescript
+  ts = typescript
+  react = react
+  node = node
+  python = python
+  py = python
+  sql = sql
+  bash = bash
+  shell = bash
+  powershell = powershell
+  ps = powershell
+  java = java
+  csharp = csharp
+  cpp = cpp
+  go = go
+  rust = rust
+  json = json
+  yaml = yaml
+  regex = regex
+  docs = docs
+  markdown = markdown
+  review = codeReview
+  test = tests
+  debug = debug
+  refactor = refactor
+  perchance = perchanceLists
+  perchancehtml = perchanceHtml
+
+$meta
+  async dynamic(inputs) =>
+    let baseTitle = "AI Code Generator Mosberg (free, no sign-up, advanced studio)"
+    let baseDescription = "Advanced AI coding workspace with many language modes, architecture planning, refactor/review/test flows, output tools, profiles, history, and live previews for HTML/JS/Python/Markdown/JSON."
+
+    let modeMap = {
+      html: "HTML/CSS/JS",
+      javascript: "JavaScript",
+      js: "JavaScript",
+      typescript: "TypeScript",
+      ts: "TypeScript",
+      react: "React",
+      node: "Node.js",
+      python: "Python",
+      py: "Python",
+      sql: "SQL",
+      bash: "Bash",
+      powershell: "PowerShell",
+      java: "Java",
+      csharp: "C#",
+      cpp: "C++",
+      go: "Go",
+      rust: "Rust",
+      json: "JSON",
+      yaml: "YAML",
+      regex: "Regex",
+      docs: "Documentation",
+      markdown: "Markdown",
+      review: "Code Review",
+      test: "Testing",
+      debug: "Debugging",
+      refactor: "Refactoring",
+      perchance: "Perchance Lists",
+      perchancehtml: "Perchance HTML"
+    }
+
+    let modeParam = inputs.urlParams && inputs.urlParams.mode ? String(inputs.urlParams.mode).toLowerCase() : ""
+    if(modeParam && modeMap[modeParam]) {
+      let modeLabel = modeMap[modeParam]
+      return {
+        title: "AI " + modeLabel + " Generator Mosberg (free, no sign-up)",
+        description: "Generate and optimize " + modeLabel + " code with advanced controls, profiles, previews, and multi-mode coding workflows."
+      }
+    }
+
+    return {
+      title: baseTitle,
+      description: baseDescription
+    }

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>add-poke — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div style="display:flex; height:100vh; font-family:sans-serif; text-align:left; overflow:hidden;">
+  <!-- Sidebar -->
+  <div style="width:260px; border-right:1px solid #ccc; display:flex; flex-direction:column; background:#fafafa;">
+    <div style="padding:10px; border-bottom:1px solid #ccc;">
+      <b>Set:</b> <input id="setNameInput" style="width:130px;" onchange="data.set_name=this.value">
+      <button onclick="addMon()">+ Add</button>
+    </div>
+    <div id="speciesListCtn" style="flex:1; overflow:auto;"></div>
+    <div style="padding:10px; border-top:1px solid #ccc; display:flex; flex-direction:column; gap:6px;">
+      <button onclick="importJson()">📂 Import JSON</button>
+      <button onclick="exportJson()">💾 Export JSON</button>
+      <button onclick="exportC()" style="background:#222; color:#fff;">🛠 Export C Headers</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+    <div id="emptyStateCtn" style="flex:1; display:flex; align-items:center; justify-content:center; color:#888; font-size:1.2rem;">
+      Select or add a Pokémon to start editing.
+    </div>
+
+    <div id="editorCtn" hidden style="flex:1; overflow:auto; padding:20px;">
+      <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+        <button onclick="generateAiMon()">🎲 AI Generate Data</button>
+        <button onclick="generateAiImage()">🎨 AI Sprite</button>
+        <div id="loadingEl" hidden style="background:#333; color:#fff; padding:4px 10px; border-radius:4px;">⏳ Working...</div>
+        <button onclick="deleteMon()" style="margin-left:auto; color:#c00;">🗑 Delete</button>
+      </div>
+
+      <div style="display:flex; gap:4px; border-bottom:2px solid #ccc; margin-bottom:12px;">
+        <button class="tabBtn" onclick="showTab('basic')">Basic</button>
+        <button class="tabBtn" onclick="showTab('stats')">Stats</button>
+        <button class="tabBtn" onclick="showTab('moves')">Moves / Evos</button>
+        <button class="tabBtn" onclick="showTab('pokedex')">Pokédex</button>
+        <button class="tabBtn" onclick="showTab('graphics')">Graphics / Cry</button>
+      </div>
+
+      <!-- Basic Tab -->
+      <div id="tabBasic" class="tabPane">
+        <div style="display:grid; grid-template-columns:150px 1fr; gap:8px; max-width:600px;">
+          <label>Name</label><input id="nameInput">
+          <label>Internal ID</label><input id="internalIdInput">
+          <label>Dex Number</label><input id="dexNumberInput" type="number">
+          <label>Types (JSON)</label><input id="typesInput">
+          <label>Primary Ability</label><input id="abil1Input">
+          <label>Secondary Ability</label><input id="abil2Input">
+          <label>Hidden Ability</label><input id="abilHInput">
+          <label>Catch Rate</label><input id="catchRateInput" type="number">
+          <label>Exp Yield</label><input id="expYieldInput" type="number">
+          <label>Growth Rate</label><input id="growthRateInput">
+          <label>Egg Groups (JSON)</label><input id="eggGroupsInput">
+          <label>Gender Ratio</label><input id="genderRatioInput">
+          <label>Base Friendship</label><input id="friendshipInput" type="number">
+          <label>Body Color</label><input id="bodyColorInput">
+          <label>Flags (JSON)</label><input id="flagsInput">
+        </div>
+      </div>
+
+      <!-- Stats Tab -->
+      <div id="tabStats" class="tabPane" hidden>
+        <h4>Base Stats</h4>
+        <div style="display:grid; grid-template-columns:150px 80px; gap:8px;">
+          <label>HP</label><input id="hpInput" type="number">
+          <label>Attack</label><input id="atkInput" type="number">
+          <label>Defense</label><input id="defInput" type="number">
+          <label>Sp. Attack</label><input id="spaInput" type="number">
+          <label>Sp. Defense</label><input id="spdInput" type="number">
+          <label>Speed</label><input id="speInput" type="number">
+        </div>
+        <h4 style="margin-top:14px;">EV Yield</h4>
+        <div style="display:grid; grid-template-columns:150px 80px; gap:8px;">
+          <label>HP</label><input id="evHpInput" type="number">
+          <label>Attack</label><input id="evAtkInput" type="number">
+          <label>Defense</label><input id="evDefInput" type="number">
+          <label>Sp. Attack</label><input id="evSpaInput" type="number">
+          <label>Sp. Defense</label><input id="evSpdInput" type="number">
+          <label>Speed</label><input id="evSpeInput" type="number">
+        </div>
+      </div>
+
+      <!-- Moves Tab -->
+      <div id="tabMoves" class="tabPane" hidden>
+        <h4>Level-Up Moves (JSON)</h4>
+        <textarea id="levelUpMovesInput" style="width:100%; height:100px;" ></textarea>
+        <h4>Egg Moves (JSON array)</h4>
+        <textarea id="eggMovesInput" style="width:100%; height:60px;" ></textarea>
+        <h4>Evolutions (JSON)</h4>
+        <textarea id="evolutionsInput" style="width:100%; height:100px;" ></textarea>
+      </div>
+
+      <!-- Pokedex Tab -->
+      <div id="tabPokedex" class="tabPane" hidden>
+        <div style="display:grid; grid-template-columns:150px 1fr; gap:8px; max-width:500px;">
+          <label>Category</label><input id="categoryInput">
+          <label>Height (dm)</label><input id="heightInput" type="number">
+          <label>Weight (hg)</label><input id="weightInput" type="number">
+        </div>
+        <h4>Description Lines (JSON)</h4>
+        <textarea id="dexTextInput" style="width:100%; height:100px;" ></textarea>
+        <div style="margin-top:12px;">
+          <img id="previewImg" style="max-width:200px; image-rendering:pixelated; border:1px solid #ccc; background:#f0f0f0;" src="https://placehold.co/200x200?text=No+Image">
+        </div>
+      </div>
+
+      <!-- Graphics Tab -->
+      <div id="tabGraphics" class="tabPane" hidden>
+        <div style="display:grid; grid-template-columns:150px 1fr; gap:8px; max-width:600px;">
+          <label>Folder</label><input id="gfxFolderInput">
+          <label>Front Pic</label><input id="gfxFrontInput">
+          <label>Back Pic</label><input id="gfxBackInput">
+          <label>Icon</label><input id="gfxIconInput">
+          <label>Footprint</label><input id="gfxFootInput">
+          <label>Palette</label><input id="gfxPalInput">
+          <label>Shiny Palette</label><input id="gfxShinyInput">
+          <label>Cry File</label><input id="cryFileInput">
+          <label>Cry ID</label><input id="cryIdInput">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Export Modal -->
+<div id="exportCtn" hidden style="position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;">
+  <div style="background:#fff; width:85%; height:85%; padding:16px; display:flex; flex-direction:column; border-radius:6px;">
+    <h3 style="margin:0 0 8px;">Exported C Headers</h3>
+    <textarea id="exportTextarea" style="flex:1; font-family:monospace; font-size:12px; white-space:pre;"></textarea>
+    <button onclick="exportCtn.hidden=true" style="margin-top:10px; align-self:flex-end;">Close</button>
+  </div>
+</div>
+
+<style>
+  .tabBtn { background:#e0e0e0; border:none; padding:6px 14px; cursor:pointer; border-radius:4px 4px 0 0; }
+  .tabBtn:hover { background:#d0d0d0; }
+  #speciesListCtn > div:hover { background:#e8f0ff; }
+  input, textarea { padding:4px; font-family:inherit; }
+  label { align-self:center; font-size:0.9rem; color:#333; }
+</style>
+
+<script>
+typesInput.placeholder = '["TYPE_DARK","TYPE_GHOST"]';
+eggGroupsInput.placeholder = '["EGG_GROUP_FIELD"]';
+flagsInput.placeholder = '["FLAG_LEGENDARY"]';
+levelUpMovesInput.placeholder = '[{"level":1,"move":"MOVE_TACKLE"}]';
+eggMovesInput.placeholder = '["MOVE_CRUNCH"]';
+evolutionsInput.placeholder = '[{"method":"EVO_LEVEL","param":36,"target":"SPECIES_MYMON2"}]';
+dexTextInput.placeholder = '["A mysterious Pokémon...","It lives in caves."]';
+let data = { version: 1, set_name: "CustomKanto151", species: [] };
+let selectedIdx = -1;
+
+// Load saved data
+kv.pokemonGen.get('data').then(d => { if(d){ data=d; renderList(); } }).catch(()=>{});
+
+function setLoading(v){ loadingEl.hidden = !v; }
+
+function addMon(){
+  let mon = {
+    name: "NEWMON", internal_id: "SPECIES_NEWMON", dex_number: 1001 + data.species.length,
+    types: ["TYPE_NORMAL"],
+    base_stats: { hp:50, attack:50, defense:50, sp_attack:50, sp_defense:50, speed:50 },
+    abilities: { primary:"ABILITY_NONE", secondary:"ABILITY_NONE", hidden:"ABILITY_NONE" },
+    catch_rate: 45, exp_yield: 100,
+    ev_yield: { hp:0, attack:0, defense:0, sp_attack:0, sp_defense:0, speed:0 },
+    growth_rate: "GROWTH_MEDIUM_FAST", egg_groups: ["EGG_GROUP_FIELD"], gender_ratio: "PERCENT_FEMALE_50",
+    base_friendship: 70, body_color: "BODY_COLOR_GRAY", flags: [],
+    level_up_moves: [], egg_moves: [], evolutions: [],
+    pokedex: { category:"???", height_dm:10, weight_hg:100, text:["A newly discovered Pokémon."] },
+    graphics: { folder:"newmon", front:"front.png", back:"back.png", icon:"icon.png", footprint:"footprint.png", palette:"palette.gbapal", shiny_palette:"shiny_palette.gbapal" },
+    cry: { file:"newmon.aif", id:"CRY_NEWMON" }
+  };
+  data.species.push(mon);
+  renderList();
+  selectIdx(data.species.length - 1);
+}
+
+function renderList(){
+  speciesListCtn.innerHTML = "";
+  data.species.forEach((mon,i) => {
+    let d = document.createElement("div");
+    d.style.cssText = "padding:8px; border-bottom:1px solid #eee; cursor:pointer; font-size:0.9rem;";
+    d.textContent = `#${mon.dex_number} ${mon.name}`;
+    d.onclick = () => selectIdx(i);
+    if(i === selectedIdx) d.style.background = "#d0e8ff";
+    speciesListCtn.appendChild(d);
+  });
+}
+
+function selectIdx(i){
+  if(selectedIdx >= 0) saveForm();
+  selectedIdx = i;
+  if(i >= 0){
+    editorCtn.hidden = false;
+    emptyStateCtn.hidden = true;
+    loadForm(data.species[i]);
+  } else {
+    editorCtn.hidden = true;
+    emptyStateCtn.hidden = false;
+  }
+  renderList();
+}
+
+function loadForm(mon){
+  setNameInput.value = data.set_name;
+  nameInput.value = mon.name || "";
+  internalIdInput.value = mon.internal_id || "";
+  dexNumberInput.value = mon.dex_number || 0;
+  typesInput.value = JSON.stringify(mon.types || []);
+  abil1Input.value = mon.abilities?.primary || "";
+  abil2Input.value = mon.abilities?.secondary || "";
+  abilHInput.value = mon.abilities?.hidden || "";
+  catchRateInput.value = mon.catch_rate ?? 45;
+  expYieldInput.value = mon.exp_yield ?? 100;
+  growthRateInput.value = mon.growth_rate || "";
+  eggGroupsInput.value = JSON.stringify(mon.egg_groups || []);
+  genderRatioInput.value = mon.gender_ratio || "";
+  friendshipInput.value = mon.base_friendship ?? 70;
+  bodyColorInput.value = mon.body_color || "";
+  flagsInput.value = JSON.stringify(mon.flags || []);
+  hpInput.value = mon.base_stats?.hp ?? 50; atkInput.value = mon.base_stats?.attack ?? 50; defInput.value = mon.base_stats?.defense ?? 50;
+  spaInput.value = mon.base_stats?.sp_attack ?? 50; spdInput.value = mon.base_stats?.sp_defense ?? 50; speInput.value = mon.base_stats?.speed ?? 50;
+  evHpInput.value = mon.ev_yield?.hp ?? 0; evAtkInput.value = mon.ev_yield?.attack ?? 0; evDefInput.value = mon.ev_yield?.defense ?? 0;
+  evSpaInput.value = mon.ev_yield?.sp_attack ?? 0; evSpdInput.value = mon.ev_yield?.sp_defense ?? 0; evSpeInput.value = mon.ev_yield?.speed ?? 0;
+  levelUpMovesInput.value = JSON.stringify(mon.level_up_moves || [], null, 2);
+  eggMovesInput.value = JSON.stringify(mon.egg_moves || [], null, 2);
+  evolutionsInput.value = JSON.stringify(mon.evolutions || [], null, 2);
+  categoryInput.value = mon.pokedex?.category || "";
+  heightInput.value = mon.pokedex?.height_dm || 0;
+  weightInput.value = mon.pokedex?.weight_hg || 0;
+  dexTextInput.value = JSON.stringify(mon.pokedex?.text || [], null, 2);
+  previewImg.src = mon._img || "https://placehold.co/200x200?text=No+Image";
+  gfxFolderInput.value = mon.graphics?.folder || "";
+  gfxFrontInput.value = mon.graphics?.front || "";
+  gfxBackInput.value = mon.graphics?.back || "";
+  gfxIconInput.value = mon.graphics?.icon || "";
+  gfxFootInput.value = mon.graphics?.footprint || "";
+  gfxPalInput.value = mon.graphics?.palette || "";
+  gfxShinyInput.value = mon.graphics?.shiny_palette || "";
+  cryFileInput.value = mon.cry?.file || "";
+  cryIdInput.value = mon.cry?.id || "";
+}
+
+function saveForm(){
+  if(selectedIdx < 0) return;
+  let mon = data.species[selectedIdx];
+  mon.name = nameInput.value;
+  mon.internal_id = internalIdInput.value;
+  mon.dex_number = parseInt(dexNumberInput.value) || 0;
+  try{ mon.types = JSON.parse(typesInput.value); }catch(e){}
+  mon.abilities = { primary: abil1Input.value, secondary: abil2Input.value, hidden: abilHInput.value };
+  mon.catch_rate = parseInt(catchRateInput.value) || 0;
+  mon.exp_yield = parseInt(expYieldInput.value) || 0;
+  mon.growth_rate = growthRateInput.value;
+  try{ mon.egg_groups = JSON.parse(eggGroupsInput.value); }catch(e){}
+  mon.gender_ratio = genderRatioInput.value;
+  mon.base_friendship = parseInt(friendshipInput.value) || 0;
+  mon.body_color = bodyColorInput.value;
+  try{ mon.flags = JSON.parse(flagsInput.value); }catch(e){}
+  mon.base_stats = { hp:+hpInput.value||0, attack:+atkInput.value||0, defense:+defInput.value||0, sp_attack:+spaInput.value||0, sp_defense:+spdInput.value||0, speed:+speInput.value||0 };
+  mon.ev_yield = { hp:+evHpInput.value||0, attack:+evAtkInput.value||0, defense:+evDefInput.value||0, sp_attack:+evSpaInput.value||0, sp_defense:+evSpdInput.value||0, speed:+evSpeInput.value||0 };
+  try{ mon.level_up_moves = JSON.parse(levelUpMovesInput.value); }catch(e){}
+  try{ mon.egg_moves = JSON.parse(eggMovesInput.value); }catch(e){}
+  try{ mon.evolutions = JSON.parse(evolutionsInput.value); }catch(e){}
+  mon.pokedex = { category: categoryInput.value, height_dm: +heightInput.value||0, weight_hg: +weightInput.value||0, text: JSON.parse(dexTextInput.value||"[]") };
+  mon.graphics = { folder: gfxFolderInput.value, front: gfxFrontInput.value, back: gfxBackInput.value, icon: gfxIconInput.value, footprint: gfxFootInput.value, palette: gfxPalInput.value, shiny_palette: gfxShinyInput.value };
+  mon.cry = { file: cryFileInput.value, id: cryIdInput.value };
+  kv.pokemonGen.set('data', data).catch(()=>{});
+}
+
+function showTab(tab){
+  document.querySelectorAll('.tabPane').forEach(el => el.hidden = true);
+  document.getElementById('tab' + tab[0].toUpperCase() + tab.slice(1)).hidden = false;
+}
+
+function deleteMon(){
+  if(selectedIdx < 0) return;
+  if(!confirm("Delete this Pokémon?")) return;
+  data.species.splice(selectedIdx, 1);
+  selectedIdx = -1;
+  renderList();
+  editorCtn.hidden = true;
+  emptyStateCtn.hidden = false;
+  kv.pokemonGen.set('data', data).catch(()=>{});
+}
+
+async function generateAiMon(){
+  if(selectedIdx < 0) return;
+  saveForm();
+  setLoading(true);
+  let prompt = `Create a unique fakemon concept. Respond ONLY with a raw JSON object (no markdown) matching this exact structure:
+{
+  "name": "UPPERCASE_NAME",
+  "types": ["TYPE_X","TYPE_Y"],
+  "base_stats": {"hp":N,"attack":N,"defense":N,"sp_attack":N,"sp_defense":N,"speed":N},
+  "abilities": {"primary":"ABILITY_X","secondary":"ABILITY_NONE","hidden":"ABILITY_Y"},
+  "growth_rate": "GROWTH_MEDIUM_FAST",
+  "egg_groups": ["EGG_GROUP_FIELD"],
+  "gender_ratio": "PERCENT_FEMALE_50",
+  "body_color": "BODY_COLOR_GREEN",
+  "level_up_moves": [{"level":1,"move":"MOVE_TACKLE"},{"level":5,"move":"MOVE_GROWL"}],
+  "egg_moves": ["MOVE_CRUNCH"],
+  "evolutions": [],
+  "pokedex": {"category":"Shadow","height_dm":12,"weight_hg":350,"text":["A mysterious Pokémon.","It lurks in darkness."]}
+}
+Be creative. Total base stats around 480-580. Use official Pokémon naming conventions for moves, abilities, and types.`;
+  try {
+    let raw = await generateText(prompt);
+    raw = raw.replace(/```json|```/g,'').trim();
+    let obj = JSON.parse(raw);
+    let mon = data.species[selectedIdx];
+    if(obj.name){ mon.name = obj.name; mon.internal_id = "SPECIES_" + obj.name; mon.cry = {file: obj.name.toLowerCase()+".aif", id: "CRY_"+obj.name}; mon.graphics.folder = obj.name.toLowerCase(); }
+    if(obj.types) mon.types = obj.types;
+    if(obj.base_stats) mon.base_stats = obj.base_stats;
+    if(obj.abilities) mon.abilities = obj.abilities;
+    if(obj.growth_rate) mon.growth_rate = obj.growth_rate;
+    if(obj.egg_groups) mon.egg_groups = obj.egg_groups;
+    if(obj.gender_ratio) mon.gender_ratio = obj.gender_ratio;
+    if(obj.body_color) mon.body_color = obj.body_color;
+    if(obj.level_up_moves) mon.level_up_moves = obj.level_up_moves;
+    if(obj.egg_moves) mon.egg_moves = obj.egg_moves;
+    if(obj.evolutions) mon.evolutions = obj.evolutions;
+    if(obj.pokedex) mon.pokedex = obj.pokedex;
+    loadForm(mon);
+    saveForm();
+  } catch(e){ alert("AI generation failed: " + e.message); }
+  setLoading(false);
+}
+
+async function generateAiImage(){
+  if(selectedIdx < 0) return;
+  saveForm();
+  setLoading(true);
+  let mon = data.species[selectedIdx];
+  let prompt = `Pixel art front sprite of a Pokémon named ${mon.name}, ${(mon.types||[]).join(' ')} type, ${mon.pokedex?.category||''} creature. ${(mon.pokedex?.text||[]).join(' ')}. White background, 96x96 GBA-style sprite.`;
+  try {
+    let url = await generateImage(prompt, {resolution:"512x512"});
+    mon._img = url;
+    previewImg.src = url;
+    saveForm();
+  } catch(e){ alert("Image generation failed: " + e.message); }
+  setLoading(false);
+}
+
+function exportJson(){
+  saveForm();
+  let blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+  let a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = data.set_name + ".json";
+  a.click();
+}
+
+function importJson(){
+  let inp = document.createElement("input");
+  inp.type = "file"; inp.accept = ".json,application/json";
+  inp.onchange = async () => {
+    if(!inp.files[0]) return;
+    try {
+      let text = await inp.files[0].text();
+      data = JSON.parse(text);
+      selectedIdx = -1;
+      renderList();
+      editorCtn.hidden = true;
+      emptyStateCtn.hidden = false;
+      kv.pokemonGen.set('data', data).catch(()=>{});
+    } catch(e){ alert("Invalid JSON file"); }
+  };
+  inp.click();
+}
+
+function exportC(){
+  saveForm();
+  let o = [];
+  o.push(`// ===== constants/species.h =====`);
+  data.species.forEach(m => o.push(`#define ${m.internal_id} ${m.dex_number}`));
+  o.push(``);
+  o.push(`// ===== species.h structs =====`);
+  data.species.forEach(m => {
+    o.push(`    [${m.internal_id}] =`);
+    o.push(`    {`);
+    o.push(`        .baseHP        = ${m.base_stats.hp},`);
+    o.push(`        .baseAttack    = ${m.base_stats.attack},`);
+    o.push(`        .baseDefense   = ${m.base_stats.defense},`);
+    o.push(`        .baseSpeed     = ${m.base_stats.speed},`);
+    o.push(`        .baseSpAttack  = ${m.base_stats.sp_attack},`);
+    o.push(`        .baseSpDefense = ${m.base_stats.sp_defense},`);
+    o.push(`        .type1 = ${m.types[0]||"TYPE_NORMAL"},`);
+    o.push(`        .type2 = ${m.types[1]||m.types[0]||"TYPE_NORMAL"},`);
+    o.push(`        .catchRate = ${m.catch_rate},`);
+    o.push(`        .expYield = ${m.exp_yield},`);
+    o.push(`        .evYield_HP        = ${m.ev_yield.hp},`);
+    o.push(`        .evYield_Attack    = ${m.ev_yield.attack},`);
+    o.push(`        .evYield_Defense   = ${m.ev_yield.defense},`);
+    o.push(`        .evYield_Speed     = ${m.ev_yield.speed},`);
+    o.push(`        .evYield_SpAttack  = ${m.ev_yield.sp_attack},`);
+    o.push(`        .evYield_SpDefense = ${m.ev_yield.sp_defense},`);
+    o.push(`        .genderRatio = ${m.gender_ratio},`);
+    o.push(`        .friendship = ${m.base_friendship},`);
+    o.push(`        .growthRate = ${m.growth_rate},`);
+    o.push(`        .eggGroup1 = ${m.egg_groups[0]||"EGG_GROUP_FIELD"},`);
+    o.push(`        .eggGroup2 = ${m.egg_groups[1]||m.egg_groups[0]||"EGG_GROUP_FIELD"},`);
+    o.push(`        .ability1 = ${m.abilities.primary},`);
+    o.push(`        .ability2 = ${m.abilities.secondary},`);
+    o.push(`        .bodyColor = ${m.body_color},`);
+    o.push(`    },`);
+  });
+  o.push(``);
+  o.push(`// ===== level_up_learnsets.h =====`);
+  data.species.forEach(m => {
+    o.push(`static const struct LevelUpMove s${m.name}LevelUpLearnset[] = {`);
+    (m.level_up_moves||[]).forEach(lu => o.push(`    LEVEL_UP_MOVE(${lu.level}, ${lu.move}),`));
+    o.push(`    LEVEL_UP_END,`);
+    o.push(`};`);
+  });
+  o.push(``);
+  o.push(`// ===== egg_moves.h =====`);
+  data.species.forEach(m => {
+    if(!m.egg_moves||!m.egg_moves.length) return;
+    o.push(`static const u16 s${m.name}EggMoves[] = {`);
+    m.egg_moves.forEach(em => o.push(`    ${em},`));
+    o.push(`    EGG_MOVES_TERMINATOR,`);
+    o.push(`};`);
+  });
+  o.push(``);
+  o.push(`// ===== evolution.h =====`);
+  data.species.forEach(m => {
+    if(!m.evolutions||!m.evolutions.length) return;
+    o.push(`[${m.internal_id}] = {`);
+    m.evolutions.forEach(ev => o.push(`    {${ev.method}, ${ev.param}, ${ev.target}},`));
+    o.push(`    EVOLUTIONS_END,`);
+    o.push(`},`);
+  });
+  o.push(``);
+  o.push(`// ===== pokedex_entries.h =====`);
+  data.species.forEach(m => {
+    o.push(`const struct PokedexEntry gPokedexEntry_${m.name} =`);
+    o.push(`{`);
+    o.push(`    .categoryName = _("${m.pokedex.category}"),`);
+    o.push(`    .height = ${m.pokedex.height_dm},`);
+    o.push(`    .weight = ${m.pokedex.weight_hg},`);
+    o.push(`    .description = g${m.name}PokedexText,`);
+    o.push(`    .pokemonScale = 256,`);
+    o.push(`    .pokemonOffset = 0,`);
+    o.push(`    .trainerScale = 256,`);
+    o.push(`    .trainerOffset = 0,`);
+    o.push(`};`);
+  });
+  o.push(``);
+  o.push(`// ===== pokedex_text.h =====`);
+  data.species.forEach(m => {
+    o.push(`static const u8 g${m.name}PokedexText[] = _(`);
+    (m.pokedex.text||[]).forEach(line => o.push(`    "${line}\\n"`));
+    o.push(`);`);
+  });
+  o.push(``);
+  o.push(`// ===== graphics / cry references =====`);
+  data.species.forEach(m => {
+    o.push(`// ${m.internal_id} -> graphics/pokemon/${m.graphics.folder}/`);
+    o.push(`// cry: ${m.cry.id} = ${m.cry.file}`);
+  });
+  exportTextarea.value = o.join("\n");
+  exportCtn.hidden = false;
+}
+</script>
+</body>
+</html>

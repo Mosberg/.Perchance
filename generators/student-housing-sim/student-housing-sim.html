@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>student-housing-sim — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- Student Housing Simulator -->
+<div id="appCtn">
+
+  <header id="topBar">
+    <div id="brand">
+      <h1>🏠 Student Housing Simulator</h1>
+      <p id="tagline">A dorm of 15 unique students. Watch them live, interact, and write your own scenes.</p>
+    </div>
+    <div id="statusBar">
+      <div class="status-item">
+        <label>Housing</label>
+        <select id="housingSelectEl" onchange="changeHousing()">
+          <option value="mixed">The Commons (Mixed)</option>
+          <option value="male">Brotherhood Hall (Male)</option>
+          <option value="female">Sisterhood House (Female)</option>
+        </select>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Day</span>
+        <strong id="dayCounterEl">1</strong>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Next Event</span>
+        <strong id="countdownEl">1</strong>d
+      </div>
+    </div>
+  </header>
+
+  <!-- Sticky simulate bar -->
+  <div id="tickBar">
+    <button id="tickBtn" onclick="runSimulationTick()">▶ Next Day</button>
+    <div id="batchControl">
+      <input type="number" id="batchDaysEl" value="3" min="1" max="14">
+      <button id="batchBtn" onclick="runBatch()">⏩ Simulate Days</button>
+    </div>
+    <div id="saveControl">
+      <button id="saveBtn" onclick="saveGame()" title="Save progress">💾 Save</button>
+      <button id="loadBtn" onclick="loadGame()" title="Load saved progress">📂 Load</button>
+      <button id="resetBtn" onclick="resetGame()" title="Reset to day 1">↺ Reset</button>
+    </div>
+  </div>
+
+  <!-- LOADING OVERLAY -->
+  <div id="loadingCtn" hidden>
+    <div class="spinner"></div>
+    <p id="loadingTextEl">Simulating...</p>
+  </div>
+
+  <main id="layout">
+
+    <!-- LEFT / MAIN COLUMN -->
+    <section class="col-main">
+
+      <!-- Activity Log -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2>📋 Activity Log</h2>
+          <div class="log-controls">
+            <select id="logFilterEl">
+              <option value="all">All</option>
+              <option value="interaction">Interactions</option>
+              <option value="event">Events</option>
+              <option value="change">Changes</option>
+              <option value="scene">Scenes</option>
+            </select>
+            <button id="scrollTopBtn" title="Jump to newest">↑ Newest</button>
+          </div>
+        </div>
+        <div id="residenceLogEl"></div>
+      </div>
+
+      <!-- Resident Directory -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2>👥 Residents</h2>
+          <span class="muted"><strong id="residentCountEl">15</strong> total</span>
+        </div>
+        <p class="hint">Tap a resident to view their full profile and relationships.</p>
+        <div id="studentCatalogueEl"></div>
+      </div>
+
+      <!-- Relationship Overview -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2>💞 Bonds &amp; Tensions</h2>
+          <span class="muted" id="bondsSummaryEl">—</span>
+        </div>
+        <p class="hint">Relationships evolve as days pass and events unfold.</p>
+        <div id="bondsListEl"></div>
+      </div>
+
+    </section>
+
+    <!-- RIGHT / SIDE COLUMN -->
+    <aside class="col-side">
+
+      <!-- Scenario -->
+      <div class="panel">
+        <h2>🌍 World Scenario</h2>
+        <p class="hint">Set history, culture, or special rules that shape how residents act.</p>
+        <textarea id="scenarioInputEl" placeholder="e.g., A converted Victorian mansion with strict quiet hours and a ghost story tradition..."></textarea>
+      </div>
+
+      <!-- Create Scene -->
+      <div class="panel">
+        <h2>✨ Create Scene</h2>
+        <p class="hint">Describe a situation, pick a room and participants. AI writes the resolution.</p>
+
+        <label class="field-label">Location</label>
+        <select id="sceneLocationEl">
+          <option value="">— Select Location —</option>
+        </select>
+
+        <label class="field-label">Participants</label>
+        <div id="sceneStudentsEl"></div>
+
+        <label class="field-label">Description</label>
+        <textarea id="sceneDescEl" placeholder="e.g., Sarah broke the microwave trying to cook popcorn at 2AM..."></textarea>
+
+        <button id="createSceneBtn" onclick="createUserScene()" disabled>🎬 Generate AI Scene</button>
+        <div id="sceneResultEl" hidden></div>
+      </div>
+
+      <!-- Housing Layout -->
+      <div class="panel">
+        <h2>🏢 Housing Layout</h2>
+        <ul id="locationsListEl"></ul>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <!-- COMMUNITY -->
+  <div class="panel" id="communityPanel">
+    <h2>💬 Community Wall</h2>
+    <p class="hint">Share funny days, scene ideas, or housing stories with other players.</p>
+    <div id="commentsCtn"></div>
+  </div>
+</div>
+
+<!-- STUDENT DETAIL MODAL -->
+<div id="studentModalCtn" hidden onclick="if(event.target===studentModalCtn)studentModalCtn.hidden=true">
+  <div id="studentModalCard">
+    <button id="modalCloseBtn" onclick="studentModalCtn.hidden=true">×</button>
+    <div id="studentModalContentEl"></div>
+  </div>
+</div>
+
+<style>
+  :root {
+    --blue: #4A90E2;
+    --blue-dark: #2c3e50;
+    --blue-light: #eef7ff;
+    --green: #28a745;
+    --red: #e74c3c;
+    --amber: #f39c12;
+    --purple: #9b59b6;
+    --bg: #f4f6f8;
+    --panel: #ffffff;
+    --border: #e0e0e0;
+    --text: #2c3e50;
+    --muted: #777;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body { text-align: left; margin: 0; background: var(--bg); color: var(--text); }
+  #appCtn {
+    font-family: 'Segoe UI', system-ui, Arial, sans-serif;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 12px;
+  }
+
+  /* HEADER */
+  #topBar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12px;
+    border-bottom: 3px solid var(--blue);
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+  }
+  #brand h1 { margin: 0; color: var(--blue-dark); font-size: 1.5em; }
+  #tagline { margin: 4px 0 0; color: #555; font-size: 0.88em; }
+  #statusBar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .status-item { display: flex; flex-direction: column; gap: 2px; font-size: 0.85em; }
+  .status-item label, .status-item .status-label { color: var(--muted); font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.04em; }
+  .status-item strong { font-size: 1.15em; color: var(--blue-dark); }
+  #statusBar select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.88em; outline: none; max-width: 100%; }
+
+  /* TICK BAR */
+  #tickBar { position: sticky; top: 0; z-index: 50; background: var(--bg); padding: 8px 0; margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  #tickBtn {
+    flex: 1 1 160px;
+    padding: 14px;
+    background: var(--green);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 1.05em;
+    font-weight: bold;
+    transition: background 0.15s;
+  }
+  #tickBtn:hover:not(:disabled) { background: #218838; }
+  #tickBtn:disabled { background: #aaa; cursor: not-allowed; }
+  #batchControl { display: flex; gap: 4px; flex: 1 1 180px; }
+  #batchDaysEl { width: 56px; padding: 8px; text-align: center; }
+  #batchBtn {
+    flex: 1; padding: 12px; background: var(--blue); color: white; border: none; border-radius: var(--radius);
+    cursor: pointer; font-size: 0.9em; font-weight: bold;
+  }
+  #batchBtn:hover:not(:disabled) { background: #3a7bd5; }
+  #batchBtn:disabled { background: #aaa; cursor: not-allowed; }
+  #saveControl { display: flex; gap: 4px; flex: 0 0 auto; }
+  #saveControl button {
+    padding: 12px 10px; background: white; color: var(--blue-dark); border: 1px solid var(--border);
+    border-radius: var(--radius); cursor: pointer; font-size: 0.85em; font-weight: bold;
+  }
+  #saveControl button:hover { background: var(--blue-light); }
+  #resetBtn { color: var(--red) !important; }
+
+  /* LAYOUT */
+  #layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+  @media (min-width: 880px) {
+    #layout { grid-template-columns: 1fr 320px; }
+  }
+
+  /* PANELS */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .panel h2 { margin: 0 0 8px; font-size: 1.1em; color: var(--blue-dark); }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; flex-wrap: wrap; }
+  .panel-head h2 { margin: 0; }
+  .hint { margin: 0 0 10px; font-size: 0.82em; color: var(--muted); }
+  .muted { color: var(--muted); font-size: 0.85em; }
+
+  /* LOG */
+  .log-controls { display: flex; gap: 6px; }
+  .log-controls select, .log-controls button {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.82em; outline: none; background: white;
+  }
+  .log-controls button { cursor: pointer; }
+  #residenceLogEl {
+    max-height: 360px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fafbfc;
+  }
+  .log-entry { border-bottom: 1px solid #eee; padding: 8px 12px; font-size: 0.88em; line-height: 1.4; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-entry .time { color: #999; font-size: 0.82em; margin-right: 6px; white-space: nowrap; }
+  .log-entry .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.76em; margin-right: 6px; color: white; vertical-align: middle; }
+  .tag-event { background: var(--red); }
+  .tag-interaction { background: var(--purple); }
+  .tag-change { background: var(--blue); }
+  .tag-scene { background: var(--amber); }
+  .tag-general { background: #aaa; }
+
+  /* CATALOGUE */
+  #studentCatalogueEl {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+  }
+  .student-card {
+    background: #fafbfc;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .student-card:hover, .student-card:active { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.08); border-color: var(--blue); }
+  .student-card .sc-name { font-weight: bold; font-size: 0.9em; color: var(--blue-dark); }
+  .student-card .sc-meta { font-size: 0.78em; color: var(--muted); margin-top: 2px; }
+  .student-card .sc-traits { margin-top: 6px; font-size: 0.78em; color: #555; }
+
+  /* FORM ELEMENTS */
+  .field-label { display: block; font-size: 0.82em; font-weight: bold; color: #555; margin: 10px 0 4px; }
+  textarea, select, input {
+    width: 100%;
+    font-family: inherit;
+    font-size: 0.88em;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    outline: none;
+    background: white;
+  }
+  textarea { min-height: 72px; resize: vertical; }
+  textarea:focus, select:focus { border-color: var(--blue); }
+  #sceneLocationEl { margin-bottom: 4px; }
+
+  #sceneStudentsEl {
+    display: flex; flex-wrap: wrap; gap: 5px;
+    max-height: 130px; overflow-y: auto;
+    padding: 4px; border: 1px solid var(--border); border-radius: 6px; background: #fafbfc;
+  }
+  .student-chip {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 8px; background: white; border: 1px solid var(--border);
+    border-radius: 12px; cursor: pointer; font-size: 0.78em; user-select: none;
+  }
+  .student-chip input { width: auto; }
+  .student-chip:has(input:checked) { background: var(--blue-light); border-color: var(--blue); }
+
+  #createSceneBtn {
+    width: 100%; margin-top: 12px; padding: 12px;
+    background: var(--red); color: white; border: none; border-radius: 8px;
+    cursor: pointer; font-size: 0.95em; font-weight: bold;
+  }
+  #createSceneBtn:hover:not(:disabled) { background: #c0392b; }
+  #createSceneBtn:disabled { background: #ccc; cursor: not-allowed; }
+
+  #sceneResultEl {
+    margin-top: 12px; font-size: 0.88em; line-height: 1.5; color: #333;
+    padding: 12px; background: #fffdf5; border: 1px solid #ffeaa7; border-radius: 8px;
+  }
+
+  /* LOCATIONS */
+  #locationsListEl { list-style: none; padding: 0; margin: 0; }
+  #locationsListEl li {
+    padding: 8px 0; border-bottom: 1px solid #eee; cursor: pointer; font-size: 0.85em;
+  }
+  #locationsListEl li:last-child { border-bottom: none; }
+  #locationsListEl .loc-name { font-weight: bold; color: var(--blue-dark); }
+  #locationsListEl .loc-name::after { content: " ▾"; color: var(--muted); font-size: 0.8em; }
+  #locationsListEl .loc-desc { font-size: 0.9em; color: #555; margin-top: 4px; }
+
+  /* MODAL */
+  #studentModalCtn {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    z-index: 1000; display: flex; justify-content: center; align-items: center; padding: 12px;
+  }
+  #studentModalCtn[hidden] { display: none; }
+  #studentModalCard {
+    background: white; max-width: 540px; width: 100%; max-height: 90vh; overflow-y: auto;
+    border-radius: 14px; padding: 20px; position: relative; box-shadow: 0 12px 36px rgba(0,0,0,0.3);
+  }
+  #modalCloseBtn {
+    position: absolute; top: 8px; right: 12px; background: none; border: none;
+    font-size: 1.8em; cursor: pointer; color: #999; line-height: 1;
+  }
+  #modalCloseBtn:hover { color: var(--text); }
+  .modal-grid { display: grid; grid-template-columns: 1fr; gap: 4px 16px; }
+  @media (min-width: 540px) { .modal-grid { grid-template-columns: 1fr 1fr; } }
+  .modal-grid p { margin: 3px 0; font-size: 0.88em; }
+  .modal-bg { margin-top: 14px; padding-top: 12px; border-top: 1px solid #eee; font-size: 0.88em; line-height: 1.5; color: #444; }
+  .modal-rels { margin-top: 14px; padding-top: 12px; border-top: 1px solid #eee; }
+  .modal-rels .rel-head { margin: 8px 0 4px; font-size: 0.82em; font-weight: bold; color: #555; }
+  .modal-rels .rel-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rel-friend, .rel-rival { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; }
+  .rel-friend { background: #e6f9ec; color: #1a7a3a; }
+  .rel-rival { background: #fdecea; color: #a02828; }
+  .rel-friend em, .rel-rival em { font-style: normal; font-weight: bold; margin-left: 4px; }
+
+  /* LOADING */
+  #loadingCtn {
+    position: fixed; inset: 0; background: rgba(255,255,255,0.9); z-index: 2000;
+    display: flex; justify-content: center; align-items: center; flex-direction: column;
+  }
+  #loadingCtn[hidden] { display: none; }
+  .spinner {
+    width: 48px; height: 48px; border: 5px solid #eee; border-top-color: var(--blue);
+    border-radius: 50%; animation: spin 1s linear infinite;
+  }
+  #loadingTextEl { margin-top: 14px; color: var(--blue); font-weight: bold; }
+
+  /* BONDS */
+  #bondsListEl { display: flex; flex-direction: column; gap: 6px; }
+  .bond-row { display: flex; align-items: center; gap: 8px; font-size: 0.82em; }
+  .bond-names { flex: 0 0 auto; min-width: 0; }
+  .bond-bar { flex: 1 1 auto; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; position: relative; }
+  .bond-fill { position: absolute; top: 0; bottom: 0; left: 50%; transform-origin: left; }
+  .bond-fill.pos { background: var(--green); }
+  .bond-fill.neg { background: var(--red); right: 50%; left: auto; transform-origin: right; }
+  .bond-val { flex: 0 0 34px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* COMMENTS */
+  #communityPanel { margin-bottom: 14px; }
+  #commentsCtn { margin-top: 6px; }
+
+  /* PORTRAIT */
+  .modal-portrait { text-align: center; margin-bottom: 12px; }
+  .modal-portrait img { max-width: 100%; max-height: 280px; border-radius: 10px; border: 1px solid var(--border); }
+  #portraitBtn {
+    width: 100%; margin-top: 8px; padding: 10px; background: var(--blue); color: white; border: none; border-radius: 8px;
+    cursor: pointer; font-size: 0.88em; font-weight: bold;
+  }
+  #portraitBtn:hover:not(:disabled) { background: #3a7bd5; }
+  #portraitBtn:disabled { background: #aaa; cursor: not-allowed; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .fade-in { animation: fadeIn 0.3s forwards; }
+</style>
+
+<script type="module">
+  // --- DATA: HOUSINGS ---
+  const housings = {
+    mixed: {
+      name: "The Commons",
+      genderPolicy: "Mixed",
+      description: "A vibrant mixed-gender dorm where everyone coexists in beautiful chaos.",
+      students: [
+        { name: "Alex Carter", gender: "Male", year: "Junior", major: "Computer Science", age: 21, hometown: "Austin, TX", traits: ["Night Owl", "Laid-Back", "Musical"], likes: "Hackathons, guitar, energy drinks", dislikes: "Dishes, alarms, mornings", background: "Started coding at 13 and never looked back. His guitar playing at 2 AM is legendary.", role: "The Hacker Musician" },
+        { name: "Sarah Kim", gender: "Female", year: "Sophomore", major: "Art", age: 19, hometown: "Portland, OR", traits: ["Introverted", "Artistic", "Anxious"], likes: "Sketching, tea, rainy days", dislikes: "Spiders, loud noises, attention", background: "Can spend 14 hours straight on a canvas. Her sketchbook is her truest confidant.", role: "The Quiet Artist" },
+        { name: "Jordan Lee", gender: "Non-Binary", year: "Senior", major: "Psychology", age: 22, hometown: "Chicago, IL", traits: ["Mediator", "Nurturing", "Wise"], likes: "Plants, advice podcasts, incense", dislikes: "Conflict, mess, cruelty", background: "The resident therapist who somehow always knows what to say. Has 47 houseplants.", role: "The Counselor" },
+        { name: "Marcus Johnson", gender: "Male", year: "Freshman", major: "Biology", age: 18, hometown: "Atlanta, GA", traits: ["Energetic", "Athletic", "Chaotic"], likes: "Morning runs, protein, sports", dislikes: "Sitting still, vegetables, quiet", background: "A human golden retriever who believes every problem can be solved with a run.", role: "The Jock" },
+        { name: "Emily Davis", gender: "Female", year: "Junior", major: "History", age: 20, hometown: "Boston, MA", traits: ["Organized", "Stern", "Bookish"], likes: "Historical dramas, tea, schedules", dislikes: "Lateness, chaos, poor grammar", background: "Runs the house like a colonial governor. Secretly writes romance novels.", role: "The Governor" },
+        { name: "Chris Patel", gender: "Male", year: "Sophomore", major: "Economics", age: 19, hometown: "New York, NY", traits: ["Social", "Lucky", "Charismatic"], likes: "DJing, parties, networking", dislikes: "Studying, silence, boredom", background: "Somehow aces tests he never studied for. The house party starts when he walks in.", role: "The Socialite" },
+        { name: "Riley Brooks", gender: "Non-Binary", year: "Senior", major: "Music", age: 21, hometown: "Seattle, WA", traits: ["Sensitive", "Talented", "Private"], likes: "Piano, noise-cancelling headphones, jazz", dislikes: "Loud neighbors, interruptions, small talk", background: "Can hear a pin drop three rooms away. Their piano playing is house folklore.", role: "The Musician" },
+        { name: "David Nguyen", gender: "Male", year: "Freshman", major: "Engineering", age: 18, hometown: "San Jose, CA", traits: ["Inventive", "Quiet", "Resourceful"], likes: "Gadgets, soldering, sci-fi", dislikes: "Broken things, manuals, crowds", background: "Built a robot vacuum from spare parts because the house was too messy.", role: "The Engineer" },
+        { name: "Ava Wilson", gender: "Female", year: "Senior", major: "English", age: 21, hometown: "Denver, CO", traits: ["Observant", "Creative", "Mysterious"], likes: "People-watching, typewriters, coffee", dislikes: "Being watched, clichés, crowds", background: "Everyone is a character in her novel. She takes notes constantly.", role: "The Writer" },
+        { name: "Ryan Ortiz", gender: "Male", year: "Junior", major: "Physics", age: 20, hometown: "Albuquerque, NM", traits: ["Absent-minded", "Brilliant", "Eccentric"], likes: "Physics, whiteboards, stargazing", dislikes: "Ignorance, biology, group projects", background: "Leaves quantum physics equations on every whiteboard to 'inspire' others.", role: "The Physicist" },
+        { name: "Mia Thompson", gender: "Female", year: "Sophomore", major: "Psychology", age: 19, hometown: "Miami, FL", traits: ["Bubbly", "Kind", "Optimistic"], likes: "Sticky notes, sunshine, compliments", dislikes: "Negativity, gray skies, rudeness", background: "Her compliment sticky notes have kept the house from civil war.", role: "The Sunshine" },
+        { name: "Sofia Martinez", gender: "Female", year: "Freshman", major: "Art", age: 18, hometown: "Los Angeles, CA", traits: ["Passionate", "Bold", "Artistic"], likes: "Street photography, film, activism", dislikes: "Posing, censorship, apathy", background: "Her candid photos of residents are both beautiful and slightly blackmail-worthy.", role: "The Photographer" },
+        { name: "Ethan Brown", gender: "Male", year: "Senior", major: "Computer Science", age: 22, hometown: "Detroit, MI", traits: ["Responsible", "Gamer", "Stoic"], likes: "Gaming, fixing Wi-Fi, pizza", dislikes: "Lag, irresponsibility, spiders", background: "The oldest soul in the house. He says 'I'll fix it' at least twice a day.", role: "The IT Guy" },
+        { name: "Chloe Anderson", gender: "Female", year: "Junior", major: "Biology", age: 20, hometown: "Philadelphia, PA", traits: ["Stressed", "Organized", "Caring"], likes: "Color-coding, anatomy charts, herbal tea", dislikes: "Disorganization, germs, C-minus grades", background: "The pre-med student who alphabetizes the spice rack at 3 AM to cope.", role: "The Doctor" },
+        { name: "Tyler White", gender: "Male", year: "Sophomore", major: "History", age: 19, hometown: "Washington, D.C.", traits: ["Enthusiastic", "Historical", "Dramatic"], likes: "Reenactments, costumes, debates", dislikes: "Modernity, ignorance, quiet parties", background: "Once tried to settle a chore dispute via parliamentary procedure.", role: "The Historian" }
+      ]
+    },
+    male: {
+      name: "Brotherhood Hall",
+      genderPolicy: "Male Only",
+      description: "An all-male residence known for intense poker nights, gym schedules, and surprising emotional vulnerability at 2 AM.",
+      students: [
+        { name: "James O'Connor", gender: "Male", year: "Senior", major: "Philosophy", age: 22, hometown: "Boston, MA", traits: ["Charismatic", "Argumentative", "Loyal"], likes: "Debates, literature, Irish folk", dislikes: "Dishonesty, early mornings", background: "Grew up in a loud Irish-American family; learned rhetoric before arithmetic.", role: "The President" },
+        { name: "Kevin Park", gender: "Male", year: "Freshman", major: "Computer Science", age: 18, hometown: "Seattle, WA", traits: ["Shy", "Brilliant", "Obsessive"], likes: "Coding, K-pop, stars", dislikes: "Crowds, public speaking", background: "Learned English via programming docs; speaks Java better than English.", role: "The Architect" },
+        { name: "Mohammed Hassan", gender: "Male", year: "Junior", major: "Mechanical Engineering", age: 20, hometown: "Dearborn, MI", traits: ["Devout", "Handy", "Generous"], likes: "Cars, basketball, theology", dislikes: "Waste, rudeness", background: "Spends summers rebuilding engines with his dad. Fixes everything here.", role: "The Mechanic" },
+        { name: "Diego Ramirez", gender: "Male", year: "Sophomore", major: "Sociology", age: 19, hometown: "San Antonio, TX", traits: ["Loud", "Passionate", "Athletic"], likes: "Soccer, tacos, justice", dislikes: "Silence, injustice", background: "First-gen student who organizes house tournaments and food drives.", role: "The Activist" },
+        { name: "Brandon Smith", gender: "Male", year: "Senior", major: "Business", age: 22, hometown: "Dallas, TX", traits: ["Ambitious", "Polished", "Insecure"], likes: "Networking, golf, podcasts", dislikes: "Mess, excuses", background: "Treats the house like a startup and every roommate like a potential co-founder.", role: "The Entrepreneur" },
+        { name: "Lucas Chen", gender: "Male", year: "Freshman", major: "Physics", age: 18, hometown: "Minneapolis, MN", traits: ["Logical", "Quiet", "Competitive"], likes: "Chess, Star Trek, puzzles", dislikes: "Noise, illogical behavior", background: "State chess champion; plays 4D chess while others play checkers.", role: "The Strategist" },
+        { name: "Trevor Williams", gender: "Male", year: "Junior", major: "Art History", age: 20, hometown: "New Orleans, LA", traits: ["Stylish", "Smooth", "Cultured"], likes: "Jazz, museums, fashion", dislikes: "Ignorance, bad lighting", background: "Knows every art period and dresses like he stepped out of one.", role: "The Aesthete" },
+        { name: "Nathan Scott", gender: "Male", year: "Sophomore", major: "Psychology", age: 19, hometown: "Chicago, IL", traits: ["Tough", "Empathetic", "Protective"], likes: "Boxing, cooking, therapy podcasts", dislikes: "Bullies, grease", background: "Trained at a south-side gym; cooks for everyone on Sundays.", role: "The Guardian" },
+        { name: "Adam Green", gender: "Male", year: "Senior", major: "Environmental Science", age: 22, hometown: "Portland, OR", traits: ["Idealistic", "Strict", "Nature-loving"], likes: "Hiking, compost, kombucha", dislikes: "Plastic, red meat", background: "Lived off-grid for a summer and never stopped talking about it.", role: "The Eco-Warrior" },
+        { name: "Elijah Turner", gender: "Male", year: "Freshman", major: "Music", age: 18, hometown: "Harlem, NY", traits: ["Confident", "Creative", "Energetic"], likes: "Freestyling, sneakers, vinyl", dislikes: "Rules, stereotypes", background: "His mom runs a choir; he runs the cyphers in the common room.", role: "The Lyricist" },
+        { name: "Malik Thompson", gender: "Male", year: "Sophomore", major: "Political Science", age: 19, hometown: "Atlanta, GA", traits: ["Charismatic", "Calculating", "Driven"], likes: "Debate, suits, news", dislikes: "Apathy, losing", background: "High school student body president; campaigns for better house snacks.", role: "The Politician" },
+        { name: "Dylan Lee", gender: "Male", year: "Junior", major: "Architecture", age: 21, hometown: "San Francisco, CA", traits: ["Chill", "Artistic", "Skater"], likes: "Skateboarding, sketching, lo-fi", dislikes: "Deadlines, conformity", background: "Treats hallways as galleries and skate parks simultaneously.", role: "The Visionary" },
+        { name: "Samir Patel", gender: "Male", year: "Senior", major: "Pre-Med", age: 22, hometown: "Houston, TX", traits: ["Disciplined", "Caffeinated", "Caring"], likes: "Studying, tutoring, cricket", dislikes: "Laziness, germs", background: "Parents are nurses; he treats study sessions like surgery.", role: "The Doctor-in-Training" },
+        { name: "Cole Anderson", gender: "Male", year: "Freshman", major: "English", age: 18, hometown: "London, UK", traits: ["Dry", "Witty", "Cultured"], likes: "Tea, Shakespeare, rain", dislikes: "American coffee, ignorance", background: "Exchange student who brought an electric kettle and superiority complex.", role: "The Expat" },
+        { name: "Ivan Petrov", gender: "Male", year: "Sophomore", major: "Mathematics", age: 19, hometown: "Moscow, Russia", traits: ["Dry humor", "Strong", "Direct"], likes: "Weightlifting, chess, literature", dislikes: "Small talk, weak coffee", background: "Moved for academics; deadlifts twice his body weight.", role: "The Bear" }
+      ]
+    },
+    female: {
+      name: "Sisterhood House",
+      genderPolicy: "Female Only",
+      description: "An all-female residence buzzing with shared skincare routines, fierce study sessions, and unbreakable bonds.",
+      students: [
+        { name: "Jasmine Washington", gender: "Female", year: "Senior", major: "Pre-Law", age: 21, hometown: "Atlanta, GA", traits: ["Leader", "Fierce", "Organized"], likes: "Mock trial, gospel, color-coding", dislikes: "Disorder, excuses", background: "Debate champion who color-codes her arguments and her closet.", role: "The Matriarch" },
+        { name: "Priya Sharma", gender: "Female", year: "Junior", major: "Computer Science", age: 20, hometown: "Seattle, WA", traits: ["Sarcastic", "Brilliant", "Gamer"], likes: "CTF competitions, Bollywood, PCs", dislikes: "Mansplaining, lag", background: "Started coding at 14; hacks for fun and academic profit.", role: "The Hacker" },
+        { name: "Luna Reyes", gender: "Female", year: "Freshman", major: "Biology", age: 18, hometown: "San Juan, PR", traits: ["Bright", "Nature-loving", "Bilingual"], likes: "Beach, marine bio, reggaeton", dislikes: "Pollution, closed minds", background: "Wants to save coral reefs; speaks Spanish when excited.", role: "The Naturalist" },
+        { name: "Harper Mitchell", gender: "Female", year: "Sophomore", major: "Journalism", age: 19, hometown: "New York, NY", traits: ["Nosy", "Articulate", "Ambitious"], likes: "Podcasts, true crime, networking", dislikes: "Being ignored, boredom", background: "Records everything for her podcast 'Roommate Crimes and Misdemeanors'.", role: "The Reporter" },
+        { name: "Avery Brooks", gender: "Female", year: "Senior", major: "Theater", age: 22, hometown: "Minneapolis, MN", traits: ["Dramatic", "Talented", "Expressive"], likes: "Musicals, makeup, monologues", dislikes: "Flat emotions, bad acoustics", background: "Has played every leading role and some furniture.", role: "The Star" },
+        { name: "Chloe Kim", gender: "Female", year: "Junior", major: "Economics", age: 20, hometown: "New York, NY", traits: ["Meticulous", "Fashionable", "Driven"], likes: "Stocks, designer clothes, organization", dislikes: "Wrinkles, bad ROI", background: "Runs an investment club; her closet is worth more than some cars.", role: "The Tycoon" },
+        { name: "Zoey Bennett", gender: "Female", year: "Freshman", major: "Art", age: 18, hometown: "Portland, OR", traits: ["Edgy", "Creative", "Sensitive"], likes: "Tattoo art, punk rock, illustration", dislikes: "Mainstream, judgment", background: "Online portfolio has 50k followers; each roommate has a portrait.", role: "The Artist" },
+        { name: "Natalie Rivera", gender: "Female", year: "Sophomore", major: "Nursing", age: 19, hometown: "Phoenix, AZ", traits: ["Motherly", "Nurturing", "Prepared"], likes: "Baking, medical dramas, first aid", dislikes: "Danger, seeing others hurt", background: "Oldest of five; carries a med kit and cookies everywhere.", role: "The Nurse" },
+        { name: "Grace Chen", gender: "Female", year: "Senior", major: "Mathematics", age: 21, hometown: "Boston, MA", traits: ["Logical", "Patient", "Funny"], likes: "Sudoku, teaching, hot pot", dislikes: "Irrationality, cheating", background: "Math Olympiad medalist who explains calculus at parties.", role: "The Professor" },
+        { name: "Sasha Volkov", gender: "Female", year: "Junior", major: "Chemistry", age: 20, hometown: "St. Petersburg, Russia", traits: ["Mysterious", "Brilliant", "Intense"], likes: "Perfumery, novels, labs", dislikes: "Superficiality, loud parties", background: "Exchange student who stayed; her room smells like vanilla and chemicals.", role: "The Alchemist" },
+        { name: "Bella Thompson", gender: "Female", year: "Freshman", major: "Music", age: 18, hometown: "Nashville, TN", traits: ["Soulful", "Friendly", "Authentic"], likes: "Guitar, songwriting, bonfires", dislikes: "Fake people, auto-tune", background: "Played honky-tonks at 16; writes songs on the balcony.", role: "The Songwriter" },
+        { name: "Rachel Green", gender: "Female", year: "Sophomore", major: "Environmental Science", age: 19, hometown: "Seattle, WA", traits: ["Eco-conscious", "Crafty", "Gentle"], likes: "Gardening, soap-making, hiking", dislikes: "Waste, corporate greed", background: "Grew up on a co-op farm; makes organic soap for everyone.", role: "The Gardener" },
+        { name: "Naomi Clark", gender: "Female", year: "Senior", major: "History", age: 21, hometown: "Chicago, IL", traits: ["Knowledgeable", "Vintage", "Fun"], likes: "Thrifting, archiving, tea", dislikes: "Fast fashion, amnesia", background: "Museum worker who knows the house history better than its architect.", role: "The Archivist" },
+        { name: "Dylan Foster", gender: "Female", year: "Junior", major: "Philosophy", age: 20, hometown: "Austin, TX", traits: ["Existential", "Witty", "Caffeinated"], likes: "Philosophy, coffee, late talks", dislikes: "Certainty, early classes", background: "Changed major three times; hasn't changed her coffee order.", role: "The Philosopher" },
+        { name: "Megan O'Neil", gender: "Female", year: "Freshman", major: "Engineering", age: 18, hometown: "Detroit, MI", traits: ["Tough", "Practical", "Loyal"], likes: "Robotics, cars, welding", dislikes: "Fragility, sexism", background: "Built her first robot at 10; fixes laptops with a soldering iron.", role: "The Engineer" }
+      ]
+    }
+  };
+
+  const premadeLocations = [
+    { name: "Common Room", description: "The heart of the house with couches, a TV, and a whiteboard for messages." },
+    { name: "Kitchen", description: "Always slightly messy. Shared fridge space is a constant source of passive-aggressive notes." },
+    { name: "Study Room", description: "A quiet space that is never actually quiet. Whiteboards are full of equations and doodles." },
+    { name: "Main Hallway", description: "Where everyone passes through. Decorated with a floor-to-ceiling corkboard for announcements." },
+    { name: "Laundry Room", description: "The site of the great rule: if you leave your clothes in the dryer, they go on the floor." },
+    { name: "Backyard Patio", description: "A small fenced area with a grill. Used for parties and late-night stargazing." },
+    { name: "Room 101", description: "A double shared by a night owl and an early bird." },
+    { name: "Room 102", description: "A single room stacked floor-to-ceiling with books and instruments." },
+    { name: "Room 103", description: "Known as 'the gaming den' because of the LED lights and triple monitor setup." },
+    { name: "Room 104", description: "A surprisingly zen space with a tea corner and aromatherapy diffusers." }
+  ];
+
+  // --- STATE ---
+  let locations = [];
+  let students = [];
+  let day = 1;
+  let isGenerating = false;
+  let nextEventCountdown = 1;
+  let currentHousingId = "mixed";
+  const selectedStudents = new Set();
+  let relMap = {};          // key "NameA|NameB" (sorted) -> score -100..100
+  const portraits = {};     // name -> dataUrl
+  let logEntries = [];      // {title, content, type, day} for save/restore
+  const SAVE_KEY = "save";
+  let modalOpenIdx = -1;
+
+  // Major event archetypes: label, prompt flavor, and relationship effect
+  const MAJOR_EVENTS = [
+    { type: "party",     label: "🎉 House Party",     flavor: "a wild house party breaks out",                  effect: +8,  spread: "group" },
+    { type: "crisis",    label: "🚨 Crisis",          flavor: "a sudden crisis forces everyone to react",       effect: 0,   spread: "mixed" },
+    { type: "romance",   label: "💖 Romance",         flavor: "an unexpected romance blossoms between two",     effect: +20, spread: "pair" },
+    { type: "prank",     label: "🃏 Epic Prank",      flavor: "an elaborate prank is pulled on someone",        effect: -12, spread: "pair" },
+    { type: "conflict",  label: "⚔️ Confrontation",   flavor: "a heated confrontation erupts between two",      effect: -18, spread: "pair" },
+    { type: "triumph",   label: "🏆 Triumph",         flavor: "the house achieves something together",          effect: +6,  spread: "group" },
+  ];
+
+  // --- EXPOSE GLOBALS FOR INLINE HANDLERS ---
+  window.changeHousing = changeHousing;
+  window.runSimulationTick = runSimulationTick;
+  window.runBatch = runBatch;
+  window.createUserScene = createUserScene;
+  window.openStudentDetail = openStudentDetail;
+  window.toggleStudent = toggleStudent;
+  window.logEvent = logEvent;
+  window.saveGame = saveGame;
+  window.loadGame = loadGame;
+  window.resetGame = resetGame;
+  window.generatePortrait = generatePortrait;
+
+  // --- RELATIONSHIPS ---
+  function relKey(a, b) { return [a, b].sort().join("|"); }
+  function getRel(a, b) { return relMap[relKey(a, b)] ?? 0; }
+  function setRel(a, b, v) { relMap[relKey(a, b)] = Math.max(-100, Math.min(100, Math.round(v))); }
+  function addRel(a, b, delta) { setRel(a, b, getRel(a, b) + delta); }
+
+  function initRelationships() {
+    relMap = {};
+    for (let i = 0; i < students.length; i++) {
+      for (let j = i + 1; j < students.length; j++) {
+        const a = students[i], b = students[j];
+        let score = Math.round((Math.random() * 35) - 10); // -10..+25 baseline
+        const shared = a.traits.filter(t => b.traits.includes(t));
+        score += shared.length * 8;                          // shared traits bond
+        setRel(a.name, b.name, score);
+      }
+    }
+  }
+
+  // Drift a few random pairs slightly each day
+  function driftRelationships() {
+    const names = students.map(s => s.name);
+    const drifts = 2 + Math.floor(Math.random() * 3);
+    for (let k = 0; k < drifts; k++) {
+      const a = names[Math.floor(Math.random() * names.length)];
+      let b = names[Math.floor(Math.random() * names.length)];
+      if (b === a) continue;
+      addRel(a, b, Math.round((Math.random() - 0.5) * 8));
+    }
+  }
+
+  // Apply a major event's effect to relationships
+  function applyMajorEffect(ev) {
+    const names = students.map(s => s.name);
+    if (ev.spread === "pair") {
+      const a = names[Math.floor(Math.random() * names.length)];
+      let b = names[Math.floor(Math.random() * names.length)];
+      while (b === a) b = names[Math.floor(Math.random() * names.length)];
+      addRel(a, b, ev.effect);
+    } else if (ev.spread === "group") {
+      const group = shuffle(names).slice(0, 4 + Math.floor(Math.random() * 3));
+      for (let i = 0; i < group.length; i++)
+        for (let j = i + 1; j < group.length; j++)
+          addRel(group[i], group[j], Math.round(ev.effect * 0.6));
+    } else { // mixed: some bond, some fray
+      const group = shuffle(names).slice(0, 4);
+      for (let i = 0; i < group.length; i++)
+        for (let j = i + 1; j < group.length; j++)
+          addRel(group[i], group[j], Math.round((Math.random() - 0.4) * 14));
+    }
+  }
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function topRelationshipsFor(name, n = 3) {
+    const arr = students.filter(s => s.name !== name).map(s => ({ name: s.name, score: getRel(name, s.name) }));
+    arr.sort((a, b) => b.score - a.score);
+    return { friends: arr.slice(0, n), rivals: arr.slice(-n).reverse() };
+  }
+
+  function renderBonds() {
+    // Show top 6 strongest bonds (positive) and top 3 tensions (negative)
+    const pairs = [];
+    for (let i = 0; i < students.length; i++) {
+      for (let j = i + 1; j < students.length; j++) {
+        const a = students[i].name, b = students[j].name;
+        pairs.push({ a, b, score: getRel(a, b) });
+      }
+    }
+    pairs.sort((x, y) => Math.abs(y.score) - Math.abs(x.score));
+    const top = pairs.slice(0, 9);
+    bondsListEl.innerHTML = top.map(p => {
+      const pct = Math.min(50, Math.abs(p.score) / 2); // 0..50% of bar
+      const pos = p.score >= 0;
+      const fillStyle = pos
+        ? `width:${pct}%;`
+        : `width:${pct}%;`;
+      return `<div class="bond-row">
+        <span class="bond-names">${p.a} &amp; ${p.b}</span>
+        <span class="bond-bar"><span class="bond-fill ${pos ? 'pos' : 'neg'}" style="${fillStyle}"></span></span>
+        <span class="bond-val">${p.score > 0 ? '+' : ''}${p.score}</span>
+      </div>`;
+    }).join('');
+    const strong = pairs.filter(p => p.score >= 40).length;
+    const tense = pairs.filter(p => p.score <= -30).length;
+    bondsSummaryEl.textContent = `${strong} close bonds · ${tense} tensions`;
+  }
+
+  // --- INIT ---
+  async function initApp() {
+    currentHousingId = "mixed";
+    housingSelectEl.value = "mixed";
+    loadHousing(currentHousingId);
+    initRelationships();
+    renderBonds();
+    logEvent("Move-In Day", `The ${students.length} residents of ${housings[currentHousingId].name} move in. Gender policy: ${housings[currentHousingId].genderPolicy}. The simulator has begun!`, "event");
+    updateUI();
+    // Try to restore a previous save
+    try {
+      const saved = await root.kv.housingSim.get(SAVE_KEY);
+      if (saved && saved.day && saved.day > 1) {
+        if (confirm(`Welcome back! A saved game on Day ${saved.day} was found. Load it?`)) {
+          applySave(saved);
+        }
+      }
+    } catch (e) { /* kv unavailable; ignore */ }
+    // Embed community wall (once)
+    try {
+      commentsCtn.innerHTML = root.commentsPlugin({ channel: "housing-sim", width: "100%", height: 360, commentPlaceholderText: "Share a funny day or a scene idea..." });
+    } catch (e) { commentsCtn.textContent = "Comments unavailable right now."; }
+  }
+
+  function loadHousing(id) {
+    students = JSON.parse(JSON.stringify(housings[id].students));
+    locations = JSON.parse(JSON.stringify(premadeLocations));
+    renderLocations();
+    renderStudents();
+    renderStudentSelector();
+    residentCountEl.textContent = students.length;
+  }
+
+  function changeHousing() {
+    if (isGenerating) return;
+    currentHousingId = housingSelectEl.value;
+    day = 1;
+    nextEventCountdown = 1;
+    logEntries = [];
+    residenceLogEl.innerHTML = "";
+    selectedStudents.clear();
+    Object.keys(portraits).forEach(k => delete portraits[k]);
+    loadHousing(currentHousingId);
+    initRelationships();
+    renderBonds();
+    logEvent("Move-In Day", `${housings[currentHousingId].name} is now occupied. ${students.length} residents move in. Gender policy: ${housings[currentHousingId].genderPolicy}.`, "event");
+    updateUI();
+    updateSceneButton();
+  }
+
+  // --- RENDER: LOCATIONS ---
+  function renderLocations() {
+    locationsListEl.innerHTML = locations.map((loc, i) => `
+      <li data-loc="${i}">
+        <div class="loc-name">${loc.name}</div>
+        <div class="loc-desc" hidden>${loc.description}</div>
+      </li>
+    `).join('');
+    sceneLocationEl.innerHTML = `<option value="">— Select Location —</option>` + locations.map(l => `<option value="${l.name}">${l.name}</option>`).join('');
+  }
+
+  locationsListEl.addEventListener('click', (e) => {
+    const li = e.target.closest('li');
+    if (!li) return;
+    const desc = li.querySelector('.loc-desc');
+    if (desc) desc.hidden = !desc.hidden;
+  });
+
+  // --- RENDER: STUDENT CATALOGUE ---
+  function renderStudents() {
+    studentCatalogueEl.innerHTML = students.map((s, i) => `
+      <div class="student-card" data-idx="${i}">
+        <div class="sc-name">${s.name}</div>
+        <div class="sc-meta">${s.year} • ${s.major}</div>
+        <div class="sc-traits">${s.traits.slice(0, 2).join(", ")}</div>
+      </div>
+    `).join('');
+  }
+
+  studentCatalogueEl.addEventListener('click', (e) => {
+    const card = e.target.closest('.student-card');
+    if (!card) return;
+    openStudentDetail(Number(card.dataset.idx));
+  });
+
+  // --- STUDENT DETAIL MODAL ---
+  function openStudentDetail(i) {
+    const s = students[i];
+    if (!s) return;
+    modalOpenIdx = i;
+    renderModalContent(s, i);
+    studentModalCtn.hidden = false;
+  }
+
+  function renderModalContent(s, i) {
+    const { friends, rivals } = topRelationshipsFor(s.name, 3);
+    const portraitHTML = portraits[s.name]
+      ? `<div class="modal-portrait"><img src="${portraits[s.name]}" alt="${s.name}"></div>`
+      : `<div class="modal-portrait"><button id="portraitBtn" onclick="generatePortrait(${i})">🎨 Generate Portrait</button></div>`;
+    const friendsHTML = friends.map(f => `<span class="rel-friend">${f.name} <em>${f.score > 0 ? '+' : ''}${f.score}</em></span>`).join("") || "<em>None yet</em>";
+    const rivalsHTML = rivals.map(r => `<span class="rel-rival">${r.name} <em>${r.score > 0 ? '+' : ''}${r.score}</em></span>`).join("") || "<em>None yet</em>";
+
+    studentModalContentEl.innerHTML = `
+      ${portraitHTML}
+      <h2 style="margin:0 0 4px;color:var(--blue-dark);">${s.name}</h2>
+      <p style="margin:0 0 12px;color:var(--muted);font-size:0.85em;">${s.role}</p>
+      <div class="modal-grid">
+        <p><strong>Gender:</strong> ${s.gender}</p>
+        <p><strong>Year:</strong> ${s.year}</p>
+        <p><strong>Major:</strong> ${s.major}</p>
+        <p><strong>Age:</strong> ${s.age}</p>
+        <p><strong>Hometown:</strong> ${s.hometown}</p>
+        <p><strong>Traits:</strong> ${s.traits.join(", ")}</p>
+        <p><strong>Likes:</strong> ${s.likes}</p>
+        <p><strong>Dislikes:</strong> ${s.dislikes}</p>
+      </div>
+      <div class="modal-bg"><strong>Background:</strong> ${s.background}</div>
+      <div class="modal-rels">
+        <p class="rel-head">💚 Closest bonds</p>
+        <div class="rel-list">${friendsHTML}</div>
+        <p class="rel-head">⚡ Tensions</p>
+        <div class="rel-list">${rivalsHTML}</div>
+      </div>
+    `;
+  }
+
+  async function generatePortrait(i) {
+    const s = students[i];
+    if (!s) return;
+    const btn = document.getElementById('portraitBtn');
+    if (btn) { btn.disabled = true; btn.textContent = "🎨 Generating..."; }
+    const prompt = `character portrait, college student, ${s.gender.toLowerCase()}, ${s.age} years old, ${s.role.replace(/^The /,'')}, ${s.traits.join(', ')}, ${s.major} vibe, expressive face, soft lighting, head and shoulders, semi-realistic illustration, neutral background`;
+    try {
+      const result = await root.generateImage({ prompt, negativePrompt: "nsfw, nudity, text, watermark, deformed", resolution: "512x512" });
+      portraits[s.name] = result.dataUrl;
+      renderModalContent(s, i);
+    } catch (e) {
+      console.error(e);
+      if (btn) { btn.disabled = false; btn.textContent = "🎨 Try again"; }
+    }
+  }
+
+  // Close modal on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !studentModalCtn.hidden) studentModalCtn.hidden = true;
+  });
+
+  // --- RENDER: SCENE STUDENT SELECTOR ---
+  function renderStudentSelector() {
+    sceneStudentsEl.innerHTML = students.map((s) => `
+      <label class="student-chip">
+        <input type="checkbox" value="${s.name}" onchange="toggleStudent(this)">
+        <span>${s.name}</span>
+      </label>
+    `).join('');
+  }
+
+  function toggleStudent() {
+    selectedStudents.clear();
+    sceneStudentsEl.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => selectedStudents.add(cb.value));
+    updateSceneButton();
+  }
+
+  function updateSceneButton() {
+    const ready = sceneLocationEl.value.trim() !== "" && selectedStudents.size > 0 && sceneDescEl.value.trim() !== "" && !isGenerating;
+    createSceneBtn.disabled = !ready;
+  }
+
+  sceneLocationEl.addEventListener('change', updateSceneButton);
+  sceneDescEl.addEventListener('input', updateSceneButton);
+
+  // --- LOG ---
+  const TAG_MAP = {
+    interaction: { text: "Interaction", cls: "tag-interaction" },
+    event:       { text: "Event",       cls: "tag-event" },
+    change:      { text: "Change",      cls: "tag-change" },
+    scene:       { text: "Scene",       cls: "tag-scene" },
+    general:     { text: "Note",        cls: "tag-general" }
+  };
+
+  function logEvent(title, content, type = "general") {
+    const tag = TAG_MAP[type] || TAG_MAP.general;
+    const entry = document.createElement('div');
+    entry.className = 'log-entry fade-in';
+    entry.dataset.type = type;
+    entry.innerHTML = `<span class="time">Day ${day}</span><span class="tag ${tag.cls}">${tag.text}</span><strong>${title}:</strong> ${content}`;
+    residenceLogEl.insertBefore(entry, residenceLogEl.firstChild);
+    logEntries.push({ title, content, type, day });
+    // Keep log bounded
+    if (logEntries.length > 400) logEntries.shift();
+  }
+
+  // Log filter
+  logFilterEl.addEventListener('change', () => {
+    const filter = logFilterEl.value;
+    for (const entry of residenceLogEl.children) {
+      entry.hidden = !(filter === "all" || entry.dataset.type === filter);
+    }
+  });
+
+  // Scroll to newest (top)
+  scrollTopBtn.addEventListener('click', () => {
+    residenceLogEl.scrollTop = 0;
+  });
+
+  // --- CREATE USER SCENE ---
+  async function createUserScene() {
+    if (isGenerating) return;
+    const loc = sceneLocationEl.value;
+    const desc = sceneDescEl.value.trim();
+    const participants = Array.from(selectedStudents);
+    if (!loc || !desc || participants.length === 0) return;
+
+    isGenerating = true;
+    loadingTextEl.textContent = "Writing scene...";
+    loadingCtn.hidden = false;
+    sceneResultEl.hidden = true;
+    createSceneBtn.textContent = "⏳ Generating...";
+    createSceneBtn.disabled = true;
+
+    const scenario = scenarioInputEl.value.trim();
+    const scenarioLine = scenario ? `\nWorld Scenario: ${scenario}` : "";
+    const participantInfo = participants.map(n => {
+      const s = students.find(x => x.name === n);
+      return s ? `- ${s.name} (${s.role}, ${s.traits.join("/")}): ${s.background}` : `- ${n}`;
+    }).join("\n");
+
+    const prompt = `Create a vivid narrative scene for a Student Housing Simulator.
+Housing: ${housings[currentHousingId].name}
+Location: ${loc}
+Participants:
+${participantInfo}
+User's Prompt: ${desc}${scenarioLine}
+
+Write a third-person narrative of this scene unfolding (150–250 words). Be detailed and engaging, showing how the characters react to each other.`;
+
+    try {
+      const result = await root.generateText(prompt);
+      sceneResultEl.innerHTML = `<strong>✨ AI Scene:</strong><br><br>${result}`;
+      sceneResultEl.hidden = false;
+      logEvent(`Scene: ${loc}`, `Featuring ${participants.join(", ")}. ${desc}`, "scene");
+    } catch (e) {
+      console.error(e);
+      sceneResultEl.textContent = "Error generating scene. Please try again.";
+      sceneResultEl.hidden = false;
+    } finally {
+      isGenerating = false;
+      loadingCtn.hidden = true;
+      createSceneBtn.textContent = "🎬 Generate AI Scene";
+      updateSceneButton();
+      autoSave();
+    }
+  }
+
+  // --- SIMULATION TICK ---
+  async function runSimulationTick() {
+    if (isGenerating) return;
+    isGenerating = true;
+    loadingTextEl.textContent = "Simulating next day...";
+    loadingCtn.hidden = false;
+    tickBtn.disabled = true;
+    batchBtn.disabled = true;
+
+    day++;
+    updateUI();
+
+    try {
+      const studentList = students.map(s => `- ${s.name} (${s.gender}, ${s.year}, ${s.major}, ${s.role}): ${s.background}`).join("\n");
+      const scenario = scenarioInputEl.value.trim();
+      const scenarioLine = scenario ? `\nWorld Scenario: ${scenario}\n` : "";
+
+      const dailyPrompt = `Simulate Day ${day} at ${housings[currentHousingId].name}. ${housings[currentHousingId].description}${scenarioLine}
+Residents:
+${studentList}
+
+Generate a realistic log of what happens during this day. Include mundane moments, small conflicts, friendships, surprises, and routines.
+Format EXACTLY as one event per line, each prefixed with "EVENT:". Provide 4 to 6 events covering morning, afternoon, and evening. Example:
+EVENT: Morning - Alex burnt toast and set off the fire alarm.
+EVENT: Afternoon - Sarah and Jordan had a deep talk in the backyard.`;
+
+      const dailyText = await root.generateText(dailyPrompt);
+      const parsedEvents = parseEvents(dailyText);
+
+      const typeCycle = ["interaction", "change", "event"];
+      parsedEvents.forEach((evt, idx) => {
+        logEvent("Daily Life", evt, typeCycle[idx % typeCycle.length]);
+      });
+
+      // Drift relationships naturally each day
+      driftRelationships();
+
+      // Major event every 3 days, or small random chance
+      if (day % 3 === 0 || Math.random() < 0.2) {
+        const ev = MAJOR_EVENTS[Math.floor(Math.random() * MAJOR_EVENTS.length)];
+        const scenarioBit = scenario ? ` World scenario: ${scenario}.` : "";
+        const majorPrompt = `Write ONE exciting sentence (max 30 words) describing ${ev.flavor} at ${housings[currentHousingId].name} on Day ${day}.${scenarioBit} Name specific residents involved. Be vivid.`;
+        const majorText = await root.generateText(majorPrompt);
+        logEvent(ev.label, majorText, "event");
+        applyMajorEffect(ev);
+        nextEventCountdown = 3;
+      } else {
+        nextEventCountdown = Math.max(0, nextEventCountdown - 1);
+      }
+
+      renderBonds();
+    } catch (e) {
+      console.error(e);
+      logEvent("System", "AI generation failed for this day. The hours pass quietly.", "event");
+    } finally {
+      isGenerating = false;
+      loadingCtn.hidden = true;
+      tickBtn.disabled = false;
+      batchBtn.disabled = false;
+      updateUI();
+      updateSceneButton();
+      autoSave();
+    }
+  }
+
+  // --- BATCH SIMULATION ---
+  async function runBatch() {
+    if (isGenerating) return;
+    const n = Math.max(1, Math.min(14, Number(batchDaysEl.value) || 1));
+    for (let k = 0; k < n; k++) {
+      loadingTextEl.textContent = `Simulating day ${k + 1} of ${n}...`;
+      await runSimulationTick();
+    }
+  }
+
+  function parseEvents(text) {
+    const events = [];
+    for (const raw of text.split('\n')) {
+      const line = raw.trim();
+      if (!line) continue;
+      const idx = line.toLowerCase().indexOf("event:");
+      if (idx !== -1) {
+        const evt = line.substring(idx + 6).trim();
+        if (evt) events.push(evt);
+      } else if (line.startsWith("-") || line.startsWith("*")) {
+        events.push(line.replace(/^[-*]\s*/, ""));
+      } else if (/^\d+[.)]\s+/.test(line)) {
+        events.push(line.replace(/^\d+[.)]\s+/, ""));
+      }
+    }
+    if (events.length === 0 && text.trim()) events.push(text.trim());
+    return events;
+  }
+
+  // --- UI UPDATE ---
+  function updateUI() {
+    dayCounterEl.textContent = day;
+    countdownEl.textContent = nextEventCountdown;
+  }
+
+  // --- SAVE / LOAD ---
+  function buildSave() {
+    return {
+      day, currentHousingId, nextEventCountdown,
+      scenario: scenarioInputEl.value,
+      logEntries,
+      relMap,
+      portraits,
+      savedAt: Date.now(),
+    };
+  }
+
+  function autoSave() {
+    try { root.kv.housingSim.set(SAVE_KEY, buildSave()); } catch (e) { /* ignore */ }
+  }
+
+  async function saveGame() {
+    try {
+      await root.kv.housingSim.set(SAVE_KEY, buildSave());
+      loadingTextEl.textContent = "Saved!";
+      loadingCtn.hidden = false;
+      setTimeout(() => { loadingCtn.hidden = true; }, 700);
+    } catch (e) {
+      alert("Could not save: " + e.message);
+    }
+  }
+
+  function applySave(save) {
+    currentHousingId = save.currentHousingId || "mixed";
+    housingSelectEl.value = currentHousingId;
+    day = save.day || 1;
+    nextEventCountdown = save.nextEventCountdown ?? 1;
+    scenarioInputEl.value = save.scenario || "";
+    logEntries = save.logEntries || [];
+    relMap = save.relMap || {};
+    Object.keys(portraits).forEach(k => delete portraits[k]);
+    if (save.portraits) Object.assign(portraits, save.portraits);
+    loadHousing(currentHousingId);
+    if (Object.keys(relMap).length === 0) initRelationships();
+    // Re-render log from saved entries
+    residenceLogEl.innerHTML = "";
+    const tag = (t) => TAG_MAP[t] || TAG_MAP.general;
+    for (const e of logEntries) {
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.dataset.type = e.type;
+      entry.innerHTML = `<span class="time">Day ${e.day}</span><span class="tag ${tag(e.type).cls}">${tag(e.type).text}</span><strong>${e.title}:</strong> ${e.content}`;
+      residenceLogEl.appendChild(entry); // append in order; newest last
+    }
+    residenceLogEl.scrollTop = residenceLogEl.scrollHeight;
+    renderBonds();
+    updateUI();
+  }
+
+  async function loadGame() {
+    if (isGenerating) return;
+    try {
+      const save = await root.kv.housingSim.get(SAVE_KEY);
+      if (!save) { alert("No saved game found."); return; }
+      applySave(save);
+      loadingTextEl.textContent = "Loaded!";
+      loadingCtn.hidden = false;
+      setTimeout(() => { loadingCtn.hidden = true; }, 700);
+    } catch (e) {
+      alert("Could not load: " + e.message);
+    }
+  }
+
+  async function resetGame() {
+    if (isGenerating) return;
+    if (!confirm("Reset to Day 1? This clears the current log and relationships.")) return;
+    day = 1; nextEventCountdown = 1; logEntries = [];
+    relMap = {}; Object.keys(portraits).forEach(k => delete portraits[k]);
+    residenceLogEl.innerHTML = "";
+    scenarioInputEl.value = "";
+    initRelationships();
+    renderBonds();
+    logEvent("Fresh Start", `A new semester begins at ${housings[currentHousingId].name}. ${students.length} residents move in.`, "event");
+    updateUI();
+    try { await root.kv.housingSim.delete(SAVE_KEY); } catch (e) {}
+  }
+
+  // --- START ---
+  initApp();
+</script>
+
+</body>
+</html>

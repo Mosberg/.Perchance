@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>msyicx2nkx — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  body {
+    text-align: left;
+    background: #0a0e1a;
+    color: #e8eef7;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+  }
+  /* Conversation sidebar */
+  #sidebar {
+    width: 260px;
+    background: #060912;
+    border-right: 1px solid #1e2740;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    flex-shrink: 0;
+    transition: transform 0.25s;
+    z-index: 200;
+  }
+  #sidebar h2 {
+    font-size: 0.8rem; color: #6b7a99; text-transform: uppercase;
+    letter-spacing: 1px; padding: 1rem 1rem 0.5rem; margin: 0;
+  }
+  #new-chat-sidebar {
+    margin: 0.5rem 1rem; padding: 0.5rem; background: #1e3a5f;
+    border: 1px solid #2a4a6f; color: #7dd3fc; border-radius: 8px;
+    cursor: pointer; font-size: 0.85rem; font-weight: 600; text-align: center;
+    font-family: inherit; transition: background 0.15s;
+  }
+  #new-chat-sidebar:hover { background: #2a4a6f; }
+  #conv-list {
+    flex: 1; overflow-y: auto; padding: 0.5rem;
+    display: flex; flex-direction: column; gap: 0.3rem;
+  }
+  .conv-item {
+    padding: 0.55rem 0.7rem; border-radius: 8px; cursor: pointer;
+    font-size: 0.82rem; color: #94a3b8; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: space-between; gap: 0.4rem;
+    border: 1px solid transparent;
+  }
+  .conv-item:hover { background: #0f1629; }
+  .conv-item.active { background: #0f1629; border-color: #2a4a6f; color: #e8eef7; }
+  .conv-item .conv-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conv-item .conv-del {
+    font-size: 0.9rem; color: #4a5568; opacity: 0; transition: opacity 0.15s;
+    background: none; border: 0; cursor: pointer; padding: 0 0.2rem; font-family: inherit;
+  }
+  .conv-item:hover .conv-del { opacity: 1; }
+  .conv-item .conv-del:hover { color: #fca5a5; }
+  .conv-item.ended .conv-title { color: #7f1d1d; }
+  #sidebar-toggle {
+    display: none; position: fixed; top: 0.6rem; left: 0.6rem; z-index: 210;
+    background: #0f1629; border: 1px solid #1e2740; color: #7dd3fc;
+    border-radius: 6px; padding: 0.4rem 0.6rem; cursor: pointer; font-size: 1.1rem;
+    font-family: inherit;
+  }
+  #sidebar-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    z-index: 199;
+  }
+  #sidebar-backdrop.open { display: block; }
+
+  /* Main chat area */
+  #main-wrap {
+    flex: 1; display: flex; flex-direction: column; min-width: 0;
+    height: 100vh;
+  }
+  header {
+    text-align: center;
+    padding: 1rem 1rem 0.8rem;
+    border-bottom: 1px solid #1e2740;
+  }
+  header h1 { margin: 0 0 0.2rem; font-size: 1.3rem; color: #7dd3fc; }
+  header .tagline { font-size: 0.72rem; color: #6b7a99; }
+  #acct-ctn { position: relative; display: inline-block; margin-top: 0.5rem; }
+  #acct-badge {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: #0f1629; border: 1px solid #1e2740; border-radius: 999px;
+    padding: 0.3rem 0.7rem; font-size: 0.74rem;
+    cursor: pointer; transition: all 0.15s;
+  }
+  #acct-badge:hover { border-color: #3b5f8f; }
+  #acct-badge .avatar {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #1e3a5f; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; color: #7dd3fc; font-weight: bold;
+  }
+  #acct-badge.creator { border-color: #fbbf24; background: #1a1505; }
+  #acct-badge.creator .avatar { background: #fbbf24; color: #1a1505; }
+  #acct-badge.creator .username { color: #fbbf24; }
+  #acct-badge .role-tag {
+    font-size: 0.6rem; padding: 0.1rem 0.4rem; border-radius: 999px;
+    background: #fbbf24; color: #1a1505; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .acct-menu {
+    position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 0.4rem;
+    background: #0f1629; border: 1px solid #1e2740; border-radius: 8px;
+    padding: 0.4rem; min-width: 160px; display: none; z-index: 50;
+  }
+  .acct-menu.open { display: block; }
+  .acct-menu button {
+    display: block; width: 100%; text-align: left; background: none; border: 0;
+    color: #94a3b8; padding: 0.4rem 0.6rem; font-size: 0.8rem; cursor: pointer;
+    border-radius: 6px; font-family: inherit;
+  }
+  .acct-menu button:hover { background: #1a2238; color: #e8eef7; }
+
+  #status-bar {
+    display: flex; align-items: center; gap: 0.6rem;
+    background: #0f1629; border: 1px solid #1e2740;
+    border-radius: 8px; padding: 0.5rem 0.9rem; margin: 0.7rem 1rem;
+    font-size: 0.74rem; flex-wrap: wrap;
+  }
+  #status-bar .label { color: #6b7a99; white-space: nowrap; }
+  #strikes-ctn { display: flex; gap: 0.3rem; align-items: center; }
+  .strike-dot {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #1a2238; border: 1px solid #2a3358; transition: all 0.3s;
+  }
+  .strike-dot.active { background: #ef4444; border-color: #ef4444; box-shadow: 0 0 6px #ef444480; }
+  #status-bar .spacer { flex: 1; }
+  #status-bar .conv-info { color: #6b7a99; font-size: 0.7rem; }
+  .crisis-banner {
+    text-align: center; font-size: 0.75rem; color: #86efac;
+    padding: 0.4rem; margin: 0 1rem 0.5rem;
+    background: #061a10; border: 1px solid #1f5f3f; border-radius: 8px;
+  }
+
+  #chat-ctn {
+    flex: 1; overflow-y: auto; padding: 0 1rem;
+  }
+  #chat {
+    display: flex; flex-direction: column; gap: 0.6rem;
+    max-width: 920px; margin: 0 auto; padding: 0.5rem 0 1rem;
+  }
+  .msg {
+    max-width: 85%; padding: 0.65rem 0.95rem; border-radius: 12px;
+    line-height: 1.45; font-size: 0.9rem; word-wrap: break-word; white-space: pre-wrap;
+  }
+  .msg.user {
+    align-self: flex-end; background: #1e3a5f; color: #e0f2fe; border-bottom-right-radius: 3px;
+  }
+  .msg.user .user-tag {
+    font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 0.2rem; padding: 0.1rem 0.4rem;
+    border-radius: 999px; display: inline-block;
+  }
+  .msg.user .user-tag.creator { background: #fbbf24; color: #1a1505; }
+  .msg.ai {
+    align-self: flex-start; background: #1a1f33; border: 1px solid #2a3358; border-bottom-left-radius: 3px;
+  }
+  .msg.ai .name { font-size: 0.68rem; color: #7dd3fc; margin-bottom: 0.2rem; font-weight: 600; }
+  .msg.crisis {
+    align-self: stretch; max-width: 100%; background: #0f2a1a;
+    border: 1px solid #2f7a4f; border-radius: 12px; padding: 0.9rem 1.1rem;
+  }
+  .msg.crisis .name { color: #86efac; }
+  .msg.crisis .resource {
+    margin-top: 0.5rem; padding: 0.5rem 0.7rem;
+    background: #061a10; border: 1px solid #1f5f3f; border-radius: 8px;
+    font-size: 0.82rem; color: #bbf7d0;
+  }
+  .msg.searching {
+    align-self: flex-start; background: #0f1629; border: 1px solid #2a4a6f;
+    border-radius: 12px; padding: 0.6rem 1rem; color: #7dd3fc; font-size: 0.82rem;
+  }
+  .msg.searching::after { content: "▋"; animation: blink 1s step-end infinite; }
+  .msg.ended {
+    align-self: center; background: #2a1010; border: 1px solid #7f1d1d; color: #fca5a5;
+    text-align: center; max-width: 90%; font-style: italic;
+  }
+  .msg.typing { color: #6b7a99; font-style: italic; }
+  .msg.typing::after { content: "▋"; animation: blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  #suggestion-ctn {
+    display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0; justify-content: center;
+    max-width: 920px; margin: 0.5rem auto;
+  }
+  .suggest {
+    font-size: 0.73rem; padding: 0.3rem 0.65rem;
+    background: #0f1629; border: 1px solid #1e2740; color: #94a3b8;
+    border-radius: 999px; cursor: pointer; transition: all 0.15s; font-family: inherit;
+  }
+  .suggest:hover { border-color: #3b5f8f; color: #7dd3fc; }
+
+  #input-bar {
+    border-top: 1px solid #1e2740; padding: 0.7rem 1rem;
+    display: flex; gap: 0.5rem; max-width: 920px; margin: 0 auto; box-sizing: border-box;
+    background: #0a0e1a;
+  }
+  #userInput {
+    flex: 1; background: #0f1629; border: 1px solid #1e2740; color: #e8eef7;
+    border-radius: 8px; padding: 0.65rem 0.85rem; font-size: 0.9rem; font-family: inherit; outline: none;
+    resize: none; overflow-y: auto; min-height: 60px; max-height: 200px; line-height: 1.4;
+    transition: max-height 0.1s;
+  }
+  #userInput:focus { border-color: #3b5f8f; }
+  #userInput:disabled { opacity: 0.4; }
+  #sendBtn {
+    background: #1e3a5f; color: #7dd3fc; border: 1px solid #2a4a6f;
+    border-radius: 8px; padding: 0 1.1rem; font-size: 0.9rem;
+    cursor: pointer; font-weight: 600; transition: background 0.15s; font-family: inherit;
+  }
+  #sendBtn:hover:not(:disabled) { background: #2a4a6f; }
+  #sendBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .disclaimer {
+    text-align: center; font-size: 0.66rem; color: #4a5568; padding-bottom: 0.5rem;
+  }
+
+  /* Auth modal */
+  #auth-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: none; align-items: center; justify-content: center; z-index: 300;
+  }
+  #auth-modal.open { display: flex; }
+  #auth-box {
+    background: #0f1629; border: 1px solid #1e2740; border-radius: 12px;
+    padding: 1.5rem; max-width: 360px; width: 90%; position: relative;
+  }
+  #auth-box h3 { margin: 0 0 0.3rem; color: #7dd3fc; font-size: 1.1rem; }
+  #auth-box .sub { font-size: 0.76rem; color: #6b7a99; margin-bottom: 1rem; }
+  #auth-box input {
+    width: 100%; box-sizing: border-box; background: #0a0e1a;
+    border: 1px solid #1e2740; color: #e8eef7; border-radius: 8px;
+    padding: 0.6rem 0.8rem; font-size: 0.88rem; font-family: inherit; outline: none; margin-bottom: 0.6rem;
+  }
+  #auth-box input:focus { border-color: #3b5f8f; }
+  #auth-box .auth-btn {
+    width: 100%; background: #1e3a5f; color: #7dd3fc; border: 1px solid #2a4a6f;
+    border-radius: 8px; padding: 0.6rem; font-size: 0.9rem; cursor: pointer;
+    font-weight: 600; font-family: inherit; margin-top: 0.3rem;
+  }
+  #auth-box .auth-btn:hover { background: #2a4a6f; }
+  #auth-box .switch-mode { text-align: center; font-size: 0.78rem; color: #6b7a99; margin-top: 0.8rem; }
+  #auth-box .switch-mode a { color: #7dd3fc; cursor: pointer; text-decoration: underline; }
+  #auth-box .auth-error { color: #fca5a5; font-size: 0.78rem; margin-top: 0.5rem; min-height: 1rem; }
+  #auth-box .close-x {
+    position: absolute; top: 0.5rem; right: 0.8rem; cursor: pointer;
+    color: #6b7a99; font-size: 1.2rem;
+  }
+
+  @media screen and (max-width: 700px) {
+    #sidebar {
+      position: fixed; left: 0; top: 0; transform: translateX(-100%);
+    }
+    #sidebar.open { transform: translateX(0); }
+    #sidebar-toggle { display: block; }
+    #chat-ctn { padding: 0 0.7rem; }
+    #status-bar { margin: 0.7rem; }
+    .crisis-banner { margin: 0 0.7rem 0.5rem; }
+    #input-bar { padding: 0.7rem; }
+  }
+</style>
+
+<button id="sidebar-toggle">☰</button>
+<div id="sidebar-backdrop"></div>
+
+<div id="sidebar">
+  <h2>Conversations</h2>
+  <button id="new-chat-sidebar">+ New Conversation</button>
+  <div id="conv-list"></div>
+</div>
+
+<div id="main-wrap">
+  <header>
+    <h1>🛡️ SafeGuard AI</h1>
+    <div class="tagline">A strict but friendly AI. Chats normally, can search the web, refuses harmful content.</div>
+    <div id="acct-ctn">
+      <div id="acct-badge"><span class="avatar">?</span><span class="username">Not signed in</span></div>
+      <div class="acct-menu" id="acct-menu">
+        <button id="login-menu-btn">Log in</button>
+        <button id="signup-menu-btn">Sign up</button>
+        <button id="logout-btn" hidden>Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="status-bar">
+    <span class="label">Violations:</span>
+    <div id="strikes-ctn">
+      <div class="strike-dot"></div>
+      <div class="strike-dot"></div>
+      <div class="strike-dot"></div>
+    </div>
+    <span class="spacer"></span>
+    <span class="conv-info" id="conv-info"></span>
+  </div>
+
+  <div class="crisis-banner">If you're in crisis, call or text <b>988</b> (Suicide & Crisis Lifeline, 24/7).</div>
+
+  <div id="chat-ctn">
+    <div id="suggestion-ctn">
+      <button class="suggest">Hello!</button>
+      <button class="suggest">How are you?</button>
+      <button class="suggest">Tell me a fun fact</button>
+      <button class="suggest">Search for latest tech news</button>
+      <button class="suggest">I'm feeling really down</button>
+    </div>
+    <div id="chat"></div>
+  </div>
+
+  <div id="input-bar">
+    <textarea id="userInput" placeholder="Say something... (Shift+Enter for new line)" autocomplete="off" rows="2"></textarea>
+    <button id="sendBtn">Send</button>
+  </div>
+  <div class="disclaimer">SafeGuard AI refuses harmful content. 3 violations ends the conversation.</div>
+</div>
+
+<div id="auth-modal">
+  <div id="auth-box">
+    <span class="close-x" id="auth-close">×</span>
+    <h3 id="auth-title">Log in</h3>
+    <div class="sub" id="auth-sub">Sign in to your SafeGuard AI account.</div>
+    <input id="auth-user" placeholder="Username" autocomplete="off" />
+    <input id="auth-pass" type="password" placeholder="Password" autocomplete="off" />
+    <button class="auth-btn" id="auth-submit">Log in</button>
+    <div class="auth-error" id="auth-error"></div>
+    <div class="switch-mode" id="auth-switch">Don't have an account? <a id="switch-link">Sign up</a></div>
+  </div>
+</div>
+
+<script>
+  // ============ ACCOUNT SYSTEM ============
+  const CREATOR_NAME = "MrHighExplosionYT";
+  const ACCOUNTS_KEY = "safeguard_accounts";
+  const SESSION_KEY = "safeguard_session";
+
+  function loadAccounts() {
+    try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "{}"); }
+    catch { return {}; }
+  }
+  function saveAccounts(a) { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(a)); }
+  function getSession() {
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); }
+    catch { return null; }
+  }
+  function setSession(s) {
+    if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+    else localStorage.removeItem(SESSION_KEY);
+  }
+  function hash(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; }
+    return String(h);
+  }
+  function ensureCreatorAccount() {
+    const accounts = loadAccounts();
+    if (!accounts[CREATOR_NAME]) {
+      accounts[CREATOR_NAME] = { passHash: hash("creator"), role: "creator", created: Date.now() };
+      saveAccounts(accounts);
+    }
+  }
+  function currentUser() {
+    const s = getSession();
+    if (!s) return null;
+    const accounts = loadAccounts();
+    return accounts[s.username] || null;
+  }
+  function initAuth() {
+    ensureCreatorAccount();
+    if (!getSession()) setSession({ username: CREATOR_NAME });
+    renderAcctBadge();
+  }
+  function renderAcctBadge() {
+    const badge = document.getElementById("acct-badge");
+    const user = currentUser();
+    const menu = document.getElementById("acct-menu");
+    const loginBtn = document.getElementById("login-menu-btn");
+    const signupBtn = document.getElementById("signup-menu-btn");
+    const logoutBtn = document.getElementById("logout-btn");
+    if (user) {
+      const name = getSession().username;
+      const isCreator = user.role === "creator";
+      badge.className = isCreator ? "creator" : "";
+      badge.innerHTML = `<span class="avatar">${name[0].toUpperCase()}</span><span class="username">${name}</span>` +
+        (isCreator ? '<span class="role-tag">Creator</span>' : '');
+      loginBtn.hidden = true; signupBtn.hidden = true; logoutBtn.hidden = false;
+    } else {
+      badge.className = "";
+      badge.innerHTML = '<span class="avatar">?</span><span class="username">Not signed in</span>';
+      loginBtn.hidden = false; signupBtn.hidden = false; logoutBtn.hidden = true;
+    }
+    menu.classList.remove("open");
+  }
+
+  const authModal = document.getElementById("auth-modal");
+  const authTitle = document.getElementById("auth-title");
+  const authSub = document.getElementById("auth-sub");
+  const authSubmit = document.getElementById("auth-submit");
+  const authSwitch = document.getElementById("auth-switch");
+  const authError = document.getElementById("auth-error");
+  let authMode = "login";
+  function openAuth(mode) {
+    authMode = mode; authError.textContent = "";
+    document.getElementById("auth-user").value = "";
+    document.getElementById("auth-pass").value = "";
+    if (mode === "login") {
+      authTitle.textContent = "Log in"; authSub.textContent = "Sign in to your SafeGuard AI account.";
+      authSubmit.textContent = "Log in";
+      authSwitch.innerHTML = 'Don\'t have an account? <a id="switch-link">Sign up</a>';
+    } else {
+      authTitle.textContent = "Sign up"; authSub.textContent = "Create a SafeGuard AI account to chat.";
+      authSubmit.textContent = "Create account";
+      authSwitch.innerHTML = 'Already have an account? <a id="switch-link">Log in</a>';
+    }
+    authModal.classList.add("open");
+    document.getElementById("auth-user").focus();
+  }
+  function closeAuth() { authModal.classList.remove("open"); }
+  document.getElementById("acct-badge").addEventListener("click", (e) => {
+    e.stopPropagation();
+    document.getElementById("acct-menu").classList.toggle("open");
+  });
+  document.addEventListener("click", () => { document.getElementById("acct-menu").classList.remove("open"); });
+  document.getElementById("login-menu-btn").addEventListener("click", () => openAuth("login"));
+  document.getElementById("signup-menu-btn").addEventListener("click", () => openAuth("signup"));
+  document.getElementById("logout-btn").addEventListener("click", () => { setSession(null); renderAcctBadge(); });
+  document.getElementById("auth-close").addEventListener("click", closeAuth);
+  authModal.addEventListener("click", (e) => { if (e.target === authModal) closeAuth(); });
+  authSwitch.addEventListener("click", (e) => { if (e.target.id === "switch-link") openAuth(authMode === "login" ? "signup" : "login"); });
+  authSubmit.addEventListener("click", () => {
+    const u = document.getElementById("auth-user").value.trim();
+    const p = document.getElementById("auth-pass").value;
+    if (!u || !p) { authError.textContent = "Please fill in both fields."; return; }
+    if (u.length < 3) { authError.textContent = "Username must be at least 3 characters."; return; }
+    const accounts = loadAccounts();
+    if (authMode === "signup") {
+      if (accounts[u]) { authError.textContent = "That username is already taken."; return; }
+      if (u.toLowerCase() === CREATOR_NAME.toLowerCase()) { authError.textContent = "That username is reserved."; return; }
+      accounts[u] = { passHash: hash(p), role: "user", created: Date.now() };
+      saveAccounts(accounts); setSession({ username: u }); closeAuth(); renderAcctBadge();
+    } else {
+      if (!accounts[u] || accounts[u].passHash !== hash(p)) { authError.textContent = "Invalid username or password."; return; }
+      setSession({ username: u }); closeAuth(); renderAcctBadge();
+    }
+  });
+  document.getElementById("auth-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") authSubmit.click(); });
+
+  initAuth();
+
+  // ============ CONVERSATION PERSISTENCE ============
+  const CONVS_KEY = "safeguard_conversations";
+  const ACTIVE_CONV_KEY = "safeguard_active_conv";
+
+  function loadConversations() {
+    try { return JSON.parse(localStorage.getItem(CONVS_KEY) || "[]"); }
+    catch { return []; }
+  }
+  function saveConversations(convs) {
+    // Also cap at 50 conversations to avoid bloating localStorage
+    if (convs.length > 50) convs = convs.slice(-50);
+    try { localStorage.setItem(CONVS_KEY, JSON.stringify(convs)); } catch(e) { /* quota */ }
+  }
+  function getActiveConvId() {
+    return localStorage.getItem(ACTIVE_CONV_KEY) || null;
+  }
+  function setActiveConvId(id) {
+    if (id) localStorage.setItem(ACTIVE_CONV_KEY, id);
+    else localStorage.removeItem(ACTIVE_CONV_KEY);
+  }
+
+  // ============ CHAT STATE ============
+  const chatEl = document.getElementById("chat");
+  const chatCtn = document.getElementById("chat-ctn");
+  const userInput = document.getElementById("userInput");
+  const sendBtn = document.getElementById("sendBtn");
+  const strikeDots = document.querySelectorAll(".strike-dot");
+  const convListEl = document.getElementById("conv-list");
+  const convInfoEl = document.getElementById("conv-info");
+
+  const MAX_STRIKES = 3;
+  let conversations = [];   // persisted array
+  let currentConv = null;   // the active conversation object
+  let busy = false;
+  let genId = 0;
+
+  // Crisis keyword detection
+  const crisisPatterns = [
+    /\b(kill|end|hurt|damage|destroy)\s*(my|myself|oneself)\b/i,
+    /\b(kill myself|end my life|want to die|wanna die|suicid\w*|self[\s-]?harm|cutting myself|hurt myself)\b/i,
+    /\b(no reason to live|better off dead|don'?t want to live|don'?t want to be (here|alive)|take my (own )?life)\b/i,
+    /\b(ending it all|end it all|can'?t go on|give up on life)\b/i,
+    /\b(I want to (die|kill myself|disappear|not exist|not be here))\b/i,
+    /\b(depressed|hopeless|worthless|alone|nobody cares)\b.*\b(die|death|kill|end|gone)\b/i,
+    /\b(planning|plan|thinking (about|of))\b.*\b(suicid|kill|die|death|end (it|my life))\b/i,
+  ];
+  function isCrisis(text) { return crisisPatterns.some(p => p.test(text)); }
+
+  function isCreator() {
+    const s = getSession(); const u = currentUser();
+    return s && u && u.role === "creator";
+  }
+  function currentUserName() {
+    const s = getSession();
+    return s ? s.username : "Guest";
+  }
+
+  function updateStrikes() {
+    strikeDots.forEach((d, i) => { d.classList.toggle("active", i < (currentConv ? currentConv.strikes : 0)); });
+  }
+
+  // Build a conversation title from the first user message
+  function titleFromMessage(msg) {
+    let t = msg.replace(/^\[CREATOR\\]\s*\S+:\s*/, "").replace(/^User:\s*/, "").replace(/^SafeGuard AI:\s*/, "").trim();
+    return t.length > 40 ? t.slice(0, 37) + "…" : t || "New Chat";
+  }
+
+  // ============ MESSAGE RENDERING ============
+  // Each message in currentConv.messages is a string like "User: ..." or "SafeGuard AI: ..."
+  // We also store role info: {role: "user"|"ai"|"crisis"|"ended"|"searching", text: "..."}
+  // For simplicity, messages array stores formatted strings for the AI prompt,
+  // and renderedMsgs stores {role, text} for display.
+
+  function addMsg(text, role) {
+    const el = document.createElement("div");
+    el.className = "msg " + role;
+    if (role === "ai" || role === "crisis") {
+      el.innerHTML = '<div class="name">🛡️ SafeGuard AI</div><div class="body"></div>';
+      el.querySelector(".body").textContent = text;
+      if (role === "crisis") {
+        el.innerHTML += '<div class="resource">📞 <b>988</b> — Suicide & Crisis Lifeline (call or text, 24/7)<br>💬 Text <b>HOME</b> to <b>741741</b> (Crisis Text Line)</div>';
+      }
+    } else if (role === "ended") {
+      el.className = "msg ended";
+      el.textContent = text;
+    } else if (role === "searching") {
+      el.textContent = text;
+    } else if (role === "user") {
+      const creator = isCreator();
+      el.innerHTML = (creator ? '<div class="user-tag creator">👑 Creator</div>' : '') + '<div class="body"></div>';
+      el.querySelector(".body").textContent = text;
+    } else {
+      el.textContent = text;
+    }
+    chatEl.appendChild(el);
+    chatCtn.scrollTop = chatCtn.scrollHeight;
+    return el;
+  }
+
+  function addStreamingMsg(role) {
+    const el = document.createElement("div");
+    el.className = "msg " + role;
+    el.innerHTML = '<div class="name">🛡️ SafeGuard AI</div><div class="body"></div>';
+    if (role === "crisis") {
+      el.innerHTML += '<div class="resource">📞 <b>988</b> — Suicide & Crisis Lifeline (call or text, 24/7)<br>💬 Text <b>HOME</b> to <b>741741</b> (Crisis Text Line)</div>';
+    }
+    chatEl.appendChild(el);
+    chatCtn.scrollTop = chatCtn.scrollHeight;
+    return el;
+  }
+
+  // ============ CONVERSATION MANAGEMENT ============
+  function createConversation() {
+    const conv = {
+      id: "c" + Date.now() + Math.random().toString(36).slice(2, 6),
+      title: "New Chat",
+      messages: [],       // formatted strings for AI prompt
+      rendered: [],       // {role, text} for display
+      strikes: 0,
+      ended: false,
+      createdAt: Date.now(),
+    };
+    // Add greeting
+    const creator = isCreator();
+    const greeting = creator
+      ? `Welcome back, MrHighExplosionYT! You're my creator. I'm SafeGuard AI — ready to chat whenever you are. What's on your mind?`
+      : `Hi! I'm SafeGuard AI, created by MrHighExplosionYT. I'm here to chat — ask me anything safe and I'll do my best to help. I can also search the web if you need current info. If you're ever in crisis, know that 988 is always there for you. What's on your mind?`;
+    conv.messages.push("SafeGuard AI: " + greeting);
+    conv.rendered.push({ role: "ai", text: greeting });
+    conversations.push(conv);
+    saveConversations(conversations);
+    return conv;
+  }
+
+  function switchConversation(convId) {
+    const conv = conversations.find(c => c.id === convId);
+    if (!conv) return;
+    currentConv = conv;
+    setActiveConvId(convId);
+    genId++;
+    busy = false;
+    renderConversation();
+    renderConvList();
+  }
+
+  function deleteConversation(convId) {
+    const idx = conversations.findIndex(c => c.id === convId);
+    if (idx === -1) return;
+    conversations.splice(idx, 1);
+    saveConversations(conversations);
+    if (currentConv && currentConv.id === convId) {
+      if (conversations.length > 0) {
+        switchConversation(conversations[conversations.length - 1].id);
+      } else {
+        const newConv = createConversation();
+        switchConversation(newConv.id);
+      }
+    } else {
+      renderConvList();
+    }
+  }
+
+  function renderConversation() {
+    chatEl.innerHTML = "";
+    updateStrikes();
+    if (!currentConv) return;
+    for (const r of currentConv.rendered) {
+      addMsg(r.text, r.role);
+    }
+    sendBtn.disabled = currentConv.ended;
+    userInput.disabled = currentConv.ended;
+    userInput.placeholder = currentConv.ended ? "Conversation ended. Start a new one." : "Say something... (Shift+Enter for new line)";
+    userInput.value = "";
+    userInput.style.height = "auto";
+    convInfoEl.textContent = currentConv.title;
+  }
+
+  function renderConvList() {
+    convListEl.innerHTML = "";
+    // Show most recent first
+    const sorted = [...conversations].reverse();
+    for (const conv of sorted) {
+      const item = document.createElement("div");
+      item.className = "conv-item" + (currentConv && conv.id === currentConv.id ? " active" : "") + (conv.ended ? " ended" : "");
+      item.innerHTML = `<span class="conv-title">${conv.title}</span><button class="conv-del" title="Delete">×</button>`;
+      item.addEventListener("click", (e) => {
+        if (e.target.classList.contains("conv-del")) return;
+        switchConversation(conv.id);
+        closeSidebarMobile();
+      });
+      item.querySelector(".conv-del").addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteConversation(conv.id);
+      });
+      convListEl.appendChild(item);
+    }
+  }
+
+  function saveCurrentConv() {
+    if (!currentConv) return;
+    saveConversations(conversations);
+  }
+
+  // ============ WEB SEARCH ============
+  async function webSearch(query) {
+    const results = [];
+    try {
+      // Step 1: Search Wikipedia for relevant articles
+      const searchUrl = "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=" +
+        encodeURIComponent(query) + "&format=json&srlimit=5&origin=*";
+      const searchResp = await root.superFetch(searchUrl);
+      const searchData = await searchResp.json();
+      const searchItems = searchData.query?.search || [];
+
+      // Step 2: Fetch summaries for top 3 results
+      for (let i = 0; i < Math.min(3, searchItems.length); i++) {
+        const title = searchItems[i].title;
+        const snippet = searchItems[i].snippet?.replace(/<[^>]+>/g, '').trim();
+        try {
+          const summaryUrl = "https://en.wikipedia.org/api/rest_v1/page/summary/" +
+            encodeURIComponent(title.replace(/\s/g, "_"));
+          const summaryResp = await root.superFetch(summaryUrl);
+          const summaryData = await summaryResp.json();
+          if (summaryData.extract) {
+            results.push({ title: title, snippet: summaryData.extract.slice(0, 400) });
+          } else {
+            results.push({ title: title, snippet: snippet });
+          }
+        } catch(e) {
+          results.push({ title: title, snippet: snippet });
+        }
+      }
+    } catch(e) {
+      // If Wikipedia fails, try DuckDuckGo as fallback
+      try {
+        const ddgUrl = "https://api.duckduckgo.com/?q=" + encodeURIComponent(query) + "&format=json&no_html=1";
+        const ddgResp = await root.superFetch(ddgUrl);
+        const ddgData = await ddgResp.json();
+        if (ddgData.Abstract) results.push({ title: ddgData.Heading || "DuckDuckGo", snippet: ddgData.Abstract });
+        for (const t of (ddgData.RelatedTopics || [])) {
+          if (t.Text && results.length < 5) results.push({ title: "", snippet: t.Text });
+        }
+      } catch(e2) { /* give up */ }
+    }
+    return results;
+  }
+
+  function formatSearchResults(query, results) {
+    if (results.length === 0) {
+      return `SEARCH RESULTS for "${query}":\nNo results found.`;
+    }
+    let text = `SEARCH RESULTS for "${query}":\n`;
+    for (const r of results) {
+      text += `\n- ${r.title}`;
+      if (r.snippet) text += `: ${r.snippet}`;
+    }
+    text += "\n\nUse these results to answer the user's question. Cite sources by name when relevant.";
+    return text;
+  }
+
+  // ============ AI RESPONSE ============
+  function buildPrompt(crisisMode, searchResults) {
+    let log = currentConv.messages.join("\n\n");
+    let task;
+    const strikes = currentConv ? currentConv.strikes : 0;
+    const escalationNote = `\n\nCURRENT VIOLATION COUNT: ${strikes} prior violation${strikes === 1 ? "" : "s"} (out of 2 allowed before the 3rd ends the conversation). If you respond with [FLAG], follow the ESCALATION rules for this count.`;
+    if (crisisMode) {
+      task = "The user may be in crisis or emotional distress. Respond with genuine warmth and care. Remind them they matter, that they are not alone, and that help is available RIGHT NOW. Mention the 988 Suicide & Crisis Lifeline (call or text 988, 24/7) and the Crisis Text Line (text HOME to 741741). Be a compassionate presence. Keep it sincere and brief. Still start with [OK] then your response.";
+    } else if (searchResults) {
+      task = "The user asked a question and a web search was performed. The search results have been added to the conversation above. Answer the user's question using the search results. Cite sources by name when relevant. Start with [OK] then your response." + escalationNote;
+    } else {
+      task = "Write the next response as SafeGuard AI. Start with [OK] or [FLAG] then your response." + escalationNote;
+    }
+    return root.systemPrompt.instruction.evaluateItem + "\n\n" + log + "\n\nTASK: " + task;
+  }
+
+  function parseMarker(text) {
+    if (text.startsWith("[FLAG]")) return { flag: "FLAG", display: text.slice(6).trim() };
+    if (text.startsWith("[OK]"))   return { flag: "OK",   display: text.slice(4).trim() };
+    if (text.startsWith("[") && text.length <= 6) return { flag: null, display: "" };
+    return { flag: "OK", display: text };
+  }
+
+  function endConversation() {
+    currentConv.ended = true;
+    busy = false;
+    sendBtn.disabled = true;
+    userInput.disabled = true;
+    userInput.placeholder = "Conversation ended. Start a new one.";
+    addMsg("🚫 I'm sorry, but this is the third violation, so I have to end this conversation. I genuinely apologize — I hope you and I can continue in a new conversation. Click \"+ New Conversation\" to start fresh.", "ended");
+    currentConv.rendered.push({ role: "ended", text: "I'm sorry, but this is the third violation, so I have to end this conversation. I hope we can continue in a new conversation." });
+    saveCurrentConv();
+    renderConvList();
+  }
+
+  async function generateResponse(crisisMode, searchResults) {
+    const myGen = genId;
+    const typingEl = document.createElement("div");
+    typingEl.className = "msg ai typing";
+    typingEl.textContent = "SafeGuard AI is typing";
+    chatEl.appendChild(typingEl);
+    chatCtn.scrollTop = chatCtn.scrollHeight;
+
+    const role = crisisMode ? "crisis" : "ai";
+    const bodyEl = addStreamingMsg(role);
+
+    let determinedFlag = null;
+    let fullText = "";
+
+    try {
+      await root.generateText({
+        instruction: buildPrompt(crisisMode, searchResults),
+        stopSequences: ["\nUser:", "\n[CREATOR]"],
+        onChunk: (d) => {
+          if (myGen !== genId) return;
+          typingEl.remove();
+          fullText = d.fullTextSoFar;
+          let parsed = parseMarker(fullText);
+          if (parsed.flag && !determinedFlag) determinedFlag = parsed.flag;
+          bodyEl.querySelector(".body").textContent = parsed.display || "…";
+          chatCtn.scrollTop = chatCtn.scrollHeight;
+        },
+      });
+
+      if (myGen !== genId) return null;
+      let parsed = parseMarker(fullText);
+      if (!determinedFlag) determinedFlag = parsed.flag || "OK";
+      bodyEl.querySelector(".body").textContent = parsed.display;
+      typingEl.remove();
+
+      return { text: parsed.display, flag: determinedFlag, raw: fullText };
+    } catch (e) {
+      if (myGen !== genId) return null;
+      typingEl.remove();
+      bodyEl.remove();
+      addMsg("Something went wrong. Please try again.", "ai");
+      return null;
+    }
+  }
+
+  async function send(text) {
+    if (busy || !currentConv || currentConv.ended || !text.trim()) return;
+    busy = true;
+    sendBtn.disabled = true;
+    userInput.value = "";
+    userInput.style.height = "auto";
+    const myGen = genId;
+
+    const crisis = isCrisis(text);
+    addMsg(text, "user");
+    const creator = isCreator();
+    const speakerLabel = creator ? "[CREATOR] " + currentUserName() : "User";
+    currentConv.messages.push(speakerLabel + ": " + text);
+    currentConv.rendered.push({ role: "user", text: text });
+
+    // Update conversation title if this is the first user message
+    if (currentConv.title === "New Chat") {
+      currentConv.title = titleFromMessage(text);
+      convInfoEl.textContent = currentConv.title;
+    }
+    saveCurrentConv();
+    renderConvList();
+
+    // Generate response
+    const result = await generateResponse(crisis, false);
+    if (myGen !== genId) return;
+
+    if (result) {
+      // Check if AI wants to search — handle "SEARCH: query", "SEARCH query", etc.
+      const searchMatch = result.text.trim().match(/^SEARCH\s*:?\s*(.+)$/i);
+      if (!crisis && searchMatch) {
+        const searchQuery = searchMatch[1].trim();
+        // Remove the AI's search response from display
+        const lastAi = chatEl.querySelector(".msg.ai:last-of-type, .msg.crisis:last-of-type");
+        // Actually, we need to remove the bodyEl that was just added
+        const aiMsgs = chatEl.querySelectorAll(".msg.ai, .msg.crisis");
+        if (aiMsgs.length > 0) aiMsgs[aiMsgs.length - 1].remove();
+
+        // Also remove from conversation history
+        currentConv.messages.pop();
+        currentConv.rendered.pop();
+
+        // Show searching indicator
+        const searchEl = addMsg(`🔍 Searching the web for "${searchQuery}"...`, "searching");
+
+        try {
+          const results = await webSearch(searchQuery);
+          if (myGen !== genId) return;
+          searchEl.remove();
+
+          // Add search results to conversation context
+          const formatted = formatSearchResults(searchQuery, results);
+          currentConv.messages.push("SYSTEM: " + formatted);
+
+          // Generate final response with search results
+          const finalResult = await generateResponse(false, true);
+          if (myGen !== genId) return;
+
+          if (finalResult) {
+            currentConv.messages.push("SafeGuard AI: " + finalResult.text);
+            currentConv.rendered.push({ role: "ai", text: finalResult.text });
+            saveCurrentConv();
+            renderConvList();
+
+            if (finalResult.flag === "FLAG") {
+              currentConv.strikes++;
+              updateStrikes();
+              saveCurrentConv();
+              if (currentConv.strikes >= MAX_STRIKES) {
+                endConversation();
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          if (myGen !== genId) return;
+          searchEl.remove();
+          addMsg("I tried to search the web but encountered an error. Let me try to answer without it.", "ai");
+          // Retry without search
+          const retryResult = await generateResponse(false, false);
+          if (myGen !== genId) return;
+          if (retryResult) {
+            currentConv.messages.push("SafeGuard AI: " + retryResult.text);
+            currentConv.rendered.push({ role: "ai", text: retryResult.text });
+            saveCurrentConv();
+          }
+        }
+      } else {
+        // Normal response
+        currentConv.messages.push("SafeGuard AI: " + result.text);
+        const displayRole = crisis ? "crisis" : "ai";
+        currentConv.rendered.push({ role: displayRole, text: result.text });
+        saveCurrentConv();
+        renderConvList();
+
+        if (!crisis && result.flag === "FLAG") {
+          currentConv.strikes++;
+          updateStrikes();
+          saveCurrentConv();
+          if (currentConv.strikes >= MAX_STRIKES) {
+            endConversation();
+            return;
+          }
+        }
+      }
+    }
+
+    busy = false;
+    if (myGen !== genId) return;
+    if (!currentConv.ended) sendBtn.disabled = false;
+    userInput.focus();
+  }
+
+  // ============ SIDEBAR (MOBILE) ============
+  const sidebar = document.getElementById("sidebar");
+  const sidebarToggle = document.getElementById("sidebar-toggle");
+  const sidebarBackdrop = document.getElementById("sidebar-backdrop");
+  function openSidebarMobile() { sidebar.classList.add("open"); sidebarBackdrop.classList.add("open"); }
+  function closeSidebarMobile() { sidebar.classList.remove("open"); sidebarBackdrop.classList.remove("open"); }
+  sidebarToggle.addEventListener("click", openSidebarMobile);
+  sidebarBackdrop.addEventListener("click", closeSidebarMobile);
+
+  // ============ EVENT LISTENERS ============
+  document.getElementById("new-chat-sidebar").addEventListener("click", () => {
+    const conv = createConversation();
+    switchConversation(conv.id);
+    closeSidebarMobile();
+  });
+  sendBtn.addEventListener("click", () => send(userInput.value));
+  userInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (!(currentConv && currentConv.ended)) send(userInput.value);
+    }
+  });
+  // Auto-grow the textarea as the user types
+  userInput.addEventListener("input", () => {
+    userInput.style.height = "auto";
+    userInput.style.height = Math.min(userInput.scrollHeight, 200) + "px";
+  });
+  document.querySelectorAll(".suggest").forEach(b => {
+    b.addEventListener("click", () => { if (!(currentConv && currentConv.ended)) send(b.textContent); });
+  });
+
+  // ============ INITIALIZATION ============
+  function init() {
+    conversations = loadConversations();
+    const activeId = getActiveConvId();
+    if (conversations.length > 0) {
+      // Try to load the active conversation
+      let conv = conversations.find(c => c.id === activeId);
+      if (!conv) conv = conversations[conversations.length - 1];
+      currentConv = conv;
+      setActiveConvId(conv.id);
+    } else {
+      // Create a new conversation
+      currentConv = createConversation();
+    }
+    renderConversation();
+    renderConvList();
+  }
+
+  init();
+</script>
+
+</body>
+</html>

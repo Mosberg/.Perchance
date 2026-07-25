@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>mythos-mixer — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Mythos Mixer — A unique Perchance-style multi-category randomizer with lockable cards,
+AI text expansion, AI image visualization, editable lists, and session history.
+-->
+
+<div id="appCtn" style="font-family:system-ui, -apple-system, sans-serif; max-width:960px; margin:0 auto; padding:20px; text-align:center; color:#0f172a;">
+
+  <h1 style="margin:0 0 4px; font-size:32px; letter-spacing:-1px;">Mythos Mixer</h1>
+  <p style="margin:0 0 20px; color:#64748b; font-size:14px;">Forge impossible worlds from spinning fragments. Lock what you love, spin what you don't.</p>
+
+  <div id="comboEl" style="min-height:36px; margin-bottom:16px; line-height:1.6;"></div>
+
+  <div id="cardsCtn" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:12px; margin-bottom:24px;"></div>
+
+  <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:24px;">
+    <button id="spinAllBtn" onclick="spinAll()" style="padding:10px 24px; border-radius:8px; border:none; background:#4f46e5; color:white; font-size:15px; cursor:pointer;">Spin All</button>
+    <button id="saveComboBtn" onclick="saveCombo()" style="padding:10px 20px; border-radius:8px; border:1px solid #cbd5e1; background:white; color:#334155; font-size:15px; cursor:pointer;">💾 Save Combo</button>
+    <button id="storyBtn" onclick="expandStory()" style="padding:10px 20px; border-radius:8px; border:none; background:#7c3aed; color:white; font-size:15px; cursor:pointer;">Expand Story</button>
+    <button id="imageBtn" onclick="visualize()" style="padding:10px 20px; border-radius:8px; border:none; background:#059669; color:white; font-size:15px; cursor:pointer;">Visualize</button>
+  </div>
+
+  <div id="loadingEl" hidden style="color:#475569; font-size:14px; margin-bottom:12px;">⏳ Working on it...</div>
+
+  <div id="outputCtn" style="display:none; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:18px; text-align:left; line-height:1.6; white-space:pre-wrap; margin-bottom:20px;"></div>
+
+  <div id="imageCtn" style="margin-bottom:24px;"></div>
+
+  <details style="text-align:left; max-width:720px; margin:0 auto 24px;">
+    <summary style="cursor:pointer; font-weight:600; color:#334155; user-select:none;">Edit Word Lists</summary>
+    <div id="editorCtn" style="margin-top:10px; background:#f1f5f9; border-radius:10px; padding:14px; display:grid; gap:10px;"></div>
+    <button onclick="saveLists()" style="margin-top:8px; padding:8px 18px; background:#334155; color:white; border:none; border-radius:6px; cursor:pointer; font-size:13px;">Save & Reload Lists</button>
+  </details>
+
+  <div style="text-align:left; max-width:720px; margin:0 auto;">
+    <div style="font-weight:600; color:#334155; margin-bottom:8px; font-size:14px;">Session History</div>
+    <div id="historyListCtn" style="max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;"></div>
+  </div>
+
+</div>
+
+<style>
+  #cardsCtn > div:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(0,0,0,0.07); }
+</style>
+
+<script>
+  let categories = {
+    Protagonist: {color:"#4f46e5", items:["a forgotten clockmaker","an exiled knight","a ghost-possessed child","a sentient mushroom colony","a star-forged android","a librarian who drinks memories","a cartographer of the dead","a sailor on a sea of glass"]},
+    Antagonist: {color:"#dc2626", items:["a time-eating monarch","a cult of mirror-worshippers","a gravitational anomaly","a civilization of dream-collectors","a vengeful cartographer","the concept of silence given form","a machine that grants lies","an empire carved from frozen sound"]},
+    Setting: {color:"#059669", items:["inside a sleeping leviathan","atop inverted floating mountains","within a library of unwritten books","beneath an eternal eclipse","in a city built on the bones of gods","the hollow space between heartbeats","a garden where flowers predict deaths","under a sky that remembers every sin"]},
+    Conflict: {color:"#d97706", items:["must retrieve a stolen color","must outrun an approaching prophecy","must heal a fractured moon","must bargain with entropy itself","must silence a song that unravels reality","must replace a star before dawn","must bury a weapon that thinks","must trade their name for passage"]},
+    Twist: {color:"#7c3aed", items:["the ally is the setting itself","the enemy never existed","the quest loops eternally","victory erases the protagonist","the magic is mundane technology reversed","the narrator is the antagonist","the world ends if they succeed","the journey was a funeral procession"]}
+  };
+
+  let state = {};
+  let locked = {};
+  let history = JSON.parse(localStorage.mythosHistory||"[]");
+
+  function init() {
+    cardsCtn.innerHTML = "";
+    editorCtn.innerHTML = "";
+    for(let cat in categories) {
+      let c = categories[cat];
+      if(!state[cat]) state[cat] = c.items[Math.floor(Math.random()*c.items.length)];
+      locked[cat] = !!locked[cat];
+
+      let card = document.createElement("div");
+      card.id = "card_" + cat;
+      card.style.cssText = `background:#fff; border:2px solid ${c.color}; border-radius:12px; padding:12px; text-align:center; transition:all .2s ease;`;
+      card.innerHTML = `
+        <div style="font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:${c.color}; font-weight:700; margin-bottom:6px;">${cat}</div>
+        <div id="val_${cat}" style="font-size:15px; color:#1e293b; min-height:52px; display:flex; align-items:center; justify-content:center; font-weight:600; padding:4px;">${state[cat]}</div>
+        <div style="margin-top:10px; display:flex; gap:6px; justify-content:center;">
+          <button onclick="toggleLock('${cat}')" id="lock_${cat}" style="flex:1; padding:5px; border:1px solid #cbd5e1; background:#fff; border-radius:6px; cursor:pointer; font-size:12px;">${locked[cat]?"🔒":"🔓"}</button>
+          <button onclick="spinOne('${cat}')" style="flex:1; padding:5px; border:none; background:${c.color}; color:#fff; border-radius:6px; cursor:pointer; font-size:12px;">Spin</button>
+        </div>
+      `;
+      cardsCtn.appendChild(card);
+
+      let row = document.createElement("div");
+      row.innerHTML = `<label style="font-size:12px; font-weight:700; color:#334155;">${cat}</label>
+      <textarea id="edit_${cat}" style="width:100%; height:64px; border:1px solid #cbd5e1; border-radius:6px; padding:6px; font-family:inherit; font-size:13px; resize:vertical; box-sizing:border-box;">${c.items.join("\n")}</textarea>`;
+      editorCtn.appendChild(row);
+    }
+    renderCombo();
+    renderHistory();
+  }
+
+  function toggleLock(cat) {
+    locked[cat] = !locked[cat];
+    let btn = document.getElementById("lock_" + cat);
+    btn.textContent = locked[cat] ? "🔒" : "🔓";
+    let card = document.getElementById("card_" + cat);
+    card.style.opacity = locked[cat] ? "0.75" : "1";
+  }
+
+  function spinOne(cat) {
+    if(locked[cat]) return;
+    let items = categories[cat].items;
+    let el = document.getElementById("val_" + cat);
+    let i = 0;
+    let intv = setInterval(() => {
+      el.textContent = items[Math.floor(Math.random()*items.length)];
+      i++;
+      if(i > 9) {
+        clearInterval(intv);
+        state[cat] = items[Math.floor(Math.random()*items.length)];
+        el.textContent = state[cat];
+        renderCombo();
+      }
+    }, 55);
+  }
+
+  function spinAll() {
+    for(let cat in categories) spinOne(cat);
+  }
+
+  function renderCombo() {
+    comboEl.innerHTML = Object.keys(state).map(k => {
+      let c = categories[k].color;
+      return `<span style="display:inline-block; background:${c}18; color:${c}; border:1px solid ${c}40; padding:3px 10px; border-radius:20px; font-size:13px; margin:3px; font-weight:600;">${state[k]}</span>`;
+    }).join("");
+  }
+
+  function saveCombo() {
+    let txt = Object.keys(state).map(k => state[k]).join(", ");
+    if(!history.includes(txt)) {
+      history.unshift(txt);
+      if(history.length > 25) history.pop();
+      localStorage.mythosHistory = JSON.stringify(history);
+      renderHistory();
+    }
+    let toast = document.createElement("div");
+    toast.textContent = "Saved to history";
+    toast.style.cssText = "position:fixed; top:20px; right:20px; background:#10b981; color:#fff; padding:8px 14px; border-radius:8px; font-size:13px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,0.15);";
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 1400);
+  }
+
+  async function expandStory() {
+    storyBtn.disabled = true; storyBtn.textContent = "⏳ ...";
+    loadingEl.hidden = false;
+    outputCtn.style.display = "block";
+    outputCtn.textContent = "";
+    let seed = Object.keys(state).map(k => state[k]).join(", ");
+    await generateText({
+      instruction: `Write a compelling dark-fantasy synopsis (about 250 words) based on this story seed: ${seed}. Start with an evocative title. Make it atmospheric and original.`,
+      onChunk: d => outputCtn.textContent += d.textChunk
+    });
+    storyBtn.disabled = false; storyBtn.textContent = "Expand Story";
+    loadingEl.hidden = true;
+  }
+
+  async function visualize() {
+    imageBtn.disabled = true; imageBtn.textContent = "⏳ ...";
+    loadingEl.hidden = false;
+    imageCtn.innerHTML = `<div style="color:#475569; font-size:14px; margin-bottom:8px;">Painting the vision...</div>`;
+    let seed = Object.keys(state).map(k => state[k]).join(", ");
+    let url = await generateImage(`Epic dark fantasy digital painting, highly detailed, atmospheric cinematic lighting, dramatic composition: ${seed}`, {resolution:"768x768"});
+    imageCtn.innerHTML = `<img src="${url}" style="max-width:100%; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,0.18);">`;
+    imageBtn.disabled = false; imageBtn.textContent = "Visualize";
+    loadingEl.hidden = true;
+  }
+
+  function saveLists() {
+    for(let cat in categories) {
+      let val = document.getElementById("edit_" + cat).value.split("\n").map(s => s.trim()).filter(s => s);
+      if(val.length) categories[cat].items = val;
+    }
+    init();
+  }
+
+  function renderHistory() {
+    historyListCtn.innerHTML = "";
+    if(!history.length) { historyListCtn.innerHTML = `<div style="color:#94a3b8; font-size:13px; padding:4px;">Nosaved combos yet.</div>`; return; }
+    history.forEach((h, idx) => {
+      let d = document.createElement("div");
+      d.style.cssText = "background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:8px 12px; font-size:13px; color:#334155; cursor:pointer; display:flex; justify-content:space-between; align-items:center;";
+      d.innerHTML = `<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${h}</span>
+      <button onclick="removeHistory(${idx})" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:18px; line-height:1; padding:0 4px;">×</button>`;
+      d.onclick = (e) => { if(e.target.tagName!=="BUTTON") navigator.clipboard.writeText(h); };
+      historyListCtn.appendChild(d);
+    });
+  }
+
+  function removeHistory(i) {
+    history.splice(i, 1);
+    localStorage.mythosHistory = JSON.stringify(history);
+    renderHistory();
+  }
+
+  init();
+</script>
+</body>
+</html>

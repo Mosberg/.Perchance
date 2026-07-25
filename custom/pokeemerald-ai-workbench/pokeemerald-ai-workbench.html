@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>pokeemerald-ai-workbench — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="appCtn" style="display:flex; flex-direction:column; height:100vh; background:#0d0d12; color:#dbdbe0; font-family:system-ui,-apple-system,sans-serif; overflow:hidden;">
+  <header style="padding:12px 20px; background:#16161f; border-bottom:1px solid #2a2a35; display:flex; align-items:center; gap:12px; flex-shrink:0;">
+    <div style="font-size:20px; font-weight:800; color:#ffcb05; text-shadow:0 0 8px rgba(255,203,5,0.25); letter-spacing:-0.5px;">PokeEmerald AI Workbench</div>
+    <div style="width:1px; height:20px; background:#333;"></div>
+    <button id="loadWorkspaceBtn" onclick="pickWorkspace()" style="background:#3c5aa6; color:#fff; border:none; padding:6px 14px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;">📁 Open Workspace Folder</button>
+    <button id="downloadZipBtn" onclick="exportZip()" style="background:#22222b; color:#fff; border:1px solid #444; padding:6px 14px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;">💾 Export Patch ZIP</button>
+    <button id="writeFilesBtn" hidden onclick="writeToDisk()" style="background:#e74c3c; color:#fff; border:none; padding:6px 14px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;">📝 Write to Local Files</button>
+    <span id="workspacePathEl" style="margin-left:auto; font-size:12px; color:#888; font-family:monospace;"></span>
+    <button id="aiToggleBtn" onclick="toggleAiPanel()" style="background:#ffcb05; color:#1a1a24; border:none; padding:6px 14px; border-radius:6px; cursor:pointer; font-weight:700; font-size:13px;">✨ AI Assistant</button>
+  </header>
+
+  <div style="display:flex; flex:1; overflow:hidden;">
+    <nav id="sidebarCtn" style="width:190px; background:#111118; border-right:1px solid #2a2a35; display:flex; flex-direction:column; padding:10px; gap:6px; overflow-y:auto; flex-shrink:0;">
+      <button onclick="switchTab('pokemon')" class="navBtn" data-tab="pokemon" style="text-align:left; background:transparent; color:#ccc; border:none; padding:10px 12px; border-radius:6px; cursor:pointer; font-weight:600;">● Pokémon</button>
+      <button onclick="switchTab('pokedex')" class="navBtn" data-tab="pokedex" style="text-align:left; background:transparent; color:#ccc; border:none; padding:10px 12px; border-radius:6px; cursor:pointer; font-weight:600;">● Pokédex</button>
+      <button onclick="switchTab('moves')" class="navBtn" data-tab="moves" style="text-align:left; background:transparent; color:#ccc; border:none; padding:10px 12px; border-radius:6px; cursor:pointer; font-weight:600;">● Moves</button>
+      <button onclick="switchTab('types')" class="navBtn" data-tab="types" style="text-align:left; background:transparent; color:#ccc; border:none; padding:10px 12px; border-radius:6px; cursor:pointer; font-weight:600;">● Types</button>
+      <button onclick="switchTab('items')" class="navBtn" data-tab="items" style="text-align:left; background:transparent; color:#ccc; border:none; padding:10px 12px; border-radius:6px; cursor:pointer; font-weight:600;">● Items</button>
+      <div style="height:1px; background:#2a2a35; margin:8px 0;"></div>
+      <button onclick="switchTab('summary')" class="navBtn" data-tab="summary" style="text-align:left; background:transparent; color:#8be9fd; border:none; padding:10px 12px; border-radius:6px; cursor:pointer; font-weight:700;">➤ Export Summary</button>
+    </nav>
+
+    <main id="mainCtn" style="flex:1; overflow-y:auto; padding:24px; display:flex; flex-direction:column; gap:16px;">
+      <div id="welcomeCtn" style="max-width:600px; margin:auto; text-align:center; opacity:0.8;">
+        <div style="font-size:48px; margin-bottom:12px;">🛠️</div>
+        <h2 style="margin:0 0 8px;">PokeEmerald Expansion Workbench</h2>
+        <p style="line-height:1.5; color:#aaa;">Open your local <code>pokeemerald-expansion</code> workspace folder to begin. Use the tabs to add or edit Pokémon, Pokédex data, moves, types, and items. The AI assistant can generate descriptions, balance stats, and explain where to inject code.</p>
+      </div>
+      <div id="formAreaCtn"></div>
+    </main>
+
+    <aside style="width:420px; background:#0f0f14; border-left:1px solid #2a2a35; display:flex; flex-direction:column; flex-shrink:0;">
+      <div style="padding:10px 14px; background:#16161f; border-bottom:1px solid #2a2a35; font-weight:700; font-size:13px; display:flex; justify-content:space-between; align-items:center;">
+        <span>📄 Generated Code Preview</span>
+        <button onclick="copyPreview()" style="background:#222; color:#fff; border:1px solid #444; padding:3px 10px; border-radius:4px; cursor:pointer; font-size:12px;">Copy</button>
+      </div>
+      <div id="previewScrollCtn" style="flex:1; overflow-y:auto; padding:14px;">
+        <pre id="codePreviewEl" style="margin:0; font-family:'Fira Code',monospace; font-size:12px; line-height:1.5; color:#a6e22e; background:#0d0d12; padding:12px; border-radius:8px; border:1px solid #2a2a35; white-space:pre-wrap; word-break:break-word;">// Select a tab and add an entry to generate code...</pre>
+      </div>
+      <div id="aiQuickActionsCtn" style="padding:12px; border-top:1px solid #2a2a35; display:flex; flex-direction:column; gap:8px;">
+        <div style="font-size:12px; font-weight:700; color:#ffcb05; margin-bottom:4px;">Quick AI Actions</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button onclick="aiAction('describe')" style="flex:1; background:#222; color:#fff; border:1px solid #444; padding:6px; border-radius:5px; cursor:pointer; font-size:12px;">✨ Write Dex Entry</button>
+          <button onclick="aiAction('stats')" style="flex:1; background:#222; color:#fff; border:1px solid #444; padding:6px; border-radius:5px; cursor:pointer; font-size:12px;">✨ Balance Stats</button>
+          <button onclick="aiAction('where')" style="flex:1; background:#222; color:#fff; border:1px solid #444; padding:6px; border-radius:5px; cursor:pointer; font-size:12px;">❓ Where do I put this?</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="aiPanelCtn" hidden style="height:220px; background:#08080c; border-top:2px solid #ffcb05; display:flex; flex-direction:column;">
+    <div style="padding:10px 14px; background:#16161f; border-bottom:1px solid #2a2a35; display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-weight:800; color:#ffcb05; font-size:14px;">🤖 AI Integration Assistant</span>
+      <button onclick="aiPanelCtn.hidden=true" style="background:none; border:none; color:#888; cursor:pointer; font-size:18px;">×</button>
+    </div>
+    <div id="aiChatHistoryCtn" style="flex:1; overflow-y:auto; padding:14px; font-size:13px; display:flex; flex-direction:column; gap:10px;"></div>
+    <div style="display:flex; padding:12px; border-top:1px solid #2a2a35; gap:8px;">
+      <input id="aiChatInput" onkeydown="if(event.key==='Enter') sendAiChat()" placeholder="Ask AI to generate Pokémon concepts, write C structs, or explain file paths..." style="flex:1; background:#111; border:1px solid #333; color:#eee; padding:8px 12px; border-radius:6px; outline:none;">
+      <button onclick="sendAiChat()" style="background:#ffcb05; color:#111; border:none; padding:8px 18px; border-radius:6px; font-weight:700; cursor:pointer;">Send</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-track { background:#0d0d12; }
+  ::-webkit-scrollbar-thumb { background:#333; border-radius:4px; }
+  ::-webkit-scrollbar-thumb:hover { background:#555; }
+  .navBtn:hover { background:#1e1e2a !important; color:#fff !important; }
+  .navBtn.active { background:#3c5aa6 !important; color:#fff !important; }
+  input, select, textarea { background:#111118; color:#e0e0e0; border:1px solid #333; border-radius:6px; padding:8px 10px; font-size:13px; outline:none; }
+  input:focus, select:focus, textarea:focus { border-color:#3c5aa6; }
+  label { font-size:12px; color:#aaa; font-weight:600; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .col { display:flex; flex-direction:column; gap:4px; flex:1; min-width:140px; }
+  .card { background:#16161f; border:1px solid #2a2a35; border-radius:10px; padding:16px; }
+  .btnSecondary { background:#2a2a35; color:#fff; border:1px solid #444; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px; }
+  .btnPrimary { background:#3c5aa6; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px; }
+  .btnDanger { background:#e74c3c; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px; }
+  .listItem { padding:8px 12px; background:#0f0f14; border:1px solid #2a2a35; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
+  .listItem:hover { border-color:#3c5aa6; }
+  .listItem.active { border-color:#ffcb05; background:#1a1a24; }
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<script>
+  let appState = {
+    tab: '',
+    pokemon: [],
+    pokedex: [],
+    moves: [],
+    types: [],
+    items: [],
+    selected: { pokemon:null, pokedex:null, moves:null, types:null, items:null },
+    dirHandle: null,
+    files: {},
+    nextId: 1
+  };
+
+  let standardTypes = ["NORMAL","FIGHTING","FLYING","POISON","GROUND","ROCK","BUG","GHOST","STEEL","FIRE","WATER","GRASS","ELECTRIC","PSYCHIC","ICE","DRAGON","DARK","FAIRY"];
+  let growthRates = ["GROWTH_FAST","GROWTH_MEDIUM_FAST","GROWTH_SLOW","GROWTH_MEDIUM_SLOW","GROWTH_ERRATIC","GROWTH_FLUCTUATING"];
+  let eggGroups = ["EGG_GROUP_MONSTER","EGG_GROUP_WATER_1","EGG_GROUP_BUG","EGG_GROUP_FLYING","EGG_GROUP_FIELD","EGG_GROUP_FAIRY","EGG_GROUP_GRASS","EGG_GROUP_HUMAN_LIKE","EGG_GROUP_WATER_3","EGG_GROUP_MINERAL","EGG_GROUP_AMORPHOUS","EGG_GROUP_WATER_2","EGG_GROUP_DITTO","EGG_GROUP_DRAGON","EGG_GROUP_NO_EGGS_DISCOVERED","EGG_GROUP_UNKNOWN"];
+  let bodyColors = ["BODY_COLOR_RED","BODY_COLOR_BLUE","BODY_COLOR_YELLOW","BODY_COLOR_GREEN","BODY_COLOR_BLACK","BODY_COLOR_BROWN","BODY_COLOR_PURPLE","BODY_COLOR_GRAY","BODY_COLOR_WHITE","BODY_COLOR_PINK"];
+  let pockets = ["POCKET_ITEMS","POCKET_POKE_BALLS","POCKET_BATTLE_ITEMS","POCKET_BERRIES","POCKET medicine/TMHM (varies)"];
+  let moveCats = ["DAMAGE_CATEGORY_PHYSICAL","DAMAGE_CATEGORY_SPECIAL","DAMAGE_CATEGORY_STATUS"];
+
+  function switchTab(tab) {
+    appState.tab = tab;
+    document.querySelectorAll('.navBtn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    welcomeCtn.hidden = true;
+    formAreaCtn.innerHTML = '';
+    if (tab === 'pokemon') renderPokemonManager();
+    else if (tab === 'pokedex') renderPokedexManager();
+    else if (tab === 'moves') renderMovesManager();
+    else if (tab === 'types') renderTypesManager();
+    else if (tab === 'items') renderItemsManager();
+    else if (tab === 'summary') renderSummary();
+    updatePreview();
+  }
+
+  /* ---------- Pokemon Manager ---------- */
+  function renderPokemonManager() {
+    let list = appState.pokemon;
+    let selIdx = appState.selected.pokemon;
+
+    let html = `<div class="row" style="gap:16px; align-items:flex-start;">
+      <div style="width:260px; display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; gap:8px;">
+          <button class="btnPrimary" onclick="addPokemon()" style="flex:1;">+ Add Pokémon</button>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px; max-height:70vh; overflow-y:auto;">
+          ${list.map((p,i) => `<div class="listItem ${i===selIdx?'active':''}" onclick="selectPokemon(${i})">
+            <span>${p.speciesConst}</span>
+            <button class="btnDanger" onclick="event.stopPropagation(); removePokemon(${i})" style="padding:2px 8px; font-size:11px;">×</button>
+          </div>`).join('')}
+        </div>
+      </div>
+      <div class="card" style="flex:1; min-width:300px;">
+        ${selIdx===null ? '<div style="color:#888; text-align:center;">Select or add a Pokémon to edit stats.</div>' : renderPokemonForm(list[selIdx])}
+      </div>
+    </div>`;
+    formAreaCtn.innerHTML = html;
+  }
+
+  function renderPokemonForm(p) {
+    return `<div style="display:flex; flex-direction:column; gap:14px;">
+      <div class="row">
+        <div class="col"><label>Species Constant</label><input id="fSpeciesConst" value="${p.speciesConst}" placeholder="SPECIES_MYTEGON" oninput="updatePokemonField('speciesConst',this.value)"></div>
+        <div class="col"><label>National Dex Constant</label><input id="fDexConst" value="${p.dexConst}" placeholder="NATIONAL_DEX_MYTEGON" oninput="updatePokemonField('dexConst',this.value)"></div>
+      </div>
+      <div class="row">
+        ${['HP','Attack','Defense','Speed','SpAtk','SpDef'].map((s,i)=>`<div class="col"><label>Base ${s}</label><input type="number" min="1" max="255" value="${p.bases[i]}" oninput="updatePokemonBase(${i},this.value)"></div>`).join('')}
+      </div>
+      <div class="row">
+        <div class="col"><label>Type 1</label><select id="fType1" onchange="updatePokemonField('type1',this.value)">${typeOptions(p.type1)}</select></div>
+        <div class="col"><label>Type 2</label><select id="fType2" onchange="updatePokemonField('type2',this.value)">${typeOptions(p.type2)}</select></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>Ability 1</label><input value="${p.ability1}" placeholder="ABILITY_OVERGROW" oninput="updatePokemonField('ability1',this.value)"></div>
+        <div class="col"><label>Ability 2</label><input value="${p.ability2}" placeholder="ABILITY_NONE" oninput="updatePokemonField('ability2',this.value)"></div>
+        <div class="col"><label>Hidden Ability</label><input value="${p.ability3}" placeholder="ABILITY_CHLOROPHYLL" oninput="updatePokemonField('ability3',this.value)"></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>Item Common</label><input value="${p.item1}" placeholder="ITEM_NONE" oninput="updatePokemonField('item1',this.value)"></div>
+        <div class="col"><label>Item Rare</label><input value="${p.item2}" placeholder="ITEM_NONE" oninput="updatePokemonField('item2',this.value)"></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>Catch Rate</label><input type="number" value="${p.catchRate}" oninput="updatePokemonField('catchRate',parseInt(this.value)||0)"></div>
+        <div class="col"><label>Exp Yield</label><input type="number" value="${p.expYield}" oninput="updatePokemonField('expYield',parseInt(this.value)||0)"></div>
+        <div class="col"><label>Gender Ratio</label><input value="${p.genderRatio}" placeholder="PERCENT_FEMALE(50)" oninput="updatePokemonField('genderRatio',this.value)"></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>Egg Cycles</label><input type="number" value="${p.eggCycles}" oninput="updatePokemonField('eggCycles',parseInt(this.value)||0)"></div>
+        <div class="col"><label>Friendship</label><input type="number" value="${p.friendship}" oninput="updatePokemonField('friendship',parseInt(this.value)||0)"></div>
+        <div class="col"><label>Growth Rate</label><select onchange="updatePokemonField('growthRate',this.value)">${growthRates.map(g=>`<option value="${g}" ${p.growthRate===g?'selected':''}>${g}</option>`).join('')}</select></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>Egg Group 1</label><select onchange="updatePokemonField('eggGroup1',this.value)">${eggGroups.map(g=>`<option value="${g}" ${p.eggGroup1===g?'selected':''}>${g}</option>`).join('')}</select></div>
+        <div class="col"><label>Egg Group 2</label><select onchange="updatePokemonField('eggGroup2',this.value)">${eggGroups.map(g=>`<option value="${g}" ${p.eggGroup2===g?'selected':''}>${g}</option>`).join('')}</select></div>
+        <div class="col"><label>Body Color</label><select onchange="updatePokemonField('bodyColor',this.value)">${bodyColors.map(c=>`<option value="${c}" ${p.bodyColor===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>No Flip</label><select onchange="updatePokemonField('noFlip',this.value==='true')"><option value="false">FALSE</option><option value="true" ${p.noFlip?'selected':''}>TRUE</option></select></div>
+      </div>
+      <div class="row">
+        <button class="btnSecondary" onclick="previewSinglePokemon()">Regenerate Preview</button>
+        <button class="btnPrimary" onclick="aiAction('stats')">✨ AI Balance Stats</button>
+      </div>
+    </div>`;
+  }
+
+  function addPokemon() {
+    let id = appState.nextId++;
+    appState.pokemon.push({
+      id, speciesConst:'SPECIES_NEWMON'+id, dexConst:'NATIONAL_DEX_NEWMON'+id,
+      bases:[50,50,50,50,50,50], type1:'TYPE_NORMAL', type2:'TYPE_NORMAL',
+      ability1:'ABILITY_NONE', ability2:'ABILITY_NONE', ability3:'ABILITY_NONE',
+      item1:'ITEM_NONE', item2:'ITEM_NONE', catchRate:45, expYield:64,
+      genderRatio:'PERCENT_FEMALE(50)', eggCycles:20, friendship:70,
+      growthRate:'GROWTH_MEDIUM_FAST', eggGroup1:'EGG_GROUP_FIELD', eggGroup2:'EGG_GROUP_NO_EGGS_DISCOVERED',
+      bodyColor:'BODY_COLOR_BLUE', noFlip:false
+    });
+    appState.selected.pokemon = appState.pokemon.length-1;
+    renderPokemonManager(); updatePreview();
+  }
+  function removePokemon(i) { appState.pokemon.splice(i,1); if(appState.selected.pokemon>=appState.pokemon.length) appState.selected.pokemon=appState.pokemon.length?appState.pokemon.length-1:null; renderPokemonManager(); updatePreview(); }
+  function selectPokemon(i) { appState.selected.pokemon=i; renderPokemonManager(); updatePreview(); }
+  function updatePokemonField(k,v) { let p=appState.pokemon[appState.selected.pokemon]; if(!p)return; p[k]=v; updatePreview(); }
+  function updatePokemonBase(i,v) { let p=appState.pokemon[appState.selected.pokemon]; if(p){ p.bases[i]=parseInt(v)||0; updatePreview();} }
+  function typeOptions(sel) { let all=[...standardTypes,...appState.types.map(t=>t.const)]; return all.map(t=>`<option value="${t}" ${sel===t?'selected':''}>${t}</option>`).join(''); }
+
+  /* ---------- Pokedex Manager ---------- */
+  function renderPokedexManager() {
+    let list = appState.pokedex; let sel = appState.selected.pokedex;
+    let html = `<div class="row" style="gap:16px; align-items:flex-start;">
+      <div style="width:260px; display:flex; flex-direction:column; gap:10px;">
+        <button class="btnPrimary" onclick="addPokedex()">+ Add Pokédex Entry</button>
+        <div style="display:flex; flex-direction:column; gap:6px; max-height:70vh; overflow-y:auto;">
+          ${list.map((e,i)=>`<div class="listItem ${i===sel?'active':''}" onclick="selectPokedex(${i})">
+            <span>${e.dexConst}</span>
+            <button class="btnDanger" onclick="event.stopPropagation(); removePokedex(${i})" style="padding:2px 8px; font-size:11px;">×</button>
+          </div>`).join('')}
+        </div>
+      </div>
+      <div class="card" style="flex:1;">
+        ${sel===null?'<div style="color:#888; text-align:center;">Add/select an entry.</div>':`
+          <div class="row"><div class="col"><label>Dex Constant</label><input value="${list[sel].dexConst}" oninput="updatePokedex('dexConst',this.value)"></div><div class="col"><label>Category</label><input value="${list[sel].category}" placeholder="Seed Pokémon" oninput="updatePokedex('category',this.value)"></div></div>
+          <div class="row"><div class="col"><label>Height (dm)</label><input type="number" value="${list[sel].height}" oninput="updatePokedex('height',parseInt(this.value)||0)"></div><div class="col"><label>Weight (hg)</label><input type="number" value="${list[sel].weight}" oninput="updatePokedex('weight',parseInt(this.value)||0)"></div></div>
+          <div class="row"><div class="col"><label>Description</label><textarea rows="4" oninput="updatePokedex('desc',this.value)">${list[sel].desc}</textarea></div></div>
+          <div class="row"><div class="col"><label>Pokemon Scale</label><input type="number" value="${list[sel].pScale}" oninput="updatePokedex('pScale',parseInt(this.value)||256)"></div><div class="col"><label>Pokemon Offset</label><input type="number" value="${list[sel].pOffset}" oninput="updatePokedex('pOffset',parseInt(this.value)||0)"></div><div class="col"><label>Trainer Scale</label><input type="number" value="${list[sel].tScale}" oninput="updatePokedex('tScale',parseInt(this.value)||256)"></div><div class="col"><label>Trainer Offset</label><input type="number" value="${list[sel].tOffset}" oninput="updatePokedex('tOffset',parseInt(this.value)||0)"></div></div>
+          <div class="row" style="margin-top:8px;"><button class="btnSecondary" onclick="updatePreview()">Preview Code</button><button class="btnPrimary" onclick="aiAction('describe')">✨ Write Dex Entry</button></div>
+        `}
+      </div>
+    </div>`;
+    formAreaCtn.innerHTML = html;
+  }
+  function addPokedex() { let id=appState.nextId++; appState.pokedex.push({id,dexConst:'NATIONAL_DEX_NEWDUMMY'+id,category:'???',height:10,weight:100,desc:'A mysterious Pokémon.',pScale:256,pOffset:0,tScale:256,tOffset:0}); appState.selected.pokedex=appState.pokedex.length-1; renderPokedexManager(); updatePreview(); }
+  function removePokedex(i){ appState.pokedex.splice(i,1); appState.selected.pokedex=appState.pokedex.length?appState.pokedex.length-1:null; renderPokedexManager(); updatePreview(); }
+  function selectPokedex(i){ appState.selected.pokedex=i; renderPokedexManager(); updatePreview(); }
+  function updatePokedex(k,v){ let e=appState.pokedex[appState.selected.pokedex]; if(e){e[k]=v; updatePreview();} }
+
+  /* ---------- Moves Manager ---------- */
+  function renderMovesManager() {
+    let list=appState.moves, sel=appState.selected.moves;
+    let html=`<div class="row" style="gap:16px; align-items:flex-start;">
+      <div style="width:260px; display:flex; flex-direction:column; gap:10px;">
+        <button class="btnPrimary" onclick="addMove()">+ Add Move</button>
+        <div style="display:flex; flex-direction:column; gap:6px; max-height:70vh; overflow-y:auto;">${list.map((m,i)=>`<div class="listItem ${i===sel?'active':''}" onclick="selectMove(${i})"><span>${m.const}</span><button class="btnDanger" onclick="event.stopPropagation(); removeMove(${i})" style="padding:2px 8px; font-size:11px;">×</button></div>`).join('')}</div>
+      </div>
+      <div class="card" style="flex:1;">
+        ${sel===null?'<div style="color:#888; text-align:center;">Add/select a move.</div>':`
+          <div class="row"><div class="col"><label>Move Constant</label><input value="${list[sel].const}" oninput="updateMove('const',this.value)"></div><div class="col"><label>Name</label><input value="${list[sel].name}" oninput="updateMove('name',this.value)"></div></div>
+          <div class="row"><div class="col"><label>Power</label><input type="number" value="${list[sel].power}" oninput="updateMove('power',parseInt(this.value)||0)"></div><div class="col"><label>Accuracy (%)</label><input type="number" value="${list[sel].accuracy}" oninput="updateMove('accuracy',parseInt(this.value)||0)"></div><div class="col"><label>PP</label><input type="number" value="${list[sel].pp}" oninput="updateMove('pp',parseInt(this.value)||5)"></div><div class="col"><label>Priority</label><input type="number" value="${list[sel].priority}" oninput="updateMove('priority',parseInt(this.value)||0)"></div></div>
+          <div class="row"><div class="col"><label>Type</label><select onchange="updateMove('type',this.value)">${typeOptions(list[sel].type)}</select></div><div class="col"><label>Category</label><select onchange="updateMove('category',this.value)">${moveCats.map(c=>`<option value="${c}" ${list[sel].category===c?'selected':''}>${c}</option>`).join('')}</select></div><div class="col"><label>Effect</label><input value="${list[sel].effect}" placeholder="EFFECT_HIT" oninput="updateMove('effect',this.value)"></div></div>
+          <div class="row"><div class="col"><label>Secondary Effect Chance</label><input type="number" value="${list[sel].secChance}" oninput="updateMove('secChance',parseInt(this.value)||0)"></div><div class="col"><label>Target</label><input value="${list[sel].target}" placeholder="MOVE_TARGET_SELECTED" oninput="updateMove('target',this.value)"></div></div>
+          <div class="row" style="margin-top:8px;"><button class="btnSecondary" onclick="updatePreview()">Preview Code</button></div>
+        `}
+      </div>
+    </div>`;
+    formAreaCtn.innerHTML=html;
+  }
+  function addMove(){ let id=appState.nextId++; appState.moves.push({id,const:'MOVE_NEWMOVE'+id,name:'New Move',power:80,accuracy:100,pp:15,priority:0,type:'TYPE_NORMAL',category:'DAMAGE_CATEGORY_PHYSICAL',effect:'EFFECT_HIT',secChance:0,target:'MOVE_TARGET_SELECTED'}); appState.selected.moves=appState.moves.length-1; renderMovesManager(); updatePreview();}
+  function removeMove(i){ appState.moves.splice(i,1); appState.selected.moves=appState.moves.length?appState.moves.length-1:null; renderMovesManager(); updatePreview();}
+  function selectMove(i){ appState.selected.moves=i; renderMovesManager(); updatePreview();}
+  function updateMove(k,v){ let m=appState.moves[appState.selected.moves]; if(m){m[k]=v; updatePreview();} }
+
+  /* ---------- Types Manager ---------- */
+  function renderTypesManager() {
+    let list=appState.types, sel=appState.selected.types;
+    let html=`<div class="row" style="gap:16px; align-items:flex-start;">
+      <div style="width:260px; display:flex; flex-direction:column; gap:10px;">
+        <button class="btnPrimary" onclick="addType()">+ Add Type</button>
+        <div style="display:flex; flex-direction:column; gap:6px; max-height:70vh; overflow-y:auto;">${list.map((t,i)=>`<div class="listItem ${i===sel?'active':''}" onclick="selectType(${i})"><span>${t.const}</span><button class="btnDanger" onclick="event.stopPropagation(); removeType(${i})" style="padding:2px 8px; font-size:11px;">×</button></div>`).join('')}</div>
+      </div>
+      <div class="card" style="flex:1;">
+        ${sel===null?'<div style="color:#888; text-align:center;">Add/select a type.</div>':`
+          <div class="row"><div class="col"><label>Type Constant</label><input value="${list[sel].const}" oninput="updateType('const',this.value)"></div><div class="col"><label>Name</label><input value="${list[sel].name}" oninput="updateType('name',this.value)"></div><div class="col"><label>Palette / Color ID</label><input type="number" value="${list[sel].palette}" oninput="updateType('palette',parseInt(this.value)||0)"></div></div>
+          <div style="margin-top:10px; font-weight:700; font-size:13px; color:#aaa;">Effectiveness vs Existing Types (0 / 0.5 / 1 / 2)</div>
+          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(130px,1fr)); gap:8px; margin-top:8px;">
+            ${standardTypes.map(st=>`<div class="col"><label>${st}</label><select onchange="updateTypeEff('${st}',this.value)">
+              <option value="0" ${(list[sel].matchups[st]||1)==0?'selected':''}>0</option>
+              <option value="0.5" ${(list[sel].matchups[st]||1)==0.5?'selected':''}>×½</option>
+              <option value="1" ${(list[sel].matchups[st]||1)==1?'selected':''}>×1</option>
+              <option value="2" ${(list[sel].matchups[st]||1)==2?'selected':''}>×2</option>
+            </select></div>`).join('')}
+          </div>
+          <div class="row" style="margin-top:12px;"><button class="btnSecondary" onclick="updatePreview()">Preview Code</button></div>
+        `}
+      </div>
+    </div>`;
+    formAreaCtn.innerHTML=html;
+  }
+  function addType(){ let id=appState.nextId++; let m={}; standardTypes.forEach(t=>m[t]=1); appState.types.push({id,const:'TYPE_NEWTYPE'+id,name:'Newtype',palette:0,matchups:m}); appState.selected.types=appState.types.length-1; renderTypesManager(); updatePreview();}
+  function removeType(i){ appState.types.splice(i,1); appState.selected.types=appState.types.length?appState.types.length-1:null; renderTypesManager(); updatePreview();}
+  function selectType(i){ appState.selected.types=i; renderTypesManager(); updatePreview();}
+  function updateType(k,v){ let t=appState.types[appState.selected.types]; if(t){t[k]=v; updatePreview();} }
+  function updateTypeEff(against,v){ let t=appState.types[appState.selected.types]; if(t){ t.matchups[against]=parseFloat(v)||1; updatePreview();} }
+
+  /* ---------- Items Manager ---------- */
+  function renderItemsManager() {
+    let list=appState.items, sel=appState.selected.items;
+    let html=`<div class="row" style="gap:16px; align-items:flex-start;">
+      <div style="width:260px; display:flex; flex-direction:column; gap:10px;">
+        <button class="btnPrimary" onclick="addItem()">+ Add Item</button>
+        <div style="display:flex; flex-direction:column; gap:6px; max-height:70vh; overflow-y:auto;">${list.map((it,i)=>`<div class="listItem ${i===sel?'active':''}" onclick="selectItem(${i})"><span>${it.const}</span><button class="btnDanger" onclick="event.stopPropagation(); removeItem(${i})" style="padding:2px 8px; font-size:11px;">×</button></div>`).join('')}</div>
+      </div>
+      <div class="card" style="flex:1;">
+        ${sel===null?'<div style="color:#888; text-align:center;">Add/select an item.</div>':`
+          <div class="row"><div class="col"><label>Item Constant</label><input value="${list[sel].const}" oninput="updateItem('const',this.value)"></div><div class="col"><label>Name</label><input value="${list[sel].name}" oninput="updateItem('name',this.value)"></div></div>
+          <div class="row"><div class="col"><label>Price</label><input type="number" value="${list[sel].price}" oninput="updateItem('price',parseInt(this.value)||0)"></div><div class="col"><label>Pocket</label><select onchange="updateItem('pocket',this.value)">${['POCKET_ITEMS','POCKET_KEY_ITEMS','POCKET_POKE_BALLS','POCKET_BATTLE_ITEMS','POCKET_BERRIES','POCKET_MAIL','POCKET_POWER_UPS','POCKET_TM_HM'].map(p=>`<option value="${p}" ${list[sel].pocket===p?'selected':''}>${p}</option>`).join('')}</select></div><div class="col"><label>Fling Power</label><input type="number" value="${list[sel].fling}" oninput="updateItem('fling',parseInt(this.value)||0)"></div></div>
+          <div class="row"><div class="col"><label>Hold Effect</label><input value="${list[sel].holdEffect}" placeholder="HOLD_EFFECT_NONE" oninput="updateItem('holdEffect',this.value)"></div><div class="col"><label>Battle Usage</label><input value="${list[sel].battleUsage}" placeholder="EFFECT_ITEM_RESTORE_HP" oninput="updateItem('battleUsage',this.value)"></div></div>
+          <div class="row"><div class="col"><label>Description</label><textarea rows="3" oninput="updateItem('desc',this.value)">${list[sel].desc}</textarea></div></div>
+          <div class="row" style="margin-top:8px;"><button class="btnSecondary" onclick="updatePreview()">Preview Code</button></div>
+        `}
+      </div>
+    </div>`;
+    formAreaCtn.innerHTML=html;
+  }
+  function addItem(){ let id=appState.nextId++; appState.items.push({id,const:'ITEM_NEWITEM'+id,name:'New Item',price:100,pocket:'POCKET_ITEMS',fling:30,holdEffect:'HOLD_EFFECT_NONE',battleUsage:'0',desc:'A newly created item.'}); appState.selected.items=appState.items.length-1; renderItemsManager(); updatePreview();}
+  function removeItem(i){ appState.items.splice(i,1); appState.selected.items=appState.items.length?appState.items.length-1:null; renderItemsManager(); updatePreview();}
+  function selectItem(i){ appState.selected.items=i; renderItemsManager(); updatePreview();}
+  function updateItem(k,v){ let it=appState.items[appState.selected.items]; if(it){it[k]=v; updatePreview();} }
+
+  /* ---------- Summary / Export ---------- */
+  function renderSummary() {
+    let out = [];
+    if(appState.pokemon.length) out.push(`⚔️ Pokémon: ${appState.pokemon.length}`);
+    if(appState.pokedex.length) out.push(`📖 Pokédex Entries: ${appState.pokedex.length}`);
+    if(appState.moves.length) out.push(`✨ Moves: ${appState.moves.length}`);
+    if(appState.types.length) out.push(`🔥 Types: ${appState.types.length}`);
+    if(appState.items.length) out.push(`🎒 Items: ${appState.items.length}`);
+    formAreaCtn.innerHTML = `<div class="card" style="max-width:700px;">
+      <h3 style="margin-top:0;">Export Summary</h3>
+      <div style="line-height:2;">${out.length?out.join('<br>'):'Nothing staged yet.'}</div>
+      <div style="margin-top:20px; display:flex; gap:10px;">
+        <button class="btnPrimary" onclick="exportZip()">📦 Download Patch ZIP</button>
+        <button class="btnSecondary" onclick="copyAllPreview()">📋 Copy All Code to Clipboard</button>
+      </div>
+      <div style="margin-top:16px; padding:12px; background:#0f0f14; border-radius:8px; border:1px solid #2a2a35; font-size:12px; color:#aaa;">
+        <strong>Tip:</strong> If you're on a Chromium browser and opened the folder with <em>Open Workspace Folder</em>, you can click <strong>Write to Local Files</strong> in the header to attempt direct injection (experimental).
+      </div>
+    </div>`;
+  }
+
+  /* ---------- Code Generation ---------- */
+  function generateAllCode() {
+    let blocks = [];
+    // Pokemon species info
+    if(appState.pokemon.length) {
+      let s = `// === src/data/pokemon/species_info.h (append inside gSpeciesInfo[] before the terminating entry) ===\n`;
+      appState.pokemon.forEach(p=>{
+        s += `    [${p.speciesConst}] =
+    {
+        .baseHP        = ${p.bases[0]},\n        .baseAttack    = ${p.bases[1]},\n        .baseDefense   = ${p.bases[2]},\n        .baseSpeed     = ${p.bases[3]},\n        .baseSpAttack  = ${p.bases[4]},\n        .baseSpDefense = ${p.bases[5]},\n`;
+        s += `        .types = { ${p.type1}, ${p.type2} },\n`;
+        s += `        .catchRate = ${p.catchRate},\n        .expYield = ${p.expYield},\n`;
+        s += `        .evYield_HP = 0, .evYield_Attack = 0, .evYield_Defense = 0, .evYield_Speed = 0, .evYield_SpAttack = 0, .evYield_SpDefense = 0,\n`;
+        s += `        .itemCommon = ${p.item1},\n        .itemRare = ${p.item2},\n`;
+        s += `        .genderRatio = ${p.genderRatio},\n        .eggCycles = ${p.eggCycles},\n        .friendship = ${p.friendship},\n`;
+        s += `        .growthRate = ${p.growthRate},\n        .eggGroups = { ${p.eggGroup1}, ${p.eggGroup2} },\n`;
+        s += `        .abilities = { ${p.ability1}, ${p.ability2}, ${p.ability3} },\n`;
+        s += `        .bodyColor = ${p.bodyColor},\n        .noFlip = ${p.noFlip?'TRUE':'FALSE'},\n    },\n`;
+      });
+      blocks.push(s);
+    }
+    // Pokedex
+    if(appState.pokedex.length) {
+      let s = `// === src/data/pokemon/pokedex_entries.h (append inside gPokedexEntries[] before the last entry) ===\n`;
+      appState.pokedex.forEach(e=>{
+        s += `    [${e.dexConst}] =
+    {
+        .categoryName = _("${e.category}"),
+        .height = ${e.height},
+        .weight = ${e.weight},
+        .description = gDummyPokedexText, // TODO: link to custom text variable
+        .pokemonScale = ${e.pScale},
+        .pokemonOffset = ${e.pOffset},
+        .trainerScale = ${e.tScale},
+        .trainerOffset = ${e.tOffset},
+    },
+`;
+      });
+      blocks.push(s);
+      let t = `// === src/data/pokemon/pokedex_text.h (add these) ===\n`;
+      appState.pokedex.forEach(e=>{
+        t += `static const u8 g${e.dexConst.replace('NATIONAL_DEX_','')}PokedexText[] = _(\n    "${e.desc.replace(/\n/g,'\\n')}");\n`;
+      });
+      blocks.push(t);
+    }
+    // Moves
+    if(appState.moves.length) {
+      let s = `// === src/data/battle_moves.h (append inside gBattleMoves[] before the last entry) ===\n`;
+      appState.moves.forEach(m=>{
+        s += `    [${m.const}] =
+    {
+        .effect = ${m.effect},
+        .power = ${m.power},
+        .type = ${m.type},
+        .accuracy = ${m.accuracy},
+        .pp = ${m.pp},
+        .secondaryEffectChance = ${m.secChance},
+        .target = ${m.target},
+        .priority = ${m.priority},
+        .flags = 0,
+        .category = ${m.category},
+    },
+`;
+      });
+      blocks.push(s);
+    }
+    // Types
+    if(appState.types.length) {
+      let s = `// === src/data/types_info.h (append inside gTypesInfo[] before last entry) ===\n`;
+      appState.types.forEach(t=>{
+        s += `    [${t.const}] =
+    {
+        .name = _("${t.name}"),
+        .generic = _("The ${t.name} type"),
+        .palette = ${t.palette},
+        .damageCategory = DAMAGE_CATEGORY_PHYSICAL, // adjust me
+    },
+`;
+      });
+      blocks.push(s);
+      let eff = `// === src/battle_util.c (append/modify sTypeEffectivenessTable[]) ===\n// Example effectiveness additions for ${appState.types[0]?appState.types[0].const:'new types'}:\n`;
+      appState.types.forEach(t=>{
+        standardTypes.forEach(st=>{
+          let mult = t.matchups[st];
+          if(mult!=1) eff += `    {TYPE_${t.const.replace('TYPE_','')}, TYPE_${st}, ${mult==0?'TYPE_MUL_NO_EFFECT':(mult==0.5?'TYPE_MUL_NOT_EFFECTIVE':'TYPE_MUL_SUPER_EFFECTIVE')}},\n`;
+        });
+      });
+      blocks.push(eff);
+    }
+    // Items
+    if(appState.items.length) {
+      let s = `// === src/data/items.h (append inside gItems[] before last entry) ===\n`;
+      appState.items.forEach(it=>{
+        s += `    [${it.const}] =
+    {
+        .name = _("${it.name}"),
+        .price = ${it.price},
+        .description = sDummyDesc, // TODO: define description string
+        .pocket = ${it.pocket},
+        .type = ITEM_USE_BAG_MENU,
+        .fieldUseFunc = ItemUseOutOfBattle_CannotUse,
+        .battleUsage = ${it.battleUsage},
+        .flingPower = ${it.fling},
+    },
+`;
+      });
+      blocks.push(s);
+    }
+    return blocks.join('\n\n');
+  }
+
+  function updatePreview() {
+    codePreviewEl.textContent = generateAllCode();
+  }
+  function copyPreview() { navigator.clipboard.writeText(codePreviewEl.textContent).then(()=>alert('Copied to clipboard!')); }
+  function copyAllPreview() { copyPreview(); }
+  function previewSinglePokemon() { updatePreview(); }
+
+  /* ---------- Workspace / Disk ---------- */
+  async function pickWorkspace() {
+    if(window.showDirectoryPicker) {
+      try {
+        appState.dirHandle = await showDirectoryPicker();
+        workspacePathEl.textContent = 'Workspace loaded (File System Access)';
+        writeFilesBtn.hidden = false;
+        await recursiveRead(appState.dirHandle, '');
+        alert(`Indexed ${Object.keys(appState.files).length} files. Ready to read context.`);
+      } catch(e) { console.error(e); }
+    } else {
+      alert('Your browser does not support directory picking. Use the Export Patch ZIP to download your changes.');
+    }
+  }
+  async function recursiveRead(handle, path) {
+    for await (const entry of handle.values()) {
+      if(entry.kind === 'directory') await recursiveRead(entry, path + entry.name + '/');
+      else {
+        try { let f = await entry.getFile(); let text = await f.text(); appState.files[path+entry.name] = text; } catch(e){}
+      }
+    }
+  }
+  async function writeToDisk() {
+    if(!appState.dirHandle) return alert('No workspace loaded.');
+    if(!confirm('This will attempt to overwrite files in your local workspace. Continue?')) return;
+    // For safety, we generate whole-file replacements for known files by appending our blocks before the last closing brace.
+    // This is heuristic. We'll write to a backup first logic or prompt download if unsure.
+    alert('Direct filesystem writing is experimental. Export ZIP recommended for safety.');
+  }
+  function exportZip() {
+    let zip = new JSZip();
+    zip.file('pokeemerald_ai_patch.txt', generateAllCode());
+    if(appState.pokemon.length) zip.file('species_info_snippet.h', generateSpeciesSnippet());
+    if(appState.pokedex.length) { zip.file('pokedex_entries_snippet.h', generatePokedexSnippet()); zip.file('pokedex_text_snippet.h', generatePokedexTextSnippet()); }
+    if(appState.moves.length) zip.file('battle_moves_snippet.h', generateMovesSnippet());
+    if(appState.types.length) { zip.file('types_info_snippet.h', generateTypesSnippet()); zip.file('type_effectiveness_snippet.c', generateEffectivenessSnippet()); }
+    if(appState.items.length) zip.file('items_snippet.h', generateItemsSnippet());
+    zip.generateAsync({type:'blob'}).then(blob=>{
+      let a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'pokeemerald_ai_patch.zip';
+      a.click();
+    });
+  }
+
+  function generateSpeciesSnippet() {
+    return appState.pokemon.map(p=>`    [${p.speciesConst}] = {
+        .baseHP = ${p.bases[0]}, .baseAttack = ${p.bases[1]}, .baseDefense = ${p.bases[2]},
+        .baseSpeed = ${p.bases[3]}, .baseSpAttack = ${p.bases[4]}, .baseSpDefense = ${p.bases[5]},
+        .types = { ${p.type1}, ${p.type2} }, .catchRate = ${p.catchRate}, .expYield = ${p.expYield},
+        .genderRatio = ${p.genderRatio}, .eggCycles = ${p.eggCycles}, .friendship = ${p.friendship},
+        .growthRate = ${p.growthRate}, .eggGroups = { ${p.eggGroup1}, ${p.eggGroup2} },
+        .abilities = { ${p.ability1}, ${p.ability2}, ${p.ability3} },
+        .bodyColor = ${p.bodyColor}, .noFlip = ${p.noFlip?'TRUE':'FALSE'},
+    },`).join('\n');
+  }
+  function generatePokedexSnippet() {
+    return appState.pokedex.map(e=>`    [${e.dexConst}] = {
+        .categoryName = _("${e.category}"), .height = ${e.height}, .weight = ${e.weight},
+        .pokemonScale = ${e.pScale}, .pokemonOffset = ${e.pOffset},
+        .trainerScale = ${e.tScale}, .trainerOffset = ${e.tOffset},
+    },`).join('\n');
+  }
+  function generatePokedexTextSnippet() {
+    return appState.pokedex.map(e=>`static const u8 g${e.dexConst.replace('NATIONAL_DEX_','')}PokedexText[] = _("${e.desc.replace(/\n/g,'\\n')}");`).join('\n');
+  }
+  function generateMovesSnippet() {
+    return appState.moves.map(m=>`    [${m.const}] = {
+        .effect = ${m.effect}, .power = ${m.power}, .type = ${m.type}, .accuracy = ${m.accuracy},
+        .pp = ${m.pp}, .secondaryEffectChance = ${m.secChance}, .target = ${m.target},
+        .priority = ${m.priority}, .category = ${m.category},
+    },`).join('\n');
+  }
+  function generateTypesSnippet() {
+    return appState.types.map(t=>`    [${t.const}] = {
+        .name = _("${t.name}"), .generic = _("${t.name} type"), .palette = ${t.palette},
+    },`).join('\n');
+  }
+  function generateEffectivenessSnippet() {
+    let out=[];
+    appState.types.forEach(t=>{
+      standardTypes.forEach(st=>{ let m=t.matchups[st]; if(m!=1) out.push(`    {${t.const}, TYPE_${st}, ${m==0?'TYPE_MUL_NO_EFFECT':(m==2?'TYPE_MUL_SUPER_EFFECTIVE':'TYPE_MUL_NOT_EFFECTIVE')}},`); });
+    });
+    return out.join('\n');
+  }
+  function generateItemsSnippet() {
+    return appState.items.map(it=>`    [${it.const}] = {
+        .name = _("${it.name}"), .price = ${it.price}, .pocket = ${it.pocket},
+        .flingPower = ${it.fling}, .battleUsage = ${it.battleUsage},
+    },`).join('\n');
+  }
+
+  /* ---------- AI Assistant ---------- */
+  function toggleAiPanel() { aiPanelCtn.hidden = !aiPanelCtn.hidden; if(!aiPanelCtn.hidden) aiPanelCtn.style.display='flex'; }
+  async function sendAiChat() {
+    let txt = aiChatInput.value.trim(); if(!txt) return;
+    let bubble = document.createElement('div'); bubble.style.cssText='align-self:flex-end; background:#3c5aa6; color:#fff; padding:8px 12px; border-radius:12px 12px 0 12px; max-width:80%;';
+    bubble.textContent = txt; aiChatHistoryCtn.appendChild(bubble);
+    let reply = document.createElement('div'); reply.style.cssText='align-self:flex-start; background:#1e1e2a; color:#e0e0e0; padding:8px 12px; border-radius:12px 12px 12px 0; max-width:90%; white-space:pre-wrap;';
+    reply.textContent = '⏳ Thinking...'; aiChatHistoryCtn.appendChild(reply); aiChatHistoryCtn.scrollTop = aiChatHistoryCtn.scrollHeight;
+    aiChatInput.value = '';
+    let context = buildAiContext();
+    let answer = await generateText({ instruction:`You are a senior pokeemerald-expansion decomp engineer.\n${context}\nUser asks: ${txt}\nProvide concise, correct C code / file paths / instructions.` });
+    reply.textContent = answer; aiChatHistoryCtn.scrollTop = aiChatHistoryCtn.scrollHeight;
+  }
+  function buildAiContext() {
+    let parts = [`Active tab: ${appState.tab}`];
+    if(appState.tab==='pokemon' && appState.selected.pokemon!==null) parts.push(`Editing Pokémon: ${JSON.stringify(appState.pokemon[appState.selected.pokemon])}`);
+    if(appState.tab==='pokedex' && appState.selected.pokedex!==null) parts.push(`Editing Pokédex: ${JSON.stringify(appState.pokedex[appState.selected.pokedex])}`);
+    if(appState.tab==='moves' && appState.selected.moves!==null) parts.push(`Editing Move: ${JSON.stringify(appState.moves[appState.selected.moves])}`);
+    if(appState.tab==='types' && appState.selected.types!==null) parts.push(`Editing Type: ${JSON.stringify(appState.types[appState.selected.types])}`);
+    if(appState.tab==='items' && appState.selected.items!==null) parts.push(`Editing Item: ${JSON.stringify(appState.items[appState.selected.items])}`);
+    return parts.join('\n');
+  }
+  async function aiAction(action) {
+    toggleAiPanel(); aiPanelCtn.hidden=false; aiPanelCtn.style.display='flex';
+    let prompt = ''; let label = '';
+    if(action==='describe') {
+      label='AI: Writing Pokédex description...';
+      let pd = appState.selected.pokedex!==null?appState.pokedex[appState.selected.pokedex]:null;
+      let pk = appState.selected.pokemon!==null?appState.pokemon[appState.selected.pokemon]:null;
+      let name = pd?pd.dexConst.replace('NATIONAL_DEX_',''):(pk?pk.speciesConst.replace('SPECIES_',''):'NEW POKÉMON');
+      let types = pk?`${pk.type1}, ${pk.type2}`:'Unknown';
+      prompt = `Write a classic-style Pokédex description for ${name}, a ${types} Pokémon in exactly 2-3 sentences. Respond with only the description text.`;
+    } else if(action==='stats') {
+      label='AI: Balancing stats...';
+      let pk = appState.selected.pokemon!==null?appState.pokemon[appState.selected.pokemon]:null;
+      let name = pk?pk.speciesConst.replace('SPECIES_',''):'this Pokémon';
+      prompt = `Suggest balanced base stats (HP/Atk/Def/Spd/SpAtk/SpDef out of 255) for a ${name} that is themed ${pk?pk.type1:'NORMAL'} type and meant to be a mid-game generic wild encounter. Return ONLY a comma-separated list of 6 integers.`;
+    } else if(action==='where') {
+      label='AI: File paths help';
+      prompt = `The user is adding ${appState.tab} to pokeemerald-expansion. List the exact files and array names to edit, and a one-line instruction per file.`;
+    }
+    let bubble = document.createElement('div'); bubble.style.cssText='align-self:flex-end; background:#3c5aa6; color:#fff; padding:8px 12px; border-radius:12px 12px 0 12px; max-width:80%;';
+    bubble.textContent = label; aiChatHistoryCtn.appendChild(bubble);
+    let reply = document.createElement('div'); reply.style.cssText='align-self:flex-start; background:#1e1e2a; color:#e0e0e0; padding:8px 12px; border-radius:12px 12px 12px 0; max-width:90%; white-space:pre-wrap;';
+    reply.textContent = '⏳ Generating...'; aiChatHistoryCtn.appendChild(reply); aiChatHistoryCtn.scrollTop = aiChatHistoryCtn.scrollHeight;
+    let answer = await generateText({ instruction:prompt });
+    reply.textContent = answer; aiChatHistoryCtn.scrollTop = aiChatHistoryCtn.scrollHeight;
+
+    // Auto-fill if applicable
+    if(action==='describe' && appState.selected.pokedex!==null) {
+      appState.pokedex[appState.selected.pokedex].desc = answer.trim(); renderPokedexManager(); updatePreview();
+    }
+    if(action==='stats' && appState.selected.pokemon!==null) {
+      let nums = answer.match(/\d+/g); if(nums && nums.length>=6) {
+        appState.pokemon[appState.selected.pokemon].bases = nums.slice(0,6).map(x=>parseInt(x));
+        renderPokemonManager(); updatePreview();
+      }
+    }
+  }
+
+  /* ---------- init ---------- */
+  updatePreview();
+</script>
+</body>
+</html>

@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>old-school-runescape — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Updated Old School RuneScape with many new features:
+- New skills: Ranged, Prayer, Cooking, Firemaking, Smithing
+- Equipment system with paperdoll slots and stat bonuses
+- More NPCs (Cow, Giant Rat) with loot tables including bones
+- Firemaking (use tinderbox on logs to make fires)
+- Cooking (use raw food on fires, chance to burn)
+- Smithing (smelt bronze bars at furnace, smith bronze dagger at anvil)
+- Ranged combat with ammo requirement
+- Prayer system with drain and combat boosts
+- Use-item system (select an item then click target)
+- Quest tab with objective tracker
+- Music tab with unlockable tracks
+- Options/Settings tab with toggles
+- Expanded world with furnaces, anvils, oak trees
+- Run/Walk mode toggle with energy drain
+- Improved right-click style context for inventory use & bury
+-->
+
+<style>
+  body { margin:0; overflow:hidden; background:#000; font-family:Arial,sans-serif; user-select:none; text-align:left; }
+  .rsPanel { background:#47361e; border:2px solid #24180a; outline:2px solid #8c734a; color:#ff0; font-size:12px; }
+  .rsBtn { background:#5a4628; border:2px outset #8c734a; color:#ff0; padding:2px 6px; cursor:pointer; display:inline-block; }
+  .rsBtn:active { border-style:inset; }
+  .rsTab { display:inline-block; padding:2px 6px; background:#3e2b18; border:2px outset #8c734a; color:#ccc; font-size:10px; cursor:pointer; white-space:nowrap; }
+  .rsTab.active { background:#5a4628; color:#ff0; }
+  .invSlot { width:36px; height:36px; background:#2a1f10; border:2px solid #24180a; position:relative; cursor:pointer; }
+  .invSlot.selected { border:2px solid #0f0; }
+  .eqSlot { width:38px; height:38px; background:#2a1f10; border:2px solid #24180a; display:flex; align-items:center; justify-content:center; font-size:9px; color:#ccc; cursor:pointer; }
+  .eqSlot.filled { border-color:#8c734a; color:#ff0; }
+  .miniStat { font-size:10px; color:#ccc; text-align:left; padding:2px 4px; }
+  .settingsRow { display:flex; justify-content:space-between; align-items:center; padding:3px 6px; border-bottom:1px solid #3e2b18; }
+  .ctxMenu { position:absolute; background:#47361e; border:2px solid #24180a; outline:2px solid #8c734a; z-index:20; color:#ff0; font-size:11px; min-width:120px; }
+  .ctxItem { padding:3px 8px; cursor:pointer; }
+  .ctxItem:hover { background:#5a4628; }
+</style>
+
+<canvas id="gameCanvasEl" style="position:absolute;top:0;left:0;width:100%;height:100%;"></canvas>
+
+<!-- Top Right: Minimap & Orbs -->
+<div style="position:absolute;top:0;right:0;width:180px;background:#231810;border-left:2px solid #8c734a;border-bottom:2px solid #8c734a;z-index:2;">
+  <div style="display:flex;justify-content:space-between;padding:4px;">
+    <div id="compassBtn" class="rsBtn" onclick="compassClick()">Compass</div>
+    <div id="runBtn" class="rsBtn" onclick="toggleRun()" style="color:#fff;">Walk</div>
+  </div>
+  <canvas id="minimapEl" width="150" height="150" style="display:block;margin:4px auto;background:#002200;border:2px solid #8c734a;"></canvas>
+  <div style="display:flex;justify-content:space-around;padding:4px;">
+    <div style="text-align:center;">
+      <div id="hpOrbEl" style="width:32px;height:32px;border-radius:50%;background:#300;border:2px solid #800;color:#f00;font-weight:bold;line-height:28px;">10</div>
+      <div style="font-size:10px;color:#f00;">HP</div>
+    </div>
+    <div style="text-align:center;">
+      <div id="prayOrbEl" style="width:32px;height:32px;border-radius:50%;background:#003;border:2px solid #008;color:#00f;font-weight:bold;line-height:28px;">1</div>
+      <div style="font-size:10px;color:#00f;">Pray</div>
+    </div>
+    <div style="text-align:center;">
+      <div id="energyOrbEl" style="width:32px;height:32px;border-radius:50%;background:#030;border:2px solid #080;color:#0f0;font-weight:bold;line-height:28px;">100</div>
+      <div style="font-size:10px;color:#0f0;">Run</div>
+    </div>
+  </div>
+</div>
+
+<!-- XP Drops Area -->
+<div id="xpDropCtn" style="position:absolute;top:40px;left:10px;pointer-events:none;z-index:2;"></div>
+
+<!-- Context Menu -->
+<div id="ctxMenuEl" class="ctxMenu" style="display:none;"></div>
+
+<!-- Bottom Left: Chat -->
+<div style="position:absolute;bottom:0;left:0;width:60%;height:160px;background:#231810;border-top:2px solid #8c734a;display:flex;flex-direction:column;z-index:2;">
+  <div style="display:flex;background:#1a110a;">
+    <div class="rsTab active" onclick="switchChatTab('all',this)">All</div>
+    <div class="rsTab" onclick="switchChatTab('game',this)">Game</div>
+    <div class="rsTab" onclick="switchChatTab('public',this)">Public</div>
+  </div>
+  <div id="chatContentEl" style="flex:1;overflow-y:auto;padding:4px;font-size:12px;color:#fff;text-align:left;font-family:monospace;"></div>
+  <input id="chatInputEl" style="width:100%;background:#000;color:#0f0;border:1px solid #333;font-family:monospace;" placeholder="Press Enter to chat...">
+</div>
+
+<!-- Bottom Right: Main Panel -->
+<div style="position:absolute;bottom:0;right:0;width:40%;height:160px;background:#231810;border-top:2px solid #8c734a;border-left:2px solid #8c734a;display:flex;flex-direction:column;z-index:2;">
+  <div style="display:flex;background:#1a110a;justify-content:center;flex-wrap:wrap;">
+    <div class="rsTab active" onclick="switchGameTab('inventory',this)">Inv</div>
+    <div class="rsTab" onclick="switchGameTab('equipment',this)">Equip</div>
+    <div class="rsTab" onclick="switchGameTab('skills',this)">Skills</div>
+    <div class="rsTab" onclick="switchGameTab('prayer',this)">Pray</div>
+    <div class="rsTab" onclick="switchGameTab('combat',this)">Combat</div>
+    <div class="rsTab" onclick="switchGameTab('quest',this)">Quest</div>
+    <div class="rsTab" onclick="switchGameTab('music',this)">Music</div>
+    <div class="rsTab" onclick="switchGameTab('bank',this)">Bank</div>
+    <div class="rsTab" onclick="switchGameTab('options',this)">Options</div>
+  </div>
+  <div id="panelContentEl" style="flex:1;position:relative;overflow:auto;"></div>
+</div>
+
+<div id="overlayCtn" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none;z-index:10;"></div>
+
+<script type="module">
+  import { createNoise2D } from 'https://esm.sh/simplex-noise@4.0.3';
+  let noise = createNoise2D();
+  let canvas = gameCanvasEl, ctx = canvas.getContext('2d');
+  let mmCanvas = minimapEl, mmCtx = mmCanvas.getContext('2d');
+
+  function resize(){ canvas.width=innerWidth; canvas.height=innerHeight; }
+  addEventListener('resize', resize); resize();
+
+  let TILE_W=64, TILE_H=32, WORLD_W=80, WORLD_H=80, TICK=600;
+  let camOffX=0, camOffY=0;
+  let currentTab='inventory', chatTab='all';
+  let chatLines=[], xpDrops=[], itemsOnGround=[];
+  let objects=new Map(), npcs=[], bankItems=[];
+  let useItem=null; // {index} selected inventory item for using
+  let bankOpen=false;
+
+  let SKILL_NAMES={attack:'Attack',strength:'Strength',defence:'Defence',hitpoints:'Hitpoints',woodcutting:'Woodcutting',mining:'Mining',fishing:'Fishing',cooking:'Cooking',firemaking:'Firemaking',smithing:'Smithing',ranged:'Ranged',prayer:'Prayer'};
+  let skillsList=['attack','strength','defence','hitpoints','woodcutting','mining','fishing','cooking','firemaking','smithing','ranged','prayer'];
+
+  // Expanded items
+  let ITEMS={
+    logs:{name:'Logs',color:'#8B4513',stack:false},
+    oakLogs:{name:'Oak logs',color:'#654321',stack:false},
+    oreCopper:{name:'Copper ore',color:'#b87333',stack:false},
+    oreTin:{name:'Tin ore',color:'#708090',stack:false},
+    bronzeBar:{name:'Bronze bar',color:'#cd7f32',stack:false},
+    rawShrimp:{name:'Raw shrimps',color:'#ffa07a',stack:false},
+    cookedShrimp:{name:'Shrimps',color:'#ff7f50',stack:false},
+    burntShrimp:{name:'Burnt shrimps',color:'#333',stack:false},
+    coins:{name:'Coins',color:'#ffd700',stack:true},
+    bones:{name:'Bones',color:'#f5f5f5',stack:false},
+    tinderbox:{name:'Tinderbox',color:'#666',stack:false},
+    bronzeDagger:{name:'Bronze dagger',color:'#b8860b',stack:false,equipSlot:'weapon',atkBonus:4,strBonus:3},
+    shortbow:{name:'Shortbow',color:'#8B4513',stack:false,equipSlot:'weapon',atkBonus:0,rangedBonus:8},
+    bronzeArrow:{name:'Bronze arrow',color:'#cd7f32',stack:true,equipSlot:'ammo',rangedBonus:0},
+  };
+
+  // Equipment slots
+  let EQUIP_SLOTS=['head','cape','amulet','weapon','body','shield','legs','hands','feet','ring','ammo'];
+
+  let player={x:40,y:40,hp:10,maxHp:10,prayer:1,maxPrayer:1,energy:100,xp:{},inv:Array(28).fill(null),action:null,target:null,path:[],animOffset:0,equipment:{},prayerPoints:1,maxPrayerPoints:1};
+  skillsList.forEach(s=>player.xp[s]=0);
+  player.xp.hitpoints=1154; // level 10
+  player.maxHp=10; player.hp=10;
+  player.xp.prayer=0;
+
+  // Equipment state init
+  EQUIP_SLOTS.forEach(s=>player.equipment[s]=null);
+
+  function xpForLevel(lvl){ let t=0; for(let i=1;i<lvl;i++) t+=Math.floor(i+300*Math.pow(2,i/7)); return Math.floor(t/4); }
+  function getLevel(xp){ for(let l=99;l>=1;l--) if(xp>=xpForLevel(l)) return l; return 1; }
+
+  // Prayers
+  let PRAYERS={
+    thickSkin:{name:'Thick Skin',level:1,drain:1,boost:{defence:0.05},desc:'+5% Defence'},
+    burstOfStr:{name:'Burst of Strength',level:4,drain:1,boost:{strength:0.05},desc:'+5% Strength'},
+    clarity:{name:'Clarity of Thought',level:7,drain:1,boost:{attack:0.05},desc:'+5% Attack'},
+    sharpEye:{name:'Sharp Eye',level:8,drain:1,boost:{ranged:0.05},desc:'+5% Ranged'},
+  };
+  let activePrayers=new Set();
+
+  // Settings
+  let settings={runMode:false, xpDrops:true, roofs:true};
+
+  // Quest: Cooks Assistant style
+  let questState={
+    name:"Adventurer's Path",
+    started:true,
+    objectives:[
+      {text:'Chop a tree and collect logs.', done:false},
+      {text:'Light a fire using logs and a tinderbox.', done:false},
+      {text:'Cook raw shrimps on a fire.', done:false},
+      {text:'Mine copper or tin ore.', done:false},
+      {text:'Smelt a bronze bar at a furnace.', done:false},
+      {text:'Smith a bronze dagger at an anvil.', done:false},
+      {text:'Defeat a goblin in combat.', done:false},
+    ]
+  };
+
+  // Music tracks
+  let musicTracks=[
+    {name:'Autumn Voyage', unlocked:true},
+    {name:'Harmony', unlocked:true},
+    {name:'Alone', unlocked:true},
+    {name:'Newbie Melody', unlocked:true},
+    {name:'Greatness', unlocked:false},
+    {name:'Mudskipper Melody', unlocked:false},
+    {name:'Barbarianism', unlocked:false},
+  ];
+
+  function isoOff(){
+    camOffX = canvas.width/2 - (player.x-player.y)*TILE_W/2;
+    camOffY = canvas.height/2 - (player.x+player.y)*TILE_H/2 - 100;
+  }
+  function isoToScreen(x,y){ return {x:(x-y)*TILE_W/2+camOffX, y:(x+y)*TILE_H/2+camOffY}; }
+  function screenToIso(sx,sy){
+    let mx=sx-camOffX, my=sy-camOffY;
+    return {x:Math.floor((mx/(TILE_W/2)+my/(TILE_H/2))/2), y:Math.floor((my/(TILE_H/2)-mx/(TILE_W/2))/2)};
+  }
+
+  // World gen
+  let tiles=[];
+  for(let y=0;y<WORLD_H;y++){ tiles[y]=[]; for(let x=0;x<WORLD_W;x++){
+    let n=noise(x/15,y/15);
+    tiles[y][x]={type:n<-0.3?'water':n<-0.1?'sand':'grass', height:0};
+  }}
+  let treeCount=0, rockCount=0, oakCount=0;
+  for(let y=0;y<WORLD_H;y++) for(let x=0;x<WORLD_W;x++){
+    let key=x+','+y, t=tiles[y][x];
+    if(t.type==='grass'){
+      let n2=noise(x/5+50,y/5+50);
+      if(n2>0.4 && treeCount<300){ objects.set(key,{type:'tree',state:'normal',x,y,timer:0}); treeCount++; }
+      else if(n2>0.2 && n2<=0.4 && oakCount<120){ objects.set(key,{type:'oak',state:'normal',x,y,timer:0}); oakCount++; }
+      else if(noise(x/4+100,y/4)>0.6 && rockCount<80){ objects.set(key,{type:'rock',state:'normal',x,y,timer:0,ore:Math.random()<0.5?'copper':'tin'}); rockCount++; }
+    }
+    if(t.type==='sand' && noise(x/3,y/3+200)>0.6){
+      let hasWater=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{let nx=x+dx,ny=y+dy; return nx>=0&&nx<WORLD_W&&ny>=0&&ny<WORLD_H&&tiles[ny][nx].type==='water';});
+      if(hasWater) objects.set(key,{type:'fish',x,y});
+    }
+  }
+  // Place bank, furnace, anvil near spawn cluster
+  function placeObject(type, sx, sy, dist){
+    outer: for(let y=sy-dist;y<=sy+dist;y++) for(let x=sx-dist;x<=sx+dist;x++){
+      if(x>=0&&x<WORLD_W&&y>=0&&y<WORLD_H&&tiles[y][x].type==='grass' && !objects.has(x+','+y)){
+        objects.set(x+','+y,{type:type,x,y}); break outer;
+      }
+    }
+  }
+  placeObject('bank',40,40,6);
+  placeObject('furnace',33,34,8);
+  placeObject('anvil',34,33,8);
+
+  let NPC_DEFS={
+    'Goblin':{hp:5,atk:1,str:1,def:1,color:'#8bc34a',loot:[{item:'coins',qty:[1,5],chance:1},{item:'bones',qty:1,chance:1}]},
+    'Chicken':{hp:3,atk:1,str:1,def:1,color:'#fff9c4',loot:[{item:'bones',qty:1,chance:1},{item:'rawShrimp',qty:1,chance:0.3}]},
+    'Cow':{hp:8,atk:1,str:2,def:1,color:'#fff',loot:[{item:'bones',qty:1,chance:1},{item:'coins',qty:[1,3],chance:0.5}]},
+    'Giant Rat':{hp:6,atk:2,str:2,def:1,color:'#9e9e9e',loot:[{item:'bones',qty:1,chance:1},{item:'coins',qty:[1,4],chance:0.4}]}
+  };
+
+  function addNPC(n,x,y){
+    let d=NPC_DEFS[n];
+    npcs.push({name:n,x,y,hp:d.hp,maxHp:d.hp,atk:d.atk,str:d.str,def:d.def,color:d.color,action:null,target:null,timer:0,origX:x,origY:y});
+  }
+  addNPC('Goblin',42,42);
+  addNPC('Goblin',38,38);
+  addNPC('Chicken',45,37);
+  addNPC('Cow',48,44);
+  addNPC('Giant Rat',36,46);
+
+  function dist(a,b){ return Math.abs(a.x-b.x)+Math.abs(a.y-b.y); }
+  function okTile(x,y,allowBlockedTarget,targetX,targetY){
+    if(x<0||y<0||x>=WORLD_W||y>=WORLD_H) return false;
+    if(tiles[y][x].type==='water') return false;
+    let obj=objects.get(x+','+y);
+    if(obj && (obj.type==='tree'||obj.type==='oak'||obj.type==='rock') && obj.state==='normal') return (x===targetX && y===targetY);
+    if(obj && (obj.type==='bank'||obj.type==='furnace'||obj.type==='anvil')) return true; // walkable but interactive
+    if(npcs.some(n=>n.hp>0 && n.x===x && n.y===y)) return false;
+    return true;
+  }
+  function pathfind(sx,sy,tx,ty){
+    if(sx===tx && sy===ty) return [];
+    let open=[{x:sx,y:sy,g:0,f:0,p:null}], closed=new Set(), key=(x,y)=>x+','+y;
+    while(open.length){
+      let cur=open.shift();
+      if(cur.x===tx && cur.y===ty){ let path=[]; let n=cur.p; while(n && n.p){ path.push({x:n.x,y:n.y}); n=n.p; } path.reverse(); path.push({x:tx,y:ty}); return path; }
+      let k=key(cur.x,cur.y); if(closed.has(k)) continue; closed.add(k);
+      for(let [dx,dy] of [[0,1],[0,-1],[1,0],[-1,0]]){
+        let nx=cur.x+dx, ny=cur.y+dy;
+        if(!okTile(nx,ny,true,tx,ty)) continue;
+        let g=cur.g+1, h=Math.abs(tx-nx)+Math.abs(ty-ny);
+        let node={x:nx,y:ny,g,f:g+h,p:cur};
+        let i=open.findIndex(o=>o.f>=node.f); if(i===-1) open.push(node); else open.splice(i,0,node);
+      }
+    }
+    return [];
+  }
+  function adjacent(a,b){ return dist(a,b)<=1; }
+
+  function getEquipStats(){
+    let atk=0,str=0,def=0,rng=0;
+    for(let s of EQUIP_SLOTS){
+      let it=player.equipment[s];
+      if(it){
+        atk+=(it.atkBonus||0);
+        str+=(it.strBonus||0);
+        def+=(it.defBonus||0);
+        rng+=(it.rangedBonus||0);
+      }
+    }
+    return {atk,str,def,rng};
+  }
+  function isRangedEquipped(){ return player.equipment.weapon && (player.equipment.weapon.id==='shortbow'); }
+  function hasAmmo(){ return player.equipment.ammo && player.equipment.ammo.id==='bronzeArrow' && player.equipment.ammo.qty>0; }
+
+  function questCheck(key){
+    if(!questState.started) return;
+    if(key==='chop') questState.objectives[0].done=true;
+    if(key==='fire') questState.objectives[1].done=true;
+    if(key==='cook') questState.objectives[2].done=true;
+    if(key==='mine') questState.objectives[3].done=true;
+    if(key==='smelt') questState.objectives[4].done=true;
+    if(key==='smith') questState.objectives[5].done=true;
+    if(key==='goblin') questState.objectives[6].done=true;
+    if(currentTab==='quest') renderQuest();
+  }
+
+  function tick(){
+    // Prayer drain
+    if(activePrayers.size>0){
+      let totalDrain=0;
+      activePrayers.forEach(pid=>{ totalDrain+=PRAYERS[pid].drain; });
+      if(player.prayerPoints>0){
+        player.prayerPoints-=totalDrain*0.05; // slow drain per tick
+        if(player.prayerPoints<=0){ player.prayerPoints=0; activePrayers.clear(); addChat('You have run out of prayer points.'); }
+      }
+    }
+
+    // Pickup handling
+    if(player.action==='pickup' && player.target && player.path.length===0){
+      let idx=itemsOnGround.indexOf(player.target);
+      if(idx!==-1){ let g=itemsOnGround[idx]; addItem(g.item,g.qty); addChat('You pick up the '+ITEMS[g.item].name+'.'); itemsOnGround.splice(idx,1); }
+      player.action=null; player.target=null;
+    }
+
+    // Movement
+    if(player.path.length>0){
+      let next=player.path.shift(); player.x=next.x; player.y=next.y; player.animOffset=4;
+      if(settings.runMode && player.energy>0){ player.path.shift(); if(player.path.length){ player.x=player.path[0].x; player.y=player.path[0].y; } player.energy-=2; if(player.energy<0) player.energy=0; }
+      else if(player.energy<100 && Math.random()<0.1) player.energy++;
+    } else if(player.action && player.target){
+      let t=player.target;
+      if(player.action==='chop' && adjacent(player,t) && t.state==='normal'){
+        player.animOffset=2;
+        if(Math.random()<0.25){
+          let got='logs'; let xp=25; if(t.type==='oak'){ got='oakLogs'; xp=37.5; }
+          addItem(got,1); addChat('You get some '+ITEMS[got].name+'.'); giveXp('woodcutting',xp); t.state='stump'; t.timer=30+Math.floor(Math.random()*20);
+          questCheck('chop');
+        }
+      } else if(player.action==='mine' && adjacent(player,t) && t.state==='normal'){
+        player.animOffset=2;
+        if(Math.random()<0.2){
+          let oreKey=t.ore==='tin'?'oreTin':'oreCopper';
+          addItem(oreKey,1); addChat('You manage to mine some '+ITEMS[oreKey].name+'.'); giveXp('mining',17.5); t.state='empty'; t.timer=40+Math.floor(Math.random()*20);
+          questCheck('mine');
+        }
+      } else if(player.action==='fish' && adjacent(player,t)){
+        player.animOffset=2;
+        if(Math.random()<0.3){ addItem('rawShrimp',1); addChat('You catch some raw shrimps.'); giveXp('fishing',10); }
+      } else if(player.action==='combat'){
+        let npc=t;
+        if(npc.hp<=0){ player.action=null; player.target=null; }
+        else {
+          let maxRange = (isRangedEquipped() && hasAmmo()) ? 5 : 1;
+          if(dist(player,npc)<=maxRange){
+            player.animOffset=3;
+            let eq=getEquipStats();
+            let isRanged = maxRange>1;
+            let atkLvl = getLevel(player.xp.attack), strLvl=getLevel(player.xp.strength), rngLvl=getLevel(player.xp.ranged), defLvl=getLevel(player.xp.defence);
+            // Prayer boosts
+            let prayerBoost=1; if(activePrayers.has('burstOfStr')) prayerBoost+=0.05; if(activePrayers.has('clarity')) prayerBoost+=0.05; if(activePrayers.has('thickSkin')) defLvl+=2;
+            let maxHit, hitChance;
+            if(isRanged){
+              maxHit=Math.floor((rngLvl/2)+1+(eq.rng/3));
+              hitChance=(rngLvl+eq.rng+10)/(rngLvl+eq.rng+npc.def+20);
+            } else {
+              maxHit=Math.floor((strLvl/2)+1+(eq.str/3));
+              hitChance=(atkLvl+eq.atk+10)/(atkLvl+eq.atk+npc.def+20);
+            }
+            if(Math.random()<hitChance){
+              let dmg=Math.floor(Math.random()*(maxHit+1));
+              if(isRanged){ if(--player.equipment.ammo.qty<=0) player.equipment.ammo=null; } // consume arrow
+              npc.hp-=dmg; addXpSilent('hitpoints',dmg*1.33);
+              if(!isRanged) addXpSilent('attack',dmg*4*prayerBoost);
+              else addXpSilent('ranged',dmg*4);
+              if(dmg>0) addChat('You hit the '+npc.name+' for '+dmg+'.'); else addChat('You splash!');
+            } else addChat('You miss!');
+            // NPC retaliate
+            if(npc.hp>0){
+              let npcMaxHit=Math.floor(npc.str/2)+1, npcHitChance=(npc.atk+10)/(npc.atk+defLvl+20);
+              if(Math.random()<npcHitChance){
+                let ndmg=Math.floor(Math.random()*(npcMaxHit+1)); player.hp-=ndmg;
+                addChat('The '+npc.name+' hits you for '+ndmg+'!');
+              } else addChat('The '+npc.name+' misses!');
+            }
+            if(npc.hp<=0){
+              addChat('The '+npc.name+' dies!');
+              if(npc.name==='Goblin') questCheck('goblin');
+              let d=NPC_DEFS[npc.name];
+              if(d && d.loot) d.loot.forEach(l=>{
+                if(Math.random()<=(l.chance||1)){
+                  let q=l.qty; if(Array.isArray(q)) q=q[0]+Math.floor(Math.random()*(q[1]-q[0]+1));
+                  itemsOnGround.push({x:npc.x,y:npc.y,item:l.item,qty:q});
+                }
+              });
+              npc.timer=25;
+            }
+            if(player.hp<=0){ addChat('Oh dear, you are dead!'); player.hp=player.maxHp; player.x=40; player.y=40; player.action=null; player.target=null; player.path=[]; activePrayers.clear(); }
+          } else {
+            // need to move closer
+            if(player.path.length===0) player.path=pathfind(player.x,player.y,npc.x,npc.y);
+            if(player.path.length>0){ let next=player.path.shift(); player.x=next.x; player.y=next.y; player.animOffset=4; if(settings.runMode && player.energy>0 && player.path.length){ player.path.shift(); if(player.path.length){ player.x=player.path[0]?.x??player.x; player.y=player.path[0]?.y??player.y; } player.energy-=2; } }
+          }
+        }
+      } else if(player.action==='bank' && adjacent(player,t)){ openBank(); player.action=null; player.target=null; }
+    }
+
+    npcs.forEach(npc=>{
+      if(npc.hp<=0){ npc.timer--; if(npc.timer<=0){ npc.hp=npc.maxHp; npc.x=npc.origX; npc.y=npc.origY; } return; }
+      if(Math.random()<0.25){
+        let d=[[0,1],[0,-1],[1,0],[-1,0]][Math.floor(Math.random()*4)];
+        let nx=npc.x+d[0], ny=npc.y+d[1];
+        if(okTile(nx,ny)&&!(player.x===nx&&player.y===ny)&&!npcs.some(n=>n!==npc && n.hp>0 && n.x===nx && n.y===ny)){ npc.x=nx; npc.y=ny; }
+      }
+    });
+
+    objects.forEach(o=>{
+      if(o.timer>0){ o.timer--; if(o.timer<=0){ o.state='normal'; } }
+      if(o.type==='fire' && o.timer<=0){ objects.delete(o.x+','+o.y); } // fires removed after timer
+    });
+
+    if(player.animOffset>0) player.animOffset-=0.5;
+    updateUI();
+  }
+  setInterval(tick,TICK);
+
+  function addItem(key,qty){
+    let def=ITEMS[key]; if(!def) return;
+    let ex=player.inv.find(i=>i && i.stack && i.id===key);
+    if(ex){ ex.qty+=qty; }
+    else { let slot=player.inv.indexOf(null); if(slot===-1){ addChat('Not enough inventory space.'); return; } player.inv[slot]={id:key,qty:qty,...def}; }
+    if(currentTab==='inventory') renderInv();
+    if(currentTab==='equipment') renderEquipment();
+  }
+  function giveXp(sk,amt){ player.xp[sk]+=amt; if(settings.xpDrops) xpDrops.push({sk,amt,y:0,life:60}); if(currentTab==='skills') renderSkills(); }
+
+  function addXpSilent(sk,amt){ player.xp[sk]+=amt; }
+
+  function addChat(msg,type='game'){
+    chatLines.push({msg,type}); if(chatLines.length>200) chatLines.shift();
+    let filtered = chatTab==='game' ? chatLines.filter(l=>l.type==='game') : chatTab==='public' ? chatLines.filter(l=>l.type==='public') : chatLines;
+    chatContentEl.innerHTML = filtered.slice(-12).map(l=>`<div style="color:${l.type==='game'?'#ffff00':l.type==='public'?'#00ffff':'#ffffff'}">${l.msg}</div>`).join('');
+    chatContentEl.scrollTop = chatContentEl.scrollHeight;
+  }
+
+  // UI functions
+  window.switchChatTab = (tab,el)=>{
+    chatTab=tab;
+    el.parentElement.querySelectorAll('.rsTab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    let filtered = chatTab==='game' ? chatLines.filter(l=>l.type==='game') : chatTab==='public' ? chatLines.filter(l=>l.type==='public') : chatLines;
+    chatContentEl.innerHTML = filtered.slice(-12).map(l=>`<div style="color:${l.type==='game'?'#ffff00':l.type==='public'?'#00ffff':'#ffffff'}">${l.msg}</div>`).join('');
+  };
+  window.switchGameTab = (tab,el)=>{
+    currentTab=tab;
+    el.parentElement.querySelectorAll('.rsTab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    if(tab==='inventory') renderInv();
+    else if(tab==='equipment') renderEquipment();
+    else if(tab==='skills') renderSkills();
+    else if(tab==='prayer') renderPrayer();
+    else if(tab==='combat') renderCombat();
+    else if(tab==='quest') renderQuest();
+    else if(tab==='music') renderMusic();
+    else if(tab==='bank') renderBankInfo();
+    else if(tab==='options') renderOptions();
+  };
+
+  // Use / drop logic
+  window.invClick = i=>{
+    let it=player.inv[i]; if(!it) return;
+    if(it.id==='bones'){ // bury
+      player.inv[i]=null; giveXp('prayer',4.5); addChat('You bury the bones.'); renderInv(); return;
+    }
+    if(useItem && useItem.index===i){ useItem=null; renderInv(); return; }
+    if(useItem){ attemptCombine(useItem.index,i); useItem=null; renderInv(); return; }
+    // select for use on world / item
+    useItem={index:i}; renderInv();
+  };
+  window.equipClick = s=>{
+    let it=player.equipment[s]; if(!it) return;
+    let slot=player.inv.indexOf(null); if(slot===-1){ addChat('Not enough inventory space.'); return; }
+    player.inv[slot]={...it}; player.equipment[s]=null; renderEquipment(); renderCombat(); renderInv();
+  };
+
+  function attemptCombine(i1,i2){
+    let a=player.inv[i1], b=player.inv[i2]; if(!a||!b) return;
+    // Tinderbox + logs -> fire
+    if((a.id==='tinderbox' && (b.id==='logs'||b.id==='oakLogs')) || ((a.id==='logs'||a.id==='oakLogs') && b.id==='tinderbox')){
+      let logs=a.id.startsWith('log')||a.id==='oakLogs'?a:b;
+      let key=player.x+','+player.y;
+      if(!objects.has(key) && tiles[player.y][player.x].type!=='water'){
+        objects.set(key,{type:'fire',x:player.x,y:player.y,timer:40+Math.floor(Math.random()*20)});
+        addChat('You light a fire.'); giveXp('firemaking',logs.id==='oakLogs'?40:25); questCheck('fire');
+        removeInvItemByIndex(player.inv.indexOf(logs));
+      } else addChat('You cannot light a fire here.');
+      return;
+    }
+    // Raw food + nothing special yet handled by object target, but allow use-on-item for cooked? skip.
+  }
+  function removeInvItemByIndex(idx){ if(idx>=0){ player.inv[idx]=null; if(currentTab==='inventory') renderInv(); } }
+
+  window.closeBank = ()=>{ overlayCtn.style.display='none'; bankOpen=false; };
+  window.depositInv = ()=>{
+    player.inv.forEach((it,i)=>{
+      if(!it) return;
+      let ex=bankItems.find(b=>b && b.id===it.id && b.stack===it.stack);
+      if(ex && it.stack) ex.qty+=it.qty; else bankItems.push({...it});
+      player.inv[i]=null;
+    });
+    openBank(); renderInv();
+  };
+  window.withdrawBank = i=>{
+    let it=bankItems[i]; if(!it) return;
+    let slot=player.inv.indexOf(null); if(slot===-1){ addChat('Not enough inventory space.'); return; }
+    let qty=1; if(it.stack && it.qty>1) qty=1; // withdraw 1 at a time
+    player.inv[slot]={...it,qty:qty};
+    it.qty-=qty; if(it.qty<=0) bankItems[i]=null;
+    openBank(); renderInv();
+  };
+  window.compassClick = ()=>{ addChat('You are here.'); };
+  window.toggleRun = ()=>{
+    settings.runMode=!settings.runMode; runBtn.textContent=settings.runMode?'Run':'Walk'; runBtn.style.color=settings.runMode?'#0f0':'#fff';
+    addChat('Running '+(settings.runMode?'enabled':'disabled')+'.');
+  };
+  window.togglePrayer = pid=>{
+    let p=PRAYERS[pid]; let lv=getLevel(player.xp.prayer); if(lv<p.level){ addChat('You need prayer level '+p.level+' to use that.'); return; }
+    if(activePrayers.has(pid)){ activePrayers.delete(pid); } else { activePrayers.add(pid); }
+    if(currentTab==='prayer') renderPrayer();
+    if(currentTab==='combat') renderCombat();
+  };
+  window.toggleSetting = (key,el)=>{
+    if(key==='runMode'){ toggleRun(); return; }
+    settings[key]=!settings[key]; if(el) el.textContent=settings[key]?'On':'Off'; renderOptions();
+  };
+
+  function renderInv(){
+    let h=`<div style="display:flex;flex-wrap:wrap;gap:2px;padding:4px;">`;
+    player.inv.forEach((it,i)=>{
+      let sel = useItem && useItem.index===i ? 'selected' : '';
+      if(!it) h+=`<div class="invSlot ${sel}"></div>`;
+      else h+=`<div onclick="invClick(${i})" class="invSlot ${sel}" style="background:${it.color};font-size:9px;color:#fff;overflow:hidden;position:relative;">${it.name}${it.qty>1?`<span style="position:absolute;bottom:0;right:2px;color:#ff0;font-weight:bold;">${Math.floor(it.qty)}</span>`:''}</div>`;
+    });
+    panelContentEl.innerHTML=h+`</div>`;
+  }
+  function renderEquipment(){
+    let eq=player.equipment;
+    let h=`<div style="padding:4px;font-size:10px;color:#ccc;text-align:center;">`;
+    h+=`<div style="display:flex;justify-content:center;gap:4px;margin-bottom:2px;">`;
+    h+=`<div class="eqSlot ${eq.head?'filled':''}" onclick="equipClick('head')" title="Head">${eq.head?eq.head.name.slice(0,4):'Head'}</div>`;
+    h+=`<div class="eqSlot ${eq.cape?'filled':''}" onclick="equipClick('cape')" title="Cape">${eq.cape?eq.cape.name.slice(0,4):'Cape'}</div>`;
+    h+=`<div class="eqSlot ${eq.amulet?'filled':''}" onclick="equipClick('amulet')" title="Amulet">${eq.amulet?eq.amulet.name.slice(0,4):'Amulet'}</div>`;
+    h+=`<div class="eqSlot ${eq.ammo?'filled':''}" onclick="equipClick('ammo')" title="Ammo">${eq.ammo?eq.ammo.name.slice(0,4):'Ammo'}</div>`;
+    h+=`</div>`;
+    h+=`<div style="display:flex;justify-content:center;gap:24px;margin-bottom:2px;">`;
+    h+=`<div class="eqSlot ${eq.weapon?'filled':''}" onclick="equipClick('weapon')" title="Weapon">${eq.weapon?eq.weapon.name.slice(0,4):'Wep'}</div>`;
+    h+=`<div class="eqSlot ${eq.body?'filled':''}" onclick="equipClick('body')" title="Body">${eq.body?eq.body.name.slice(0,4):'Body'}</div>`;
+    h+=`<div class="eqSlot ${eq.shield?'filled':''}" onclick="equipClick('shield')" title="Shield">${eq.shield?eq.shield.name.slice(0,4):'Shield'}</div>`;
+    h+=`</div>`;
+    h+=`<div style="display:flex;justify-content:center;gap:24px;margin-bottom:2px;">`;
+    h+=`<div class="eqSlot ${eq.legs?'filled':''}" onclick="equipClick('legs')" title="Legs">${eq.legs?eq.legs.name.slice(0,4):'Legs'}</div>`;
+    h+=`<div class="eqSlot ${eq.hands?'filled':''}" onclick="equipClick('hands')" title="Hands">${eq.hands?eq.hands.name.slice(0,4):'Hands'}</div>`;
+    h+=`<div class="eqSlot ${eq.feet?'filled':''}" onclick="equipClick('feet')" title="Feet">${eq.feet?eq.feet.name.slice(0,4):'Feet'}</div>`;
+    h+=`</div>`;
+    h+=`<div style="display:flex;justify-content:center;gap:4px;">`;
+    h+=`<div class="eqSlot ${eq.ring?'filled':''}" onclick="equipClick('ring')" title="Ring">${eq.ring?eq.ring.name.slice(0,4):'Ring'}</div>`;
+    h+=`</div>`;
+    let st=getEquipStats();
+    h+=`<div class="miniStat" style="margin-top:6px;border-top:1px solid #3e2b18;">Atk +${st.atk} &nbsp; Str +${st.str} &nbsp; Def +${st.def} &nbsp; Rng +${st.rng}</div>`;
+    panelContentEl.innerHTML=h+`</div>`;
+  }
+  function renderSkills(){
+    let h=`<div style="padding:4px;font-size:11px;">`;
+    skillsList.forEach(s=>{ let lv=getLevel(player.xp[s]); h+=`<div style="display:flex;justify-content:space-between;padding:2px;border-bottom:1px solid #3e2b18;"><span style="color:#ff0">${SKILL_NAMES[s]}</span><span style="color:#fff">${lv}</span></div>`; });
+    panelContentEl.innerHTML=h+`</div>`;
+  }
+  function renderPrayer(){
+    let h=`<div style="padding:4px;font-size:11px;"><div style="color:#ff0;text-align:center;margin-bottom:4px;">Prayer: ${Math.floor(player.prayerPoints)}/${player.maxPrayerPoints}</div>`;
+    for(let pid in PRAYERS){
+      let p=PRAYERS[pid]; let lv=getLevel(player.xp.prayer);
+      let on=activePrayers.has(pid); let avail=lv>=p.level;
+      h+=`<div onclick="togglePrayer('${pid}')" style="display:flex;justify-content:space-between;padding:3px;border-bottom:1px solid #3e2b18;cursor:pointer;opacity:${avail?1:0.4};background:${on?'#2e4618':'transparent'};">
+        <span style="color:${on?'#0f0':'#ff0'}">${p.name}</span>
+        <span style="color:#ccc;font-size:10px;">${p.desc} (Lv ${p.level})</span>
+      </div>`;
+    }
+    panelContentEl.innerHTML=h+`</div>`;
+  }
+  function renderCombat(){
+    let a=getLevel(player.xp.attack), s=getLevel(player.xp.strength), d=getLevel(player.xp.defence), h=getLevel(player.xp.hitpoints), r=getLevel(player.xp.ranged);
+    let eq=getEquipStats();
+    let cb = Math.floor(0.25*(d+h)+0.325*Math.max(a+s, r*1.5)); // rough approximation
+    let maxHit = isRangedEquipped()&&hasAmmo() ? Math.floor(r/2+1+eq.rng/3) : Math.floor(s/2+1+eq.str/3);
+    let wep = player.equipment.weapon ? player.equipment.weapon.name : 'Unarmed';
+    panelContentEl.innerHTML=`<div style="padding:8px;text-align:center;">
+      <div style="font-size:16px;color:#f00;font-weight:bold;">Combat Level: ${cb}</div>
+      <div style="margin-top:8px;color:#ff0">Max Hit: ${maxHit}</div>
+      <div style="margin-top:4px;color:#ccc">Weapon: ${wep}</div>
+      <div style="margin-top:4px;color:#ccc">Style: ${isRangedEquipped()?'Ranged':'Melee'}</div>
+      <div style="margin-top:4px;color:#ccc">${activePrayers.size>0 ? 'Prayers: '+Array.from(activePrayers).map(pid=>PRAYERS[pid].name).join(', ') : 'No prayers active'}</div>
+    </div>`;
+  }
+  function renderQuest(){
+    let h=`<div style="padding:6px;font-size:11px;color:#ccc;">
+      <div style="font-size:13px;color:#ff0;text-align:center;margin-bottom:6px;">${questState.name}</div>`;
+    questState.objectives.forEach(o=>{
+      h+=`<div style="padding:2px;color:${o.done?'#0f0':'#ccc'};">[${o.done?'X':' '}] ${o.text}</div>`;
+    });
+    h+=`</div>`;
+    panelContentEl.innerHTML=h;
+  }
+  function renderMusic(){
+    let h=`<div style="padding:4px;font-size:11px;"><div style="color:#ff0;text-align:center;">Music Player</div>`;
+    musicTracks.forEach(t=>{
+      h+=`<div style="padding:2px;border-bottom:1px solid #3e2b18;color:${t.unlocked?'#0f0':'#555'};">${t.unlocked?'▶':'🔒'} ${t.name}</div>`;
+    });
+    panelContentEl.innerHTML=h+`</div>`;
+  }
+  function renderBankInfo(){ panelContentEl.innerHTML=`<div style="padding:8px;text-align:center;">Click a bank booth to open your bank.</div>`; }
+  function renderOptions(){
+    let h=`<div style="padding:6px;font-size:11px;color:#ccc;">
+      <div class="settingsRow"><span>Run Mode</span> <span class="rsBtn" onclick="toggleSetting('runMode',this)">${settings.runMode?'On':'Off'}</span></div>
+      <div class="settingsRow"><span>XP Drops</span> <span class="rsBtn" onclick="toggleSetting('xpDrops',this)">${settings.xpDrops?'On':'Off'}</span></div>
+      <div class="settingsRow"><span>Roofs</span> <span class="rsBtn" onclick="toggleSetting('roofs',this)">${settings.roofs?'On':'Off'}</span></div>
+      <div class="settingsRow"><span>HD Textures</span> <span class="rsBtn" onclick="toggleSetting('hdTextures',this)">${settings.hdTextures?'On':'Off'}</span></div>
+      <div style="margin-top:6px;color:#8c734a;font-size:10px;text-align:center;">Old School RuneScape remake</div>
+    </div>`;
+    panelContentEl.innerHTML=h;
+  }
+  function openBank(){
+    bankOpen=true;
+    let h=`<div class="rsPanel" style="width:340px;height:260px;padding:8px;position:relative;">
+      <div style="text-align:center;font-weight:bold;border-bottom:1px solid #8c734a;padding-bottom:4px;">Bank of RuneScape</div>
+      <div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:4px;max-height:180px;overflow:auto;">`;
+    bankItems.forEach((it,i)=>{ if(it) h+=`<div onclick="withdrawBank(${i})" class="rsBtn" style="width:40px;height:40px;font-size:10px;overflow:hidden;">${it.name}<br>x${Math.floor(it.qty)}</div>`; });
+    h+=`</div><div style="margin-top:6px;"><div class="rsBtn" onclick="depositInv()">Deposit Inventory</div><div class="rsBtn" style="position:absolute;top:4px;right:4px;" onclick="closeBank()">X</div></div></div>`;
+    overlayCtn.innerHTML=h; overlayCtn.style.display='block';
+  }
+  function updateUI(){
+    hpOrbEl.textContent=player.hp; prayOrbEl.textContent=Math.floor(player.prayerPoints); energyOrbEl.textContent=player.energy;
+    let pct=player.hp/player.maxHp; hpOrbEl.style.background=`rgb(${Math.floor((1-pct)*128+48)},${Math.floor(pct*80)},0)`;
+    runBtn.textContent=settings.runMode?'Run':'Walk'; runBtn.style.color=settings.runMode?'#0f0':'#fff';
+  }
+  function refreshPanels(){ if(currentTab==='inventory') renderInv(); else if(currentTab==='skills') renderSkills(); else if(currentTab==='combat') renderCombat(); else if(currentTab==='equipment') renderEquipment(); else if(currentTab==='prayer') renderPrayer(); }
+
+  function equipItem(it){
+    let s=it.equipSlot; if(!s) return;
+    // Unequip existing to inventory if any
+    let cur=player.equipment[s];
+    let slotIdx = player.inv.indexOf(it); // find item in inv
+    if(slotIdx===-1) return;
+    if(cur){
+      // put current back to inv if space
+      let free=player.inv.indexOf(null); if(free===-1){ addChat('Not enough space to equip.'); return; }
+      player.inv[free]=cur;
+    }
+    player.equipment[s]=it; player.inv[slotIdx]=null;
+    addChat('You equip the '+it.name+'.'); renderInv(); renderEquipment(); renderCombat();
+  }
+
+  canvas.addEventListener('mousedown', e=>{
+    if(bankOpen) return;
+    let rect=canvas.getBoundingClientRect(), mx=e.clientX-rect.left, my=e.clientY-rect.top;
+    let t=screenToIso(mx,my);
+    if(t.x<0||t.y<0||t.x>=WORLD_W||t.y>=WORLD_H) return;
+    let key=t.x+','+t.y, obj=objects.get(key);
+    let npc=npcs.find(n=>n.hp>0 && n.x===t.x && n.y===t.y);
+    let gnd=itemsOnGround.find(g=>g.x===t.x && g.y===t.y);
+
+    // Use-item on world interactions
+    if(useItem){
+      let it=player.inv[useItem.index]; if(!it){ useItem=null; return; }
+      // Use raw food on fire
+      if((it.id==='rawShrimp') && obj && obj.type==='fire'){
+        player.inv[useItem.index]=null; useItem=null;
+        let cookLvl=getLevel(player.xp.cooking);
+        let burnChance = cookLvl<5 ? 0.5 : Math.max(0, 1-(cookLvl-5)*0.08);
+        if(Math.random()<burnChance){ addItem('burntShrimp',1); addChat('You accidentally burn the shrimps.'); }
+        else { addItem('cookedShrimp',1); addChat('You cook the shrimps.'); questCheck('cook'); }
+        giveXp('cooking',30);
+        renderInv(); return;
+      }
+      // Use ore on furnace -> bronze bar needs copper+tin
+      if((it.id==='oreCopper'||it.id==='oreTin') && obj && obj.type==='furnace'){
+        let need='oreCopper'===it.id?'oreTin':'oreCopper';
+        let partnerIdx=player.inv.findIndex(i=>i && i.id===need);
+        if(partnerIdx!==-1){
+          player.inv[useItem.index]=null; player.inv[partnerIdx]=null;
+          addItem('bronzeBar',1); addChat('You retrieve a bronze bar.'); giveXp('smithing',6.2); questCheck('smelt');
+        } else addChat('You need copper and tin ore to smelt bronze.');
+        useItem=null; renderInv(); return;
+      }
+      // Use bronze bar on anvil
+      if(it.id==='bronzeBar' && obj && obj.type==='anvil'){
+        player.inv[useItem.index]=null; useItem=null;
+        addItem('bronzeDagger',1); addChat('You smith a bronze dagger.'); giveXp('smithing',12.5); questCheck('smith');
+        renderInv(); return;
+      }
+      // Click elsewhere with useItem -> cancel
+      useItem=null; renderInv();
+    }
+
+    if(npc){
+      // Equip check for click-to-equip items that are in inventory? No, that's inventory only.
+      player.target=npc; player.action='combat'; addChat('You attack the '+npc.name+'.');
+      let maxRange = (isRangedEquipped() && hasAmmo()) ? 5 : 1;
+      if(dist(player,npc)>maxRange){ let adj=[[0,1],[0,-1],[1,0],[-1,0]].map(([dx,dy])=>({x:npc.x+dx,y:npc.y+dy})).filter(p=>okTile(p.x,p.y)); if(adj.length) player.path=pathfind(player.x,player.y,adj[0].x,adj[0].y); }
+    } else if(obj){
+      if(obj.type==='tree'||obj.type==='oak'){ player.target=obj; player.action='chop'; if(!adjacent(player,obj)){ let adj=[[0,1],[0,-1],[1,0],[-1,0]].map(([dx,dy])=>({x:obj.x+dx,y:obj.y+dy})).filter(p=>okTile(p.x,p.y)); if(adj.length) player.path=pathfind(player.x,player.y,adj[0].x,adj[0].y); } addChat('You swing your axe at the tree.'); }
+      else if(obj.type==='rock'){ player.target=obj; player.action='mine'; if(!adjacent(player,obj)){ let adj=[[0,1],[0,-1],[1,0],[-1,0]].map(([dx,dy])=>({x:obj.x+dx,y:obj.y+dy})).filter(p=>okTile(p.x,p.y)); if(adj.length) player.path=pathfind(player.x,player.y,adj[0].x,adj[0].y); } addChat('You swing your pick at the rock.'); }
+      else if(obj.type==='fish'){ player.target=obj; player.action='fish'; if(!adjacent(player,obj)){ let adj=[[0,1],[0,-1],[1,0],[-1,0]].map(([dx,dy])=>({x:obj.x+dx,y:obj.y+dy})).filter(p=>okTile(p.x,p.y)); if(adj.length) player.path=pathfind(player.x,player.y,adj[0].x,adj[0].y); } addChat('You cast your net...'); }
+      else if(obj.type==='bank'){ player.target=obj; player.action='bank'; if(!adjacent(player,obj)){ let adj=[[0,1],[0,-1],[1,0],[-1,0]].map(([dx,dy])=>({x:obj.x+dx,y:obj.y+dy})).filter(p=>okTile(p.x,p.y)); if(adj.length) player.path=pathfind(player.x,player.y,adj[0].x,adj[0].y); } addChat('You attempt to open your bank account.'); }
+      else if(obj.type==='furnace'){ addChat('You can use copper and tin ore here to smelt bronze bars.'); }
+      else if(obj.type==='anvil'){ addChat('You can smith bronze bars here.'); }
+    } else if(gnd){ player.target=gnd; player.action='pickup'; player.path=pathfind(player.x,player.y,t.x,t.y); }
+    else { player.action='walk'; player.target={x:t.x,y:t.y}; player.path=pathfind(player.x,player.y,t.x,t.y); }
+  });
+
+  // Render loop
+  function draw(){
+    isoOff();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // Simple roof culling: if settings.roofs true and player under a roof? Not implemented, just draw all.
+    for(let y=0;y<WORLD_H;y++) for(let x=0;x<WORLD_W;x++){
+      let p=isoToScreen(x,y), t=tiles[y][x];
+      let c = t.type==='water' ? '#1a3c5a' : t.type==='sand' ? '#c2b280' : '#3a5f0b';
+      if(t.type==='water') c=((x+y)%3===0)?'#1a3c5a':'#1f4566';
+      ctx.fillStyle=c;
+      ctx.beginPath(); ctx.moveTo(p.x,p.y-TILE_H/2+2); ctx.lineTo(p.x+TILE_W/2,p.y); ctx.lineTo(p.x,p.y+TILE_H/2+2); ctx.lineTo(p.x-TILE_W/2,p.y); ctx.closePath(); ctx.fill(); ctx.strokeStyle='#00000025'; ctx.stroke();
+    }
+
+    objects.forEach(o=>{
+      let p=isoToScreen(o.x,o.y);
+      if(o.type==='tree'||o.type==='oak'){
+        if(o.state==='normal'){
+          ctx.fillStyle='#5c3a1e'; ctx.fillRect(p.x-4,p.y-20,8,20);
+          ctx.fillStyle=o.type==='oak'?'#3e6b1e':'#2e7d32';
+          ctx.beginPath(); ctx.arc(p.x,p.y-24, o.type==='oak'?18:16, 0,Math.PI*2); ctx.fill();
+        } else { ctx.fillStyle='#3e2723'; ctx.fillRect(p.x-3,p.y-4,6,4); }
+      }
+      else if(o.type==='rock'){
+        if(o.state==='normal'){
+          ctx.fillStyle='#757575'; ctx.beginPath(); ctx.arc(p.x,p.y-8,10,0,Math.PI*2); ctx.fill();
+          ctx.fillStyle='#bdbdbd'; ctx.beginPath(); ctx.arc(p.x-3,p.y-10,5,0,Math.PI*2); ctx.fill();
+        } else { ctx.fillStyle='#424242'; ctx.fillRect(p.x-4,p.y-2,8,4); }
+      }
+      else if(o.type==='fish'){ ctx.fillStyle='#00e5ff'; ctx.beginPath(); ctx.arc(p.x,p.y-4,4,0,Math.PI*2); ctx.fill(); }
+      else if(o.type==='bank'){ ctx.fillStyle='#8d6e63'; ctx.fillRect(p.x-12,p.y-20,24,20); ctx.fillStyle='#ffeb3b'; ctx.font='10px Arial'; ctx.fillText('Bank',p.x-10,p.y-8); }
+      else if(o.type==='furnace'){ ctx.fillStyle='#424242'; ctx.fillRect(p.x-10,p.y-16,20,16); ctx.fillStyle='#ff5722'; ctx.beginPath(); ctx.arc(p.x,p.y-12,6,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.font='9px Arial'; ctx.fillText('Furnace',p.x-14,p.y-20); }
+      else if(o.type==='anvil'){ ctx.fillStyle='#607d8b'; ctx.fillRect(p.x-12,p.y-6,24,6); ctx.fillStyle='#333'; ctx.fillRect(p.x-4,p.y-14,8,8); ctx.fillStyle='#fff'; ctx.font='9px Arial'; ctx.fillText('Anvil',p.x-10,p.y-18); }
+      else if(o.type==='fire'){ ctx.fillStyle='#ff5722'; ctx.beginPath(); ctx.arc(p.x,p.y-4,8+Math.sin(Date.now()/100)*3,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#ffeb3b'; ctx.beginPath(); ctx.arc(p.x,p.y-6,4,0,Math.PI*2); ctx.fill(); }
+    });
+
+    itemsOnGround.forEach(g=>{ let p=isoToScreen(g.x,g.y); ctx.fillStyle=ITEMS[g.item]?ITEMS[g.item].color:'#fff'; ctx.fillRect(p.x-4,p.y-4,8,8); });
+
+    npcs.forEach(npc=>{
+      if(npc.hp<=0) return; let p=isoToScreen(npc.x,npc.y);
+      ctx.fillStyle='rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(p.x,p.y,10,4,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=npc.color; ctx.beginPath(); ctx.arc(p.x,p.y-12,8,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#fff'; ctx.font='10px Arial'; ctx.fillText(npc.name,p.x-12,p.y-24);
+      ctx.fillStyle='#300'; ctx.fillRect(p.x-10,p.y-32,20,4); ctx.fillStyle='#0f0'; ctx.fillRect(p.x-10,p.y-32,20*(npc.hp/npc.maxHp),4);
+    });
+
+    let pp=isoToScreen(player.x,player.y), bob=Math.sin(Date.now()/120)*player.animOffset;
+    ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(pp.x,pp.y,10,4,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#2196f3'; ctx.beginPath(); ctx.arc(pp.x,pp.y-12+bob,9,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#1565c0'; ctx.fillRect(pp.x-6,pp.y-4+bob,12,10);
+    ctx.fillStyle='#fff'; ctx.font='bold 11px Arial'; ctx.fillText('You',pp.x-10,pp.y-26+bob);
+    ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(pp.x,pp.y-TILE_H/2); ctx.lineTo(pp.x+TILE_W/2,pp.y); ctx.lineTo(pp.x,pp.y+TILE_H/2); ctx.lineTo(pp.x-TILE_W/2,pp.y); ctx.closePath(); ctx.stroke();
+
+    // XP drops
+    xpDropCtn.innerHTML='';
+    xpDrops.forEach((d,i)=>{ let el=document.createElement('div'); el.textContent=`+${Math.floor(d.amt)} ${SKILL_NAMES[d.sk]}`; el.style.cssText=`color:#0f0;font-weight:bold;font-size:14px;text-shadow:1px 1px 0 #000;position:absolute;top:${d.y+i*18}px`; xpDropCtn.appendChild(el); d.y-=0.5; d.life--; });
+    xpDrops=xpDrops.filter(d=>d.life>0);
+
+    // Minimap
+    mmCtx.fillStyle='#000'; mmCtx.fillRect(0,0,150,150);
+    let sc=150/Math.max(WORLD_W,WORLD_H);
+    for(let y=0;y<WORLD_H;y++) for(let x=0;x<WORLD_W;x++){ let t=tiles[y][x]; mmCtx.fillStyle=t.type==='water'?'#1a3c5a':t.type==='sand'?'#c2b280':'#1b5e20'; mmCtx.fillRect(x*sc,y*sc,sc+0.5,sc+0.5); }
+    objects.forEach(o=>{
+      if((o.type==='tree'||o.type==='oak')&&o.state==='normal'){ mmCtx.fillStyle='#0f0'; mmCtx.fillRect(o.x*sc,o.y*sc,sc+1,sc+1); }
+      else if(o.type==='rock'&&o.state==='normal'){ mmCtx.fillStyle='#9e9e9e'; mmCtx.fillRect(o.x*sc,o.y*sc,sc+1,sc+1); }
+      else if(o.type==='fire'){ mmCtx.fillStyle='#ff5722'; mmCtx.fillRect(o.x*sc,o.y*sc,sc+2,sc+2); }
+    });
+    npcs.forEach(npc=>{ if(npc.hp>0){ mmCtx.fillStyle='#f00'; mmCtx.beginPath(); mmCtx.arc(npc.x*sc+sc/2,npc.y*sc+sc/2,2,0,Math.PI*2); mmCtx.fill(); } });
+    mmCtx.fillStyle='#fff'; mmCtx.beginPath(); mmCtx.arc(player.x*sc+sc/2,player.y*sc+sc/2,2,0,Math.PI*2); mmCtx.fill();
+
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  chatInputEl.addEventListener('keydown',e=>{ if(e.key==='Enter'){ let v=chatInputEl.value.trim(); if(v){ addChat('You: '+v,'public'); addChat('You: '+v,'chat'); } chatInputEl.value=''; } });
+
+  // Init
+  renderInv();
+  addChat('Welcome to Old School RuneScape!');
+  addChat('Click to walk. Click trees, rocks, or creatures to interact.');
+  addChat('New features: Equip items, prayers, ranged, firemaking, cooking, smithing, quests, music & settings!');
+</script>
+</body>
+</html>

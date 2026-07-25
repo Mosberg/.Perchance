@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>normal-tekst-ai — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f5f5f5;
+    text-align: left; /* override platform default center */
+  }
+
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .tab {
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #ddd;
+    font-weight: 600;
+  }
+
+  .tab.active {
+    background: #333;
+    color: white;
+  }
+
+  .card {
+    background: white;
+    padding: 16px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+  }
+
+  .output {
+    white-space: pre-wrap;
+    background: #fafafa;
+    padding: 16px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    min-height: 140px;
+  }
+
+  .history-item {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .dark body { background:#111; color:#eee; }
+  .dark .card { background:#222; color:#eee; }
+  .dark .output { background:#333; border-color:#444; }
+  .dark .tab { background:#444; color:#eee; }
+  .dark .tab.active { background:#eee; color:#111; }
+</style>
+
+<div class="container">
+
+  <button onclick="toggleDark()" style="float:right; margin-bottom:10px;">🌙 Dark mode</button>
+  <div style="clear:both;"></div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('normal')">Normal</div>
+    <div class="tab" onclick="switchTab('story')">Historie</div>
+    <div class="tab" onclick="switchTab('character')">Karakter-chat</div>
+  </div>
+
+  <!-- NORMAL MODE -->
+  <div id="normalTabCtn" class="card">
+    <h2>Normal tekstgenerering</h2>
+    <textarea id="normalPromptInput" rows="4" style="width:100%;"></textarea>
+    <button id="normalGenerateBtn" onclick="startGeneration('normal')">Generér</button>
+  </div>
+
+  <!-- STORY MODE -->
+  <div id="storyTabCtn" class="card" hidden>
+    <h2>Eventyr / Historie-tilstand</h2>
+    <textarea id="storyPromptInput" rows="4" style="width:100%;" placeholder="Start fx: 'Et eventyr om en dreng i en magisk skov'"></textarea>
+    <button id="storyGenerateBtn" onclick="startGeneration('story')">Start historie</button>
+    <button id="storyContinueBtn" onclick="continueStory()">Fortsæt kapitel</button>
+  </div>
+
+  <!-- CHARACTER CHAT -->
+  <div id="characterTabCtn" class="card" hidden>
+    <h2>Karakter-chat</h2>
+
+    <label>Vælg karakter:</label>
+    <select id="characterSelectInput" style="width:100%; margin-bottom:10px;">
+      <option value="viking">🛡️ Viking (rå, ærefuld, direkte)</option>
+      <option value="bard">🎻 Bard (poetisk, dramatisk, syngende)</option>
+      <option value="witch">🔮 Heks (mystisk, gådefuld, mørk humor)</option>
+      <option value="robot">🤖 Robot (logisk, tør humor, præcis)</option>
+    </select>
+
+    <textarea id="characterPromptInput" rows="4" style="width:100%;" placeholder="Skriv til karakteren..."></textarea>
+    <button id="characterSendBtn" onclick="startGeneration('character')">Send</button>
+  </div>
+
+  <!-- OUTPUT -->
+  <div class="card">
+    <h3>Output</h3>
+    <div id="outputEl" class="output"></div>
+    <button id="continueBtn" hidden onclick="safeContinue()">Fortsæt</button>
+    <button id="stopBtn" hidden onclick="safeStop()">Stop</button>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="card">
+    <h3>Historik</h3>
+    <div id="historyListEl" style="max-height:200px; overflow-y:auto;"></div>
+  </div>
+
+</div>
+
+<script>
+let currentGen = null;
+let lastOutput = "";
+let state = "idle"; // idle → optimizing → generating → done
+let mode = "normal";
+
+function toggleDark() {
+  document.documentElement.classList.toggle("dark");
+  localStorage.darkMode = document.documentElement.classList.contains("dark") ? "1" : "";
+}
+if (localStorage.darkMode) document.documentElement.classList.add("dark");
+
+function switchTab(tab) {
+  mode = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  normalTabCtn.hidden = true;
+  storyTabCtn.hidden = true;
+  characterTabCtn.hidden = true;
+
+  if (tab === "normal") {
+    normalTabCtn.hidden = false;
+    document.querySelectorAll('.tab')[0].classList.add('active');
+  }
+  if (tab === "story") {
+    storyTabCtn.hidden = false;
+    document.querySelectorAll('.tab')[1].classList.add('active');
+  }
+  if (tab === "character") {
+    characterTabCtn.hidden = false;
+    document.querySelectorAll('.tab')[2].classList.add('active');
+  }
+}
+
+function setState(s) {
+  state = s;
+  continueBtn.hidden = !(s === "done");
+  stopBtn.hidden = !(s === "generating" || s === "optimizing");
+}
+
+function safeStop() {
+  if (currentGen && currentGen.stop) currentGen.stop();
+}
+
+function safeContinue() {
+  if (!lastOutput) return;
+  continueStory();
+}
+
+function saveHistory(prompt, output) {
+  let entry = { prompt, output, time: Date.now(), mode };
+  let history = JSON.parse(localStorage.ai_history || "[]");
+  history.unshift(entry);
+  localStorage.ai_history = JSON.stringify(history);
+  renderHistory();
+}
+
+function renderHistory() {
+  let history = JSON.parse(localStorage.ai_history || "[]");
+  historyListEl.innerHTML = history.map(h => `
+    <div class="history-item">
+      <strong>${h.mode}</strong>: ${h.prompt}<br>
+      <em>${h.output.slice(0,120)}...</em>
+    </div>
+  `).join("");
+}
+
+async function startGeneration(modeType) {
+  mode = modeType;
+  lastOutput = "";
+  outputEl.textContent = "";
+  setState("optimizing");
+
+  let prompt = "";
+  if (mode === "normal") prompt = normalPromptInput.value;
+  if (mode === "story") prompt = storyPromptInput.value;
+  if (mode === "character") prompt = characterPromptInput.value;
+
+  let optimized = await optimizePrompt(prompt);
+
+  let system = "Skriv på flydende dansk.";
+
+  if (mode === "story") {
+    system = "Du er en dansk eventyrfortæller. Skriv levende, billedrigt og kapitel-baseret.";
+  }
+
+  if (mode === "character") {
+    let c = characterSelectInput.value;
+    let personalities = {
+      viking: "Du er en rå, ærefuld nordisk kriger.",
+      bard: "Du er en dramatisk, poetisk bard.",
+      witch: "Du er en mystisk heks med mørk humor.",
+      robot: "Du er en logisk robot med tør humor."
+    };
+    system = personalities[c];
+  }
+
+  setState("generating");
+
+  currentGen = generateText({
+    instruction: system + "\n\n" + optimized,
+    onChunk: d => outputEl.textContent += d.textChunk
+  });
+
+  try {
+    let final = await currentGen;
+    lastOutput = final.text;
+    saveHistory(prompt, final.text);
+    setState("done");
+  } catch {
+    outputEl.textContent += "\n[Fejl]";
+    setState("idle");
+  }
+}
+
+async function continueStory() {
+  if (!lastOutput) return;
+
+  setState("generating");
+
+  currentGen = generateText({
+    instruction: "Fortsæt historien i samme stil:\n\n" + lastOutput,
+    onChunk: d => outputEl.textContent += d.textChunk
+  });
+
+  try {
+    let final = await currentGen;
+    lastOutput += "\n" + final.text;
+    saveHistory("[Fortsættelse]", final.text);
+    setState("done");
+  } catch {
+    outputEl.textContent += "\n[Fejl]";
+    setState("idle");
+  }
+}
+
+async function optimizePrompt(p) {
+  let gen = generateText({
+    instruction: "Forbedr denne prompt på dansk:\n" + p,
+    onChunk: () => {}
+  });
+  try {
+    let r = await gen;
+    return r.text;
+  } catch {
+    return p;
+  }
+}
+
+renderHistory();
+</script>
+</body>
+</html>

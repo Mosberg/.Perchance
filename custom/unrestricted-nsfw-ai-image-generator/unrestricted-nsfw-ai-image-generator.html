@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>unrestricted-nsfw-ai-image-generator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  body { text-align:left; background:#050505; color:#e0e0e0; margin:0; font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif; }
+  .panel { background:#141414; border:1px solid #2a2a2a; border-radius:12px; padding:16px; }
+  button, .btn { cursor:pointer; border:none; border-radius:8px; padding:10px 16px; font-weight:700; font-size:13px; transition:opacity .2s, transform .1s; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+  button:hover, .btn:hover { opacity:.85; }
+  button:active, .btn:active { transform:scale(.98); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  select, textarea, input[type="number"], input[type="text"] { background:#0a0a0a; color:#e0e0e0; border:1px solid #333; border-radius:8px; padding:10px; font-family:inherit; font-size:13px; outline:none; width:100%; box-sizing:border-box; }
+  select:focus, textarea:focus, input:focus { border-color:#ff2d55; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .mainGrid { display:grid; grid-template-columns:1fr 340px; gap:16px; }
+  .flexCol { display:flex; flex-direction:column; gap:16px; }
+  .flexRow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .label { font-size:11px; color:#888; text-transform:uppercase; font-weight:700; letter-spacing:0.5px; display:block; margin-bottom:4px; }
+  .tagBtn { background:#1f1f1f; color:#ccc; padding:6px 10px; font-size:12px; border-radius:6px; border:none; cursor:pointer; }
+  .tagBtn:hover { background:#2a2a2a; }
+  .smallBtn { background:transparent; color:#666; padding:4px 8px; font-size:12px; border:none; cursor:pointer; }
+  .smallBtn:hover { color:#aaa; }
+  .resultArea { position:relative; min-height:360px; display:flex; align-items:center; justify-content:center; background:#0a0a0a; border-radius:12px; }
+  .historyItem { display:flex; gap:10px; align-items:center; background:#0f0f0f; border:1px solid #222; border-radius:8px; padding:8px; cursor:pointer; transition:background .15s; }
+  .historyItem:hover { background:#1a1a1a; }
+  .historyThumb { width:52px; height:52px; object-fit:cover; border-radius:6px; flex-shrink:0; background:#000; }
+  .advGrid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: #0a0a0a; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #444; }
+
+  @media (max-width: 900px) {
+    .mainGrid { grid-template-columns: 1fr; }
+    #appCtn { padding: 12px; }
+    header h1 { font-size: 24px; }
+    .sceneGrid { grid-template-columns: 1fr 1fr !important; }
+  }
+  @media (max-width: 600px) {
+    header h1 { font-size: 20px; letter-spacing:0; }
+    .sceneGrid { grid-template-columns: 1fr !important; }
+    .advGrid { grid-template-columns: 1fr !important; }
+    .resultArea { min-height: 260px; }
+    button, .btn { min-height: 44px; }
+  }
+</style>
+
+<div id="appCtn" style="max-width:1300px; margin:0 auto; padding:20px;">
+  <header style="margin-bottom:20px;">
+    <h1 style="margin:0; font-size:32px; letter-spacing:-1px;">🔞 Unrestricted NSFW AI Image Generator</h1>
+    <p style="margin:6px 0 0; color:#888; font-size:14px;">AI prompt generation, enhancement, high-quality image synthesis, stories & captions — no filters.</p>
+  </header>
+
+  <div class="mainGrid">
+    <div class="flexCol">
+      <!-- Scene Builder -->
+      <div class="panel">
+        <div class="flexRow" style="justify-content:space-between;">
+          <span class="label">Scene Builder</span>
+          <button class="smallBtn" onclick="randomizeScene()">🎲 Randomize</button>
+        </div>
+        <div class="sceneGrid" style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:8px;">
+          <select id="charSelect"></select>
+          <select id="actionSelect"></select>
+          <select id="settingSelect"></select>
+          <select id="moodSelect"></select>
+        </div>
+        <div class="flexRow" style="margin-top:10px;">
+          <button style="background:#2a2a2a; color:#fff;" onclick="assembleScene()">🔧 Assemble Prompt</button>
+          <button style="background:#2a2a2a; color:#fff;" onclick="assembleScene(true)">➕ Append to Prompt</button>
+        </div>
+      </div>
+
+      <!-- Prompt Area -->
+      <div class="panel">
+        <div class="flexRow" style="justify-content:space-between; margin-bottom:6px;">
+          <span class="label">Prompt</span>
+          <div class="flexRow" style="gap:4px;">
+            <button class="smallBtn" onclick="copyPrompt()">📋 Copy</button>
+            <button class="smallBtn" onclick="promptInput.value=''; negativeInput.value='';">Clear</button>
+          </div>
+        </div>
+        <textarea id="promptInput" rows="3" placeholder="Describe your explicit scene in vivid detail..."></textarea>
+
+        <div style="margin-top:8px;">
+          <span class="label">Negative Prompt</span>
+          <textarea id="negativeInput" rows="2" placeholder="Things to exclude: blurry, low quality, extra limbs, watermark, text, censored..."></textarea>
+        </div>
+
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; max-height:170px; overflow-y:auto; align-content:flex-start;">
+          <button class="tagBtn" onclick="appendTag('8k uhd')">8k uhd</button>
+          <button class="tagBtn" onclick="appendTag('hdr')">hdr</button>
+          <button class="tagBtn" onclick="appendTag('dramatic lighting')">dramatic lighting</button>
+          <button class="tagBtn" onclick="appendTag('close up')">close up</button>
+          <button class="tagBtn" onclick="appendTag('bokeh')">bokeh</button>
+          <button class="tagBtn" onclick="appendTag('cinematic angle')">cinematic angle</button>
+          <button class="tagBtn" onclick="appendTag('highly detailed')">highly detailed</button>
+          <button class="tagBtn" onclick="appendTag('NSFW')">NSFW</button>
+          <button class="tagBtn" onclick="appendTag('explicit')">explicit</button>
+          <button class="tagBtn" onclick="appendTag('raw')">raw</button>
+          <button class="tagBtn" onclick="appendTag('masterpiece')">masterpiece</button>
+          <button class="tagBtn" onclick="appendTag('best quality')">best quality</button>
+          <button class="tagBtn" onclick="appendTag('sharp focus')">sharp focus</button>
+          <button class="tagBtn" onclick="appendTag('volumetric lighting')">volumetric lighting</button>
+          <button class="tagBtn" onclick="appendTag('film grain')">film grain</button>
+          <button class="tagBtn" onclick="appendTag('analog photo')">analog photo</button>
+          <button class="tagBtn" onclick="appendTag('skin pores')">skin pores</button>
+          <button class="tagBtn" onclick="appendTag('sweat droplets')">sweat droplets</button>
+          <button class="tagBtn" onclick="appendTag('freckles')">freckles</button>
+          <button class="tagBtn" onclick="appendTag('messy hair')">messy hair</button>
+          <button class="tagBtn" onclick="appendTag('uncensored')">uncensored</button>
+          <button class="tagBtn" onclick="appendTag('huge breasts')">huge breasts</button>
+          <button class="tagBtn" onclick="appendTag('muscular abs')">muscular abs</button>
+          <button class="tagBtn" onclick="appendTag('thigh highs')">thigh highs</button>
+          <button class="tagBtn" onclick="appendTag('lingerie')">lingerie</button>
+          <button class="tagBtn" onclick="appendTag('collar and leash')">collar and leash</button>
+          <button class="tagBtn" onclick="appendTag('bondage')">bondage</button>
+          <button class="tagBtn" onclick="appendTag('oil on skin')">oil on skin</button>
+          <button class="tagBtn" onclick="appendTag('tongue out')">tongue out</button>
+        </div>
+
+        <div class="flexRow" style="margin-top:12px;">
+          <button id="genPromptBtn" style="flex:1; background:#2a2a2a; color:#fff; min-width:120px;" onclick="generateRandomPrompt()">✨ AI Generate Prompt</button>
+          <button id="enhanceBtn" style="flex:1; background:#2a2a2a; color:#fff; min-width:120px;" onclick="enhanceCurrentPrompt()">🔥 AI Enhance</button>
+          <button id="variationsBtn" style="flex:1; background:#2a2a2a; color:#fff; min-width:120px;" onclick="generateVariations()">🎭 AI Variations</button>
+        </div>
+      </div>
+
+      <!-- Generation Settings -->
+      <div class="panel">
+        <div class="flexRow" style="justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span class="label" style="margin:0;">Generation Settings</span>
+          <button class="smallBtn" onclick="toggleAdvanced()">⚙️ Toggle Advanced</button>
+        </div>
+        <div class="advGrid">
+          <div>
+            <span class="label">Art Style</span>
+            <select id="styleSelect">
+              <option value="">Raw / None</option>
+              <option value="photorealistic, 8k uhd, dslr, RAW photo">Photorealistic</option>
+              <option value="anime style, vibrant colors, detailed line art, cel shaded">Anime</option>
+              <option value="3d render, octane render, unreal engine 5, subsurface scattering">3D Render</option>
+              <option value="oil painting, classical art, textured canvas, visible brushstrokes">Oil Painting</option>
+              <option value="digital illustration, concept art, dramatic rim lighting">Digital Art</option>
+              <option value="vintage photograph, film grain, 35mm, 1970s aesthetic">Vintage Photo</option>
+              <option value="watercolor, soft edges, flowing pigments, artistic">Watercolor</option>
+              <option value="pixel art, dithering, retro game aesthetic">Pixel Art</option>
+              <option value="hentai, doujinshi style, detailed genitalia">Hentai / Doujin</option>
+            </select>
+          </div>
+          <div>
+            <span class="label">Aspect Ratio</span>
+            <select id="aspectSelect" onchange="updateResolutionFromAspect()">
+              <option value="1:1">1:1 Square</option>
+              <option value="2:3" selected>2:3 Portrait</option>
+              <option value="3:2">3:2 Landscape</option>
+              <option value="9:16">9:16 Tall Portrait</option>
+              <option value="16:9">16:9 Widescreen</option>
+            </select>
+          </div>
+        </div>
+        <input type="hidden" id="resSelect" value="512x768">
+
+        <div id="advancedSettingsCtn" hidden style="margin-top:12px;">
+          <div class="advGrid">
+            <div>
+              <span class="label">Resolution Override</span>
+              <select id="resSelectDirect">
+                <option value="512x512">512x512</option>
+                <option value="768x768">768x768</option>
+                <option value="512x768" selected>512x768</option>
+                <option value="768x512">768x512</option>
+              </select>
+            </div>
+            <div>
+              <span class="label">Seed (-1 = random)</span>
+              <input type="number" id="seedInput" value="-1" min="-1" max="9999999999">
+            </div>
+            <div>
+              <span class="label">Guidance Scale</span>
+              <input type="number" id="guidanceInput" value="7.5" min="1" max="20" step="0.5">
+            </div>
+            <div>
+              <span class="label">Inference Steps</span>
+              <input type="number" id="stepsInput" value="30" min="10" max="100" step="1">
+            </div>
+          </div>
+        </div>
+
+        <button id="generateBtn" style="width:100%; background:linear-gradient(90deg,#ff2d55,#ff5e3a); color:#fff; font-size:16px; padding:14px; margin-top:12px;" onclick="generateImageFromPrompt()">🚀 Generate Image</button>
+      </div>
+
+      <!-- Result -->
+      <div class="panel resultArea">
+        <div id="loaderEl" hidden style="text-align:center;">
+          <div style="width:44px; height:44px; border:4px solid #222; border-top-color:#ff2d55; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 12px;"></div>
+          <div style="color:#666; font-size:14px;" id="loaderTextEl">Synthesizing image...</div>
+        </div>
+        <div id="placeholderEl" style="color:#444; font-size:16px; text-align:center;">Your creation will appear here</div>
+        <img id="resultImgEl" hidden style="max-width:100%; max-height:70vh; border-radius:10px; box-shadow:0 10px 40px rgba(0,0,0,.6); cursor:zoom-in;" onclick="lightboxEl.hidden=false; lightboxImg.src=this.src;" />
+        <div id="downloadCtnEl" hidden style="position:absolute; bottom:12px; right:12px; z-index:2; display:flex; gap:8px;">
+          <button class="btn" style="background:#ffffff; color:#000;" onclick="remixImage()">🔀 Remix</button>
+          <a id="downloadBtnEl" class="btn" style="background:#ffffff; color:#000;" download="nsfw-generation.png">⬇ Download</a>
+        </div>
+        <div id="imageMetaEl" hidden style="position:absolute; bottom:12px; left:12px; z-index:2; background:rgba(0,0,0,0.7); padding:6px 10px; border-radius:6px; font-size:11px; color:#aaa; max-width:70%; word-break:break-word;"></div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="flexCol">
+      <!-- AI Text Tools -->
+      <div class="panel">
+        <h3 style="margin:0 0 10px; font-size:16px;">📝 AI Text Tools</h3>
+        <div class="flexCol" style="gap:8px;">
+          <button style="background:#2a2a2a; color:#fff;" onclick="generateStory()">📖 Generate Erotic Story</button>
+          <button style="background:#2a2a2a; color:#fff;" onclick="generateCaption()">💬 Generate Caption</button>
+          <button style="background:#2a2a2a; color:#fff;" onclick="generateName()">🏷️ Generate Character Name</button>
+          <div id="textOutputCtn" hidden style="margin-top:8px; background:#0a0a0a; border:1px solid #222; border-radius:8px; padding:10px; max-height:240px; overflow-y:auto;">
+            <div id="textOutputEl" style="font-size:13px; color:#ccc; white-space:pre-wrap;"></div>
+            <div class="flexRow" style="margin-top:8px; justify-content:flex-end;">
+              <button class="smallBtn" onclick="copyTextOutput()">Copy</button>
+              <button class="smallBtn" onclick="textOutputCtn.hidden=true;">Hide</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Session History -->
+      <div class="panel">
+        <div class="flexRow" style="justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3 style="margin:0; font-size:16px;">📁 Session History</h3>
+          <div class="flexRow" style="gap:4px;">
+            <button class="smallBtn" onclick="saveHistoryToStorage()">💾 Save</button>
+            <button class="smallBtn" onclick="loadHistoryFromStorage()">📂 Load</button>
+            <button class="smallBtn" onclick="clearHistory()">Clear</button>
+          </div>
+        </div>
+        <div id="historyCtn" style="display:flex; flex-direction:column; gap:10px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightboxEl" hidden style="position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;" onclick="if(event.target===this) this.hidden=true;">
+  <img id="lightboxImg" style="max-width:100%; max-height:90vh; border-radius:10px;" />
+</div>
+
+<script>
+  // Defensive: suppress stray unhandled rejections from platform internals
+  window.addEventListener("unhandledrejection", function(e) {
+    console.warn("Unhandled rejection suppressed:", e.reason);
+    e.preventDefault();
+  });
+  window.addEventListener("error", function(e) {
+    console.warn("Error suppressed:", e.message);
+    e.preventDefault();
+  });
+
+  let historyArr = [];
+  let isAdvancedOpen = false;
+  let currentTextGen = null;
+
+  // Populate scene builder selects dynamically
+  const charOptions = ["","beautiful woman","handsome man","feminine elf","muscular orc","cyberpunk android","kneeling maid","shirtless warrior","feline anthro","curvy sorceress","femboy","muscular bara","alien queen","vampire lord","bunny girl","knight in armor"];
+  const actionOptions = ["","seductive pose","intimate embrace","passionate kiss","bending over","lying on silk sheets","against the wall","dancing erotically","submissive pose","dominant stance","undressing","oiled body","bondage ropes","whispering in ear","spread legs","looking back at viewer"];
+  const settingOptions = ["","luxury bedroom","dungeon chamber","neon-lit city rooftop","steam bath","medieval tavern","spaceship cockpit","beach at sunset","dark forest clearing","modern penthouse","public library","hot springs","abandoned warehouse","royal throne room","locker room","strip club stage"];
+  const moodOptions = ["","romantic lighting","dramatic shadows","soft morning light","neon glow","candlelit","heavy rain","golden hour","cyberpunk night","foggy atmosphere","volumetric fog","lens flare","chiaroscuro","blacklight","studio lighting"];
+
+  function fillSelect(sel, opts, label) {
+    sel.innerHTML = '<option value="">' + label + '</option>' + opts.slice(1).map(o => '<option value="'+o+'">'+o.replace(/\b\w/g,l=>l.toUpperCase())+'</option>').join('');
+  }
+  fillSelect(charSelect, charOptions, "Character...");
+  fillSelect(actionSelect, actionOptions, "Action...");
+  fillSelect(settingSelect, settingOptions, "Setting...");
+  fillSelect(moodSelect, moodOptions, "Mood...");
+
+  function assembleScene(append=false) {
+    let parts = [charSelect.value, actionSelect.value, settingSelect.value, moodSelect.value].filter(Boolean).join(", ");
+    if(!parts) return;
+    if(append && promptInput.value.trim()) {
+      promptInput.value = promptInput.value.trim() + ", " + parts;
+    } else {
+      promptInput.value = parts;
+    }
+  }
+
+  function randomizeScene() {
+    charSelect.selectedIndex = Math.floor(Math.random()*(charOptions.length-1))+1;
+    actionSelect.selectedIndex = Math.floor(Math.random()*(actionOptions.length-1))+1;
+    settingSelect.selectedIndex = Math.floor(Math.random()*(settingOptions.length-1))+1;
+    moodSelect.selectedIndex = Math.floor(Math.random()*(moodOptions.length-1))+1;
+    assembleScene();
+  }
+
+  function appendTag(tag) {
+    let v = promptInput.value.trim();
+    let clean = tag.trim();
+    promptInput.value = v ? v + ", " + clean : clean;
+  }
+
+  function copyPrompt() {
+    if(!promptInput.value) return;
+    navigator.clipboard.writeText(promptInput.value).then(() => {
+      let btn = event.target.closest("button") || event.target;
+      let orig = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(()=>btn.textContent=orig, 1200);
+    });
+  }
+
+  function toggleAdvanced() {
+    isAdvancedOpen = !isAdvancedOpen;
+    advancedSettingsCtn.hidden = !isAdvancedOpen;
+  }
+
+  function updateResolutionFromAspect() {
+    let map = {"1:1":"768x768","2:3":"512x768","3:2":"768x512","9:16":"512x768","16:9":"768x512"};
+    let r = map[aspectSelect.value] || "512x768";
+    resSelect.value = r;
+    resSelectDirect.value = r;
+  }
+
+  // Unified AI text helper with optional streaming
+  async function aiText(instruction, btnEl, loadingText, streamTarget) {
+    if(typeof generateText !== "function") { alert("Text generator unavailable"); return null; }
+    let orig = btnEl.textContent;
+    btnEl.disabled = true;
+    btnEl.textContent = loadingText || "⏳ Working...";
+    textOutputCtn.hidden = false;
+    if(streamTarget) streamTarget.textContent = "";
+    try {
+      if(streamTarget) {
+        currentTextGen = generateText({
+          instruction: instruction,
+          onChunk: (data) => { streamTarget.textContent += data.textChunk; }
+        });
+        await currentTextGen;
+        currentTextGen = null;
+        return streamTarget.textContent;
+      } else {
+        currentTextGen = generateText(instruction);
+        let text = await currentTextGen;
+        currentTextGen = null;
+        return (text || "").trim();
+      }
+    } catch(e) {
+      console.error(e);
+      alert("AI text generation failed");
+      return null;
+    } finally {
+      btnEl.disabled = false;
+      btnEl.textContent = orig;
+    }
+  }
+
+  async function generateRandomPrompt() {
+    let text = await aiText("Write a single highly detailed explicit NSFW image generation prompt. Include visual details about the subject, setting, lighting, camera angle, body anatomy, mood, and style. Output only the prompt text with no labels or commentary.", genPromptBtn, "⏳ Generating...");
+    if(text) promptInput.value = text;
+  }
+
+  async function enhanceCurrentPrompt() {
+    if(!promptInput.value.trim()) { alert("Enter a prompt to enhance"); return; }
+    let text = await aiText("Enhance the following image prompt to be more vivid, detailed, and visually striking. Add explicit details about lighting, atmosphere, textures, camera lens, and anatomy. Output only the enhanced prompt, no extra text.\n\nPrompt: " + promptInput.value, enhanceBtn, "⏳ Enhancing...");
+    if(text) promptInput.value = text;
+  }
+
+  async function generateVariations() {
+    if(!promptInput.value.trim()) { alert("Enter a prompt first"); return; }
+    let text = await aiText("Create 3 short creative variations of the following NSFW image prompt. Keep each under 20 words. Number them 1, 2, 3. Output only the variations.\n\nPrompt: " + promptInput.value, variationsBtn, "⏳ Working...", textOutputEl);
+    if(text) textOutputCtn.hidden = false;
+  }
+
+  async function generateStory() {
+    let prompt = promptInput.value.trim() || "an erotic encounter";
+    let text = await aiText("Write a short explicit NSFW erotic story (about 300 words) based on this scene: " + prompt + ". Use vivid sensory details. Output only the story.", event.target, "⏳ Writing...", textOutputEl);
+    if(text) textOutputCtn.hidden = false;
+  }
+
+  async function generateCaption() {
+    let prompt = promptInput.value.trim() || "a seductive moment";
+    let text = await aiText("Write 5 flirty/explicit caption ideas for an NSFW image of: " + prompt + ". Number them. Keep each under 15 words. Output only the captions.", event.target, "⏳ Writing...", textOutputEl);
+    if(text) textOutputCtn.hidden = false;
+  }
+
+  async function generateName() {
+    let text = await aiText("Generate 5 creative character names suitable for NSFW fantasy/sci-fi art. Mix genders. Output only the names, one per line.", event.target, "⏳ Thinking...", textOutputEl);
+    if(text) textOutputCtn.hidden = false;
+  }
+
+  function copyTextOutput() {
+    navigator.clipboard.writeText(textOutputEl.textContent).then(()=>alert("Copied to clipboard"));
+  }
+
+  // Image generation with retry logic and advanced options
+  async function generateImageFromPrompt() {
+    if(typeof generateImage !== "function") { alert("Image generator unavailable"); return; }
+    let base = promptInput.value.trim();
+    if(!base) { alert("Enter a prompt"); return; }
+    let finalPrompt = styleSelect.value ? styleSelect.value + ", " + base : base;
+    let res = resSelectDirect.value || resSelect.value || "512x768";
+    let seed = parseInt(seedInput.value);
+    let guidance = parseFloat(guidanceInput.value);
+    let steps = parseInt(stepsInput.value);
+    let negative = negativeInput.value.trim();
+
+    generateBtn.disabled = true;
+    generateBtn.textContent = "⏳ Generating...";
+    genPromptBtn.disabled = true;
+    enhanceBtn.disabled = true;
+    variationsBtn.disabled = true;
+    loaderEl.hidden = false;
+    loaderTextEl.textContent = "Synthesizing image...";
+    resultImgEl.hidden = true;
+    placeholderEl.hidden = true;
+    downloadCtnEl.hidden = true;
+    imageMetaEl.hidden = true;
+
+    try {
+      let opts = {resolution: res};
+      if(!isNaN(seed) && seed >= 0) opts.seed = seed;
+      if(!isNaN(guidance)) opts.guidanceScale = guidance;
+      if(!isNaN(steps)) opts.numInferenceSteps = steps;
+      if(negative) opts.negativePrompt = negative;
+
+      let url = null;
+      let attempts = 0;
+      let maxAttempts = 2;
+      while(attempts < maxAttempts) {
+        try {
+          url = await generateImage(finalPrompt, opts);
+          if(url && typeof url === "string") break;
+        } catch(e) {
+          if(attempts >= maxAttempts-1) throw e;
+          loaderTextEl.textContent = "Retrying... (" + (attempts+1) + "/" + maxAttempts + ")";
+          await new Promise(r => setTimeout(r, 2000));
+        }
+        attempts++;
+      }
+      if(!url || typeof url !== "string") throw new Error("Invalid image response");
+
+      resultImgEl.onerror = function() {
+        resultImgEl.hidden = true;
+        placeholderEl.hidden = false;
+        placeholderEl.textContent = "Image failed to load";
+      };
+      resultImgEl.src = url;
+      resultImgEl.hidden = false;
+      downloadBtnEl.href = url;
+      downloadCtnEl.hidden = false;
+
+      let meta = `Res: ${res} | Style: ${styleSelect.value || 'None'}`;
+      if(seed >= 0) meta += ` | Seed: ${seed}`;
+      if(negative) meta += ` | Neg: ${negative.length > 20 ? negative.slice(0,20)+'...' : negative}`;
+      imageMetaEl.textContent = meta;
+      imageMetaEl.hidden = false;
+
+      addToHistory(url, base, {resolution: res, style: styleSelect.value, seed: seed>=0?seed:'random', negative: negative, guidance: guidance, steps: steps});
+    } catch(err) {
+      console.error(err);
+      alert("Image generation failed: " + ((err && err.message) || "Unknown error"));
+      placeholderEl.hidden = false;
+      placeholderEl.textContent = "Image generation failed. Try again.";
+    } finally {
+      loaderEl.hidden = true;
+      generateBtn.disabled = false;
+      generateBtn.textContent = "🚀 Generate Image";
+      genPromptBtn.disabled = false;
+      enhanceBtn.disabled = false;
+      variationsBtn.disabled = false;
+    }
+  }
+
+  function remixImage() {
+    if(!resultImgEl.src || resultImgEl.hidden) return;
+    appendTag("variation, alternate angle");
+    window.scrollTo({top:0, behavior:"smooth"});
+    generateImageFromPrompt();
+  }
+
+  function addToHistory(url, prompt, meta={}) {
+    historyArr.unshift({url, prompt, time: Date.now(), meta});
+    if(historyArr.length > 30) historyArr.pop();
+    renderHistory();
+  }
+
+  function renderHistory() {
+    historyCtn.innerHTML = "";
+    if(!historyArr.length) {
+      historyCtn.innerHTML = '<div style="color:#555; font-size:13px; text-align:center; padding:20px;">No history yet</div>';
+      return;
+    }
+    historyArr.forEach(function(item, idx) {
+      let row = document.createElement("div");
+      row.className = "historyItem";
+      row.onclick = function(e) {
+        if(e.target.tagName === 'BUTTON') return;
+        loadHistoryItem(idx);
+      };
+
+      let img = document.createElement("img");
+      img.src = item.url;
+      img.className = "historyThumb";
+      img.onerror = function() { this.style.opacity = "0.3"; };
+
+      let info = document.createElement("div");
+      info.style.cssText = "min-width:0; flex:1;";
+
+      let txt = document.createElement("div");
+      txt.textContent = item.prompt;
+      txt.style.cssText = "font-size:12px; color:#aaa; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;";
+
+      let metaTxt = document.createElement("div");
+      let m = item.meta || {};
+      metaTxt.textContent = (m.resolution||'') + (m.seed && m.seed!=='random' ? ' | seed:'+m.seed : '');
+      metaTxt.style.cssText = "font-size:10px; color:#555; margin-top:2px;";
+
+      let del = document.createElement("button");
+      del.textContent = "🗑";
+      del.style.cssText = "background:transparent; border:none; color:#555; cursor:pointer; font-size:14px; padding:4px;";
+      del.onclick = function(e) { e.stopPropagation(); removeHistoryItem(idx); };
+
+      info.appendChild(txt);
+      info.appendChild(metaTxt);
+      row.appendChild(img);
+      row.appendChild(info);
+      row.appendChild(del);
+      historyCtn.appendChild(row);
+    });
+  }
+
+  function loadHistoryItem(idx) {
+    let item = historyArr[idx];
+    if(!item) return;
+    resultImgEl.src = item.url;
+    resultImgEl.hidden = false;
+    resultImgEl.onerror = function() {
+      resultImgEl.hidden = true;
+      placeholderEl.hidden = false;
+      placeholderEl.textContent = "Image failed to load";
+    };
+    placeholderEl.hidden = true;
+    downloadBtnEl.href = item.url;
+    downloadCtnEl.hidden = false;
+    promptInput.value = item.prompt;
+    if(item.meta) {
+      if(item.meta.negative) negativeInput.value = item.meta.negative;
+      if(item.meta.resolution) { resSelectDirect.value = item.meta.resolution; resSelect.value = item.meta.resolution; }
+      if(item.meta.seed !== undefined && item.meta.seed !== 'random') seedInput.value = item.meta.seed;
+      if(item.meta.guidance) guidanceInput.value = item.meta.guidance;
+      if(item.meta.steps) stepsInput.value = item.meta.steps;
+    }
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+
+  function removeHistoryItem(idx) {
+    historyArr.splice(idx, 1);
+    renderHistory();
+  }
+
+  function clearHistory() {
+    historyArr = [];
+    renderHistory();
+  }
+
+  function saveHistoryToStorage() {
+    try {
+      localStorage.nsfwGenHistory = JSON.stringify(historyArr);
+      alert("History saved to browser storage");
+    } catch(e) { alert("Save failed"); }
+  }
+
+  function loadHistoryFromStorage() {
+    try {
+      let raw = localStorage.nsfwGenHistory;
+      if(!raw) { alert("No saved history found"); return; }
+      historyArr = JSON.parse(raw);
+      renderHistory();
+    } catch(e) { alert("Load failed"); }
+  }
+
+  // Init
+  updateResolutionFromAspect();
+  renderHistory();
+</script>
+</body>
+</html>

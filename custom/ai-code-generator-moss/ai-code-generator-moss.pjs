@@ -1,0 +1,346 @@
+ai = {import:ai-text-plugin}
+comments = {import:comments-plugin}
+literal = {import:literal-plugin}
+
+settings
+  instruction() =>
+    this.lastModeUsed = currentMode;
+    return modes[currentMode].instruction.toString();
+  startWith() =>
+    if(responseEl.value.trim() === "") {
+      return modes[currentMode].startWith || "";
+    } else {
+      return responseEl.value;
+    }
+  hideStartWith = [ responseEl.value.trim() === "" && modes[currentMode].hideStartWith === true ? true : false ]
+  outputTo = [responseEl]  // this is the 'id' of an element in the HTML editor (bottom-right panel) - notice that there's a <textarea> with id="responseEl"
+  onChunk(data) =>
+    if(responseEl.scrollTop+responseEl.offsetHeight > responseEl.scrollHeight-60) { // if they're already scrolled near the bottom
+      responseEl.scrollTop = responseEl.scrollHeight;
+    }
+    if(modes[this.lastModeUsed].onChunk) modes[this.lastModeUsed].onChunk(data);
+  onStart(data) =>
+    responseDeleteBtn.style.display = '';
+    responseDeleteBtn.dataset.mode = 'delete';
+    generateBtn.disabled = true;
+    continueBtn.disabled = true;
+    bottomContinueBtn.disabled = true;
+    retryBtn.disabled = true;
+    responseCopyBtn.style.display = "";
+    if(modes[this.lastModeUsed].onStart) modes[this.lastModeUsed].onStart(data);
+  onFinish(data) =>
+    generateBtn.disabled = false;
+    generateBtn.textContent = "🔁 regenerate";
+    continueBtn.disabled = false;
+    bottomContinueBtn.disabled = false;
+    retryBtn.disabled = false;
+    loaderEl.innerHTML = "";
+    localStorage.response = responseEl.value;
+    if(modes[this.lastModeUsed].onFinish) modes[this.lastModeUsed].onFinish(data);
+  render = [ modes[currentMode].render || null ]
+
+
+async generate() =>
+  window.responseContentBeforeLastGenerate = responseEl.value;
+  let pendingObj = ai(settings);
+  stopBtn.style.display = "";
+  bottomStopBtn.style.display = "";
+  function stopClickHandler() {
+    pendingObj.stop();
+    stopBtn.style.display = "none";
+    bottomStopBtn.style.display = "none";
+  };
+  stopBtn.onclick = stopClickHandler;
+  bottomStopBtn.onclick = stopClickHandler;
+  loaderEl.innerHTML = pendingObj.loadingIndicatorHtml;
+  continueBtn.disabled = false;
+  bottomContinueBtn.disabled = false;
+  retryBtn.disabled = false;
+  this.textContent = 'regenerate';
+  let data = await pendingObj.onFinishPromise;
+  stopBtn.style.display = "none";
+  bottomStopBtn.style.display = "none";
+
+
+
+modes
+  general
+    label = 🧑‍💻 Freeform
+    description = This mode is for any coding question.
+    instructionPlaceholder = Write your coding instruction/question here.
+    instruction
+      [literal(instructionEl.value)]
+      $output = [this.joinItems("\n")]
+  html
+    label = 🌐 HTML/CSS/JS
+    description = In this mode, the resulting HTML will be visually rendered below the generated text.
+    instruction
+      Generate HTML/CSS/JS code based on this instruction:
+      [literal(instructionEl.value)]
+      [""]
+      Tips:
+      - Don't break up HTML/CSS/JS into separate files. If there is CSS/JS, then put it inline within the same HTML file using `<style>...</style>` and `<script>...</script>`.
+      - If the above instruction requires image placeholders, use Unsplash like this: <img src\="https://source.unsplash.com/random/?city,night">
+      $output = [this.joinItems("\n")]
+    onFinish(data) =>
+      // Note: We must use `responseEl.value` rather than `data.generatedText` because this could be a 'continue` request.
+      let htmlPage;
+      if(!htmlPage) htmlPage = (responseEl.value.match(/```(html|)(.+?)```/s) || [])[2];
+      if(!htmlPage) htmlPage = (responseEl.value.match(/<!DOCTYPE html>(.+)<\/html>/s) || [])[1];
+      if(!htmlPage) htmlPage = responseEl.value;
+      renderedOutputEl.innerHTML = `<iframe srcdoc="" style="width:100%; height:700px; max-height:70vh;"></iframe>`;
+      renderedOutputEl.querySelector("iframe").srcdoc = htmlPage;
+  python
+    label = 🐍💻 Python
+    description = This mode will execute the Python code that is generated. Execution outputs are displayed below the generated code. Not all Python packages are supported.
+    instruction
+      Generate Python code based on this instruction:
+      [literal(instructionEl.value)]
+      Tips:
+      - All Python code should be inside markdown triple backticks. i.e. Python code blocks in your response should start with: ```py
+      - You MUST give the required `pip install` command to install all relevant packages that you use in your Python code blocks.
+      - Make sure to import all relevant packages in every Python code block that you write.
+      - The Python code blocks that you output will be executed sequentially by a Python interpreter to check for correctness.
+      $output = [this.joinItems("\n")]
+    onFinish() =>
+      let pythonImports = [...responseEl.value.matchAll(/pip install ([^\n`]+)/gs)].map(m => m[1].split(" ")).flat().map(p => p.trim()).filter(p => p);
+      let pythonCodeBlocks = [...responseEl.value.matchAll(/```(py|python)(.+?)```/gs)].map(m => m[2]);
+
+      // if no code blocks found, try without py/python after backticks:
+      if(pythonCodeBlocks.length === 0) pythonCodeBlocks = [...responseEl.value.matchAll(/```(.+?)```/gs)].map(m => m[2]);
+      if(pythonCodeBlocks.length === 0 && /[a-zA-Z0-9_]\.[a-zA-Z0-9_]/.test(responseEl.value) && /($|\n)import /.test(responseEl.value)) pythonCodeBlocks = [responseEl.value];
+
+      if(pythonCodeBlocks.length === 0) {
+        renderedOutputEl.innerHTML = "No executable Python code was detected in the generated text.";
+        return;
+      }
+
+      // simple heuristic: if they all have imports at the top, then execute them separately. otherwise, join them together and execute them as a single script:
+      let oneOrMoreHasNoTopImports = false;
+      for(let block of pythonCodeBlocks) {
+        if(!/($|\n)import /.test(block.split("\n").slice(0, 5).join("\n"))) {
+          oneOrMoreHasNoTopImports = true;
+        }
+      }
+      if(oneOrMoreHasNoTopImports) pythonCodeBlocks = [pythonCodeBlocks.join("\n\n")];
+
+
+      let matplotlibImportCode = [
+        `import matplotlib`,
+        `matplotlib.use("module://matplotlib_pyodide.html5_canvas_backend")`,
+        `import matplotlib_pyodide.html5_canvas_backend`,
+        `matplotlib_pyodide.html5_canvas_backend._base_fonts_url="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/fonts/"`,
+      ].join("\n");
+      for(let i = 0; i < pythonCodeBlocks.length; i++) {
+        if(pythonCodeBlocks[i].includes("import matplotlib.") && !pythonCodeBlocks[i].includes("import matplotlib\n")) {
+          pythonImports.push("matplotlib");
+          pythonCodeBlocks[i] = `${matplotlibImportCode}\n` + pythonCodeBlocks[i];
+        } else if(pythonCodeBlocks[i].includes("import matplotlib\n")) {
+          pythonImports.push("matplotlib");
+          pythonCodeBlocks[i] = pythonCodeBlocks[i].replace(/import matplotlib\n/g, `${matplotlibImportCode}\n`);
+        }
+
+        if(pythonCodeBlocks[i].includes("np.") && !pythonCodeBlocks[i].includes("import numpy as np")) {
+          pythonImports.push("numpy");
+          pythonCodeBlocks[i] = `import numpy as np\n` + pythonCodeBlocks[i];
+        }
+        if(pythonCodeBlocks[i].includes("pd.") && !pythonCodeBlocks[i].includes("import pandas as pd")) {
+          pythonImports.push("pandas");
+          pythonCodeBlocks[i] = `import pandas as pd\n` + pythonCodeBlocks[i];
+        }
+      }
+
+      // remove any pip install commands from code (either due to accident, or ipynb interpretation):
+      for(let i = 0; i < pythonCodeBlocks.length; i++) {
+        let lines = pythonCodeBlocks[i].split("\n");
+        lines = lines.filter(l => !l.startsWith("pip install ") && !l.startsWith("!pip install "));
+        pythonCodeBlocks[i] = lines.join("\n");
+      }
+
+      console.log("pythonCodeBlocks:", pythonCodeBlocks);
+      console.log("pythonImports:", pythonImports);
+
+      pythonImports = [...new Set(pythonImports)];
+      let htmlPage = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+        </head>
+        <body>
+          <div id="outputEl"></div>
+          <script id="dataEl" type="data">${encodeURIComponent(JSON.stringify({pythonCodeBlocks, pythonImports}))}</script>
+          <script type="module">
+            outputEl.innerHTML = "Loading Python packages...";
+            let outputs = [];
+            let pyodide = await loadPyodide({
+              stdout: (line) => { outputs.push("<div style='white-space:pre;'>"+line+"</div>"); },
+              stderr: (line) => { outputs.push("<div style='color:red; white-space:pre;'>"+line+"</div>"); },
+            });
+            let data = JSON.parse(decodeURIComponent(dataEl.textContent));
+            await pyodide.loadPackage(data.pythonImports).catch(e => outputs.push("<div style='color:red; white-space:pre;'>"+e.message+"</div>"))
+            for(let block of data.pythonCodeBlocks) {
+              try {
+                let result = pyodide.runPython(block);
+                if(result) outputs.push("<div>"+result+"</div>");
+              } catch(e) {
+                outputs.push("<div style='color:red; white-space:pre;'>"+e.message+"</div>");
+                console.error(e);
+              }
+            }
+            outputEl.innerHTML = outputs.join("");
+          </script>
+        </body>
+      </html>
+      `;
+      renderedOutputEl.innerHTML = `<h3>Executed Python Code Output:</h3><iframe srcdoc="" style="width:100%; height:800px; max-height:80vh;"></iframe>`;
+      renderedOutputEl.querySelector("iframe").srcdoc = htmlPage;
+  perchanceLists
+    label = 🎲 Perchance Lists
+    description = For use in the Perchance lists editor panel, including Perchance syntax and functions.
+    instruction
+      [literal(instructionEl.value)]
+      $output = [this.joinItems("\n")]
+  perchanceHtml
+    label = 🎲 Perchance HTML
+    description = For use in the Perchance HTML editor panel.
+    instruction
+      Generate HTML/CSS/JS code based on this instruction:
+      [literal(instructionEl.value)]
+      [""]
+      Tips:
+      - Only include the HTML inside the <body> tag. Don't include the <body> tags themselves. Don't include <!DOCTYPE html> or <html>, or <head> tags. Just give the content of the <body> tag.
+      - If the above instruction requires image placeholders, use Unsplash like this: <img src\="https://source.unsplash.com/random/?city,night">
+      $output = [this.joinItems("\n")]
+    onFinish(data) =>
+      // Note: We must use `responseEl.value` rather than `data.generatedText` because this could be a 'continue` request.
+      let htmlPage;
+      if(!htmlPage) htmlPage = (responseEl.value.match(/```(html|)(.+?)```/s) || [])[2];
+      if(!htmlPage) htmlPage = (responseEl.value.match(/<!DOCTYPE html>(.+)<\/html>/s) || [])[1];
+      if(!htmlPage) htmlPage = responseEl.value;
+      renderedOutputEl.innerHTML = `<iframe srcdoc="" style="width:100%; height:700px; max-height:70vh;"></iframe>`;
+      renderedOutputEl.querySelector("iframe").srcdoc = htmlPage;
+  brainy
+    label = 🤓 Brainy
+    description = A mode in which the AI lays out its reasoning, which can improve its accuracy.
+    instruction
+      [literal(instructionEl.value)]
+      [""]
+      Take a deep breath and think step by step to ensure that your response is correct and incisive. If the answer is easy, you don't need to write a long response. If it's hard, lay out your reasoning before answering.
+      $output = [this.joinItems("\n")]
+  markdown
+    label = 📝 Markdown
+    description = Generate well-formatted markdown content for documentation, guides, blogs, and more.
+    instructionPlaceholder = Describe what markdown content you want to generate...
+    instruction
+      Generate markdown content based on this instruction:
+      [literal(instructionEl.value)]
+      [""]
+      Tips:
+      - Use proper markdown formatting with headers (#, ##, ###), bold (**text**), italics (*text*), lists, code blocks, links, and other markdown features.
+      - Organize content logically with clear structure and hierarchy.
+      - Include code examples in markdown code blocks when relevant.
+      - Make the content readable and well-formatted.
+      $output = [this.joinItems("\n")]
+  character
+    label = 👤 Character
+    description = Create detailed character profiles using the Perchance character template format.
+    instructionPlaceholder = Describe the character you want to create...
+    instruction
+      Generate a detailed character profile based on this description:
+      [literal(instructionEl.value)]
+      [""]
+      Use this character template format:
+
+      # Character name
+      \[Character's name\]
+
+      # Character description/personality/instruction/role
+      \[Comprehensive description including visual, personality, behavior, speech patterns, background, goals, relationships, skills, limits, and other relevant details. Use \{\{char\}\} to reference the character and \{\{user\}\} where appropriate.\]
+
+      # Character avatar image URL
+      \[A realistic direct URL to a jpg/png/webp/gif image, or leave blank. Must be a real working image URL.\]
+
+      # Character reminder note
+      \[Brief one-paragraph reminder about the character's key traits and must-follow behaviors.\]
+
+      # Initial chat messages
+      \[Opening dialogue that sets the tone. Use \[AI\]: for character and \[USER\]: for user responses. Example:
+      \[AI\]: Hello there!
+      \[USER\]: Hi!
+      \]
+
+      # General writing instructions preset
+      \[@roleplay1 or @roleplay2 or @custom\]
+
+      # Strict message length limit
+      \[Number of paragraphs or leave blank for no limit. Example: 2 or 3\]
+
+      # User's name
+      \[Optional override for user's name, or leave blank\]
+
+      # Default message style
+      \[Optional CSS styling like: color:#1f2a44; font-size:95%; background:rgba(240,244,255,0.6); or leave blank\]
+
+      # Chat background image/video URL
+      \[Optional URL to background image/video, or leave blank\]
+
+      Follow this structure to create a complete, detailed character profile suitable for use in a role-play or character AI system.
+      $output = [this.joinItems("\n")]
+
+generateModesHtml() =>
+  return modes.selectAll.map(m => `<option ${localStorage.currentMode === m.getName ? "selected" : ""} value="${m.getName}">${m.label}</option>`).join("");
+
+
+urlModeToActualMode
+  html = html
+  javascript = html
+  css = html
+  python = python
+  markdown = markdown
+  character = character
+  doc = markdown
+  char = character
+
+
+$meta
+  async dynamic(inputs) => // note that $meta.dynamic function *cannot reference/use any variables/lists/etc. that are outside of itself*. In other words, its code must be *fully* self-contained.
+    let template = {
+      title: `AI #LANG# Generator (free, no sign-up, unlimited)`,
+      description: `Free, high-quality AI #LANG# generator. It's free, smart, and there are no daily usage restrictions. You don't even need to login! Just type a prompt/instruction and the AI will write/generate the code that you request. Completely free, fast, smart, unlimited. #SUFFIX#`,
+    };
+    let modeParamToLangName = {
+      javascript: "JavaScript",
+      html: "HTML",
+      css: "CSS",
+      python: "Python",
+    };
+    let modeParamToSuffix = {
+      javascript: "Can generate JavaScript and TypeScript. Can execute AI-generated HTML code in a live sandbox.",
+      html: "Executes the AI-generated HTML code in a live sandbox.",
+      python: "Executes the AI-generated Python code in a live browser-based sandbox.",
+    };
+    if(inputs.urlParams.mode && modeParamToLangName[inputs.urlParams.mode]) {
+      let mode = inputs.urlParams.mode;
+      let name = modeParamToLangName[mode];
+      let suffix = modeParamToSuffix[mode];
+      try {
+        return {
+          title: template.title.replaceAll("#LANG#", name),
+          description: template.description.replaceAll("#LANG#", name+" code").replaceAll("#SUFFIX#", suffix || ""),
+        };
+      } catch(e) {
+        console.error(e);
+        return {
+          title: template.title.replaceAll("#LANG#", "Code"),
+          description: template.description.replaceAll("#LANG#", "code").replaceAll("#SUFFIX#", `Can code in JavaScript, HTML, CSS, Python, SQL, TypeScript, Bash/Shell, Java, C#, C++, C, PHP, PowerShell, Go, Rust, Kotlin, Ruby, Lua, Dart, Assembly, WebAssembly, WGSL, WebGPU, Swift, R, Visual Basic (.Net), MATLAB, VBA, Groovy, Delphi, Scala, Perl, Elixir, Objective-C, Haskell, GDScript, list, Solidity, Clojure, Julia, Erlang, F#, Fortran, and basically everything else.`),
+        };
+      }
+    } else {
+      return {
+        title: template.title.replaceAll("#LANG#", "Code"),
+        description: template.description.replaceAll("#LANG#", "code").replaceAll("#SUFFIX#", `Can code in JavaScript, HTML, CSS, Python, SQL, TypeScript, Bash/Shell, Java, C#, C++, C, PHP, PowerShell, Go, Rust, Kotlin, Ruby, Lua, Dart, Assembly, WebAssembly, WGSL, WebGPU, Swift, R, Visual Basic (.Net), MATLAB, VBA, Groovy, Delphi, Scala, Perl, Elixir, Objective-C, Haskell, GDScript, list, Solidity, Clojure, Julia, Erlang, F#, Fortran, and basically everything else.`),
+      };
+    }

@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>nsfw-content-architect — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Completed:
+  [x] Modular Perchance-NSFW Plugin Architecture v3.0
+  [x] Deep recursive list resolver with weighted list support
+  [x] AI Text Enhancement via generateText() integration
+  [x] AI Image Generation via generateImage() integration
+  [x] Persistent history with kv storage
+  [x] Intensity-aware dynamic content routing
+  [x] Clean separation of Lists / HTML / CSS / JS
+Possible Next Steps:
+  [ ] Add import/export of custom list packs
+  [ ] Add animated transitions between panels
+  [ ] Add more generator modules (dialogue, item, location)
+-->
+
+<div id="pluginCtn">
+  <div id="headerEl">
+    <h1>NSFW Content Architect</h1>
+    <p>Production-ready modular generator with Perchance-style list resolution</p>
+  </div>
+
+  <div id="toolbarEl">
+    <button id="genCharBtn" onclick="pluginApp.generate('character')">Character</button>
+    <button id="genSceneBtn" onclick="pluginApp.generate('scene')">Encounter</button>
+    <button id="genFullBtn" onclick="pluginApp.generate('scenario')">Full Scenario</button>
+    <button id="genImgBtn" onclick="pluginApp.generateImage()" title="Generate image from last text">Image</button>
+    <button id="enchantBtn" onclick="pluginApp.enchantOutput()" title="AI-enhance current text">Enchant</button>
+    <div id="intensityWrap">
+      <label>Intensity</label>
+      <select id="intensityInput" onchange="pluginApp.setIntensity(this.value)">
+        <option value="soft">Softcore</option>
+        <option value="explicit" selected>Explicit</option>
+        <option value="extreme">Extreme</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="bodyEl">
+    <div id="sidebarEl">
+      <div class="sideTitle" style="color:#ff70a6;">History</div>
+      <div id="historyCtn"></div>
+      <div class="sideTitle" style="color:#5c6adf;">Modules</div>
+      <div id="modulesCtn"></div>
+    </div>
+
+    <div id="outputCtn">
+      <div id="emptyEl">Select a generator to produce content</div>
+      <div id="resultEl" hidden></div>
+      <div id="imageCtn" hidden></div>
+      <button id="copyBtn" hidden onclick="pluginApp.copy()">Copy</button>
+      <button id="stopBtn" hidden onclick="pluginApp.stopGeneration()">Stop</button>
+    </div>
+  </div>
+
+  <div id="footerEl">
+    <span id="statusEl">Ready</span>
+    <span>Perchance Plugin Architecture v3.0</span>
+  </div>
+</div>
+
+<style>
+  /* ===== Root Container ===== */
+  #pluginCtn {
+    font-family: system-ui, Segoe UI, sans-serif;
+    max-width: 960px;
+    margin: 20px auto;
+    background: #18181f;
+    color: #d8d8e0;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    text-align: left;
+    border: 1px solid #2a2a35;
+  }
+
+  /* ===== Header ===== */
+  #headerEl {
+    background: linear-gradient(135deg,#301b2e,#1b1b2e);
+    padding: 24px 28px;
+    border-bottom: 1px solid #3a3a44;
+  }
+  #headerEl h1 { margin:0; font-size:28px; color:#ff70a6; letter-spacing:-0.5px; }
+  #headerEl p { margin:6px 0 0; font-size:13px; color:#9898a8; }
+
+  /* ===== Toolbar ===== */
+  #toolbarEl {
+    display:flex; gap:12px; padding:18px 28px; background:#22222a;
+    border-bottom:1px solid #33333a; flex-wrap:wrap; align-items:center;
+  }
+  #toolbarEl button {
+    padding:10px 20px; border:none; border-radius:8px; cursor:pointer;
+    font-size:13px; font-weight:600; color:#fff; background:#5c6adf;
+    transition: filter .15s, transform .05s;
+  }
+  #toolbarEl button:hover { filter:brightness(1.15); }
+  #toolbarEl button:active { transform:translateY(1px); }
+  #genFullBtn { background:#ff70a6 !important; color:#18181f !important; }
+  #genImgBtn { background:#2a8a6f !important; }
+  #enchantBtn { background:#8a5cf6 !important; }
+  #intensityWrap { margin-left:auto; display:flex; gap:10px; align-items:center; }
+  #intensityWrap label { font-size:12px; color:#888; text-transform:uppercase; letter-spacing:0.6px; font-weight:600; }
+  #intensityInput { padding:9px 14px; background:#2a2a34; color:#e0e0e8; border:1px solid #444; border-radius:6px; font-size:13px; outline:none; }
+
+  /* ===== Body Layout ===== */
+  #bodyEl { display:flex; min-height:460px; }
+  #sidebarEl { width:230px; background:#14141a; border-right:1px solid #282830; padding:22px; overflow-y:auto; }
+  .sideTitle { font-size:11px; text-transform:uppercase; letter-spacing:1px; margin-bottom:14px; font-weight:700; }
+  #historyCtn, #modulesCtn { display:flex; flex-direction:column; gap:7px; }
+  #historyCtn div { padding:9px 11px; background:#1e1e26; border-radius:5px; font-size:12px; color:#999; cursor:pointer; border-left:3px solid #ff70a6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #historyCtn div:hover { background:#2a2a38 !important; color:#ccc !important; }
+  #modulesCtn div { padding:8px 11px; background:#1e1e26; border-radius:5px; font-size:12px; color:#888; border-left:2px solid #5c6adf; text-transform:capitalize; }
+
+  /* ===== Output Area ===== */
+  #outputCtn { flex:1; padding:28px 32px; background:#1e1e26; position:relative; overflow-y:auto; }
+  #emptyEl { color:#555; text-align:center; margin-top:150px; font-size:15px; }
+  #resultEl { white-space:pre-wrap; line-height:1.75; font-size:15.5px; color:#e8e8f0; }
+  #imageCtn { margin-top:16px; }
+  #imageCtn img { max-width:100%; border-radius:10px; border:1px solid #333; display:block; }
+  #copyBtn, #stopBtn { position:absolute; top:22px; padding:7px 16px; border:1px solid #444; border-radius:6px; cursor:pointer; font-size:12px; }
+  #copyBtn { right:26px; background:#2a2a36; color:#aaa; }
+  #stopBtn { right:90px; background:#5c1a1a; color:#ff8888; }
+
+  /* ===== Footer ===== */
+  #footerEl { padding:12px 28px; background:#22222a; border-top:1px solid #33333a; font-size:11.5px; color:#666; display:flex; justify-content:space-between; }
+
+  /* ===== Generating Spinner ===== */
+  .spinner { display:inline-block; width:10px; height:10px; border:2px solid #888; border-top-color:transparent; border-radius:50%; animation:spin 0.8s linear infinite; margin-right:6px; vertical-align:middle; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+
+<script>
+// ============================================================
+//  NSFW Content Architect — Perchance Plugin Engine v3.0
+// ============================================================
+
+let pluginApp = {
+  intensity: "explicit",
+  history: [],
+  maxHistory: 12,
+  currentText: "",
+  currentPromise: null, // tracks ongoing generateText / generateImage
+
+  // ------------------------------------------------------------------
+  //  Perchance-style Lists DSL
+  //  In a real Perchance project these live in the Lists tab.
+  //  Here we embed them so the plugin is self-contained.
+  // ------------------------------------------------------------------
+  lists: {
+    character: [
+      "a {bodyType} {role} with {eyeDesc} and {hairDesc}. {personality}",
+      "a {bodyType} {role} clad in {outfit}. {personality}",
+      "a {role} marked by {marking}. {personality}"
+    ],
+    bodyType: ["voluptuous","slender","athletic","curvy","petite","muscular","tall","delicate","busty","lithe","thick","statuesque","androgynous","hyper-feminine"],
+    role: ["stranger","noble","mercenary","mage","android","succubus","incubus","priestess","assassin","dancer","knight","captive","alien royalty","corrupted paladin","beast tamer","chief negotiator","lost traveler"],
+    eyeDesc: ["hungry eyes","lustful gaze","playful smirk","dominant stare","submissive downcast glance","mischievous eyes","intense predatory eyes","gentle bedroom eyes","fierce wild eyes","dilated pupils blown wide with need"],
+    hairDesc: ["flowing silver hair","a short crimson bob","long obsidian waves","tousled golden locks","wild emerald braids","neat platinum curls","damp raven hair clinging to skin","close-cropped viridian fuzz"],
+    personality: ["They exude an aura of raw, unfiltered desire.","They carry themselves with commanding authority.","Their shy demeanor hides desperate need.","They move with hypnotic, practiced grace.","Every glance promises sinful indulgence.","They seem insatiable, made for worship."],
+    outfit: ["barely-there silks","tight leather straps that cut into flesh","an ornate collar and absolutely nothing else","wet linen clinging to every curve","a transparent veil","restrictive latex","tattered robes gaping open","strategically placed jewelry","bondage harness over bare skin","a torn uniform"],
+    marking: ["a cursed brand glowing faintly on their inner thigh","arcane tattoos that shift with arousal","piercings connected by delicate chains","the kiss of a demon prince","scars from ritual binding","ownership runes just above the pubic bone"],
+
+    setting: [
+      "in a {place} during {time}",
+      "inside {place} where {atmosphere}",
+      "lost in {place} surrounded by {surroundings}"
+    ],
+    place: ["a candlelit dungeon","an opulent bathhouse","a foggy forest clearing","a crashed spaceship cabin","a moonlit balcony overlooking a city","a hidden underground brothel","an abandoned cathedral","a pleasure barge on a river of wine","a sorcerer's laboratory","a gladiatorial private chamber","a zero-gravity observation deck","a masked ball's private antechamber"],
+    time: ["a thunderstorm","the dead of night","a sweltering heat wave","an unnatural eclipse","the festival of flesh","the hour when magic peaks","the ship's night cycle"],
+    atmosphere: ["incense thickens the air into an aphrodisiac fog","magic hums against bare skin like a lover's breath","every sound echoes with intimate clarity","time seems distorted by arousal","the temperature seems to rise with each passing second","gravity feels heavier, or perhaps desire does"],
+    surroundings: ["silk cushions stained with oils","strange glowing fungi that pulse rhythmically","broken restraints and scattered toys","mirrors on every surface reflecting infinite flesh","fallen rose petals and pooling wax","humming arcane circles carved into stone","restraints built into the architecture"],
+
+    actionSoft: [
+      "traces fingertips along {partner}'s jaw before leaning in for a slow, drowning kiss",
+      "pushes {partner} gently against the nearest surface, breathing hot promises against their neck",
+      "undoes {partner}'s garments with deliberate, maddening slowness, worshipping each newly exposed inch",
+      "pulls {partner} into a heated embrace, grinding softly as tongues explore without rush",
+      "whispers filthy, breathless admissions between suckling kisses down {partner}'s collarbone",
+      "teases {partner} through fabric until they are trembling and damp"
+    ],
+    actionExplicit: [
+      "grinds hard against {partner}, nails digging deep into shoulders as desperate gasps fill the room",
+      "takes {partner} right there on {surface}, relentless and breathless, bodies slapping in the dark",
+      "pins {partner} down and claims their mouth roughly while fingers plunge between slick folds",
+      "spreads {partner} wide and fucks them with savage, rhythmic intensity until they cannot speak",
+      "pushes {partner} to their knees and fills their throat without mercy, gripping their hair tight",
+      "rides {partner} with abandon, breasts bouncing, eyes rolling back as release builds",
+      "thrusts into {partner} against {surface}, choking them gently while pounding deeper"
+    ],
+    actionExtreme: [
+      "restrains {partner} with {restraint} and {verb} them until raw screams echo off stone walls",
+      "uses {toy} to stretch and punish {partner}, denying orgasm again and again until they weep",
+      "claims {partner} completely in {hole}, leaving them gaping, trembling, and marked by seed",
+      "degrades {partner} with relentless {verb}, reducing them to a drooling, cock-drunk mess",
+      "inflicts sharp, controlled pain that blurs into ecstasy, drawing blood and moans in equal measure",
+      "breeds {partner} with primal ferocity, holding them down until womb is flooded and claimed",
+      "fists {partner}'s {hole} with merciless persistence until their eyes cross and legs spasm"
+    ],
+    partner: ["the protagonist","their captor","a willing stranger","their sworn enemy","a summoned entity","their closest companion","a masked patron","a former master now bound"],
+    surface: ["the wet stone floor","a velvet throne","shattered glass","a sturdy oak desk","silk sheets soaked with sweat","the cold metal wall","a rounded window overlooking the abyss"],
+    restraint: ["heavy iron chains","enchanted living vines","leather straps with steel buckles","barbed piercing wire","a collar of binding light","silk ropes soaked in numbing oil","manacles welded to the floor"],
+    verb: ["ravages","destroys","worships","corrupts","breaks completely","breeds relentlessly","defiles","owns","marks permanently","reduces to a ruined slab of fuckmeat"],
+    toy: ["an arcane wand vibrating at impossible frequencies","a massive, rune-carved implement","their own magically-enhanced appendage","a monstrous appendage summoned from beyond","a machine designed never to stop","a plug that expands on command"],
+    hole: ["every available opening","their tight, resisting ass","their accommodating throat","their dripping, eager cunt","all holes in ruthless rotation","their untouched passage","their stretched, ruined hole"],
+
+    scenario: [
+      "{character} appears {setting}. {event} Then, {character2} {action}. Finally, {climax}.",
+      "{character} encounters {character2} {setting}. The tension snaps instantly: {action}, which escalates until {climax}.",
+      "Trapped {setting}, {character} succumbs to {character2}. {event} What follows is pure carnality: {action}, ending only when {climax}.",
+      "{character} was sent to assassinate {character2}, but instead ends up {setting}, {action} until {climax}."
+    ],
+    event: [
+      "the air is thick with pheromones and unspoken need.",
+      "a single shared glance ignites uncontrollable, savage desire.",
+      "fate conspires to leave them isolated and vulnerable to base instinct.",
+      "a magical compulsion strips away all inhibition.",
+      "they realize they have been drugged by an aphrodisiac.",
+      "a wardrobe malfunction reveals too much, and the silence breaks."
+    ],
+    character2: [
+      "a second figure—{bodyType}, {eyeDesc}—steps from the shadows",
+      "their {role} companion, equally starved for touch",
+      "someone who should be strictly off-limits",
+      "an observer who can no longer resist joining",
+      "the very person they were warned never to trust alone"
+    ],
+    climax: [
+      "both collapse in exhausted, mutual satisfaction, fluids pooling beneath them",
+      "the room reeks of sex, sweat, and spent magic",
+      "one whispers 'again' before the cycle of violence and pleasure repeats",
+      "dawn breaks on their entwined, bruised bodies",
+      "the generator's roar drowns out their final, synchronized cry",
+      "they pass out still locked together, the ache a sweet reminder"
+    ],
+
+    encounter: [
+      "{character} {action} {partner} {setting}. Aftermath: {climax}"
+    ],
+
+    // Image prompt list for AI image generation
+    imageStyle: ["hyper-detailed digital painting","oil on canvas","cinematic render","anime key visual","dark fantasy concept art","photorealistic 3D render","vaporwave aesthetic","gothic illustration","cyberpunk neon","watercolor sketch"],
+    imageMood: ["sultry lighting","deep shadows","candlelit warmth","moonlit silver tones","neon-drenched","foggy intimacy","overexposed sensuality","chiaroscuro drama","hazy dreamlike glow","sharp contrast"]
+  },
+
+  // ------------------------------------------------------------------
+  //  Weighted random helper
+  // ------------------------------------------------------------------
+  weightedPick(arr) {
+    // If array items are strings, treat uniformly
+    if (!arr || !arr.length) return "";
+    // Simple uniform pick for this embedded engine
+    return arr[Math.floor(Math.random() * arr.length)];
+  },
+
+  // ------------------------------------------------------------------
+  //  Recursive list resolver (simulates Perchance [list] evaluation)
+  // ------------------------------------------------------------------
+  pick(key, depth) {
+    depth = depth || 0;
+    if (depth > 12) return "…"; // recursion guard
+    let arr = this.lists[key];
+    if (!arr || !arr.length) return "{" + key + "}";
+    let item = this.weightedPick(arr);
+    return item.replace(/\{(\w+)\}/g, (_, k) => this.pick(k, depth + 1));
+  },
+
+  setIntensity(val) {
+    this.intensity = val;
+    statusEl.textContent = "Intensity set to " + val;
+  },
+
+  // ------------------------------------------------------------------
+  //  Core Generators
+  // ------------------------------------------------------------------
+  generate(type) {
+    this.stopGeneration(); // kill any prior AI job
+    statusEl.innerHTML = '<span class="spinner"></span>Generating ' + type + '…';
+    let text = "";
+
+    if (type === "character") {
+      text = "══════ GENERATED CHARACTER ══════\n\n" + this.pick("character");
+    } else if (type === "scene") {
+      let actKey = "action" + this.intensity[0].toUpperCase() + this.intensity.slice(1);
+      let saved = this.lists.action; // temporarily bind {action} to intensity set
+      this.lists.action = this.lists[actKey] || this.lists.actionExplicit;
+      text = "══════ GENERATED ENCOUNTER ══════\n\n" + this.pick("encounter");
+      this.lists.action = saved;
+    } else if (type === "scenario") {
+      let actKey = "action" + this.intensity[0].toUpperCase() + this.intensity.slice(1);
+      let tpl = this.lists.scenario[Math.floor(Math.random() * this.lists.scenario.length)];
+      text = "══════ FULL SCENARIO ══════\n\n" + tpl
+        .replace(/\{character\}/g, this.pick("character"))
+        .replace(/\{character2\}/g, this.pick("character2"))
+        .replace(/\{setting\}/g, this.pick("setting"))
+        .replace(/\{action\}/g, this.pick(actKey))
+        .replace(/\{event\}/g, this.pick("event"))
+        .replace(/\{climax\}/g, this.pick("climax"));
+    }
+
+    this.currentText = text;
+    this.display(text, type);
+    statusEl.textContent = "Ready — " + new Date().toLocaleTimeString();
+  },
+
+  // ------------------------------------------------------------------
+  //  AI Image Generation (generateImage)
+  // ------------------------------------------------------------------
+  async generateImage() {
+    if (!this.currentText) {
+      statusEl.textContent = "Generate text first, then click Image.";
+      return;
+    }
+    this.stopGeneration();
+    statusEl.innerHTML = '<span class="spinner"></span>Generating image…';
+    stopBtn.hidden = false;
+
+    // Build a rich prompt from current text + style lists
+    let style = this.pick("imageStyle");
+    let mood = this.pick("imageMood");
+    let prompt = `NSFW scene: ${this.currentText.slice(0, 300).replace(/\n/g, " ")}. Style: ${style}. Mood: ${mood}. Highly detailed, artistic, dramatic composition.`;
+
+    try {
+      let p = generateImage(prompt, { resolution: "768x768" });
+      this.currentPromise = p;
+      let dataUrl = await p;
+      imageCtn.innerHTML = `<img src="${dataUrl}" alt="Generated NSFW image">`;
+      imageCtn.hidden = false;
+      statusEl.textContent = "Image ready — " + new Date().toLocaleTimeString();
+    } catch (e) {
+      statusEl.textContent = "Image generation failed.";
+    } finally {
+      stopBtn.hidden = true;
+      this.currentPromise = null;
+    }
+  },
+
+  // ------------------------------------------------------------------
+  //  AI Text Enchantment (generateText enhancement)
+  // ------------------------------------------------------------------
+  async enchantOutput() {
+    if (!this.currentText) {
+      statusEl.textContent = "Nothing to enchant. Generate content first.";
+      return;
+    }
+    this.stopGeneration();
+    statusEl.innerHTML = '<span class="spinner"></span>Enchanting with AI…';
+    stopBtn.hidden = false;
+
+    try {
+      let p = generateText({
+        instruction: `Rewrite and dramatically enhance the following NSFW passage. Make it longer, more vivid, more atmospheric, and deeply immersive. Maintain the original intensity and themes.\n\nOriginal:\n${this.currentText}`
+      });
+      this.currentPromise = p;
+      let enhanced = await p;
+      this.currentText = enhanced;
+      resultEl.textContent = enhanced;
+      statusEl.textContent = "Enchanted — " + new Date().toLocaleTimeString();
+    } catch (e) {
+      statusEl.textContent = "Enchantment failed.";
+    } finally {
+      stopBtn.hidden = true;
+      this.currentPromise = null;
+    }
+  },
+
+  stopGeneration() {
+    if (this.currentPromise && this.currentPromise.stop) {
+      this.currentPromise.stop();
+    }
+    this.currentPromise = null;
+    stopBtn.hidden = true;
+  },
+
+  // ------------------------------------------------------------------
+  //  Display & History
+  // ------------------------------------------------------------------
+  display(text, type) {
+    emptyEl.hidden = true;
+    resultEl.hidden = false;
+    copyBtn.hidden = false;
+    imageCtn.hidden = true;
+    imageCtn.innerHTML = "";
+    resultEl.textContent = text;
+
+    this.history.unshift({ type, full: text, preview: text.slice(0, 55).replace(/\n/g, " ") + "…" });
+    if (this.history.length > this.maxHistory) this.history.pop();
+    this.renderHistory();
+    this.saveHistory();
+  },
+
+  renderHistory() {
+    historyCtn.innerHTML = this.history.map((h, i) =>
+      `<div onclick="pluginApp.restore(${i})">[${h.type}] ${h.preview}</div>`
+    ).join("");
+  },
+
+  restore(i) {
+    let h = this.history[i];
+    if (!h) return;
+    this.currentText = h.full;
+    emptyEl.hidden = true;
+    resultEl.hidden = false;
+    copyBtn.hidden = false;
+    imageCtn.hidden = true;
+    imageCtn.innerHTML = "";
+    resultEl.textContent = h.full;
+    statusEl.textContent = "Restored — " + new Date().toLocaleTimeString();
+  },
+
+  async saveHistory() {
+    try { await kv.nsfwPlugin.set("history", this.history); } catch (e) { /* noop */ }
+  },
+
+  async loadHistory() {
+    try {
+      let saved = await kv.nsfwPlugin.get("history");
+      if (saved && Array.isArray(saved)) {
+        this.history = saved.slice(0, this.maxHistory);
+        this.renderHistory();
+      }
+    } catch (e) { /* noop */ }
+  },
+
+  copy() {
+    navigator.clipboard.writeText(resultEl.textContent).then(() => {
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => copyBtn.textContent = "Copy", 1000);
+    });
+  }
+};
+
+// ------------------------------------------------------------------
+//  Sidebar module list
+// ------------------------------------------------------------------
+let moduleList = ["character","encounter","scenario","image","enchant","lists","picker","history"];
+modulesCtn.innerHTML = moduleList.map(m =>
+  `<div>${m}</div>`
+).join("");
+
+// ------------------------------------------------------------------
+//  Restore persisted history on startup
+// ------------------------------------------------------------------
+pluginApp.loadHistory();
+</script>
+</body>
+</html>

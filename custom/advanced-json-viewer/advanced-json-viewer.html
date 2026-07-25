@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>advanced-json-viewer — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Advanced JSON Viewer – JSONLoader v3</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background: #1e1e1e;
+        color: #eee;
+        margin: 0;
+      }
+
+      h2 {
+        margin: 20px;
+      }
+
+      .top-bar {
+        display: flex;
+        gap: 10px;
+        padding: 10px 20px;
+        background: #111;
+        align-items: center;
+        border-bottom: 1px solid #333;
+        flex-wrap: wrap;
+      }
+
+      select,
+      button,
+      input[type="checkbox"] {
+        background: #222;
+        border: 1px solid #444;
+        color: #eee;
+        padding: 6px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #333;
+      }
+
+      .tabs {
+        display: flex;
+        background: #111;
+        border-bottom: 2px solid #333;
+      }
+      .tab {
+        padding: 10px 20px;
+        cursor: pointer;
+        border-right: 1px solid #333;
+        color: #ccc;
+      }
+      .tab.active {
+        background: #222;
+        color: #4fc1ff;
+        font-weight: bold;
+      }
+
+      .tab-content {
+        display: none;
+        padding: 20px;
+        height: calc(100vh - 160px);
+        overflow: auto;
+      }
+      .tab-content.active {
+        display: block;
+      }
+
+      .tree ul {
+        list-style-type: none;
+        padding-left: 20px;
+      }
+      .tree li {
+        margin: 4px 0;
+        cursor: pointer;
+      }
+      .tree li span.key {
+        color: #9cdcfe;
+      }
+      .tree li span.value {
+        color: #ccc;
+      }
+      .collapsed > ul {
+        display: none;
+      }
+
+      .icon {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        margin-right: 6px;
+        border-radius: 2px;
+      }
+      .icon.object {
+        background: #4fc1ff;
+      }
+      .icon.array {
+        background: #c586c0;
+      }
+      .icon.string {
+        background: #ce9178;
+      }
+      .icon.number {
+        background: #b5cea8;
+      }
+      .icon.boolean {
+        background: #569cd6;
+      }
+      .badge {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 2px 6px;
+        border-radius: 10px;
+        background: #333;
+        font-size: 10px;
+        color: #ccc;
+      }
+
+      #searchBox {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 10px;
+        background: #222;
+        border: 1px solid #444;
+        color: #eee;
+        border-radius: 4px;
+      }
+
+      pre {
+        background: #111;
+        padding: 10px;
+        border-radius: 6px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: Consolas, monospace;
+        font-size: 13px;
+      }
+      .json-key {
+        color: #9cdcfe;
+      }
+      .json-string {
+        color: #ce9178;
+      }
+      .json-number {
+        color: #b5cea8;
+      }
+      .json-boolean {
+        color: #569cd6;
+      }
+      .json-null {
+        color: #c586c0;
+      }
+
+      .metrics,
+      .errors,
+      .config-panel {
+        font-size: 12px;
+        background: #111;
+        padding: 10px;
+        border-radius: 6px;
+        margin-top: 10px;
+        border: 1px solid #333;
+      }
+      .metrics span.label,
+      .errors span.label,
+      .config-panel span.label {
+        font-weight: bold;
+        color: #4fc1ff;
+      }
+      .config-panel label {
+        margin-right: 10px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Advanced JSON Viewer – JSONLoader v3</h2>
+
+    <div class="top-bar">
+      <span>JSON sources:</span>
+      <select id="jsonSelector" multiple size="3">
+        <option value="plugins" selected>plugins.perchance.json</option>
+        <option value="software" selected>software.json</option>
+        <option value="extra">extra.json</option>
+      </select>
+      <button id="loadBtn">Load selected</button>
+      <button id="expandAllBtn">Expand all</button>
+      <button id="collapseAllBtn">Collapse all</button>
+
+      <span>Group view:</span>
+      <select id="groupSelector">
+        <option value="all" selected>All merged</option>
+        <option value="core">core</option>
+        <option value="meta">meta</option>
+        <option value="extra">extra</option>
+      </select>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="tree">Tree View</div>
+      <div class="tab" data-tab="raw">Raw JSON</div>
+      <div class="tab" data-tab="metrics">Metrics</div>
+      <div class="tab" data-tab="errors">Errors</div>
+    </div>
+
+    <div id="tree" class="tab-content active">
+      <input id="searchBox" placeholder="Search keys or values..." />
+      <div id="treeView" class="tree"></div>
+      <div class="config-panel">
+        <span class="label">Loader config:</span>
+        <label
+          ><input type="checkbox" id="deepMergeChk" checked /> deepMerge</label
+        >
+        <label
+          ><input type="checkbox" id="dedupeArraysChk" checked />
+          dedupeArrays</label
+        >
+        <label
+          ><input type="checkbox" id="flattenArraysChk" /> flattenArrays</label
+        >
+        <label
+          ><input type="checkbox" id="validateSchemasChk" checked />
+          validateSchemas</label
+        >
+        <label
+          ><input type="checkbox" id="autoSchemaChk" checked />
+          autoDetectSchemas</label
+        >
+      </div>
+    </div>
+
+    <div id="raw" class="tab-content">
+      <pre id="rawJson"></pre>
+    </div>
+
+    <div id="metrics" class="tab-content">
+      <div class="metrics" id="metricsBox">
+        <span class="label">Performance metrics</span><br />
+        Started: <span id="mStarted">-</span><br />
+        Finished: <span id="mFinished">-</span><br />
+        Duration: <span id="mDuration">-</span> ms<br />
+        Files loaded: <span id="mLoaded">-</span><br />
+        Files failed: <span id="mFailed">-</span><br />
+      </div>
+    </div>
+
+    <div id="errors" class="tab-content">
+      <div class="errors" id="errorsBox">
+        <span class="label">Errors</span>
+        <ul id="errorsList"></ul>
+      </div>
+    </div>
+
+    <script type="module">
+      import { JSONLoader } from "https://mosberg.github.io/src/scripts/jsonLoader.js";
+
+      let currentData = {};
+      let lastGroupView = "all";
+
+      const sourceMap = {
+        plugins: {
+          url: "https://mosberg.github.io/plugins.perchance.json",
+          group: "core",
+          priority: 10,
+        },
+        software: {
+          url: "https://mosberg.github.io/software.json",
+          group: "meta",
+          priority: 5,
+        },
+        extra: {
+          url: "https://mosberg.github.io/extra.json",
+          group: "extra",
+          priority: 1,
+        },
+      };
+
+      function applyConfigFromUI() {
+        JSONLoader.config.deepMerge =
+          document.getElementById("deepMergeChk").checked;
+        JSONLoader.config.dedupeArrays =
+          document.getElementById("dedupeArraysChk").checked;
+        JSONLoader.config.flattenArrays =
+          document.getElementById("flattenArraysChk").checked;
+        JSONLoader.config.validateSchemas =
+          document.getElementById("validateSchemasChk").checked;
+        JSONLoader.config.autoDetectSchemas =
+          document.getElementById("autoSchemaChk").checked;
+        JSONLoader.config.logLevel = "info";
+      }
+
+      function loadSelected() {
+        const selector = document.getElementById("jsonSelector");
+        const keys = Array.from(selector.selectedOptions).map((o) => o.value);
+
+        const sources = keys.map((k) => sourceMap[k]);
+
+        JSONLoader.reset();
+        applyConfigFromUI();
+
+        JSONLoader.on("ready", (data) => {
+          currentData = data;
+          updateMetricsUI();
+          renderAll();
+        });
+
+        JSONLoader.on("error", (errInfo) => {
+          appendError(errInfo);
+          updateMetricsUI();
+        });
+
+        JSONLoader.init(sources);
+      }
+
+      function getViewData() {
+        const group = lastGroupView;
+        if (group === "all") return JSONLoader.data;
+
+        const groupData = JSONLoader.getGroup(group);
+        if (!groupData || groupData.length === 0) return {};
+        if (groupData.length === 1) return groupData[0];
+        return groupData;
+      }
+
+      function renderAll() {
+        const data = getViewData();
+        document.getElementById("treeView").innerHTML = "";
+        buildTreeView(data);
+        document.getElementById("rawJson").innerHTML = syntaxHighlight(
+          JSON.stringify(data, null, 2),
+        );
+      }
+
+      function updateMetricsUI() {
+        const m = JSONLoader.metrics;
+        document.getElementById("mStarted").textContent = m.started
+          ? m.started.toFixed(2)
+          : "-";
+        document.getElementById("mFinished").textContent = m.finished
+          ? m.finished.toFixed(2)
+          : "-";
+        document.getElementById("mDuration").textContent = m.duration
+          ? m.duration.toFixed(2)
+          : "-";
+        document.getElementById("mLoaded").textContent = m.filesLoaded;
+        document.getElementById("mFailed").textContent = m.filesFailed;
+      }
+
+      function appendError(info) {
+        const li = document.createElement("li");
+        li.textContent = `${info.url}: ${info.error}`;
+        document.getElementById("errorsList").appendChild(li);
+      }
+
+      document.getElementById("loadBtn").onclick = loadSelected;
+
+      document.getElementById("groupSelector").onchange = (e) => {
+        lastGroupView = e.target.value;
+        renderAll();
+      };
+
+      document.querySelectorAll(".tab").forEach((tab) => {
+        tab.onclick = () => {
+          document
+            .querySelectorAll(".tab")
+            .forEach((t) => t.classList.remove("active"));
+          document
+            .querySelectorAll(".tab-content")
+            .forEach((c) => c.classList.remove("active"));
+
+          tab.classList.add("active");
+          document.getElementById(tab.dataset.tab).classList.add("active");
+        };
+      });
+
+      function buildTreeView(obj, parent = null) {
+        const container = parent || document.getElementById("treeView");
+        const ul = document.createElement("ul");
+
+        const isArray = Array.isArray(obj);
+        const entries = isArray ? obj : Object.entries(obj);
+
+        entries.forEach((entry, index) => {
+          const li = document.createElement("li");
+
+          let key, value;
+          if (isArray) {
+            key = index;
+            value = entry;
+          } else {
+            key = entry[0];
+            value = entry[1];
+          }
+
+          const icon = document.createElement("span");
+          icon.classList.add("icon");
+          if (Array.isArray(value)) icon.classList.add("array");
+          else if (typeof value === "object" && value !== null)
+            icon.classList.add("object");
+          else icon.classList.add(typeof value);
+
+          const keySpan = document.createElement("span");
+          keySpan.classList.add("key");
+          keySpan.textContent = key;
+
+          li.appendChild(icon);
+          li.appendChild(keySpan);
+
+          if (Array.isArray(value)) {
+            const badge = document.createElement("span");
+            badge.classList.add("badge");
+            badge.textContent = `len: ${value.length}`;
+            li.appendChild(badge);
+          }
+
+          if (typeof value === "object" && value !== null) {
+            li.classList.add("collapsible");
+            keySpan.onclick = () => li.classList.toggle("collapsed");
+            buildTreeView(value, li);
+          } else {
+            const valSpan = document.createElement("span");
+            valSpan.classList.add("value");
+            valSpan.textContent = " : " + value;
+            li.appendChild(valSpan);
+          }
+
+          ul.appendChild(li);
+        });
+
+        container.appendChild(ul);
+      }
+
+      document.getElementById("searchBox").addEventListener("input", (e) => {
+        const term = e.target.value.toLowerCase();
+        const items = document.querySelectorAll("#treeView li");
+
+        items.forEach((li) => {
+          const text = li.textContent.toLowerCase();
+          li.style.display = text.includes(term) ? "block" : "none";
+        });
+      });
+
+      document.getElementById("expandAllBtn").onclick = () => {
+        document.querySelectorAll("#treeView li.collapsible").forEach((li) => {
+          li.classList.remove("collapsed");
+        });
+      };
+      document.getElementById("collapseAllBtn").onclick = () => {
+        document.querySelectorAll("#treeView li.collapsible").forEach((li) => {
+          li.classList.add("collapsed");
+        });
+      };
+
+      function syntaxHighlight(json) {
+        json = json
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+        return json.replace(
+          /("(\\u[\da-fA-F]{4}|\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(\.\d+)?([eE][+\-]?\d+)?)/g,
+          (match) => {
+            let cls = "json-number";
+            if (/^"/.test(match)) {
+              cls = /:$/.test(match) ? "json-key" : "json-string";
+            } else if (/true|false/.test(match)) {
+              cls = "json-boolean";
+            } else if (/null/.test(match)) {
+              cls = "json-null";
+            }
+            return `<span class="${cls}">${match}</span>`;
+          },
+        );
+      }
+
+      loadSelected();
+    </script>
+  </body>
+</html>
+
+</body>
+</html>

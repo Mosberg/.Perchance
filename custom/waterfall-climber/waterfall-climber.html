@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>waterfall-climber — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" style="display:block;"></canvas>
+<div id="uiCtn" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
+  <div id="scoreEl" style="position:absolute;top:18px;left:18px;color:#e0f7fa;font:bold 22px sans-serif;z-index:10;text-shadow:1px 1px 2px #000;">Height: 0m</div>
+  
+  <div id="startScreenCtn" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,10,20,0.75);pointer-events:auto;">
+    <h1 style="color:#4fc3f7;font:700 48px sans-serif;margin:0 0 10px;text-shadow:2px 2px 0 #01579b;">Waterfall Climber</h1>
+    <p style="color:#e0f7fa;font:16px sans-serif;max-width:320px;text-align:center;margin:0 0 8px;">Climb the endless, randomly generated waterfall. Fight the current and leap between rocky ledges.</p>
+    <p style="color:#b2ebf2;font:14px sans-serif;margin:0 0 24px;">A / D or Arrow Keys to move · Space / W / Up to Jump</p>
+    <button id="startBtn" onclick="startGame()" style="padding:12px 36px;font:18px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#0288d1;color:#fff;">Start Climb</button>
+  </div>
+  
+  <div id="gameOverCtn" hidden style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,5,10,0.8);pointer-events:auto;">
+    <h2 style="color:#ff5252;font:36px sans-serif;margin:0 0 8px;">Swept Away!</h2>
+    <p id="finalScoreEl" style="color:#fff;font:22px sans-serif;margin:0 0 20px;">Height: 0m</p>
+    <button id="restartBtn" onclick="startGame()" style="padding:12px 36px;font:18px sans-serif;cursor:pointer;border:none;border-radius:4px;background:#0288d1;color:#fff;">Try Again</button>
+  </div>
+</div>
+
+<style>
+body { margin:0; overflow:hidden; background:#001220; text-align:left; }
+</style>
+
+<script>
+let canvas = gameCanvas;
+let ctx = canvas.getContext('2d');
+let w, h;
+function resize(){ w=canvas.width=innerWidth; h=canvas.height=innerHeight; }
+resize();
+addEventListener('resize', resize);
+
+let player, platforms, particles, cameraY, highestTop, score, gameState='menu';
+let keys={};
+let jumpNext=false;
+
+addEventListener('keydown', e=>{
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+  if(!keys[e.code] && (e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW')) jumpNext=true;
+  keys[e.code]=true;
+});
+addEventListener('keyup', e=>keys[e.code]=false);
+
+function startGame(){
+  startScreenCtn.hidden=true;
+  gameOverCtn.hidden=true;
+  initGame();
+  gameState='play';
+  loop();
+}
+
+function initGame(){
+  let groundTop = 30;
+  platforms=[{x: w/2 - 100, y: 10, w: 200, h: 20}];
+  highestTop = groundTop;
+  for(let i=0;i<14;i++){
+    highestTop += 48 + Math.random()*38;
+    spawnPlatformAt(highestTop);
+  }
+  player={x: w/2, y: groundTop + 15, w: 22, h: 30, vx:0, vy:0, onGround:true};
+  cameraY = player.y - h/3;
+  score=0;
+  particles=[];
+  for(let i=0;i<160;i++){
+    particles.push({x:Math.random()*w, y:Math.random()*h, speed:4+Math.random()*8, len:10+Math.random()*35, alpha:0.08+Math.random()*0.2, thick:1+Math.random()*2});
+  }
+}
+
+function spawnPlatformAt(topY){
+  let wid = 65 + Math.random()*95;
+  if(wid > w-30) wid = w-30;
+  let x = Math.random()*(w - wid);
+  let hgt = 14 + Math.random()*10;
+  platforms.push({x, y: topY - hgt, w: wid, h: hgt});
+}
+
+function loop(){
+  if(gameState!=='play') return;
+  updateGame();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function updateGame(){
+  let p=player;
+  let hw=p.w/2;
+  let oldBot = p.y - p.h/2;
+
+  if(keys.ArrowLeft || keys.KeyA) p.vx -= 0.7;
+  if(keys.ArrowRight || keys.KeyD) p.vx += 0.7;
+  p.vx *= 0.86;
+  p.x += p.vx;
+  if(p.x < hw){ p.x=hw; p.vx=0; }
+  if(p.x > w-hw){ p.x=w-hw; p.vx=0; }
+
+  if(jumpNext && p.onGround){
+    p.vy = 10.5;
+    p.onGround = false;
+    jumpNext = false;
+  } else {
+    jumpNext = false;
+  }
+
+  if(!p.onGround){
+    p.vy -= 0.5;
+    if(p.vy < -14) p.vy = -14;
+  }
+  p.y += p.vy;
+  let newBot = p.y - p.h/2;
+
+  let landed = false;
+  for(let plat of platforms){
+    let platTop = plat.y + plat.h;
+    let overlapX = p.x+hw > plat.x && p.x-hw < plat.x+plat.w;
+    if(overlapX && oldBot >= platTop && newBot <= platTop){
+      p.y = platTop + p.h/2;
+      p.vy = 0;
+      landed = true;
+      newBot = p.y - p.h/2;
+    }
+  }
+  p.onGround = landed;
+
+  let screenBottom = h/2 + cameraY - newBot;
+  if(screenBottom > h + 80){
+    gameState='over';
+    gameOverCtn.hidden=false;
+    finalScoreEl.textContent = 'Height: ' + score + 'm';
+    return;
+  }
+
+  let curScore = Math.floor(p.y/10);
+  if(curScore > score) score = curScore;
+  scoreEl.textContent = 'Height: ' + score + 'm';
+
+  let targetCam = p.y - h/3;
+  cameraY += (targetCam - cameraY)*0.08;
+
+  let topEdge = cameraY + h/2;
+  while(highestTop < topEdge + 350){
+    highestTop += 46 + Math.random()*38;
+    spawnPlatformAt(highestTop);
+  }
+  let botEdge = cameraY - h/2;
+  platforms = platforms.filter(pl => pl.y + pl.h > botEdge - 250);
+
+  for(let pt of particles){
+    pt.y += pt.speed;
+    if(pt.y > h){ pt.y = -pt.len; pt.x = Math.random()*w; }
+  }
+}
+
+function draw(){
+  let g = ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#0b486b');
+  g.addColorStop(1,'#001220');
+  ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+
+  ctx.lineWidth = 1;
+  for(let pt of particles){
+    ctx.strokeStyle = `rgba(180,235,255,${pt.alpha})`;
+    ctx.lineWidth = pt.thick;
+    ctx.beginPath();
+    ctx.moveTo(pt.x, pt.y);
+    ctx.lineTo(pt.x, pt.y + pt.len);
+    ctx.stroke();
+  }
+
+  for(let plat of platforms){
+    let screenTop = h/2 + cameraY - (plat.y + plat.h);
+    let screenBot = h/2 + cameraY - plat.y;
+    let drawH = screenBot - screenTop;
+    
+    ctx.fillStyle = '#5d4037';
+    ctx.fillRect(plat.x, screenTop, plat.w, drawH);
+    ctx.strokeStyle = '#3e2723'; ctx.lineWidth=2;
+    ctx.strokeRect(plat.x, screenTop, plat.w, drawH);
+    ctx.fillStyle = '#2e7d32';
+    ctx.fillRect(plat.x, screenTop, plat.w, 5);
+    ctx.fillStyle = 'rgba(120,210,255,0.08)';
+    ctx.fillRect(plat.x + plat.w*0.25, screenTop+5, plat.w*0.5, drawH-5);
+  }
+
+  let sx = player.x;
+  let sy = h/2 + cameraY - player.y;
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(player.vx * 0.07);
+  
+  ctx.fillStyle = '#e65100';
+  ctx.fillRect(-11, -15, 22, 30);
+  ctx.fillStyle = '#ffe0b2';
+  ctx.fillRect(-11, -4, 22, 12);
+  ctx.fillStyle = '#d32f2f';
+  ctx.fillRect(-11, -12, 22, 4);
+  ctx.fillStyle = '#222';
+  if(player.vx < -0.15){
+    ctx.fillRect(-8, -6, 3, 3);
+  } else if(player.vx > 0.15){
+    ctx.fillRect(5, -6, 3, 3);
+  } else {
+    ctx.fillRect(-8, -6, 3, 3);
+    ctx.fillRect(5, -6, 3, 3);
+  }
+  ctx.fillStyle = '#ffe0b2';
+  if(player.onGround){
+    ctx.fillRect(-15, 8, 4, 6);
+    ctx.fillRect(11, 8, 4, 6);
+  } else {
+    ctx.fillRect(-15, -18, 4, 8);
+    ctx.fillRect(11, -18, 4, 8);
+  }
+  ctx.restore();
+}
+</script>
+</body>
+</html>

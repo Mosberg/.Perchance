@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>mos-ai-img-a — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="appCtn" data-theme="dark">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+    <h1 style="margin:0;font-size:24px;">AI Image Generator</h1>
+    <button onclick="toggleTheme()" title="Toggle light/dark" style="font-size:18px;">◑</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" id="mainGridEl">
+    <div id="leftColEl">
+      <details open style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
+        <summary style="font-weight:600;cursor:pointer;user-select:none;">Prompt Builder</summary>
+        <div style="margin-top:10px;">
+          <textarea id="promptInput" placeholder="Enter your main prompt..." oninput="state.prompt=this.value;queueSave()" style="width:100%;min-height:90px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:8px;"></textarea>
+        </div>
+        <div style="margin-top:8px;">
+          <label style="font-size:12px;opacity:0.8;">Negative Prompt (reference only)</label>
+          <textarea id="negInput" placeholder="things to avoid..." oninput="state.negative=this.value;queueSave()" style="width:100%;min-height:50px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:4px;"></textarea>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button onclick="applyRecipe('portrait')">Portrait</button>
+          <button onclick="applyRecipe('cinematic')">Cinematic</button>
+          <button onclick="applyRecipe('macro')">Macro</button>
+          <button onclick="applyRecipe('anime')">Anime</button>
+          <button onclick="applyRecipe('product')">Product</button>
+          <button onclick="buildRandomPrompt()">🎲 Random</button>
+          <button onclick="copyPrompt()">📋 Copy</button>
+        </div>
+      </details>
+
+      <details style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
+        <summary style="font-weight:600;cursor:pointer;user-select:none;">Prompt Enhancer</summary>
+        <div style="margin-top:10px;display:grid;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <select id="enhanceMode" onchange="state.enhance.mode=this.value;queueSave()" style="flex:1;min-width:120px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px;">
+              <option value="enhance">Enhance</option>
+              <option value="rewrite">Rewrite</option>
+              <option value="detail-boost">Detail Boost</option>
+              <option value="cinematic">Cinematic</option>
+              <option value="photographic">Photographic</option>
+            </select>
+            <select id="enhanceLen" onchange="state.enhance.length=this.value;queueSave()" style="flex:1;min-width:120px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px;">
+              <option value="short">Short</option>
+              <option value="medium">Medium</option>
+              <option value="long">Long</option>
+              <option value="ultra">Ultra</option>
+            </select>
+          </div>
+          <button onclick="enhancePrompt()">✨ Enhance Prompt</button>
+          <textarea id="enhancedOutput" placeholder="Enhanced preview..." style="width:100%;min-height:70px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:8px;"></textarea>
+          <button onclick="applyEnhanced()">Apply to Prompt</button>
+        </div>
+      </details>
+
+      <details open style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
+        <summary style="font-weight:600;cursor:pointer;user-select:none;">Generation Settings</summary>
+        <div style="margin-top:10px;display:grid;gap:10px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <label style="flex:1;min-width:140px;font-size:12px;">Model hint<br>
+              <select id="modelInput" onchange="state.settings.model=this.value;queueSave()" style="width:100%;margin-top:4px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px;">
+                <option>SDXL</option><option>Flux</option><option>SD1.5</option><option>Anime</option>
+              </select>
+            </label>
+            <label style="flex:1;min-width:140px;font-size:12px;">Resolution<br>
+              <select id="resInput" onchange="state.settings.resolution=this.value;queueSave()" style="width:100%;margin-top:4px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px;">
+                <option value="1:1">1:1 (768x768)</option>
+                <option value="16:9">16:9 (768x512)</option>
+                <option value="9:16">9:16 (512x768)</option>
+                <option value="4:5">4:5 (768x768)</option>
+              </select>
+            </label>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <label style="flex:1;min-width:100px;font-size:12px;">Steps<br><input id="stepsInput" type="number" min="1" max="150" onchange="state.settings.steps=parseInt(this.value)||30;queueSave()" style="width:100%;margin-top:4px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px;"></label>
+            <label style="flex:1;min-width:100px;font-size:12px;">CFG Scale<br><input id="cfgInput" type="number" step="0.5" min="1" max="30" onchange="state.settings.cfg=parseFloat(this.value)||7;queueSave()" style="width:100%;margin-top:4px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px;"></label>
+            <label style="flex:1;min-width:100px;font-size:12px;">Batch<br><input id="batchInput" type="number" min="1" max="4" onchange="state.settings.batch=parseInt(this.value)||1;queueSave()" style="width:100%;margin-top:4px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px;"></label>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <label style="flex:1;min-width:140px;font-size:12px;">Sampler<br>
+              <select id="samplerInput" onchange="state.settings.sampler=this.value;queueSave()" style="width:100%;margin-top:4px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px;">
+                <option>Euler</option><option>Euler a</option><option>DPM++ 2M Karras</option><option>DDIM</option>
+              </select>
+            </label>
+            <label style="flex:1;min-width:140px;font-size:12px;">Seed (blank=random)<br><input id="seedInput" placeholder="random" onchange="state.settings.seed=this.value;queueSave()" style="width:100%;margin-top:4px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px;"></label>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:13px;">
+            <label style="display:flex;align-items:center;gap:6px;"><input id="faceFixInput" type="checkbox" onchange="state.settings.faceFix=this.checked;queueSave()"> Face Fix</label>
+            <label style="display:flex;align-items:center;gap:6px;"><input id="upscaleInput" type="checkbox" onchange="state.settings.upscale=this.checked;queueSave()"> Upscale</label>
+            <label style="display:flex;align-items:center;gap:6px;"><input id="safetyInput" type="checkbox" onchange="state.settings.safety=this.checked;queueSave()"> Safety Filter</label>
+          </div>
+        </div>
+      </details>
+
+      <div style="position:sticky;bottom:16px;z-index:30;text-align:center;padding:8px;">
+        <button id="genBtn" onclick="runGeneration()" style="font-size:18px;padding:12px 44px;border-radius:999px;box-shadow:0 6px 18px rgba(0,0,0,0.35);background:linear-gradient(90deg,var(--accent),#8b5cf6);">Generate</button>
+      </div>
+    </div>
+
+    <div id="rightColEl">
+      <div id="statusEl" style="margin-bottom:8px;font-weight:600;min-height:24px;"></div>
+      <div id="currentImgCtn" hidden style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;">
+        <img id="currentImgEl" style="width:100%;border-radius:6px;display:block;">
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <h2 style="margin:0;font-size:18px;">Gallery</h2>
+          <button onclick="clearGallery()">Clear</button>
+        </div>
+        <div id="galleryGridEl" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;"></div>
+        <div id="gallerySentinel" style="height:20px;margin-top:8px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="metaModalEl" hidden onclick="if(event.target===this)closeModal()" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;">
+    <div style="background:var(--card);padding:16px;border-radius:8px;max-width:90vw;max-height:90vh;overflow:auto;width:600px;border:1px solid var(--border);">
+      <pre id="metaPreEl" style="white-space:pre-wrap;word-break:break-word;font-size:12px;margin:0 0 12px;"></pre>
+      <button onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  :root { --bg:#f8fafc; --fg:#0f172a; --card:#ffffff; --accent:#4f46e5; --border:#e2e8f0; }
+  [data-theme="dark"] { --bg:#0b1120; --fg:#e2e8f0; --card:#111827; --accent:#6366f1; --border:#1f2937; }
+  body { text-align:left; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif; background:var(--bg); color:var(--fg); }
+  #appCtn { max-width:1280px; margin:0 auto; padding:16px; }
+  @media (max-width:860px) { #mainGridEl { grid-template-columns:1fr !important; } }
+  button { cursor:pointer; font-family:inherit; }
+  details > summary { list-style:none; }
+  details > summary::-webkit-details-marker { display:none; }
+</style>
+
+<script>
+  window.onunhandledrejection = function(e){ e.preventDefault(); };
+
+  let state = {
+    prompt:"", negative:"", enhanced:"",
+    enhance:{mode:"enhance", length:"medium"},
+    settings:{model:"SDXL", resolution:"1:1", steps:30, cfg:7.5, sampler:"Euler", seed:"", batch:1, faceFix:false, upscale:false, safety:true},
+    gallery:[], galleryPage:0, theme:"dark"
+  };
+  let saveTimer;
+
+  let lists = {
+    subject:[["a cyberpunk samurai",1],["an ancient tree of life",1],["a floating sky city",1],["a deep sea creature",0.9],["a neon street market",1],["a mystical phoenix",1],["a retro astronaut",0.9],["a hidden jungle temple",1]],
+    style:[["oil painting",1],["unreal engine 5 render",1],["watercolor illustration",1],["3D digital art",1],["pixel art",0.8],["photorealistic",1],["anime key visual",1],["vintage film photo",0.9]],
+    lighting:[["golden hour sunlight",1],["neon bounce lighting",1],["volumetric god rays",1],["softbox studio light",0.9],["bioluminescent glow",0.8],["moonlight silhouette",1],["overcast diffuse",0.8]],
+    camera:[["85mm portrait lens",1],["macro 100mm",0.8],["drone aerial shot",0.7],["f/1.8 shallow depth",1],["24mm wide angle",0.9],["telephoto 200mm",0.8],["tilt-shift",0.6]],
+    composition:[["rule of thirds",1],["symmetrical frame",1],["leading lines",0.9],["extreme close-up",0.9],["bokeh background",1],["reflection in water",0.8],["framed by archway",0.8]],
+    mood:[["epic and grand",1],["serene and peaceful",1],["mysterious and dark",1],["whimsical and cute",0.9],["lonely melancholic",0.8],["intense action",0.9]]
+  };
+
+  let recipes = {
+    portrait:{prompt:"professional portrait, 85mm lens, sharp focus on eyes, natural skin texture, shallow depth of field, studio lighting, bokeh background", negative:"cartoon, 3d render, blurry, deformed, ugly, duplicate"},
+    cinematic:{prompt:"cinematic film still, dramatic lighting, anamorphic lens flares, color graded, atmospheric fog, widescreen composition, highly detailed", negative:"noise, blur, watermark, deformed, cropped"},
+    macro:{prompt:"extreme macro photography, intricate details, natural lighting, vivid colors, shallow depth of field, sharp focus, organic textures", negative:"blurry, out of focus, distorted, oversaturated"},
+    anime:{prompt:"masterpiece, best quality, anime style artwork, vibrant colors, clean lineart, detailed background, cinematic composition, studio ghibli inspired", negative:"lowres, bad anatomy, bad hands, text, error, missing fingers"},
+    product:{prompt:"product photography, clean white seamless background, softbox lighting, 8k, sharp focus, commercial style, minimalist composition, premium look", negative:"cluttered background, blurry, distorted, text, watermark"}
+  };
+
+  function pickWeighted(arr){ let t=0; for(let i=0;i<arr.length;i++) t+=arr[i][1]; let r=Math.random()*t; for(let i=0;i<arr.length;i++){ let [v,w]=arr[i]; r-=w; if(r<=0) return v; } return arr[0][0]; }
+
+  window.buildRandomPrompt = function(){
+    state.prompt = [pickWeighted(lists.subject), pickWeighted(lists.style), pickWeighted(lists.lighting), pickWeighted(lists.camera), pickWeighted(lists.composition), pickWeighted(lists.mood)].join(", ");
+    promptInput.value = state.prompt;
+    queueSave();
+  };
+
+  window.applyRecipe = function(key){
+    state.prompt = recipes[key].prompt;
+    state.negative = recipes[key].negative;
+    promptInput.value = state.prompt;
+    negInput.value = state.negative;
+    queueSave();
+  };
+
+  window.copyPrompt = async function(text){
+    let t = text || state.prompt;
+    if(!t) return;
+    try{ await navigator.clipboard.writeText(t); }catch(e){}
+  };
+
+  let lenMap = {short:"concise, 1 sentence", medium:"2-3 sentences", long:"a full paragraph", ultra:"two rich paragraphs"};
+  window.enhancePrompt = async function(){
+    if(!state.prompt.trim()){ enhancedOutput.value = "Enter a prompt first."; return; }
+    enhancedOutput.value = "Enhancing...";
+    try{
+      let mode = state.enhance.mode;
+      let length = lenMap[state.enhance.length] || "medium";
+      let instruction = "You are an expert prompt engineer for AI image models. Mode: "+mode+". Desired length: "+length+". Improve the following prompt while preserving its subject. Output only the improved prompt.\n\nPrompt: "+state.prompt;
+      let out = await generateText(instruction);
+      state.enhanced = (out||"").trim();
+      enhancedOutput.value = state.enhanced || "No response.";
+      queueSave();
+    }catch(err){
+      enhancedOutput.value = "Enhance failed. Please retry.";
+    }
+  };
+
+  window.applyEnhanced = function(){
+    if(state.enhanced){ state.prompt = state.enhanced; promptInput.value = state.prompt; queueSave(); }
+  };
+
+  function buildFinalPrompt(){
+    let p = (state.prompt||"").trim();
+    if(!p) return "";
+    if(state.settings.model==="Anime") p += ", anime artwork, vibrant stylized, cel shaded, detailed lineart";
+    if(state.settings.model==="Flux") p += ", flux aesthetic, raw digital render, modern stylized";
+    if(state.settings.model==="SD1.5") p += ", masterpiece, best quality, highly detailed";
+    if(state.settings.model==="SDXL") p += ", professional quality, high resolution, detailed";
+    if(state.settings.faceFix) p += ", perfect symmetrical face, detailed eyes, realistic skin texture";
+    if(state.settings.upscale) p += ", 8k uhd, hyper detailed, sharp focus, crisp";
+    if(state.settings.safety) p += ", safe for work, wholesome";
+    return p;
+  }
+
+  let resMap = {"1:1":"768x768","16:9":"768x512","9:16":"512x768","4:5":"768x768"};
+
+  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+  window.runGeneration = async function(){
+    if(typeof generateImage !== "function"){ statusEl.textContent = "Image generator not ready."; return; }
+    let total = Math.max(1, Math.min(4, parseInt(state.settings.batch)||1));
+    let resKey = resMap[state.settings.resolution] || "768x768";
+    let final = buildFinalPrompt();
+    if(!final){ statusEl.textContent = "Enter a prompt first."; return; }
+    genBtn.disabled = true;
+    try{
+      for(let i=0;i<total;i++){
+        statusEl.textContent = "Generating "+(i+1)+"/"+total+"...";
+        let url;
+        try{
+          url = await generateImage(final, {resolution: resKey});
+        }catch(e){
+          statusEl.textContent = "Generation error: "+((e&&e.message)||"failed");
+          break;
+        }
+        if(!url){ statusEl.textContent = "Empty response. Stopping."; break; }
+        let item = {id:Date.now()+i, url:url, prompt:state.prompt, negative:state.negative, settings:JSON.parse(JSON.stringify(state.settings)), time:Date.now()};
+        state.gallery.unshift(item);
+        if(state.gallery.length > 200) state.gallery = state.gallery.slice(0,200);
+        if(i===0){ currentImgEl.src = url; currentImgCtn.hidden = false; }
+        state.galleryPage = 0;
+        renderGallery();
+        queueSave();
+        if(i < total-1) await sleep(1200);
+      }
+    }finally{
+      genBtn.disabled = false;
+      statusEl.textContent = "Ready";
+    }
+  };
+
+  window.renderGallery = function(){
+    let pageSize = 12;
+    let items = state.gallery.slice(0, (state.galleryPage+1)*pageSize);
+    galleryGridEl.innerHTML = items.map(it=>`<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <img src="${it.url}" loading="lazy" onclick="viewMeta(${it.id})" style="width:100%;height:190px;object-fit:cover;display:block;cursor:pointer;" title="View metadata">
+      <div style="display:flex;gap:6px;justify-content:center;padding:8px;">
+        <button onclick="event.stopPropagation();downloadById(${it.id})" title="Download">⬇</button>
+        <button onclick="event.stopPropagation();copyById(${it.id})" title="Copy prompt">📋</button>
+        <button onclick="event.stopPropagation();deleteImg(${it.id})" title="Delete">🗑</button>
+      </div>
+    </div>`).join("");
+    gallerySentinel.hidden = items.length >= state.gallery.length;
+  };
+
+  window.downloadById = function(id){
+    let it = state.gallery.find(x=>x.id===id);
+    if(!it) return;
+    let a = document.createElement("a");
+    a.href = it.url;
+    a.download = "perchance-"+id+".png";
+    a.click();
+  };
+
+  window.copyById = function(id){
+    let it = state.gallery.find(x=>x.id===id);
+    if(it) copyPrompt(it.prompt);
+  };
+
+  window.viewMeta = function(id){
+    let it = state.gallery.find(x=>x.id===id);
+    if(!it) return;
+    metaPreEl.textContent = JSON.stringify(it, null, 2);
+    metaModalEl.hidden = false;
+  };
+
+  window.closeModal = function(){ metaModalEl.hidden = true; };
+
+  window.deleteImg = function(id){
+    state.gallery = state.gallery.filter(x=>x.id!==id);
+    state.galleryPage = 0;
+    renderGallery();
+    queueSave();
+  };
+
+  window.clearGallery = function(){
+    if(!state.gallery.length) return;
+    if(!confirm("Clear entire gallery?")) return;
+    state.gallery = [];
+    state.galleryPage = 0;
+    renderGallery();
+    queueSave();
+  };
+
+  window.toggleTheme = function(){
+    let next = appCtn.getAttribute("data-theme")==="dark" ? "light" : "dark";
+    appCtn.setAttribute("data-theme", next);
+    state.theme = next;
+    queueSave();
+  };
+
+  window.queueSave = function(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveState, 600);
+  };
+
+  async function saveState(){
+    try{ if(typeof kv!=="undefined"&&kv&&kv.tiGen) await kv.tiGen.set("state", state); }catch(e){}
+  }
+
+  async function loadState(){
+    try{
+      if(typeof kv!=="undefined"&&kv&&kv.tiGen){
+        let s = await kv.tiGen.get("state");
+        if(s && typeof s==="object"){
+          state = s;
+          if(state.theme) appCtn.setAttribute("data-theme", state.theme);
+        }
+      }
+    }catch(e){}
+    promptInput.value = state.prompt || "";
+    negInput.value = state.negative || "";
+    enhancedOutput.value = state.enhanced || "";
+    enhanceMode.value = state.enhance.mode || "enhance";
+    enhanceLen.value = state.enhance.length || "medium";
+    modelInput.value = state.settings.model || "SDXL";
+    resInput.value = state.settings.resolution || "1:1";
+    stepsInput.value = state.settings.steps || 30;
+    cfgInput.value = state.settings.cfg || 7.5;
+    samplerInput.value = state.settings.sampler || "Euler";
+    seedInput.value = state.settings.seed || "";
+    batchInput.value = state.settings.batch || 1;
+    faceFixInput.checked = !!state.settings.faceFix;
+    upscaleInput.checked = !!state.settings.upscale;
+    safetyInput.checked = state.settings.safety!==false;
+    state.galleryPage = 0;
+    renderGallery();
+  }
+
+  let observer = new IntersectionObserver(function(entries){
+    if(entries[0]&&entries[0].isIntersecting){
+      let loaded = (state.galleryPage+1)*12;
+      if(state.gallery && state.gallery.length > loaded){
+        state.galleryPage++;
+        renderGallery();
+      }
+    }
+  });
+  if(gallerySentinel) observer.observe(gallerySentinel);
+
+  loadState().catch(function(){});
+</script>
+</body>
+</html>

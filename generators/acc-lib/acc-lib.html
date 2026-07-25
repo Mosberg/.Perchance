@@ -1,0 +1,1740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>acc-lib — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- 1. Load the Archivo Narrow font -->
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;700&display=swap');
+
+  /* Theme colour palette used throughout the app */
+  :root {
+    --bg: #000000;
+    --card: #060606;
+    --border: #1a1a1a;
+    --border-hover: #333333;
+    --accent: #4fc3f7;
+    --nsfw: #ff5252;
+    --text: #ffffff;
+    --dim: #888888;
+  }
+
+  /* Force everything to lowercase and use Archivo Narrow */
+  * { 
+    box-sizing: border-box; 
+    font-family: 'Archivo Narrow', sans-serif; 
+    text-transform: lowercase; 
+  }
+
+  /* Base page setup */
+  body {
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 20px;
+    min-height: 100vh;
+  }
+
+  /* Layout container, keeps content centred */
+  .wrapper { max-width: 1000px; margin: auto; }
+
+  /* Header structure */
+  header { margin-bottom: 25px; }
+  
+  /* Sticky top bar holding the search, nsfw switch, and discussion action */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: center;
+    background: var(--bg);
+    position: sticky;
+    top: 0;
+    padding: 15px 0;
+    z-index: 100;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Search input */
+  #searchInput {
+    flex-grow: 1;
+    padding: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: white;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #searchInput:focus { border-color: var(--accent); }
+  
+  /* Layout action row for toggles & buttons */
+  .control-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+
+  /* (removed unused .nsfw-toggle-wrap) */
+
+  /* Discussion button in top bar */
+  .btn-discussion {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    padding: 10px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .btn-discussion:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Submission Form collapsible wrapper */
+  details { 
+    background: #030303;
+    border: 1px solid var(--border);
+    margin-bottom: 20px; 
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  details[open] { border-color: var(--accent); }
+  summary { padding: 15px; cursor: pointer; color: var(--accent); font-weight: bold; }
+  
+  /* Form inner grid */
+  .form { 
+    padding: 20px; 
+    display: grid; 
+    gap: 12px; 
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); 
+  }
+  
+  /* Selects text inputs only (excludes the checkbox) */
+  .form input:not([type="checkbox"]), .form textarea { 
+    background: #000; 
+    border: 1px solid var(--border); 
+    padding: 10px; 
+    color: #fff; 
+    width: 100%;
+    outline: none;
+    border-radius: 4px;
+    transition: border-color 0.2s;
+  }
+  .form input:not([type="checkbox"]):focus, .form textarea:focus { border-color: var(--accent); }
+  .form textarea { grid-column: 1 / -1; height: 80px; resize: vertical; }
+  /* (removed unused .full-width) */
+  
+  /* Dedicated, clean styling for the NSFW check in the form */
+  .nsfw-submit-wrap {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.95rem;
+    color: var(--dim);
+    cursor: pointer;
+    user-select: none;
+    padding: 5px 0;
+    justify-self: start; 
+  }
+
+  /* Styles the checkbox element itself */
+  .nsfw-submit-wrap input[type="checkbox"] {
+    width: 16px !important;
+    height: 16px !important;
+    margin: 0 !important;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  /* Form submit button */
+  .btn-submit { 
+    background: var(--accent); 
+    color: #000; 
+    border: none; 
+    padding: 12px; 
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold; 
+    grid-column: 1/-1;
+    transition: opacity 0.2s;
+  }
+  .btn-submit:hover { opacity: 0.9; }
+
+  /* Character Grid */
+  #listCtn {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+  }
+
+  /* Card layout */
+  .char-card {
+    background: linear-gradient(165deg, #080808 0%, #050505 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.25s, transform 0.2s;
+  }
+  .char-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-3px);
+  }
+
+  .char-header {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+
+  /* Avatar styles */
+  .pfp {
+    width: 64px;
+    height: 64px;
+    background-color: #111;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text x='50%' y='60%' dominant-baseline='middle' text-anchor='middle' fill='%23333333' font-family='sans-serif' font-weight='bold' font-size='40'>?</text></svg>");
+    background-size: cover;
+    background-position: center;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+    transition: opacity 0.2s, border-color 0.25s;
+  }
+  .char-card:hover .pfp {
+    border-color: var(--accent);
+  }
+
+  .char-info { flex-grow: 1; min-width: 0; }
+  .char-name {
+    color: #ffffff;
+    font-size: 1.25rem;
+    margin: 0;
+    line-height: 1.2;
+    letter-spacing: 0.3px;
+    text-transform: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .char-score {
+    display: block;
+    font-size: 0.72rem;
+    color: #555;
+    margin-top: 3px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Card footer: votes + launch link */
+  .card-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 14px;
+    margin-top: 2px;
+    border-top: 1px solid var(--border);
+  }
+  .card-footer .vote-box { flex-shrink: 0; }
+  .card-footer .btn-link {
+    flex-grow: 1;
+    padding: 8px;
+    font-size: 0.85rem;
+  }
+  
+  /* NSFW Card Tag */
+  .badge-nsfw {
+    font-size: 0.7rem;
+    color: var(--nsfw);
+    border: 1px solid var(--nsfw);
+    background: rgba(255, 82, 82, 0.05);
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+  }
+
+  .char-desc { 
+    color: var(--dim); 
+    font-size: 0.9rem; 
+    margin: 0; 
+    line-height: 1.5; 
+    text-align: left;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    transition: -webkit-line-clamp 0.2s;
+  }
+  .char-desc.expanded {
+    -webkit-line-clamp: unset;
+    overflow: visible;
+  }
+  .desc-toggle {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.78rem;
+    padding: 2px 0 0 0;
+    align-self: flex-start;
+    transition: opacity 0.2s;
+  }
+  .desc-toggle:hover { opacity: 0.7; }
+  
+  .tag-box { 
+    display: flex; 
+    flex-wrap: wrap; 
+    gap: 6px; 
+    margin-top: auto;
+  }
+  .tag { 
+    font-size: 0.72rem; 
+    background: #0d0d0d; 
+    border: 1px solid var(--border); 
+    padding: 3px 10px; 
+    color: #999; 
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .char-card:hover .tag { border-color: #222; }
+
+  /* Card link button */
+  .btn-link {
+    display: block;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 10px;
+    border-radius: 6px;
+    text-align: center;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+    transition: background 0.2s, color 0.2s;
+  }
+  .btn-link:hover { 
+    background: var(--accent); 
+    color: #000000; 
+  }
+
+  /* Delete button on card */
+  .delete-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: none;
+    border: none;
+    color: #333;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 4px;
+    transition: color 0.2s;
+  }
+  .delete-btn:hover { color: var(--nsfw); }
+
+  /* Vote box on card */
+  .vote-box {
+    display: flex;
+    gap: 10px;
+  }
+  .vote-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: #0d0d0d;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    padding: 7px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: bold;
+    transition: border-color 0.2s, color 0.2s, background 0.2s, transform 0.1s;
+  }
+  .vote-btn:hover { border-color: var(--border-hover); color: #fff; }
+  .vote-btn:active { transform: scale(0.95); }
+  .vote-btn.up.active { color: var(--accent); border-color: var(--accent); background: rgba(79, 195, 247, 0.08); }
+  .vote-btn.down.active { color: var(--nsfw); border-color: var(--nsfw); background: rgba(255, 82, 82, 0.08); }
+
+  /* Allow uppercase in the character name input */
+  #nameInput { text-transform: none; }
+
+  /* Loading indicator */
+  #loadingEl {
+    text-align: center;
+    margin-top: 60px;
+    color: var(--dim);
+    font-size: 1rem;
+    letter-spacing: 1px;
+  }
+  #loadingEl::after {
+    content: '';
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    margin-left: 10px;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Connection status dot removed */
+
+  /* Custom Warning Modal overlay */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .modal-content {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 30px;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    border-radius: 8px;
+  }
+  .modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  .btn-modal {
+    padding: 10px 20px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: white;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.9rem;
+    border-radius: 4px;
+  }
+  .btn-modal.confirm {
+    border-color: var(--nsfw);
+    color: var(--nsfw);
+  }
+  .btn-modal:hover { background: #111; }
+
+  /* Slide-Out Drawer for Comments */
+  .drawer {
+    position: fixed;
+    top: 0;
+    right: -450px; /* Hidden off-screen */
+    width: 450px;
+    max-width: 100%;
+    height: 100vh;
+    background: var(--card);
+    border-left: 1px solid var(--border);
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+  }
+  .drawer.open {
+    right: 0;
+  }
+  .drawer-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .close-drawer-btn {
+    background: none;
+    border: none;
+    color: var(--dim);
+    font-size: 1.8rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px;
+    transition: color 0.2s;
+  }
+  .close-drawer-btn:hover {
+    color: var(--accent);
+  }
+  .drawer-body {
+    flex-grow: 1;
+    padding: 10px;
+    background: #000000; /* Solid black base helps transparent comments pop */
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Tabbed Comments */
+  .comment-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+    flex-shrink: 0;
+  }
+  .comment-tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--dim);
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: bold;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .comment-tab:hover { color: #fff; }
+  .comment-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .comment-ctn {
+    flex-grow: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .comment-widget-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Dark overlay backdrop when drawer opens */
+  .drawer-backdrop {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    z-index: 999;
+  }
+  .drawer-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Small Screen Responsive Adjustments */
+  @media (max-width: 600px) {
+    .controls {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+    }
+    .control-actions {
+      justify-content: space-between;
+    }
+    #searchInput {
+      width: 100%;
+    }
+    .filter-bar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .sort-select {
+      width: 100%;
+    }
+  }
+
+  /* Advanced Filter Bar */
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 12px 15px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .filter-label {
+    font-size: 0.8rem;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+  .sort-select {
+    background: #000;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .sort-select:focus { border-color: var(--accent); }
+  .sort-select option { background: #000; }
+
+  /* Tag cloud for filtering */
+  .tag-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  .tag-cloud:empty { display: none; }
+  .filter-tag {
+    font-size: 0.75rem;
+    background: #111;
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    color: #aaa;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .filter-tag:hover { border-color: var(--border-hover); color: #fff; }
+  .filter-tag.active {
+    background: rgba(79, 195, 247, 0.12);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Clear filters button */
+  .btn-clear-filters {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.2s;
+  }
+  .btn-clear-filters:hover { border-color: var(--nsfw); color: var(--nsfw); }
+
+  /* Show-hidden toggle in filter bar */
+  .show-hidden-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--dim);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .show-hidden-wrap input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--nsfw);
+    cursor: pointer;
+  }
+
+  /* Hidden/low-rated character cards */
+  .char-card.hidden-card {
+    opacity: 0.5;
+    border-color: #2a1111;
+    border-style: dashed;
+  }
+  .char-card.hidden-card:hover { opacity: 0.75; }
+  .badge-hidden {
+    font-size: 0.7rem;
+    color: var(--nsfw);
+    border: 1px solid var(--nsfw);
+    background: rgba(255, 82, 82, 0.05);
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+  }
+
+  /* Admin moderation controls */
+  .btn-discussion.admin-active {
+    border-color: var(--nsfw);
+    color: var(--nsfw);
+    background: rgba(255, 82, 82, 0.05);
+  }
+  .admin-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .admin-hide-btn {
+    background: #1a0808;
+    border: 1px solid #331111;
+    color: var(--nsfw);
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: bold;
+    transition: background 0.2s;
+  }
+  .admin-hide-btn:hover { background: #2a1111; }
+  .submitter-id { color: #444; font-size: 0.7rem; word-break: break-all; }
+
+  /* Compact feedback notice — single line, doesn't block comments */
+  .feedback-notice {
+    background: rgba(79, 195, 247, 0.05);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 7px 10px;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--dim);
+    flex-shrink: 0;
+  }
+  .feedback-notice a { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
+  .feedback-notice a:hover { opacity: 0.8; }
+  .feedback-notice .report-prefix { color: var(--nsfw); font-weight: bold; }
+</style>
+
+<div class="wrapper">
+  <!-- Connection status dot removed -->
+
+  <!-- Library Header -->
+  <header>
+    <h1 style="margin:0; font-size: 2.5rem; letter-spacing: -1px;">acc library</h1>
+    <p style="color: var(--dim); margin:0;">upload and share perchance character links</p>
+    <p style="color: var(--nsfw); font-size: 0.8rem; margin: 6px 0 0 0; opacity: 0.7;">rules: nsfw is allowed, but no extreme stuff please.</p>
+  </header>
+
+  <!-- Collapsible Submission Form -->
+  <details id="addSection">
+    <summary>+ submit a new character</summary>
+    <div class="form">
+      <!-- Submission Rules / Guidelines Callout -->
+      <p style="grid-column: 1 / -1; color: var(--nsfw); border: 1px solid #221111; background: rgba(255, 82, 82, 0.03); padding: 12px; margin: 0 0 10px 0; border-radius: 4px; font-size: 0.9rem; line-height: 1.4; letter-spacing: 0.5px;">
+        guideline: nsfw content is allowed in this library, but absolutely no extreme, illegal, non-consensual, or excessively violent stuff. content violating this rule will be deleted immediately and submitters banned.
+      </p>
+
+      <input id="nameInput" placeholder="character name">
+      <input id="linkInput" placeholder="perchance character share link">
+      <input id="pfpInput" placeholder="pfp image url (optional)">
+      <input id="tagsInput" placeholder="tags (comma separated)">
+      <textarea id="descInput" placeholder="short character description..."></textarea>
+      
+      <label class="nsfw-submit-wrap">
+        <input type="checkbox" id="nsfwInput">
+        <span>this character is nsfw</span>
+      </label>
+      
+      <button class="btn-submit" id="submitBtn">add character to library</button>
+      <div id="statusEl" style="grid-column: 1/-1; font-size: 12px; text-align: center; color: var(--accent);"></div>
+    </div>
+  </details>
+
+  <!-- Sticky Top Bar Controls -->
+  <div class="controls">
+    <input id="searchInput" placeholder="search characters...">
+    
+    <div class="control-actions">
+      <button id="rulesBtn" class="btn-discussion">
+        <span>rules</span>
+        <span>📜</span>
+      </button>
+      
+      <button id="commentsBtn" class="btn-discussion">
+        <span>discussion</span>
+        <span>💬</span>
+      </button>
+      <button id="modBtn" class="btn-discussion" hidden>
+        <span>mod</span>
+        <span>🛡️</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Advanced Filter Bar -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <span class="filter-label">sort by:</span>
+      <select class="sort-select" id="sortSelect">
+        <option value="newest">newest</option>
+        <option value="oldest">oldest</option>
+        <option value="top">top rated</option>
+        <option value="most-upvoted">most upvoted</option>
+        <option value="most-downvoted">most downvoted</option>
+        <option value="most-discussed">most voted</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">content:</span>
+      <select class="sort-select" id="nsfwFilter">
+        <option value="sfw">sfw only</option>
+        <option value="all">all</option>
+        <option value="nsfw">nsfw only</option>
+      </select>
+    </div>
+    <button class="btn-clear-filters" id="clearFiltersBtn">clear filters</button>
+    <label class="show-hidden-wrap">
+      <input type="checkbox" id="showHiddenInput">
+      <span>show hidden</span>
+    </label>
+  </div>
+  <div class="tag-cloud" id="tagCloud"></div>
+
+  <!-- Dynamic Character Grid -->
+  <div id="listCtn"></div>
+  <p id="loadingEl">connecting to server</p>
+  <p id="emptyEl" hidden style="text-align:center; margin-top:50px; opacity: 0.3;">no characters found</p>
+</div>
+
+<!-- Age Verification Warning Modal -->
+<div id="ageModal" class="modal-overlay">
+  <div class="modal-content">
+    <h2 style="margin: 0; color: var(--nsfw); font-size: 1.5rem; letter-spacing: 1px;">nsfw content warning</h2>
+    <p style="color: var(--dim); margin: 0; line-height: 1.4;">
+      enabling this will show adult (18+) characters. if you are under 18, please turn back.
+    </p>
+    <p style="color: white; font-weight: bold; margin: 0;">
+      are you 18 or older and wish to proceed?
+    </p>
+    <div class="modal-buttons">
+      <button class="btn-modal confirm" id="confirmAgeYes">yes, proceed</button>
+      <button class="btn-modal" id="confirmAgeNo">no, cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Full Rules & Chat Rules Modal (IFrame) -->
+<div id="rulesModal" class="modal-overlay" style="display: none;">
+  <div class="modal-content" style="max-width: 800px; width: 90%; height: 80vh; padding: 0; gap: 0; overflow: hidden;">
+    <div style="padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+      <h2 style="margin: 0; color: var(--accent); font-size: 1.5rem; letter-spacing: 1px;">library & chat rules</h2>
+      <button id="closeRulesBtn" style="background: none; border: none; color: var(--dim); font-size: 1.8rem; cursor: pointer; line-height: 1; padding: 4px;">×</button>
+    </div>
+    <div style="flex-grow: 1; padding: 20px; background: #000; min-height: 0;">
+      <iframe id="rulesFrame" style="width: 100%; height: 100%; border: none; border-radius: 6px; background: var(--card);"></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- Discussion Drawer Overlay -->
+<div id="drawerBackdrop" class="drawer-backdrop"></div>
+<div id="commentsDrawer" class="drawer">
+  <div class="drawer-header">
+    <h2 style="margin: 0; font-size: 1.6rem; letter-spacing: -0.5px;">discussion</h2>
+    <button class="close-drawer-btn" id="closeCommentsBtn">×</button>
+  </div>
+  <div class="drawer-body">
+    <div class="comment-tabs" id="commentTabs">
+      <button class="comment-tab active" data-channel="acc-library">general</button>
+      <button class="comment-tab" data-channel="acc-library-requests">requests</button>
+      <button class="comment-tab" data-channel="acc-library-feedback">feedback</button>
+    </div>
+    <div class="comment-ctn" id="commentCtn"></div>
+  </div>
+</div>
+
+<script type="text/x-server-plugin">
+  // --- UTF-8 encode/decode (no TextEncoder in server isolate) ---
+  function utf8Encode(str) {
+    const bytes = [];
+    for (let i = 0; i < str.length; i++) {
+      let c = str.charCodeAt(i);
+      if (c < 0x80) bytes.push(c);
+      else if (c < 0x800) { bytes.push(0xC0|(c>>6), 0x80|(c&0x3F)); }
+      else if (c >= 0xD800 && c <= 0xDBFF) {
+        i++;
+        const c2 = str.charCodeAt(i);
+        const cp = 0x10000 + ((c & 0x3FF) << 10) + (c2 & 0x3FF);
+        bytes.push(0xF0|(cp>>18), 0x80|((cp>>12)&0x3F), 0x80|((cp>>6)&0x3F), 0x80|(cp&0x3F));
+      } else {
+        bytes.push(0xE0|(c>>12), 0x80|((c>>6)&0x3F), 0x80|(c&0x3F));
+      }
+    }
+    return new Uint8Array(bytes);
+  }
+  function utf8Decode(bytes) {
+    let str = '';
+    for (let i = 0; i < bytes.length; i++) {
+      const b = bytes[i];
+      if (b < 0x80) str += String.fromCharCode(b);
+      else if (b < 0xE0) { str += String.fromCharCode(((b&0x1F)<<6)|(bytes[++i]&0x3F)); }
+      else if (b < 0xF0) { str += String.fromCharCode(((b&0x0F)<<12)|((bytes[++i]&0x3F)<<6)|(bytes[++i]&0x3F)); }
+      else {
+        const cp = ((b&0x07)<<18)|((bytes[++i]&0x3F)<<12)|((bytes[++i]&0x3F)<<6)|(bytes[++i]&0x3F);
+        const adj = cp - 0x10000;
+        str += String.fromCharCode(0xD800|(adj>>10), 0xDC00|(adj&0x3FF));
+      }
+    }
+    return str;
+  }
+
+  // --- Synchronous pure-JS SHA-256 (server isolate has no crypto.subtle) ---
+  function sha256Hex(ascii) {
+    function rightRotate(value, amount) {
+      return (value >>> amount) | (value << (32 - amount));
+    }
+    var mathPow = Math.pow;
+    var maxWord = mathPow(2, 32);
+    var lengthProperty = 'length';
+    var i, j;
+    var result = '';
+    var words = [];
+    var asciiBitLength = ascii[lengthProperty] * 8;
+    var hash = [];
+    var k = [];
+    var primeCounter = 0;
+    var isComposite = {};
+    for (var candidate = 2; primeCounter < 64; candidate++) {
+      if (!isComposite[candidate]) {
+        for (i = 0; i < 313; i += candidate) {
+          isComposite[i] = candidate;
+        }
+        hash[primeCounter] = (mathPow(candidate, .5) * maxWord) | 0;
+        k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+      }
+    }
+    ascii += '\x80';
+    while (ascii[lengthProperty] % 64 - 56) ascii += '\x00';
+    for (i = 0; i < ascii[lengthProperty]; i++) {
+      j = ascii.charCodeAt(i);
+      if (j >> 8) return;
+      words[i >> 2] |= j << ((3 - i) % 4) * 8;
+    }
+    words[words[lengthProperty]] = ((asciiBitLength / maxWord) | 0);
+    words[words[lengthProperty]] = (asciiBitLength);
+    for (j = 0; j < words[lengthProperty]; ) {
+      var w = words.slice(j, j += 16);
+      var oldHash = hash;
+      hash = hash.slice(0, 8);
+      for (i = 0; i < 64; i++) {
+        var w15 = w[i - 15], w2 = w[i - 2];
+        var a = hash[0], e = hash[4];
+        var temp1 = hash[7]
+          + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25))
+          + ((e & hash[5]) ^ ((~e) & hash[6]))
+          + k[i]
+          + (w[i] = (i < 16) ? w[i] : (
+              w[i - 16]
+              + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3))
+              + w[i - 7]
+              + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))
+            ) | 0
+          );
+        var temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22))
+          + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+        hash = [(temp1 + temp2) | 0].concat(hash);
+        hash[4] = (hash[4] + temp1) | 0;
+      }
+      for (i = 0; i < 8; i++) {
+        hash[i] = (hash[i] + oldHash[i]) | 0;
+      }
+    }
+    for (i = 0; i < 8; i++) {
+      for (j = 3; j + 1; j--) {
+        var b = (hash[i] >> (j * 8)) & 255;
+        result += ((b < 16) ? 0 : '') + b.toString(16);
+      }
+    }
+    return result;
+  }
+
+  function sanitizeText(str) {
+    return String(str).replace(/[\x00-\x1F\x7F\u200B-\u200F\u202A-\u202E]/g, '');
+  }
+
+  // --- Durable state: [1 version][4 length][json bytes...] ---
+  function loadChars() {
+    if (state[0] === 0) return [];
+    const len = (state[1]<<24)|(state[2]<<16)|(state[3]<<8)|state[4];
+    if (len === 0 || len > state.length - 5) return [];
+    const bytes = new Uint8Array(state.buffer, 5, len);
+    try { return JSON.parse(utf8Decode(bytes)) || []; } catch(e) { return []; }
+  }
+  function saveChars(chars) {
+    const bytes = utf8Encode(JSON.stringify(chars));
+    if (bytes.length > state.length - 5) return false;
+    state[0] = 1;
+    state[1] = (bytes.length>>24)&0xFF;
+    state[2] = (bytes.length>>16)&0xFF;
+    state[3] = (bytes.length>>8)&0xFF;
+    state[4] = bytes.length&0xFF;
+    state.set(bytes, 5);
+    return true;
+  }
+  function sanitizeForClient(chars) {
+    return chars.map(function(c) {
+      const s = {};
+      for (const k in c) {
+        if (k === "ownerToken" || k === "netVoters") continue;
+        s[k] = c[k];
+      }
+      delete s.voters;
+      return s;
+    });
+  }
+
+  function getYourVotes(chars, connId) {
+    const votes = {};
+    for (const c of chars) {
+      if (c.voters && c.voters[connId]) votes[c.id] = c.voters[connId];
+    }
+    return votes;
+  }
+
+  function broadcast(chars) {
+    pubsub.publish("library", JSON.stringify({type:"update", chars: sanitizeForClient(chars)}));
+  }
+
+  const ADMIN_HASH = "ca988aa08b135421fe05665b7781ebb101d9f676717bec1aac98881896bb4979";
+  const adminSessionTokens = new Map();
+  const connToToken = new Map();
+  const authAttempts = new Map();
+  const rateLimits = new Map();
+  const MAX_AUTH_ATTEMPTS = 5;
+  const AUTH_WINDOW_MS = 60000;
+  const MAX_CHARS = 2000;
+  const ADMIN_TOKEN_TTL = 3600000;
+  let lastTokenCleanup = 0;
+
+  const RATE_LIMITS = {
+    add:    { max: 5,  windowMs: 60000 },
+    delete: { max: 10, windowMs: 60000 },
+    vote:   { max: 30, windowMs: 60000 },
+  };
+
+  function allowAuthAttempt(conn) {
+    const now = Date.now();
+    let entry = authAttempts.get(conn.id);
+    if (!entry || now - entry.firstAttempt > AUTH_WINDOW_MS) {
+      entry = { count: 0, firstAttempt: now };
+      authAttempts.set(conn.id, entry);
+    }
+    entry.count++;
+    return entry.count <= MAX_AUTH_ATTEMPTS;
+  }
+
+  function checkRateLimit(connId, action) {
+    const limit = RATE_LIMITS[action];
+    if (!limit) return true;
+    let connLimits = rateLimits.get(connId);
+    if (!connLimits) { connLimits = new Map(); rateLimits.set(connId, connLimits); }
+    const now = Date.now();
+    let entry = connLimits.get(action);
+    if (!entry || now - entry.firstAttempt > limit.windowMs) {
+      entry = { count: 0, firstAttempt: now };
+      connLimits.set(action, entry);
+    }
+    entry.count++;
+    return entry.count <= limit.max;
+  }
+
+  function isAdminConn(conn) {
+    const token = connToToken.get(conn.id);
+    if (!token) return false;
+    const entry = adminSessionTokens.get(token);
+    if (!entry) { connToToken.delete(conn.id); return false; }
+    if (Date.now() - entry.created > ADMIN_TOKEN_TTL) {
+      adminSessionTokens.delete(token);
+      connToToken.delete(conn.id);
+      return false;
+    }
+    return true;
+  }
+
+  function cleanupExpiredTokens() {
+    const now = Date.now();
+    if (now - lastTokenCleanup < 300000) return;
+    lastTokenCleanup = now;
+    for (const [token, entry] of adminSessionTokens) {
+      if (now - entry.created > ADMIN_TOKEN_TTL) adminSessionTokens.delete(token);
+    }
+  }
+
+  self.onopen = ({conn}) => {
+    conn.subscribe("library");
+    const chars = loadChars();
+    conn.send(JSON.stringify({type:"snapshot", chars: sanitizeForClient(chars), yourVotes: getYourVotes(chars, conn.id)}));
+  };
+
+  self.onclose = ({conn}) => {
+    connToToken.delete(conn.id);
+    authAttempts.delete(conn.id);
+    rateLimits.delete(conn.id);
+  };
+
+  self.onmessage = ({conn, data}) => {
+    if (typeof data !== "string") return;
+    let msg;
+    try { msg = JSON.parse(data); } catch(e) { return; }
+    if (!msg || typeof msg.type !== "string") return;
+    const chars = loadChars();
+    let changed = false;
+
+    if (msg.type === "add" && msg.char) {
+      if (!checkRateLimit(conn.id, "add")) return;
+      if (chars.length >= MAX_CHARS) {
+        conn.send(JSON.stringify({type:"error", message:"library is full (" + MAX_CHARS + " max)"}));
+        return;
+      }
+      const c = msg.char;
+      if (typeof c.name === "string" && c.name.length > 0 && c.name.length <= 100 &&
+          typeof c.link === "string" && c.link.length > 0 && c.link.length <= 500 &&
+          /^https?:\/\/perchance\.org\/ai-character-chat\?data=.+\.gz$/i.test(c.link)) {
+        const ownerToken = Date.now().toString(36) + Math.random().toString(36).slice(2);
+        const clean = {
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 10),
+          name: sanitizeText(c.name).slice(0, 100),
+          link: c.link,
+          pfp: (typeof c.pfp === "string" && /^https?:\/\/.+/i.test(c.pfp)) ? c.pfp.slice(0, 500) : "",
+          tags: Array.isArray(c.tags) ? c.tags.slice(0, 10).map(function(t) { return sanitizeText(t).slice(0, 30); }).filter(Boolean) : [],
+          desc: typeof c.desc === "string" ? sanitizeText(c.desc).slice(0, 500) : "",
+          nsfw: !!c.nsfw,
+          ownerToken: ownerToken,
+          upvotes: 0,
+          downvotes: 0,
+          voters: {},
+          netVoters: {},
+          time: Date.now()
+        };
+        chars.unshift(clean);
+        changed = true;
+        conn.send(JSON.stringify({type:"addResult", id: clean.id, token: ownerToken}));
+      }
+    } else if (msg.type === "delete" && msg.id) {
+      if (!checkRateLimit(conn.id, "delete")) return;
+      const idx = chars.findIndex(function(c) { return c.id === msg.id; });
+      if (idx >= 0 && typeof msg.token === "string" && chars[idx].ownerToken === msg.token) {
+        chars.splice(idx, 1);
+        changed = true;
+      }
+    } else if (msg.type === "vote" && msg.id && (msg.dir === 1 || msg.dir === -1)) {
+      if (!checkRateLimit(conn.id, "vote")) return;
+      const c = chars.find(function(c) { return c.id === msg.id; });
+      if (c) {
+        if (!c.voters) c.voters = {};
+        if (!c.netVoters) c.netVoters = {};
+        const netKey = conn.net ? conn.net[3] : 0;
+        const prevNet = c.netVoters[netKey];
+        if (prevNet !== undefined && prevNet !== conn.id) {
+          return;
+        }
+        const prev = c.voters[conn.id] || 0;
+        if (prev === msg.dir) {
+          if (msg.dir === 1) c.upvotes = Math.max(0, c.upvotes - 1);
+          else c.downvotes = Math.max(0, c.downvotes - 1);
+          delete c.voters[conn.id];
+          delete c.netVoters[netKey];
+        } else {
+          if (prev === 1) c.upvotes = Math.max(0, c.upvotes - 1);
+          else if (prev === -1) c.downvotes = Math.max(0, c.downvotes - 1);
+          if (msg.dir === 1) c.upvotes++;
+          else c.downvotes++;
+          c.voters[conn.id] = msg.dir;
+          c.netVoters[netKey] = conn.id;
+        }
+        changed = true;
+        conn.send(JSON.stringify({type:"voteResult", id: c.id, dir: msg.dir}));
+      }
+    } else if (msg.type === "adminDelete" && msg.id && isAdminConn(conn)) {
+      const idx = chars.findIndex(function(c) { return c.id === msg.id; });
+      if (idx >= 0) {
+        chars.splice(idx, 1);
+        changed = true;
+      }
+    } else if (msg.type === "adminHide" && msg.id && isAdminConn(conn)) {
+      const c = chars.find(function(c) { return c.id === msg.id; });
+      if (c) {
+        c.modHidden = !c.modHidden;
+        changed = true;
+      }
+    } else if (msg.type === "adminLogin") {
+      cleanupExpiredTokens();
+      if (msg.sessionToken && typeof msg.sessionToken === "string") {
+        const entry = adminSessionTokens.get(msg.sessionToken);
+        if (entry && Date.now() - entry.created <= ADMIN_TOKEN_TTL) {
+          connToToken.set(conn.id, msg.sessionToken);
+          conn.send(JSON.stringify({type: "adminLoginResult", success: true, sessionToken: msg.sessionToken}));
+        } else {
+          if (entry) adminSessionTokens.delete(msg.sessionToken);
+          conn.send(JSON.stringify({type: "adminLoginResult", success: false}));
+        }
+        return;
+      }
+      if (!allowAuthAttempt(conn)) {
+        conn.send(JSON.stringify({type: "adminLoginResult", success: false, error: "rate_limited"}));
+        return;
+      }
+      const password = typeof msg.password === "string" ? msg.password : "";
+      const hash = sha256Hex("perchance-comments-plugin|" + password);
+      if (hash === ADMIN_HASH) {
+        const sessionToken = Date.now().toString(36) + Math.random().toString(36).slice(2);
+        adminSessionTokens.set(sessionToken, {created: Date.now()});
+        connToToken.set(conn.id, sessionToken);
+        conn.send(JSON.stringify({type: "adminLoginResult", success: true, sessionToken: sessionToken}));
+      } else {
+        conn.send(JSON.stringify({type: "adminLoginResult", success: false}));
+      }
+    } else if (msg.type === "adminLogout") {
+      const token = connToToken.get(conn.id);
+      if (token) {
+        adminSessionTokens.delete(token);
+        connToToken.delete(conn.id);
+      }
+      conn.send(JSON.stringify({type: "adminLogoutResult"}));
+    }
+
+    if (changed) {
+      if (!saveChars(chars)) {
+        conn.send(JSON.stringify({type:"error", message:"storage full, data may not persist"}));
+      }
+      broadcast(chars);
+    }
+  };
+</script>
+
+
+
+<script type="module">
+  // ─── Constants ───
+  const ADMIN_HASH = 'ca988aa08b135421fe05665b7781ebb101d9f676717bec1aac98881896bb4979';
+  const LINK_REGEX = /^https?:\/\/perchance\.org\/ai-character-chat\?data=.+\.gz$/i;
+  const HIDE_THRESHOLD = -5;
+
+  const SORT_FNS = {
+    'newest':         (a, b) => (b.time || 0) - (a.time || 0),
+    'oldest':         (a, b) => (a.time || 0) - (b.time || 0),
+    'top':            (a, b) => netScore(b) - netScore(a),
+    'most-upvoted':   (a, b) => (b.upvotes || 0) - (a.upvotes || 0),
+    'most-downvoted': (a, b) => (b.downvotes || 0) - (a.downvotes || 0),
+    'most-discussed': (a, b) => totalVotes(b) - totalVotes(a),
+  };
+
+  // ─── State ───
+  let chars = [];
+  let socket = null;
+  let connected = false;
+  let myVotes = {};
+  let isAdmin = false;
+  let adminSessionToken = null;
+  let pendingAuthType = null;
+  let activeTags = new Set();
+  let currentSort = 'newest';
+  let showHidden = localStorage.getItem('acc_show_hidden') === 'true';
+
+  // ─── User Identity ───
+  let userId = localStorage.getItem('acc_user_id');
+  if (!userId) {
+    userId = 'u_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem('acc_user_id', userId);
+  }
+
+  let ownershipTokens = {};
+  try { ownershipTokens = JSON.parse(localStorage.getItem('acc_ownership_tokens') || '{}'); } catch {}
+  const saveOwnershipTokens = () => localStorage.setItem('acc_ownership_tokens', JSON.stringify(ownershipTokens));
+
+  // ─── Utilities ───
+  const esc = (s) => {
+    if (!s) return '';
+    return s.toString()
+      .split('&').join('&amp;')
+      .split('<').join('&lt;')
+      .split('>').join('&gt;')
+      .split('"').join('&quot;')
+      .split("'").join('&#39;');
+  };
+
+  const netScore = (c) => (c.upvotes || 0) - (c.downvotes || 0);
+  const totalVotes = (c) => (c.upvotes || 0) + (c.downvotes || 0);
+  const isHidden = (c) => netScore(c) <= HIDE_THRESHOLD || !!c.modHidden;
+
+  // ─── Server Connection ───
+  const send = (msg) => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(msg));
+    }
+  };
+
+  function connect() {
+    socket = root.createServerSocket();
+
+    socket.addEventListener('open', () => {
+      connected = true;
+      if (adminSessionToken) {
+        pendingAuthType = 'token';
+        send({ type: 'adminLogin', sessionToken: adminSessionToken });
+      }
+    });
+
+    socket.addEventListener('message', (event) => {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
+
+      if (msg.type === 'voteResult') {
+        myVotes[msg.id] = msg.dir;
+        renderList();
+        return;
+      }
+
+      if (msg.type === 'adminLogoutResult') {
+        isAdmin = false;
+        adminSessionToken = null;
+        modBtn.classList.remove('admin-active');
+        renderList();
+        return;
+      }
+
+      if (msg.type === 'addResult') {
+        ownershipTokens[msg.id] = msg.token;
+        saveOwnershipTokens();
+        return;
+      }
+
+      if (msg.type === 'error') {
+        statusEl.textContent = msg.message || 'error';
+        setTimeout(() => { if (statusEl.textContent === msg.message) statusEl.textContent = ''; }, 5000);
+        return;
+      }
+
+      if (msg.type === 'adminLoginResult') {
+        if (msg.success) {
+          isAdmin = true;
+          if (msg.sessionToken) adminSessionToken = msg.sessionToken;
+          modBtn.classList.add('admin-active');
+          renderList();
+        } else {
+          if (pendingAuthType === 'token') {
+            adminSessionToken = null;
+          } else {
+            alert(msg.error === 'rate_limited' ? 'too many attempts, try again later' : 'incorrect admin password');
+          }
+        }
+        pendingAuthType = null;
+        return;
+      }
+
+      if (msg.type === 'snapshot' || msg.type === 'update') {
+        if (msg.yourVotes) myVotes = msg.yourVotes;
+        chars = Array.isArray(msg.chars) ? msg.chars : [];
+        loadingEl.hidden = true;
+        if (msg.type === 'snapshot' && chars.length === 0 && !localStorage.getItem('acc_migrated')) {
+          migrateLocalChars();
+        }
+        refreshAll();
+      }
+    });
+
+    socket.addEventListener('close', () => {
+      connected = false;
+      loadingEl.textContent = 'reconnecting...';
+      loadingEl.hidden = false;
+      setTimeout(connect, 3000);
+    });
+  }
+
+  async function migrateLocalChars() {
+    localStorage.setItem('acc_migrated', '1');
+    try {
+      const local = await root.kv.accLibrary.get('chars');
+      if (Array.isArray(local) && local.length > 0) {
+        local.forEach((c) => send({ type: 'add', char: c }));
+      }
+    } catch {}
+  }
+
+  // ─── Character Operations ───
+  function addChar() {
+    const name = nameInput.value.trim();
+    const link = linkInput.value.trim();
+    const pfp = pfpInput.value.trim();
+    const tags = tagsInput.value.split(',').map((t) => t.trim()).filter(Boolean);
+    const desc = descInput.value.trim();
+    const isNsfw = nsfwInput.checked;
+
+    if (!name || !link) { alert('name and link are required'); return; }
+    if (!connected) { alert('not connected to server yet'); return; }
+    if (!LINK_REGEX.test(link)) {
+      alert('invalid link. must be a perchance character share link:\nhttps://perchance.org/ai-character-chat?data=Name~hash.gz');
+      return;
+    }
+
+    send({ type: 'add', char: { name, link, pfp, tags, desc, nsfw: isNsfw } });
+
+    [nameInput, linkInput, pfpInput, tagsInput, descInput].forEach((el) => el.value = '');
+    nsfwInput.checked = false;
+    addSection.removeAttribute('open');
+
+    statusEl.textContent = 'character added to database';
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+  }
+
+  function deleteChar(id) {
+    const c = chars.find((c) => c.id === id);
+    if (!c) return;
+    const token = ownershipTokens[id];
+    if (!token) { alert('you can only delete characters submitted from this browser.'); return; }
+    if (!confirm('remove this character from the library?')) return;
+    send({ type: 'delete', id, token });
+  }
+
+  const vote = (id, dir) => send({ type: 'vote', id, dir });
+
+  // ─── Admin Operations ───
+  async function adminLogin() {
+    if (isAdmin) {
+      send({ type: 'adminLogout' });
+      return;
+    }
+    const password = prompt('enter admin password:');
+    if (!password) return;
+    pendingAuthType = 'password';
+    send({ type: 'adminLogin', password });
+  }
+
+  function adminDeleteChar(id) {
+    if (!isAdmin) return;
+    if (!confirm('moderator delete: remove this character from the library?')) return;
+    send({ type: 'adminDelete', id });
+  }
+
+  const adminToggleHide = (id) => {
+    if (!isAdmin) return;
+    send({ type: 'adminHide', id });
+  };
+
+  // ─── NSFW / Age Verification ───
+  function onNsfwFilterChange() {
+    const val = nsfwFilter.value;
+    if ((val === 'all' || val === 'nsfw') && localStorage.getItem('nsfw_verified') !== 'true') {
+      nsfwFilter.dataset.pending = val;
+      nsfwFilter.value = localStorage.getItem('nsfw_last') || 'sfw';
+      ageModal.style.display = 'flex';
+      return;
+    }
+    localStorage.setItem('nsfw_last', val);
+    renderList();
+  }
+
+  function confirmAge(isOfAge) {
+    ageModal.style.display = 'none';
+    const val = isOfAge ? (nsfwFilter.dataset.pending || 'all') : 'sfw';
+    if (isOfAge) localStorage.setItem('nsfw_verified', 'true');
+    nsfwFilter.value = val;
+    localStorage.setItem('nsfw_last', val);
+    renderList();
+  }
+
+  // ─── Filtering & Rendering ───
+  function getAllTags() {
+    const set = new Set();
+    chars.forEach((c) => (c.tags || []).forEach((t) => set.add(t)));
+    return [...set].sort();
+  }
+
+  function getFilteredChars() {
+    const q = searchInput.value.toLowerCase();
+    const nsfwMode = nsfwFilter.value;
+
+    return chars.filter((c) => {
+      const matchesSearch = c.name.toLowerCase().includes(q) ||
+                            (c.tags || []).some((t) => t.toLowerCase().includes(q)) ||
+                            (c.desc && c.desc.toLowerCase().includes(q));
+      const nsfwCheck = nsfwMode === 'all' ? true : nsfwMode === 'nsfw' ? c.nsfw : !c.nsfw;
+      const tagCheck = activeTags.size === 0 || (c.tags || []).some((t) => activeTags.has(t));
+      const hiddenCheck = showHidden || !isHidden(c);
+      return matchesSearch && nsfwCheck && tagCheck && hiddenCheck;
+    });
+  }
+
+  function buildCard(c) {
+    const tagsHtml = (c.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join('');
+    const score = netScore(c);
+    const myVote = myVotes[c.id] || 0;
+    const pfpUrl = esc(c.pfp);
+
+    let badges = '';
+    if (c.nsfw) badges += '<span class="badge-nsfw">nsfw</span>';
+    if (isHidden(c)) badges += '<span class="badge-hidden">hidden</span>';
+
+    const canDelete = ownershipTokens[c.id] || isAdmin;
+    const deleteHtml = canDelete
+      ? `<button class="delete-btn" data-id="${c.id}" title="${ownershipTokens[c.id] ? 'remove' : 'mod delete'}">×</button>`
+      : '';
+
+    const adminHtml = isAdmin
+      ? `<div class="admin-controls"><button class="admin-hide-btn" data-id="${c.id}">${c.modHidden ? 'unhide' : 'hide'}</button></div>`
+      : '';
+
+    const pfpHtml = pfpUrl
+      ? `<img src="${pfpUrl}" class="pfp" onerror="this.style.opacity=0">`
+      : '<div class="pfp"></div>';
+
+    const card = document.createElement('div');
+    card.className = 'char-card';
+    if (isHidden(c)) card.classList.add('hidden-card');
+
+    card.innerHTML =
+      deleteHtml +
+      `<div class="char-header">${pfpHtml}` +
+        `<div class="char-info">` +
+          `<h3 class="char-name">${esc(c.name)} ${badges}</h3>` +
+          `<span class="char-score">${score >= 0 ? '+' : ''}${score} score</span>` +
+        `</div>` +
+      `</div>` +
+      `<p class="char-desc">${c.desc ? esc(c.desc) : 'no description'}</p>` +
+      `<button class="desc-toggle">...show more</button>` +
+      `<div class="tag-box">${tagsHtml}</div>` +
+      adminHtml +
+      `<div class="card-footer">` +
+        `<div class="vote-box">` +
+          `<button class="vote-btn up${myVote === 1 ? ' active' : ''}" data-id="${c.id}" data-dir="1">▲ <span>${c.upvotes || 0}</span></button>` +
+          `<button class="vote-btn down${myVote === -1 ? ' active' : ''}" data-id="${c.id}" data-dir="-1">▼ <span>${c.downvotes || 0}</span></button>` +
+        `</div>` +
+        `<a href="${esc(c.link)}" target="_blank" class="btn-link">launch ↗</a>` +
+      `</div>`;
+
+    // Hide expand button if description doesn't overflow
+    const descEl = card.querySelector('.char-desc');
+    const toggleEl = card.querySelector('.desc-toggle');
+    if (descEl && toggleEl && descEl.scrollHeight <= descEl.offsetHeight + 1) {
+      toggleEl.hidden = true;
+    }
+
+    return card;
+  }
+
+  function renderTagCloud() {
+    tagCloud.innerHTML = getAllTags().map((t) => {
+      const cls = activeTags.has(t) ? ' active' : '';
+      return `<span class="filter-tag${cls}" data-tag="${esc(t)}">${esc(t)}</span>`;
+    }).join('');
+  }
+
+  function renderList() {
+    const filtered = getFilteredChars().sort(SORT_FNS[currentSort] || SORT_FNS.newest);
+
+    listCtn.innerHTML = '';
+    emptyEl.hidden = filtered.length > 0;
+    filtered.forEach((c) => listCtn.appendChild(buildCard(c)));
+  }
+
+  const refreshAll = () => { renderTagCloud(); renderList(); };
+
+  // ─── Comments ───
+  function renderComments(channel) {
+    const widget = root.commentsPlugin({
+      channel,
+      width: '100%',
+      height: '100%',
+      adminPasswordHash: ADMIN_HASH,
+      adminFlair: '👑 admin',
+      slashCommands: {
+        help:   { output: 'commands: /rules, /uptime, /about' },
+        rules:  { output: 'rules: 1. nsfw allowed but no extreme/illegal/non-consensual content. 2. keep tags relevant. 3. be respectful. 4. only share chars you have permission to. 5. search before submitting. 6. downvote low-quality/broken chars — enough downvotes auto-hides them. violators banned.' },
+        about:  { output: 'acc library: a clean repository for perchance character sharing.' },
+        uptime: { output: 'acc library is operational.' },
+      },
+    });
+
+    if (channel === 'acc-library-feedback') {
+      commentCtn.innerHTML =
+        '<div class="feedback-notice">' +
+          'feedback helps development! for private reports (e.g. security), message me on ' +
+          '<a href="https://perchance.org/secret#MomdPQbhR3zMKVQ4mwbnzX" target="_blank">secret</a> ' +
+          'with <span class="report-prefix">[acc-lib]</span> in the title.' +
+        '</div>' +
+        '<div class="comment-widget-wrap">' + widget + '</div>';
+    } else {
+      commentCtn.innerHTML = '<div class="comment-widget-wrap">' + widget + '</div>';
+    }
+  }
+
+  // ─── Rules Document ───
+  rulesFrame.srcdoc = `<!DOCTYPE html>
+<html>
+<head>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;700&display=swap');
+  body { background: #060606; color: #fff; font-family: 'Archivo Narrow', sans-serif; text-transform: lowercase; line-height: 1.6; padding: 20px; margin: 0; }
+  h1 { color: #4fc3f7; border-bottom: 1px solid #1a1a1a; padding-bottom: 10px; font-size: 1.5rem; margin-top: 0; }
+  h2 { color: #ff5252; margin-top: 28px; font-size: 1.2rem; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 8px; color: #888; }
+  strong { color: #fff; }
+  .note { color: #4fc3f7; margin-top: 20px; border-top: 1px solid #1a1a1a; padding-top: 10px; font-size: 0.85rem; }
+  .warning { color: #ff5252; font-weight: bold; }
+</style>
+</head>
+<body>
+  <h1>library rules</h1>
+  <ul>
+    <li><strong>nsfw is allowed</strong>, but <span class="warning">absolutely no</span> extreme, illegal, non-consensual, or excessively violent content. this includes: content involving minors, real people without consent, bestiality, gore/snuff, and anything illegal under applicable law.</li>
+    <li>keep <strong>tags relevant and accurate</strong> so others can find characters easily. don't spam tags or use misleading ones.</li>
+    <li>be <strong>respectful</strong> to other users and submitters. no harassment in comments or submissions.</li>
+    <li>only submit characters you have <strong>permission to share</strong>. don't claim others' characters as your own.</li>
+    <li>provide accurate descriptions and a <strong>working</strong> perchance character share link.</li>
+    <li><strong>search before you submit</strong> — duplicates may be removed.</li>
+    <li>content violating these rules will be <strong>deleted immediately</strong> and repeat submitters banned.</li>
+  </ul>
+  <h2>chat rules</h2>
+  <ul>
+    <li>be respectful to other users. <strong>no harassment, hate speech, or personal attacks.</strong></li>
+    <li>no spamming, excessive caps, or flooding the discussion.</li>
+    <li>no doxxing or sharing personal information about others.</li>
+    <li>keep discussion relevant to the <strong>channel topic</strong> — general chat, character requests, or site feedback.</li>
+    <li>nsfw discussion is allowed only in appropriate contexts; absolutely no extreme or illegal topics.</li>
+    <li>no advertising or self-promotion outside of sharing your own characters.</li>
+    <li>use the <strong>/rules</strong> command in chat for a quick reference.</li>
+  </ul>
+  <h2>voting guidelines</h2>
+  <ul>
+    <li><strong>upvote</strong> characters you enjoy or find well-made — it helps others discover quality content.</li>
+    <li><strong>downvote</strong> characters that are low quality, misleading, have broken links, or violate rules.</li>
+    <li>don't downvote just because you dislike a concept — reserve downvotes for genuine quality issues.</li>
+    <li>characters that receive enough downvotes (net score of -5 or lower) will be <strong>automatically hidden</strong> from the default view.</li>
+    <li>hidden characters can still be viewed by enabling <strong>"show hidden"</strong> in the filter bar.</li>
+    <li>don't coordinate vote brigading — it undermines the community and may result in a ban.</li>
+  </ul>
+  <h2>submission guidelines</h2>
+  <ul>
+    <li>use the character's <strong>actual name</strong> as the title.</li>
+    <li>include a clear, concise <strong>description</strong> of the character's personality and premise.</li>
+    <li>add <strong>relevant tags</strong> (e.g. fantasy, romance, sci-fi) to help others discover your character.</li>
+    <li><strong>mark nsfw characters appropriately</strong> — failing to do so may result in removal.</li>
+    <li><strong>test your share link</strong> before submitting to ensure it works.</li>
+  </ul>
+  <p class="note">moderators reserve the right to remove any content or ban any users that disrupt the library or chat environment. if you spot rule-breaking content, downvote it and use the feedback channel to report it.</p>
+</body>
+</html>`;
+
+  // ─── Event Listeners ───
+  function initEvents() {
+    // Form & search
+    submitBtn.addEventListener('click', addChar);
+    searchInput.addEventListener('input', renderList);
+    nsfwFilter.addEventListener('change', onNsfwFilterChange);
+    confirmAgeYes.addEventListener('click', () => confirmAge(true));
+    confirmAgeNo.addEventListener('click', () => confirmAge(false));
+
+    // Filters
+    sortSelect.addEventListener('change', (e) => { currentSort = e.target.value; renderList(); });
+    clearFiltersBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      activeTags.clear();
+      currentSort = 'newest';
+      sortSelect.value = 'newest';
+      nsfwFilter.value = 'sfw';
+      renderTagCloud();
+      renderList();
+    });
+    showHiddenInput.addEventListener('change', (e) => {
+      showHidden = e.target.checked;
+      localStorage.setItem('acc_show_hidden', String(showHidden));
+      renderList();
+    });
+
+    // Tag cloud
+    tagCloud.addEventListener('click', (e) => {
+      const tag = e.target.closest('.filter-tag');
+      if (!tag) return;
+      const t = tag.dataset.tag;
+      activeTags.has(t) ? activeTags.delete(t) : activeTags.add(t);
+      renderTagCloud();
+      renderList();
+    });
+
+    // Admin (Ctrl+M)
+    modBtn.addEventListener('click', adminLogin);
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); adminLogin(); }
+    });
+
+    // Rules modal
+    rulesBtn.addEventListener('click', () => rulesModal.style.display = 'flex');
+    closeRulesBtn.addEventListener('click', () => rulesModal.style.display = 'none');
+    rulesModal.addEventListener('click', (e) => { if (e.target === rulesModal) rulesModal.style.display = 'none'; });
+
+    // Comments drawer
+    const openDrawer = () => { commentsDrawer.classList.add('open'); drawerBackdrop.classList.add('open'); };
+    const closeDrawer = () => { commentsDrawer.classList.remove('open'); drawerBackdrop.classList.remove('open'); };
+    commentsBtn.addEventListener('click', openDrawer);
+    closeCommentsBtn.addEventListener('click', closeDrawer);
+    drawerBackdrop.addEventListener('click', closeDrawer);
+
+    // Comment tabs
+    commentTabs.addEventListener('click', (e) => {
+      const tab = e.target.closest('.comment-tab');
+      if (!tab) return;
+      document.querySelectorAll('.comment-tab').forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+      renderComments(tab.dataset.channel);
+    });
+
+    // Card interactions (delegated)
+    listCtn.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const id = btn.dataset.id;
+
+      if (btn.classList.contains('delete-btn')) {
+        const c = chars.find((c) => c.id === id);
+        if (c && isAdmin && !ownershipTokens[id]) adminDeleteChar(id);
+        else deleteChar(id);
+      } else if (btn.classList.contains('desc-toggle')) {
+        const desc = btn.previousElementSibling;
+        const expanded = desc.classList.toggle('expanded');
+        btn.textContent = expanded ? 'show less' : '...show more';
+      } else if (btn.classList.contains('vote-btn')) {
+        vote(id, parseInt(btn.dataset.dir, 10));
+      } else if (btn.classList.contains('admin-hide-btn')) {
+        adminToggleHide(id);
+      }
+    });
+  }
+
+  // ─── Init ───
+  showHiddenInput.checked = showHidden;
+  initEvents();
+  renderComments('acc-library');
+  connect();
+</script>
+</body>
+</html>

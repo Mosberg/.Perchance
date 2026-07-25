@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>runescape-lite — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Created a functional "RuneScape Lite" engine in a single file.
+Features included:
+  - 3D Isometric World (Three.js)
+  - Procedural Terrain (Grass, Water, Trees, Rocks, Banks, Fires)
+  - Click-to-Move Movement System with Basic Pathfinding (BFS)
+  - Skills: Woodcutting, Mining, Attack, Fishing, Cooking, Smithing (New)
+  - Inventory System with Item Management
+  - Combat System (Goblins with AI, HP, XP drops, Loot)
+  - Equipment System (Wield items for stat bonuses)
+  - Banking System (Store items)
+  - Level Up System with notifications
+  - Save/Load System (using kv storage) - *Robustified to prevent undefined lvl errors*
+  - UI: Minimap, Chat, Inventory, Stats, Context Menus, Tabs, Settings
+  - Sound effects (synthesized via AudioContext) + Background Ambient
+  - Classic RS Color Palette and Layout
+  - AI Quest Generation (Using generateText)
+  - Camera Controls (Zoom/Pan) + Follows Player
+  - Day/Night Cycle
+  - Particle Effects for gathering
+
+FIXES & IMPROVEMENTS:
+  - Fixed Three.js "reading 'side' of undefined" error by correcting InstancedMesh material usage (single material with color tinting instead of array).
+  - Implemented smooth camera following the player.
+  - Improved click-to-move raycasting against InstancedMesh.
+  - Optimized world generation to ensure entities spawn on valid ground.
+  - Added robust bounds checking to prevent out-of-world crashes.
+-->
+
+<div id="gameContainerEl" style="position:relative; width:100%; height:100vh; overflow:hidden; background:black; font-family:'Courier New', Courier, monospace; user-select:none;">
+  
+  <!-- Loading Screen -->
+  <div id="loadingScreenEl" style="position:absolute; top:0; left:0; width:100%; height:100%; background:#1e1e1e; color:#ffb83f; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:9999;">
+    <h1 style="font-size:40px; margin-bottom:20px; text-shadow: 2px 2px 0px black;">RUNESCAPE LITE</h1>
+    <div style="width:300px; height:20px; background:#333; border:2px solid #5e5e5e;">
+      <div id="loadingBarEl" style="width:0%; height:100%; background:#00ff00; transition:width 0.2s;"></div>
+    </div>
+    <p id="loadingTextEl" style="margin-top:10px; color:#ffff00;">Loading engine...</p>
+  </div>
+
+  <!-- UI Overlay -->
+  <div id="uiLayerEl" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; display:none;">
+    
+    <!-- Top Left: Stats -->
+    <div id="statsPanelEl" class="panel" style="position:absolute; top:10px; left:10px; width:180px; background:rgba(0,0,0,0.6); border:2px solid #ff981f; color:#fff; padding:5px; pointer-events:auto;">
+      <div style="text-align:center; border-bottom:1px solid #ff981f; margin-bottom:5px; font-weight:bold;">STATS</div>
+      <div style="display:flex; justify-content:space-between;"><span>Attack:</span> <span id="statAtkEl">1/1</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Woodcut:</span> <span id="statWcEl">1/1</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Mining:</span> <span id="statMinEl">1/1</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Smithing:</span> <span id="statSmithEl">1/1</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Fishing:</span> <span id="statFishEl">1/1</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Cooking:</span> <span id="statCookEl">1/1</span></div>
+      <div style="display:flex; justify-content:space-between; margin-top:5px; color:#ff0000;"><span>HP:</span> <span id="statHpEl">10/10</span></div>
+      <div style="margin-top:5px; font-size:10px; color:#aaa;">Wielding: <span id="wieldedItemEl">Nothing</span></div>
+      <div style="font-size:10px; color:#aaa; margin-top:2px;">Run Mode: <span id="runModeStatusEl">OFF</span> (Hold Shift)</div>
+    </div>
+
+    <!-- Top Right: Minimap & Settings -->
+    <div style="position:absolute; top:10px; right:10px; display:flex; flex-direction:column; gap:10px;">
+        <div id="minimapCtn" class="panel" style="width:150px; height:150px; background:rgba(0,0,0,0.6); border:2px solid #ff981f; pointer-events:auto; overflow:hidden;">
+          <canvas id="minimapCanvasEl" width="150" height="150" style="width:100%; height:100%;"></canvas>
+          <div style="position:absolute; bottom:0; width:100%; text-align:center; background:rgba(0,0,0,0.5); color:white; font-size:10px;">Tutorial Island</div>
+        </div>
+        
+        <button id="settingsBtnEl" style="background:#ff981f; border:2px solid #fff; color:black; font-weight:bold; cursor:pointer; padding:2px;">SETTINGS</button>
+    </div>
+
+    <!-- Settings Modal (Hidden) -->
+    <div id="settingsModalEl" hidden style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#c4b69c; border:4px solid #3e3b22; padding:20px; z-index:1000; pointer-events:auto; display:flex; flex-direction:column; gap:10px; min-width:200px;">
+        <h3 style="margin:0; text-align:center; border-bottom:2px solid #3e3b22; padding-bottom:5px;">OPTIONS</h3>
+        <div><label><input type="checkbox" id="musicToggleEl" checked> Music (Ambient)</label></div>
+        <div><label><input type="checkbox" id="sfxToggleEl" checked> Sound Effects</label></div>
+        <button onclick="resetGameBtnEl.click()" style="background:#b00; color:white; border:none; padding:5px; cursor:pointer;">Reset Save Data</button>
+        <button onclick="settingsModalEl.hidden=true" style="background:#fff; border:1px solid black; cursor:pointer;">Close</button>
+    </div>
+
+    <!-- Bottom Left: Chat -->
+    <div id="chatCtn" class="panel" style="position:absolute; bottom:10px; left:10px; width:350px; height:140px; background:rgba(0,0,0,0.6); border:2px solid #ff981f; display:flex; flex-direction:column; pointer-events:auto;">
+      <div id="chatHistoryEl" style="flex:1; padding:5px; overflow-y:auto; font-size:12px; color:#ffff00;">
+        <div style="color:white;">Welcome to RuneScape Lite!</div>
+      </div>
+      <div style="border-top:1px solid #555; display:flex;">
+        <input id="chatInputEl" type="text" placeholder="Type here..." style="flex:1; background:black; border:none; color:white; padding:3px; outline:none;">
+      </div>
+    </div>
+
+    <!-- Bottom Right: Tabbed Interface (Inventory/Stats/Equipment/Bank/Craft) -->
+    <div id="mainPanelEl" class="panel" style="position:absolute; bottom:10px; right:10px; width:250px; background:rgba(0,0,0,0.6); border:2px solid #ff981f; color:white; pointer-events:auto; display:flex; flex-direction:column;">
+      
+      <!-- Tabs -->
+      <div style="display:flex; background:#333;">
+        <button class="tabBtn" data-target="inventory" style="flex:1; border:none; background:#444; color:white; cursor:pointer; border-bottom:2px solid #ff981f;">Inv</button>
+        <button class="tabBtn" data-target="equipment" style="flex:1; border:none; background:#222; color:#aaa; cursor:pointer;">Equip</button>
+        <button class="tabBtn" data-target="bank" style="flex:1; border:none; background:#222; color:#aaa; cursor:pointer;">Bank</button>
+        <button class="tabBtn" data-target="craft" style="flex:1; border:none; background:#222; color:#aaa; cursor:pointer;">Craft</button>
+        <button class="tabBtn" data-target="quest" style="flex:1; border:none; background:#222; color:#aaa; cursor:pointer;">Quest</button>
+      </div>
+
+      <!-- Tab Content: Inventory -->
+      <div id="tab-inventory" class="tabContent" style="padding:5px;">
+        <div style="text-align:center; border-bottom:1px solid #ff981f; margin-bottom:5px; font-weight:bold;">INVENTORY</div>
+        <div id="inventoryGridEl" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:2px;"></div>
+      </div>
+
+      <!-- Tab Content: Equipment -->
+      <div id="tab-equipment" class="tabContent" hidden style="padding:5px;">
+        <div style="text-align:center; border-bottom:1px solid #ff981f; margin-bottom:5px; font-weight:bold;">EQUIPMENT</div>
+        <div style="display:flex; justify-content:center; margin-bottom:10px;">
+            <div id="equipSlotWeaponEl" style="width:50px; height:50px; border:2px solid #555; background:#222; display:flex; align-items:center; justify-content:center; position:relative;">
+                <span style="position:absolute; bottom:0; font-size:10px; background:black; width:100%; text-align:center;">Main Hand</span>
+            </div>
+        </div>
+        <div style="font-size:12px; text-align:center; color:#ccc;">Click items in inventory to wear/wield.</div>
+      </div>
+
+      <!-- Tab Content: Bank -->
+      <div id="tab-bank" class="tabContent" hidden style="padding:5px;">
+        <div style="text-align:center; border-bottom:1px solid #ff981f; margin-bottom:5px; font-weight:bold;">BANK</div>
+        <button id="depositAllBtn" style="width:100%; margin-bottom:5px; background:#333; color:white; border:1px solid #777; cursor:pointer;">Deposit All</button>
+        <button id="withdrawAllBtn" style="width:100%; margin-bottom:5px; background:#333; color:white; border:1px solid #777; cursor:pointer;">Withdraw All</button>
+        <div id="bankGridEl" style="display:grid; grid-template-columns:repeat(6, 1fr); gap:1px; height:100px; overflow-y:auto;"></div>
+      </div>
+
+      <!-- Tab Content: Crafting -->
+      <div id="tab-craft" class="tabContent" hidden style="padding:5px;">
+        <div style="text-align:center; border-bottom:1px solid #ff981f; margin-bottom:5px; font-weight:bold;">CRAFTING</div>
+        <div id="craftListEl" style="display:flex; flex-direction:column; gap:2px; overflow-y:auto; height:140px;"></div>
+      </div>
+
+       <!-- Tab Content: Quest -->
+       <div id="tab-quest" class="tabContent" hidden style="padding:5px; font-size:11px;">
+        <div style="text-align:center; border-bottom:1px solid #ff981f; margin-bottom:5px; font-weight:bold;">CURRENT QUEST</div>
+        <div id="questTitleEl" style="color:#ffff00; font-weight:bold;">None</div>
+        <div id="questDescEl" style="color:#eee; margin-top:5px; white-space:pre-wrap; line-height:1.4;">Find the Sage NPC to get a quest.</div>
+    </div>
+    </div>
+
+    <!-- Context Menu (Hidden by default) -->
+    <div id="contextMenuEl" hidden style="position:absolute; background:#c4b69c; border:1px solid #3e3b22; padding:2px 0; display:flex; flex-direction:column; width:130px; pointer-events:auto; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); z-index:100;"></div>
+
+    <!-- XP Drops Container -->
+    <div id="xpDropsCtn" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden;"></div>
+  </div>
+  
+  <!-- Hidden reset button for settings -->
+  <button id="resetGameBtnEl" hidden onclick="localStorage.clear(); location.reload();">Reset</button>
+</div>
+
+<style>
+  /* Scrollbar styling */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #111; }
+  ::-webkit-scrollbar-thumb { background: #555; }
+  
+  .panel { font-family: 'Courier New', Courier, monospace; }
+  
+  /* XP Drop Animation */
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-50px); }
+  }
+  .xp-drop {
+    position: absolute;
+    color: #00ff00;
+    font-weight: bold;
+    font-size: 14px;
+    text-shadow: 1px 1px 0 #000;
+    animation: floatUp 2s forwards;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .damage-drop { color: #ff0000; }
+  
+  .item-slot {
+    background-color: #333;
+    border: 1px solid #555;
+    position: relative;
+    cursor: pointer;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .item-slot:hover { border-color: #ff981f; }
+  .item-icon { width: 80%; height: 80%; }
+  
+  .craft-recipe {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      background:#2a2a2a;
+      padding:4px;
+      border:1px solid #444;
+      cursor:pointer;
+      font-size:11px;
+  }
+  .craft-recipe:hover { background:#444; border-color:#ff981f; }
+</style>
+
+<script type="module">
+  import * as THREE from 'https://esm.sh/three@0.177.0';
+  import { createNoise2D } from 'https://esm.sh/simplex-noise@4.0.3';
+
+  // --- Game State & Config ---
+  const CONFIG = {
+    worldSize: 50,
+    cellSize: 2,
+    moveSpeed: 7,
+    runSpeed: 12,
+    enemySpeed: 3.5,
+    aggroRange: 8,
+    attackRange: 1.8,
+    dayDuration: 120, // seconds
+    colors: {
+      grass: 0x3b4d25,
+      water: 0x2e4c7b,
+      tree: 0x2a3b15,
+      rock: 0x6e6e6e,
+      goblin: 0x4a8f3a,
+      player: 0xff0000,
+      hover: 0xffff00,
+      select: 0x00ff00,
+      bank: 0x8B4513,
+      fire: 0xFF4500,
+      sage: 0x4169E1,
+      tin: 0xB87333,
+      bronze_bar: 0xcd7f32
+    }
+  };
+
+  const STATE = {
+    player: { x: 0, z: 0, hp: 10, maxHp: 10, target: null, action: 'idle', equipment: {} },
+    // Initialize all skills with default structure to prevent undefined errors
+    skills: { 
+      attack: { lvl: 1, xp: 0 }, 
+      woodcutting: { lvl: 1, xp: 0 }, 
+      mining: { lvl: 1, xp: 0 }, 
+      fishing: { lvl: 1, xp: 0 }, 
+      cooking: { lvl: 1, xp: 0 },
+      smithing: { lvl: 1, xp: 0 },
+      firemaking: { lvl: 1, xp: 0 }
+    },
+    inventory: [],
+    bank: [],
+    quest: null,
+    settings: { music: true, sfx: true },
+    entities: [],
+    pathQueue: [], // For movement
+    dayTime: 0,
+    particles: []
+  };
+
+  // Item Definitions
+  const ITEMS = {
+    log: { id: 'log', name: 'Logs', color: '#8B4513', type: 'resource' },
+    ore: { id: 'ore', name: 'Copper Ore', color: '#B87333', type: 'resource' },
+    tin_ore: { id: 'tin_ore', name: 'Tin Ore', color: '#71797E', type: 'resource' },
+    bronze_bar: { id: 'bronze_bar', name: 'Bronze Bar', color: '#cd7f32', type: 'resource' },
+    bones: { id: 'bones', name: 'Bones', color: '#F0F0F0', type: 'resource' },
+    tinderbox: { id: 'tinderbox', name: 'Tinderbox', color: '#8B0000', type: 'tool' },
+    raw_fish: { id: 'raw_fish', name: 'Raw Trout', color: '#88aabb', type: 'consumable' },
+    cooked_fish: { id: 'cooked_fish', name: 'Trout', color: '#d68e65', type: 'food', heal: 5 },
+    bronze_sword: { id: 'sword', name: 'Bronze Sword', color: '#CD7F32', type: 'weapon', bonus: 2 },
+    bronze_axe: { id: 'axe', name: 'Bronze Axe', color: '#CD7F32', type: 'tool', bonus: 1 },
+    bronze_hammer: { id: 'hammer', name: 'Bronze Hammer', color: '#CD7F32', type: 'tool' }
+  };
+
+  const RECIPES = [
+      { name: "Bronze Bar", req: { 'ore': 1, 'tin_ore': 1 }, out: 'bronze_bar', xp: 25, skill: 'smithing' },
+      { name: "Bronze Sword", req: { 'bronze_bar': 2, 'hammer': 1 }, out: 'sword', xp: 50, skill: 'smithing' },
+      { name: "Bonfire", req: { 'tinderbox': 1, 'log': 1 }, out: 'fire_action', xp: 10, skill: 'firemaking' } // Special action
+  ];
+
+  // --- Audio System ---
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioContext();
+  
+  let ambientOsc = null;
+  let ambientGain = null;
+
+  function startAmbient() {
+    if(!STATE.settings.music || ambientOsc) return;
+    ambientOsc = audioCtx.createOscillator();
+    ambientGain = audioCtx.createGain();
+    ambientOsc.type = 'sine';
+    ambientOsc.frequency.setValueAtTime(50, audioCtx.currentTime);
+    const lfo = audioCtx.createOscillator();
+    lfo.frequency.value = 0.1;
+    const lfoGain = audioCtx.createGain();
+    lfoGain.gain.value = 500;
+    lfo.connect(lfoGain);
+    lfoGain.connect(ambientOsc.frequency);
+
+    ambientGain.gain.value = 0.02;
+    ambientOsc.connect(ambientGain);
+    ambientGain.connect(audioCtx.destination);
+    ambientOsc.start();
+    lfo.start();
+  }
+
+  function stopAmbient() {
+    if(ambientOsc) {
+      ambientOsc.stop();
+      ambientOsc.disconnect();
+      ambientOsc = null;
+    }
+  }
+  
+  function playSound(type) {
+    if (!STATE.settings.sfx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    const now = audioCtx.currentTime;
+    if (type === 'click') {
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
+      gain.gain.setValueAtTime(0.05, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+      osc.start(now);
+      osc.stop(now + 0.1);
+    } else if (type === 'chop' || type === 'mine') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(100, now);
+      gain.gain.setValueAtTime(0.05, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.1);
+      osc.start(now);
+      osc.stop(now + 0.1);
+    } else if (type === 'levelup') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(400, now);
+      osc.frequency.linearRampToValueAtTime(800, now + 0.5);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.linearRampToValueAtTime(0, now + 1.5);
+      osc.start(now);
+      osc.stop(now + 1.5);
+    } else if (type === 'splash') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.linearRampToValueAtTime(100, now + 0.2);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+    }
+  }
+
+  // --- Three.js Setup ---
+  const container = document.getElementById('gameContainerEl');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x111111);
+  scene.fog = new THREE.Fog(0x111111, 20, 80);
+  
+  const aspect = container.clientWidth / container.clientHeight;
+  let zoom = 20;
+  const camera = new THREE.OrthographicCamera(-zoom * aspect, zoom * aspect, zoom, -zoom, 1, 1000);
+  
+  // Camera offset for isometric view
+  const camOffset = new THREE.Vector3(20, 20, 20);
+  camera.position.copy(camOffset);
+  camera.lookAt(scene.position);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  renderer.shadowMap.enabled = true;
+  container.appendChild(renderer.domElement);
+
+  // Lighting (Dynamic for Day/Night)
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambientLight);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+  dirLight.position.set(50, 100, 50);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 1024; 
+  dirLight.shadow.mapSize.height = 1024;
+  scene.add(dirLight);
+
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  let targetPos = new THREE.Vector3(0, 0.5, 0);
+  let isDragging = false;
+  let previousMousePosition = { x: 0, y: 0 };
+  let isShiftDown = false;
+
+  // Texture Gen
+  function createTexture(colorStr) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = colorStr;
+    ctx.fillRect(0,0,64,64);
+    for(let i=0; i<200; i++) {
+      ctx.fillStyle = `rgba(255,255,255,${Math.random()*0.1})`;
+      ctx.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.NearestFilter;
+    return tex;
+  }
+
+  // Fix: Use single material for InstancedMesh to prevent 'side' error
+  const matGrass = new THREE.MeshLambertMaterial({ map: createTexture('#3b4d25') });
+  const waterColor = new THREE.Color(CONFIG.colors.water);
+  const grassColor = new THREE.Color(CONFIG.colors.grass);
+  
+  const matWater = new THREE.MeshLambertMaterial({ map: createTexture('#2e4c7b'), transparent: true, opacity: 0.9 }); // Unused in mesh, used for ref
+  const matTree = new THREE.MeshLambertMaterial({ map: createTexture('#2a3b15') });
+  const matRock = new THREE.MeshLambertMaterial({ map: createTexture('#6e6e6e') });
+  const matPlayer = new THREE.MeshLambertMaterial({ color: CONFIG.colors.player });
+  const matGoblin = new THREE.MeshLambertMaterial({ color: CONFIG.colors.goblin });
+  const matBank = new THREE.MeshLambertMaterial({ color: CONFIG.colors.bank });
+  const matFire = new THREE.MeshBasicMaterial({ color: CONFIG.colors.fire });
+  const matSage = new THREE.MeshLambertMaterial({ color: CONFIG.colors.sage });
+
+  // World Generation
+  const noise2D = createNoise2D();
+  const geometry = new THREE.BoxGeometry(CONFIG.cellSize, 1, CONFIG.cellSize);
+  // Fix: Pass single material 'matGrass', use setColorAt for water
+  const instancedMesh = new THREE.InstancedMesh(geometry, matGrass, CONFIG.worldSize * CONFIG.worldSize);
+  instancedMesh.receiveShadow = true;
+  instancedMesh.castShadow = true;
+  scene.add(instancedMesh);
+
+  const entityGroup = new THREE.Group();
+  scene.add(entityGroup);
+  
+  // Player Mesh
+  const playerMesh = new THREE.Group();
+  const pBody = new THREE.Mesh(new THREE.BoxGeometry(1, 1.8, 1), matPlayer);
+  pBody.position.y = 0.9;
+  pBody.castShadow = true;
+  playerMesh.add(pBody);
+  scene.add(playerMesh);
+
+  const markerGeo = new THREE.RingGeometry(0.4, 0.5, 32);
+  const markerMat = new THREE.MeshBasicMaterial({ color: CONFIG.colors.select, side: THREE.DoubleSide });
+  const marker = new THREE.Mesh(markerGeo, markerMat);
+  marker.rotation.x = -Math.PI / 2;
+  marker.position.y = 0.05;
+  marker.visible = false;
+  scene.add(marker);
+
+  const grid = []; 
+  const entities = []; 
+
+  function getTileColor(x, z) {
+    const val = noise2D(x * 0.08, z * 0.08);
+    if (val < -0.25) return 1; // Water
+    return 0; // Grass
+  }
+
+  function findPath(startX, startZ, endX, endZ) {
+    const queue = [{ x: startX, z: startZ, path: [] }];
+    const visited = new Set();
+    visited.add(`${startX},${startZ}`);
+
+    while (queue.length > 0) {
+      const { x, z, path } = queue.shift();
+
+      if (x === endX && z === endZ) return path;
+
+      const neighbors = [
+        { x: x + 1, z: z }, { x: x - 1, z: z },
+        { x: x, z: z + 1 }, { x: x, z: z - 1 }
+      ];
+
+      for (const n of neighbors) {
+        if (n.x >= 0 && n.x < CONFIG.worldSize && n.z >= 0 && n.z < CONFIG.worldSize) {
+          const tileBlocked = grid[n.x][n.z] === 1;
+          const entityBlocked = entities.some(e => 
+              Math.round(e.position.x / CONFIG.cellSize) === n.x && 
+              Math.round(e.position.z / CONFIG.cellSize) === n.z &&
+              e.userData.type !== 'fire' && e.userData.type !== 'bank' && e.userData.type !== 'sage'
+          );
+
+          if (!tileBlocked && !entityBlocked && !visited.has(`${n.x},${n.z}`)) {
+            visited.add(`${n.x},${n.z}`);
+            queue.push({ x: n.x, z: n.z, path: [...path, { x: n.x, z: n.z }] });
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  // Initialize World
+  for (let x = 0; x < CONFIG.worldSize; x++) {
+    grid[x] = [];
+    for (let z = 0; z < CONFIG.worldSize; z++) {
+      const type = getTileColor(x, z);
+      grid[x][z] = type;
+      
+      const index = x * CONFIG.worldSize + z;
+      const dummy = new THREE.Object3D();
+      dummy.position.set(x * CONFIG.cellSize, -0.5, z * CONFIG.cellSize);
+      dummy.updateMatrix();
+      instancedMesh.setMatrixAt(index, dummy.matrix);
+
+      // Fix: Apply color based on type to single material
+      if (type === 1) {
+          instancedMesh.setColorAt(index, waterColor);
+      } else {
+          instancedMesh.setColorAt(index, grassColor);
+      }
+
+      // Only spawn entities on grass (type 0)
+      if (type === 0) {
+        const rng = Math.random();
+        if (rng < 0.08) createEntity(x, z, 'tree');
+        else if (rng < 0.12) createEntity(x, z, 'rock');
+        else if (rng < 0.16) createEntity(x, z, 'goblin');
+        else if (rng < 0.165) createEntity(x, z, 'fire');
+        else if (rng < 0.167) createEntity(x, z, 'bank');
+        else if (x === 5 && z === 5) createEntity(x, z, 'sage');
+      }
+    }
+  }
+  instancedMesh.instanceMatrix.needsUpdate = true;
+  instancedMesh.instanceColor.needsUpdate = true; // Vital for color update
+
+  function createEntity(gx, gz, type) {
+    const group = new THREE.Group();
+    
+    if (type === 'tree') {
+      const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.5), new THREE.MeshLambertMaterial({color:0x5C4033}));
+      trunk.position.y = 0.5;
+      trunk.castShadow = true;
+      const leaves = new THREE.Mesh(new THREE.ConeGeometry(1.2, 2, 8), matTree);
+      leaves.position.y = 2;
+      leaves.castShadow = true;
+      group.add(trunk, leaves);
+    } else if (type === 'rock') {
+      const mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(0.8), matRock);
+      mesh.castShadow = true;
+      group.add(mesh);
+    } else if (type === 'goblin') {
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1, 4, 8), matGoblin);
+      body.position.y = 0.9;
+      body.castShadow = true;
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({color:0xffff00}));
+      eye.position.set(0.2, 1.2, 0.3);
+      group.add(body, eye);
+    } else if (type === 'bank') {
+        const booth = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1), matBank);
+        booth.position.y = 0.75;
+        booth.castShadow = true;
+        group.add(booth);
+    } else if (type === 'fire') {
+        const base = new THREE.Mesh(new THREE.CircleGeometry(0.6), new THREE.MeshBasicMaterial({color:0x000000}));
+        base.rotation.x = -Math.PI/2;
+        base.position.y = 0.05;
+        const flames = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.8, 4), matFire);
+        flames.position.y = 0.4;
+        group.add(base, flames);
+        group.userData.tick = (dt) => { flames.scale.y = 1 + Math.sin(Date.now()/100)*0.2; };
+    } else if (type === 'sage') {
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.8, 8), matSage);
+        body.position.y = 0.9;
+        const hat = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.8, 8), new THREE.MeshLambertMaterial({color:0xffffff}));
+        hat.position.y = 2;
+        group.add(body, hat);
+    }
+
+    group.position.set(gx * CONFIG.cellSize, 0, gz * CONFIG.cellSize);
+    group.userData = { 
+        type: type, gridX: gx, gridZ: gz, 
+        hp: type === 'goblin' ? 10 : 999, maxHp: type === 'goblin' ? 10 : 999, 
+        id: Math.random().toString(36).substr(2, 9),
+        state: 'idle'
+    };
+    entityGroup.add(group);
+    entities.push(group);
+  }
+
+  // Particle System
+  function spawnParticles(pos, color) {
+      for(let i=0; i<5; i++) {
+          const geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+          const mat = new THREE.MeshBasicMaterial({ color: color });
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.copy(pos);
+          mesh.position.x += (Math.random()-0.5);
+          mesh.position.z += (Math.random()-0.5);
+          mesh.position.y += 0.5;
+          const vel = { x: (Math.random()-0.5)*5, y: Math.random()*5, z: (Math.random()-0.5)*5 };
+          scene.add(mesh);
+          STATE.particles.push({ mesh, vel, life: 1.0 });
+      }
+  }
+
+  function updateParticles(dt) {
+      for(let i = STATE.particles.length - 1; i >= 0; i--) {
+          const p = STATE.particles[i];
+          p.life -= dt;
+          p.mesh.position.x += p.vel.x * dt;
+          p.mesh.position.y += p.vel.y * dt;
+          p.mesh.position.z += p.vel.z * dt;
+          p.vel.y -= 9.8 * dt; // Gravity
+          p.mesh.rotation.x += dt * 5;
+          
+          if(p.life <= 0 || p.mesh.position.y < 0) {
+              scene.remove(p.mesh);
+              STATE.particles.splice(i, 1);
+          }
+      }
+  }
+
+  function updateDayNight(dt) {
+      STATE.dayTime += dt;
+      const cycle = (Math.sin(STATE.dayTime / CONFIG.dayDuration * Math.PI * 2) + 1) / 2; // 0 to 1
+      
+      // Move light
+      const angle = cycle * Math.PI;
+      dirLight.position.set(Math.cos(angle)*50, Math.sin(angle)*50, 50);
+      
+      // Change intensity
+      dirLight.intensity = 0.2 + cycle * 0.8;
+      ambientLight.intensity = 0.1 + cycle * 0.4;
+      
+      // Change Sky/Fog color slightly
+      const r = 0x11 + (0x3b - 0x11) * cycle;
+      const g = 0x11 + (0x4d - 0x11) * cycle;
+      const b = 0x11 + (0x25 - 0x11) * cycle;
+      scene.background.setRGB(r/255, g/255, b/255);
+      scene.fog.color.setRGB(r/255, g/255, b/255);
+  }
+
+  // --- Game Logic ---
+
+  function addChat(msg, color='#ffff00') {
+    const div = document.createElement('div');
+    div.style.color = color;
+    div.textContent = msg;
+    const history = document.getElementById('chatHistoryEl');
+    history.appendChild(div);
+    history.scrollTop = history.scrollHeight;
+  }
+
+  function addXpDrop(text, x, z, type='xp') {
+    const div = document.createElement('div');
+    div.className = type === 'damage' ? 'xp-drop damage-drop' : 'xp-drop';
+    div.textContent = text;
+    
+    const vec = new THREE.Vector3(x, 2, z);
+    vec.project(camera);
+    const sx = (vec.x * .5 + .5) * container.clientWidth;
+    const sy = (-(vec.y * .5) + .5) * container.clientHeight;
+    
+    div.style.left = sx + 'px';
+    div.style.top = sy + 'px';
+    
+    document.getElementById('xpDropsCtn').appendChild(div);
+    setTimeout(() => div.remove(), 2000);
+  }
+
+  function checkLevel(skillName) {
+    if(!STATE.skills[skillName]) return; // Safety check
+    const skill = STATE.skills[skillName];
+    const newLevel = Math.floor(Math.pow(skill.xp / 100, 1/3)) + 1;
+    if (newLevel > skill.lvl) {
+      skill.lvl = newLevel;
+      addChat(`Congratulations! Your ${skillName} level is now ${newLevel}.`, '#00ff00');
+      playSound('levelup');
+      updateStatsUI();
+    }
+    return newLevel;
+  }
+
+  function addXp(skillName, amount) {
+      if(!STATE.skills[skillName]) return; // Safety check
+      STATE.skills[skillName].xp += amount;
+      addXpDrop(`+${amount} XP`, playerMesh.position.x, playerMesh.position.z);
+      checkLevel(skillName);
+      updateStatsUI();
+      saveGame();
+  }
+
+  function addToInventory(itemId, sourceBank = false) {
+    const limit = 28;
+    const targetArr = sourceBank ? STATE.bank : STATE.inventory;
+    const targetLimit = sourceBank ? 500 : limit;
+
+    if (targetArr.length < targetLimit) {
+      targetArr.push(itemId);
+      if(!sourceBank) updateInventoryUI();
+      else updateBankUI();
+      if(!sourceBank) addChat(`You get some ${ITEMS[itemId].name}.`);
+    } else {
+      addChat(sourceBank ? "Bank full!" : "Inventory full!", 'red');
+    }
+  }
+
+  function removeFromInventory(index, sourceBank = false) {
+      const arr = sourceBank ? STATE.bank : STATE.inventory;
+      if (index >= 0 && index < arr.length) {
+          arr.splice(index, 1);
+          if(!sourceBank) updateInventoryUI();
+          else updateBankUI();
+      }
+  }
+
+  // --- Interaction System ---
+
+  window.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.panel') || e.target.closest('button')) return;
+
+    if (e.button === 2 || (e.button === 0 && e.shiftKey)) { 
+        if(e.button === 2) {
+             // Context handled in contextmenu
+        }
+    } else if (e.button === 1) { 
+        isDragging = true;
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+    } else { 
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        
+        const entityIntersects = raycaster.intersectObjects(entityGroup.children, true);
+        if (entityIntersects.length > 0) {
+          let target = entityIntersects[0].object;
+          while(target.parent && target.parent !== entityGroup) target = target.parent;
+          
+          if (e.button === 0) {
+            handleEntityClick(target);
+          }
+          hideContextMenu();
+          return;
+        }
+
+        // Fix: Raycast against InstancedMesh
+        const intersects = raycaster.intersectObject(instancedMesh);
+        if (intersects.length > 0) {
+          const instanceId = intersects[0].instanceId;
+          if (instanceId !== undefined) {
+              const gx = Math.floor(instanceId / CONFIG.worldSize);
+              const gz = instanceId % CONFIG.worldSize;
+              
+              if (gx >= 0 && gx < CONFIG.worldSize && gz >= 0 && gz < CONFIG.worldSize && grid[gx][gz] !== 1) {
+                const startGx = Math.round(playerMesh.position.x / CONFIG.cellSize);
+                const startGz = Math.round(playerMesh.position.z / CONFIG.cellSize);
+                const path = findPath(startGx, startGz, gx, gz);
+                
+                if (path && path.length > 0) {
+                    STATE.pathQueue = path; 
+                    marker.visible = false; 
+                    STATE.player.action = 'walking_path';
+                    STATE.player.target = null;
+                    playSound('click');
+                } else {
+                    targetPos.set(gx * CONFIG.cellSize, 0.5, gz * CONFIG.cellSize);
+                    marker.position.copy(targetPos);
+                    marker.visible = true;
+                    STATE.player.action = 'walking';
+                    STATE.player.target = null;
+                    playSound('click');
+                }
+                hideContextMenu();
+              }
+          }
+        }
+    }
+  });
+
+  window.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+          const deltaX = e.clientX - previousMousePosition.x;
+          const deltaY = e.clientY - previousMousePosition.y;
+          camera.position.x -= deltaX * 0.05;
+          camera.position.y += deltaY * 0.05;
+          camera.position.z -= deltaX * 0.05;
+          camera.lookAt(scene.position);
+          previousMousePosition = { x: e.clientX, y: e.clientY };
+      }
+  });
+
+  window.addEventListener('mouseup', () => { isDragging = false; });
+  window.addEventListener('wheel', (e) => {
+      zoom += e.deltaY * 0.01;
+      zoom = Math.max(5, Math.min(50, zoom));
+      camera.left = -zoom * aspect;
+      camera.right = zoom * aspect;
+      camera.top = zoom;
+      camera.bottom = -zoom;
+      camera.updateProjectionMatrix();
+  });
+  
+  window.addEventListener('keydown', (e) => {
+      if(e.key === 'Shift') isShiftDown = true;
+  });
+  window.addEventListener('keyup', (e) => {
+      if(e.key === 'Shift') isShiftDown = false;
+  });
+
+  window.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const entityIntersects = raycaster.intersectObjects(entityGroup.children, true);
+      if(entityIntersects.length > 0) {
+          let target = entityIntersects[0].object;
+          while(target.parent && target.parent !== entityGroup) target = target.parent;
+          showContextMenu(e.clientX, e.clientY, target.userData);
+      } else hideContextMenu();
+  });
+
+  function showContextMenu(x, y, data) {
+    const menu = document.getElementById('contextMenuEl');
+    menu.innerHTML = '';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.hidden = false;
+
+    const createOption = (text, action) => {
+      const div = document.createElement('div');
+      div.textContent = text;
+      div.style.padding = '2px 10px';
+      div.style.cursor = 'pointer';
+      div.onmouseover = () => div.style.background = '#fff';
+      div.onmouseout = () => div.style.background = 'transparent';
+      div.onclick = () => { action(); hideContextMenu(); };
+      menu.appendChild(div);
+    };
+
+    if (data.type === 'tree') createOption('Chop down', () => startAction('woodcutting', data));
+    if (data.type === 'rock') createOption('Mine', () => startAction('mining', data));
+    if (data.type === 'goblin') createOption('Attack', () => startAction('attack', data));
+    if (data.type === 'bank') createOption('Use Bank', () => openBank());
+    if (data.type === 'fire') {
+        if (hasItem('raw_fish')) createOption('Cook Trout', () => startAction('cooking', data));
+        else createOption('Add logs', () => startAction('firemaking', data));
+    }
+    if (data.type === 'sage') createOption('Talk to Sage', () => interactSage(data));
+    if (grid[data.gridX] && grid[data.gridX][data.gridZ] === 1) createOption('Fish', () => startAction('fishing', data));
+    
+    // Light fire anywhere if holding tinderbox
+    if(hasItem('tinderbox')) createOption('Light Fire', () => {
+         const gx = Math.round(playerMesh.position.x / CONFIG.cellSize);
+         const gz = Math.round(playerMesh.position.z / CONFIG.cellSize);
+         if(!entities.find(e=>e.userData.gridX===gx && e.userData.gridZ===gz)) {
+            createEntity(gx, gz, 'fire');
+            removeFromInventory(STATE.inventory.indexOf('tinderbox'));
+            addChat("You light a fire.");
+            playSound('levelup'); // placeholder
+         }
+    });
+  }
+
+  function hideContextMenu() {
+    document.getElementById('contextMenuEl').hidden = true;
+  }
+
+  function handleEntityClick(entity) {
+    if (entity.userData.type === 'tree') startAction('woodcutting', entity.userData);
+    else if (entity.userData.type === 'rock') startAction('mining', entity.userData);
+    else if (entity.userData.type === 'goblin') startAction('attack', entity.userData);
+    else if (entity.userData.type === 'bank') openBank();
+    else if (entity.userData.type === 'sage') interactSage(entity.userData);
+  }
+
+  function startAction(actionType, targetData) {
+    const tx = targetData.gridX * CONFIG.cellSize;
+    const tz = targetData.gridZ * CONFIG.cellSize;
+    
+    const startGx = Math.round(playerMesh.position.x / CONFIG.cellSize);
+    const startGz = Math.round(playerMesh.position.z / CONFIG.cellSize);
+    const path = findPath(startGx, startGz, targetData.gridX, targetData.gridZ);
+    
+    if (path && path.length > 1) {
+        const finalStep = path[path.length - 2];
+        STATE.pathQueue = path.slice(0, path.length - 1);
+        STATE.player.pendingAction = actionType;
+        STATE.player.target = targetData;
+        STATE.player.action = 'walking_path_to_action';
+        playSound('click');
+    } else {
+        STATE.player.action = actionType;
+        STATE.player.target = targetData;
+        playSound('click');
+    }
+  }
+  
+  // --- Crafting Logic ---
+  function updateCraftingUI() {
+      const list = document.getElementById('craftListEl');
+      list.innerHTML = '';
+      RECIPES.forEach((recipe, idx) => {
+          const div = document.createElement('div');
+          div.className = 'craft-recipe';
+          
+          // Check requirements
+          let canCraft = true;
+          let reqStr = [];
+          for(let [id, count] of Object.entries(recipe.req)) {
+              const countInv = STATE.inventory.filter(i => i === id).length;
+              if(countInv < count) canCraft = false;
+              const name = ITEMS[id] ? ITEMS[id].name : id;
+              reqStr.push(`${count} ${name}`);
+          }
+          
+          const xpStr = recipe.skill ? `(${recipe.skill} XP)` : '';
+          div.innerHTML = `<span>${recipe.name} <span style="font-size:9px; color:#aaa;">${reqStr.join(', ')} ${xpStr}</span></span> <button ${!canCraft ? 'disabled style="opacity:0.5"' : ''}>Craft</button>`;
+          div.querySelector('button').onclick = () => craftItem(idx);
+          list.appendChild(div);
+      });
+  }
+  
+  function craftItem(idx) {
+      const recipe = RECIPES[idx];
+      // Remove items
+      for(let [id, count] of Object.entries(recipe.req)) {
+          for(let i=0; i<count; i++) {
+              const invIdx = STATE.inventory.indexOf(id);
+              if(invIdx > -1) removeFromInventory(invIdx);
+          }
+      }
+      
+      if(recipe.out === 'fire_action') {
+           addChat("You light a fire.");
+           const gx = Math.round(playerMesh.position.x / CONFIG.cellSize);
+           const gz = Math.round(playerMesh.position.z / CONFIG.cellSize);
+           createEntity(gx, gz, 'fire');
+      } else {
+           addToInventory(recipe.out);
+      }
+      
+      if(recipe.skill && recipe.xp) addXp(recipe.skill, recipe.xp);
+      playSound('click');
+      updateCraftingUI();
+  }
+
+  // --- AI / Sage Logic ---
+  async function interactSage(data) {
+      if(STATE.quest && STATE.quest.completed) {
+          addChat("Sage: You have completed my quest! Well done, adventurer.", '#00ff00');
+          return;
+      }
+      if(STATE.quest) {
+          addChat(`Sage: You are on a quest: "${STATE.quest.title}"`, '#ffff00');
+          return;
+      }
+      
+      addChat("Sage: Consulting the stars for a task...", '#aaa');
+      try {
+          const prompt = "Generate a simple RPG quest title and a one-sentence objective for a low-level player. Format: 'Title: [Title]. Objective: [Objective]'. Do not include extra text.";
+          const response = await root.generateText(prompt);
+          const parts = response.split('Objective:');
+          if(parts.length >= 2) {
+              const title = parts[0].replace('Title:', '').trim();
+              const desc = parts[1].trim();
+              STATE.quest = { title, desc, completed: false };
+              addChat(`Sage: Ah! ${title}`, '#00ffff');
+              document.getElementById('questTitleEl').textContent = title;
+              document.getElementById('questDescEl').textContent = desc;
+              updateStatsUI();
+          }
+      } catch(e) {
+          addChat("Sage: The stars are cloudy... (AI Error)", 'red');
+      }
+  }
+
+  // --- Main Loop ---
+
+  const clock = new THREE.Clock();
+  let actionTimer = 0;
+  const tickRate = 0.6;
+  const _tempVec = new THREE.Vector3(); // Optimization: Reuse vector
+
+  function updateGame() {
+    const dt = clock.getDelta();
+
+    // Player Movement (Pathfinding)
+    STATE.player.x = playerMesh.position.x;
+    STATE.player.z = playerMesh.position.z;
+    
+    const currentSpeed = isShiftDown ? CONFIG.runSpeed : CONFIG.moveSpeed;
+    document.getElementById('runModeStatusEl').textContent = isShiftDown ? "ON" : "OFF";
+
+    if (STATE.player.action.startsWith('walking')) {
+        let dest = null;
+        
+        if (STATE.player.action === 'walking_path' || STATE.player.action === 'walking_path_to_action') {
+            if (STATE.pathQueue.length > 0) {
+                const nextTile = STATE.pathQueue[0];
+                const tx = nextTile.x * CONFIG.cellSize;
+                const tz = nextTile.z * CONFIG.cellSize;
+                targetPos.set(tx, 0.5, tz);
+                
+                const dx = tx - playerMesh.position.x;
+                const dz = tz - playerMesh.position.z;
+                const dist = Math.sqrt(dx*dx + dz*dz);
+                
+                if (dist < 0.1) {
+                    STATE.pathQueue.shift(); 
+                } else {
+                    const moveDist = currentSpeed * dt;
+                    playerMesh.position.x += (dx/dist) * moveDist;
+                    playerMesh.position.z += (dz/dist) * moveDist;
+                    playerMesh.lookAt(targetPos);
+                }
+            } else {
+                if (STATE.player.action === 'walking_path_to_action') {
+                    STATE.player.action = STATE.player.pendingAction;
+                    actionTimer = 0;
+                } else {
+                    STATE.player.action = 'idle';
+                }
+            }
+        } else {
+            const dx = targetPos.x - playerMesh.position.x;
+            const dz = targetPos.z - playerMesh.position.z;
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            if (dist > 0.1) {
+                const moveDist = Math.min(dist, currentSpeed * dt);
+                playerMesh.position.x += (dx / dist) * moveDist;
+                playerMesh.position.z += (dz / dist) * moveDist;
+                playerMesh.lookAt(targetPos);
+            } else {
+                STATE.player.action = 'idle';
+            }
+        }
+    }
+
+    // Entity Logic (AI)
+    entities.forEach(ent => {
+        if (ent.userData.type === 'goblin') {
+            const distToPlayer = playerMesh.position.distanceTo(ent.position);
+            
+            // Wander AI
+            if(ent.userData.state === 'idle') {
+                if(Math.random() < 0.005) {
+                    ent.userData.state = 'wander';
+                    ent.userData.wanderTarget = {
+                        x: ent.position.x + (Math.random()-0.5)*10,
+                        z: ent.position.z + (Math.random()-0.5)*10
+                    };
+                }
+            } else if (ent.userData.state === 'wander') {
+                 const dx = ent.userData.wanderTarget.x - ent.position.x;
+                 const dz = ent.userData.wanderTarget.z - ent.position.z;
+                 const dist = Math.sqrt(dx*dx + dz*dz);
+                 if(dist < 0.1) ent.userData.state = 'idle';
+                 else {
+                     ent.position.x += (dx/dist) * (CONFIG.enemySpeed * 0.3) * dt;
+                     ent.position.z += (dz/dist) * (CONFIG.enemySpeed * 0.3) * dt;
+                     ent.lookAt(_tempVec.set(ent.userData.wanderTarget.x, ent.position.y, ent.userData.wanderTarget.z));
+                 }
+            }
+
+            if (ent.userData.hp < ent.userData.maxHp) {
+                if (distToPlayer < CONFIG.aggroRange) {
+                    ent.userData.state = 'chase'; // Interrupt wander
+                    const dx = playerMesh.position.x - ent.position.x;
+                    const dz = playerMesh.position.z - ent.position.z;
+                    ent.lookAt(playerMesh.position);
+                    if (distToPlayer > CONFIG.attackRange) {
+                        ent.position.x += (dx/distToPlayer) * CONFIG.enemySpeed * dt;
+                        ent.position.z += (dz/distToPlayer) * CONFIG.enemySpeed * dt;
+                    } else {
+                        if (Math.random() < 0.02) {
+                            STATE.player.hp -= 1;
+                            addXpDrop(1, playerMesh.position.x, playerMesh.position.z, 'damage');
+                            updateStatsUI();
+                            if (STATE.player.hp <= 0) handleDeath();
+                        }
+                    }
+                }
+            } else {
+                 if (distToPlayer < 4 && distToPlayer > CONFIG.attackRange) {
+                     ent.userData.state = 'chase';
+                     const dx = playerMesh.position.x - ent.position.x;
+                     const dz = playerMesh.position.z - ent.position.z;
+                     ent.position.x += (dx/distToPlayer) * (CONFIG.enemySpeed * 0.5) * dt;
+                     ent.position.z += (dz/distToPlayer) * (CONFIG.enemySpeed * 0.5) * dt;
+                     ent.lookAt(playerMesh.position);
+                 }
+            }
+        }
+        if(ent.userData.tick) ent.userData.tick(dt);
+    });
+
+    // Action Processing
+    if (['woodcutting', 'mining', 'attack', 'fishing', 'cooking', 'firemaking'].includes(STATE.player.action)) {
+      actionTimer += dt;
+      playerMesh.position.y = Math.sin(Date.now() / 150) * 0.1; 
+
+      if (actionTimer > tickRate) {
+        actionTimer = 0;
+        performActionTick();
+      }
+    } else {
+      playerMesh.position.y = 0;
+    }
+
+    // Camera Follow Logic
+    const targetCamPos = _tempVec.copy(playerMesh.position).add(camOffset);
+    camera.position.lerp(targetCamPos, 0.1); // Smooth follow
+    camera.lookAt(playerMesh.position);
+
+    updateParticles(dt);
+    updateDayNight(dt);
+    drawMinimap();
+    renderer.render(scene, camera);
+    requestAnimationFrame(updateGame);
+  }
+
+  function handleDeath() {
+      addChat("Oh dear, you are dead!", 'red');
+      STATE.player.hp = STATE.player.maxHp;
+      playerMesh.position.set(0,0,0);
+      targetPos.set(0,0.5,0);
+      STATE.pathQueue = [];
+      STATE.player.action = 'idle';
+      updateStatsUI();
+  }
+
+  function performActionTick() {
+    const target = STATE.player.target;
+    if (!target) { STATE.player.action = 'idle'; return; }
+    
+    const entityObj = entities.find(e => e.userData.id === target.id);
+    if (!entityObj && target.type !== 'water_tile') { STATE.player.action = 'idle'; return; }
+
+    let bonus = 0;
+    if(STATE.player.equipment.main_hand) {
+        bonus = ITEMS[STATE.player.equipment.main_hand].bonus || 0;
+    }
+
+    if (STATE.player.action === 'woodcutting') {
+      playSound('chop');
+      spawnParticles(playerMesh.position, 0x8B4513);
+      addXp('woodcutting', 25 + bonus);
+      if (Math.random() > 0.7) {
+        addToInventory('log');
+        if (Math.random() > 0.8) {
+          entityGroup.remove(entityObj);
+          entities.splice(entities.indexOf(entityObj), 1);
+          STATE.player.action = 'idle';
+        }
+      }
+    } else if (STATE.player.action === 'mining') {
+      playSound('chop');
+      spawnParticles(playerMesh.position, 0x6e6e6e);
+      addXp('mining', 35 + bonus);
+      if (Math.random() > 0.6) {
+        addToInventory(Math.random() > 0.5 ? 'ore' : 'tin_ore');
+        if (Math.random() > 0.8) {
+          entityGroup.remove(entityObj);
+          entities.splice(entities.indexOf(entityObj), 1);
+          STATE.player.action = 'idle';
+        }
+      }
+    } else if (STATE.player.action === 'attack') {
+      const maxHit = STATE.skills.attack.lvl + bonus;
+      const dmg = Math.floor(Math.random() * maxHit) + 1;
+      entityObj.userData.hp -= dmg;
+      addXpDrop(dmg, entityObj.position.x, entityObj.position.z, 'damage');
+      addXp('attack', 4 * dmg);
+      
+      entityObj.children[0].material.color.setHex(0xff0000);
+      setTimeout(() => entityObj.children[0].material.color.setHex(CONFIG.colors.goblin), 150);
+
+      if (entityObj.userData.hp <= 0) {
+        addChat("You defeat the goblin!");
+        addToInventory('bones');
+        entityGroup.remove(entityObj);
+        entities.splice(entities.indexOf(entityObj), 1);
+        STATE.player.action = 'idle';
+      }
+    } else if (STATE.player.action === 'fishing') {
+        playSound('splash');
+        spawnParticles(playerMesh.position, 0x2e4c7b);
+        addXp('fishing', 20);
+        if(Math.random() > 0.6) {
+            addToInventory('raw_fish');
+            addChat("You catch a trout.");
+        }
+    } else if (STATE.player.action === 'cooking') {
+        playSound('click'); 
+        addXp('cooking', 30);
+        const rawIdx = STATE.inventory.indexOf('raw_fish');
+        if(rawIdx > -1) {
+            removeFromInventory(rawIdx);
+            if(Math.random() > 0.3) {
+                addToInventory('cooked_fish');
+                addChat("You successfully cook the trout.");
+            } else {
+                addChat("You burn the trout.", 'red');
+            }
+        } else {
+            STATE.player.action = 'idle';
+        }
+    } else if (STATE.player.action === 'firemaking') {
+        playSound('click');
+        addXp('firemaking', 10);
+        addChat("The fire burns brightly.");
+        // Just visual XP for now
+        STATE.player.action = 'idle';
+    }
+  }
+
+  // --- UI Logic ---
+
+  function updateStatsUI() {
+    // Helper to safely get lvl/xp
+    const getStat = (name) => {
+        const s = STATE.skills[name];
+        return s ? `${s.lvl}/${s.lvl}` : "1/1";
+    };
+
+    document.getElementById('statAtkEl').textContent = getStat('attack');
+    document.getElementById('statWcEl').textContent = getStat('woodcutting');
+    document.getElementById('statMinEl').textContent = getStat('mining');
+    document.getElementById('statSmithEl').textContent = getStat('smithing');
+    document.getElementById('statFishEl').textContent = getStat('fishing');
+    document.getElementById('statCookEl').textContent = getStat('cooking');
+    document.getElementById('statHpEl').textContent = `${STATE.player.hp}/${STATE.player.maxHp}`;
+    document.getElementById('wieldedItemEl').textContent = STATE.player.equipment.main_hand ? ITEMS[STATE.player.equipment.main_hand].name : 'Nothing';
+    
+    if(STATE.player.equipment.main_hand) {
+        const slot = document.getElementById('equipSlotWeaponEl');
+        const item = ITEMS[STATE.player.equipment.main_hand];
+        slot.innerHTML = `<div style="background:${item.color}; width:30px; height:30px;"></div><span style="position:absolute; bottom:0; font-size:10px; background:black; width:100%; text-align:center;">Wielded</span>`;
+    }
+  }
+
+  function hasItem(id) { return STATE.inventory.includes(id); }
+
+  function updateInventoryUI() {
+    const grid = document.getElementById('inventoryGridEl');
+    grid.innerHTML = '';
+    STATE.inventory.forEach((itemId, idx) => {
+      const item = ITEMS[itemId];
+      if(!item) return; // Skip unknown items
+      const div = document.createElement('div');
+      div.className = 'item-slot';
+      div.title = item.name;
+      
+      const icon = document.createElement('div');
+      icon.className = 'item-icon';
+      icon.style.backgroundColor = item.color;
+      div.appendChild(icon);
+      
+      div.onclick = () => handleInventoryClick(idx, itemId);
+      grid.appendChild(div);
+    });
+    updateCraftingUI(); // Refresh craft availability
+  }
+  
+  function updateBankUI() {
+      const grid = document.getElementById('bankGridEl');
+      grid.innerHTML = '';
+      STATE.bank.forEach((itemId, idx) => {
+          const item = ITEMS[itemId];
+          if(!item) return;
+          const div = document.createElement('div');
+          div.className = 'item-slot';
+          div.title = item.name;
+          div.style.width = '100%'; 
+          div.style.height = 'auto';
+          div.style.aspectRatio = '1';
+
+          const icon = document.createElement('div');
+          icon.className = 'item-icon';
+          icon.style.backgroundColor = item.color;
+          div.appendChild(icon);
+
+          div.onclick = () => {
+              removeFromInventory(idx, true);
+              addToInventory(itemId, false);
+          };
+          grid.appendChild(div);
+      });
+  }
+
+  function handleInventoryClick(idx, itemId) {
+      const item = ITEMS[itemId];
+      if(!item) return;
+      
+      if (item.type === 'food') {
+          if (STATE.player.hp < STATE.player.maxHp) {
+              STATE.player.hp = Math.min(STATE.player.maxHp, STATE.player.hp + item.heal);
+              removeFromInventory(idx);
+              addXpDrop(`+${item.heal} HP`, playerMesh.position.x, playerMesh.position.z, 'xp');
+              playSound('click');
+              updateStatsUI();
+          } else {
+              addChat("You are not hungry.", 'red');
+          }
+          return;
+      }
+
+      if (item.type === 'weapon' || item.type === 'tool') {
+          if (STATE.player.equipment.main_hand) {
+              const old = STATE.player.equipment.main_hand;
+              STATE.player.equipment.main_hand = itemId;
+              STATE.inventory[idx] = old;
+          } else {
+              STATE.player.equipment.main_hand = itemId;
+              removeFromInventory(idx);
+          }
+          playSound('click');
+          updateStatsUI();
+          updateInventoryUI();
+          return;
+      }
+
+      if(confirm("Drop this item?")) {
+          removeFromInventory(idx);
+          addChat("Dropped " + item.name);
+      }
+  }
+
+  window.openBank = () => {
+      document.querySelectorAll('.tabBtn').forEach(b => b.classList.remove('active')); 
+      document.querySelector('[data-target="bank"]').click(); 
+  };
+  
+  document.getElementById('depositAllBtn').onclick = () => {
+      [...STATE.inventory].forEach(item => {
+          removeFromInventory(0); 
+          addToInventory(item, true); 
+      });
+      addChat("Deposited all items.");
+  };
+  
+  document.getElementById('withdrawAllBtn').onclick = () => {
+      [...STATE.bank].forEach(item => {
+          removeFromInventory(0, true);
+          addToInventory(item, false);
+      });
+      addChat("Withdrew all items.");
+  };
+
+  document.querySelectorAll('.tabBtn').forEach(btn => {
+      btn.onclick = () => {
+          document.querySelectorAll('.tabContent').forEach(c => c.hidden = true);
+          document.getElementById('tab-' + btn.dataset.target).hidden = false;
+          
+          document.querySelectorAll('.tabBtn').forEach(b => {
+              b.style.background = '#222';
+              b.style.color = '#aaa';
+              b.style.borderBottom = 'none';
+          });
+          btn.style.background = '#444';
+          btn.style.color = 'white';
+          btn.style.borderBottom = '2px solid #ff981f';
+          
+          if(btn.dataset.target === 'craft') updateCraftingUI();
+      };
+  });
+
+  settingsBtnEl.onclick = () => settingsModalEl.hidden = false;
+  musicToggleEl.onchange = (e) => {
+      STATE.settings.music = e.target.checked;
+      if(STATE.settings.music) startAmbient(); else stopAmbient();
+      saveGame();
+  };
+  sfxToggleEl.onchange = (e) => {
+      STATE.settings.sfx = e.target.checked;
+      saveGame();
+  };
+
+  function drawMinimap() {
+    const cvs = minimapCanvasEl;
+    if(!cvs) return;
+    const ctx = cvs.getContext('2d');
+    const scale = 3;
+    
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0, cvs.width, cvs.height);
+    
+    const px = Math.round(playerMesh.position.x / CONFIG.cellSize);
+    const pz = Math.round(playerMesh.position.z / CONFIG.cellSize);
+    const radius = 25;
+    
+    for(let x = px - radius; x < px + radius; x++) {
+      for(let z = pz - radius; z < pz + radius; z++) {
+        if (x >= 0 && x < CONFIG.worldSize && z >= 0 && z < CONFIG.worldSize) {
+          const type = grid[x][z];
+          ctx.fillStyle = type === 1 ? '#2e4c7b' : '#3b4d25';
+          ctx.fillRect((x - (px - radius)) * scale, (z - (pz - radius)) * scale, scale, scale);
+          
+          const ent = entities.find(e => Math.round(e.position.x/CONFIG.cellSize) === x && Math.round(e.position.z/CONFIG.cellSize) === z);
+          if(ent) {
+              if(ent.userData.type === 'goblin') ctx.fillStyle = 'green';
+              else if(ent.userData.type === 'bank') ctx.fillStyle = 'brown';
+              else if(ent.userData.type === 'sage') ctx.fillStyle = 'blue';
+              else if(ent.userData.type === 'fire') ctx.fillStyle = 'orange';
+              ctx.fillRect((x - (px - radius)) * scale, (z - (pz - radius)) * scale, scale, scale);
+          }
+        }
+      }
+    }
+    
+    ctx.fillStyle = 'red';
+    ctx.fillRect(cvs.width/2 - 2, cvs.height/2 - 2, 4, 4);
+  }
+
+  // --- Save/Load System ---
+  async function saveGame() {
+    try {
+      await root.kv.runeLite.set("playerState", STATE);
+    } catch(e) { console.log("Save failed", e); }
+  }
+
+  async function loadGame() {
+    try {
+      const saved = await root.kv.runeLite.get("playerState");
+      if (saved) {
+        STATE.player.x = saved.player.x;
+        STATE.player.z = saved.player.z;
+        STATE.player.hp = saved.player.hp;
+        
+        // Robust Merge for Skills to prevent undefined error
+        if(saved.skills) {
+            Object.keys(STATE.skills).forEach(key => {
+                if(saved.skills[key]) {
+                    STATE.skills[key].lvl = saved.skills[key].lvl;
+                    STATE.skills[key].xp = saved.skills[key].xp;
+                }
+            });
+        }
+
+        STATE.inventory = saved.inventory || [];
+        STATE.bank = saved.bank || [];
+        STATE.player.equipment = saved.player.equipment || {};
+        STATE.settings = saved.settings || { music: true, sfx: true };
+        STATE.quest = saved.quest || null;
+        
+        playerMesh.position.set(STATE.player.x, 0, STATE.player.z);
+        targetPos.copy(playerMesh.position);
+        
+        musicToggleEl.checked = STATE.settings.music;
+        sfxToggleEl.checked = STATE.settings.sfx;
+        if(STATE.quest) {
+            document.getElementById('questTitleEl').textContent = STATE.quest.title;
+            document.getElementById('questDescEl').textContent = STATE.quest.desc;
+        }
+
+        addChat("Game loaded.");
+      }
+    } catch(e) { console.log("No save found", e); }
+  }
+
+  // --- Initialization ---
+  async function init() {
+    const loadingBar = document.getElementById('loadingBarEl');
+    const loadingText = document.getElementById('loadingTextEl');
+    
+    loadingBar.style.width = '30%';
+    loadingText.textContent = "Generating terrain...";
+    await new Promise(r => setTimeout(r, 200));
+    
+    loadingBar.style.width = '60%';
+    loadingText.textContent = "Spawning entities...";
+    await new Promise(r => setTimeout(r, 200));
+    
+    loadingBar.style.width = '80%';
+    loadingText.textContent = "Loading assets...";
+    await new Promise(r => setTimeout(r, 200));
+
+    await loadGame();
+    updateStatsUI();
+    updateInventoryUI();
+    updateBankUI();
+    if(STATE.settings.music) startAmbient();
+
+    loadingBar.style.width = '100%';
+    loadingText.textContent = "Welcome!";
+    
+    setTimeout(() => {
+      document.getElementById('loadingScreenEl').style.display = 'none';
+      document.getElementById('uiLayerEl').style.display = 'block';
+      playSound('click');
+      requestAnimationFrame(updateGame);
+    }, 500);
+
+    chatInputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const text = e.target.value.trim();
+        if (text) {
+          addChat(text, '#fff');
+          e.target.value = '';
+        }
+      }
+    });
+  }
+
+  window.addEventListener('resize', () => {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    const aspect = w / h;
+    camera.left = -zoom * aspect;
+    camera.right = zoom * aspect;
+    camera.top = zoom;
+    camera.bottom = -zoom;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  });
+
+  init();
+</script>
+</body>
+</html>

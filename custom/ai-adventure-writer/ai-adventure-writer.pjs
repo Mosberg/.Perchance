@@ -1,0 +1,345 @@
+kv = {import:kv-plugin}
+generateText = {import:ai-text-plugin}
+
+// =========================
+//  UI: MAIN LAYOUT
+// =========================
+
+main
+  <div style="font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 16px; line-height: 1.5;">
+  <h1>AI Story Writer, Generator & Narrator</h1>
+  <p>Create interactive stories with branching choices, AI narration, and persistent memory.</p>
+
+  <hr>
+
+  <h2>1. Story Setup</h2>
+  <p><b>Choose your base parameters, then click "Start / Continue Story".</b></p>
+
+  <label>Genre:</label><br>
+  <select bind="genre">
+    <option>Fantasy</option>
+    <option>Science Fiction</option>
+    <option>Horror</option>
+    <option>Mystery</option>
+    <option>Romance</option>
+    <option>Adventure</option>
+  </select>
+  <br><br>
+
+  <label>Tone:</label><br>
+  <select bind="tone">
+    <option>Epic</option>
+    <option>Dark</option>
+    <option>Whimsical</option>
+    <option>Comedic</option>
+    <option>Serious</option>
+  </select>
+  <br><br>
+
+  <label>Story length per segment:</label><br>
+  <select bind="segment_length">
+    <option>Short</option>
+    <option>Medium</option>
+    <option>Long</option>
+  </select>
+  <br><br>
+
+  <label>Main character name:</label><br>
+  <input bind="main_character" placeholder="e.g. Aria, Jax, Liora">
+  <br><br>
+
+  <label>Setting:</label><br>
+  <input bind="setting" placeholder="e.g. a floating city above the clouds">
+  <br><br>
+
+  <label>Narration voice:</label><br>
+  <select bind="narration_voice">
+    <option>Default</option>
+    <option>Male</option>
+    <option>Female</option>
+    <option>Robot</option>
+    <option>Whisper</option>
+    <option>Dramatic</option>
+  </select>
+  <br><br>
+
+  <button onclick="start_or_continue_story()">Start / Continue Story</button>
+
+  <hr>
+
+  <h2>2. Story So Far</h2>
+  <div id="story-container" style="border: 1px solid #ccc; padding: 12px; min-height: 150px; white-space: pre-wrap; background: #fafafa;">
+    {{story_so_far_display}}
+  </div>
+
+  <br>
+  <button onclick="speak_story()">🔊 Narrate Story</button>
+  <button onclick="clear_story()">🧹 Reset Story</button>
+
+  <hr>
+
+  <h2>3. Current Segment & Choices</h2>
+  <div id="current-segment" style="border: 1px solid #ddd; padding: 12px; background: #fff; white-space: pre-wrap;">
+    {{current_segment_display}}
+  </div>
+
+  <br>
+  <div id="choices">
+    {{choices_display}}
+  </div>
+
+  <hr>
+
+  <h2>4. Debug / Memory View (optional)</h2>
+  <details>
+    <summary>Show memory & internal state</summary>
+    <pre>
+Memory_summary
+  {{memory_summary}}
+
+Last_choice
+  {{last_choice}}
+
+Branch_history
+  {{branch_history}}
+  </pre>
+  </details>
+  </div>
+
+// =========================
+//  STATE / MEMORY VARIABLES
+// =========================
+
+// Persistent story memory (append segments here)
+story_memory
+  {{story_memory || ""}}
+
+// Current segment text
+current_segment
+  {{current_segment || ""}}
+
+// Last choice made
+last_choice
+  {{last_choice || "None yet"}}
+
+// Branch history (simple text log)
+branch_history
+  {{branch_history || ""}}
+
+// =========================
+//  DISPLAY HELPERS
+// =========================
+
+story_so_far_display
+  {{story_memory || "No story yet. Click 'Start / Continue Story' to begin."}}
+
+current_segment_display
+  {{current_segment || "No segment yet. When you start, the first scene will appear here."}}
+
+choices_display
+  {{choices_block || "No choices yet. Start the story to see options."}}
+
+memory_summary
+  Genre: {{genre}}
+  Tone: {{tone}}
+  Segment length: {{segment_length}}
+  Main character: {{main_character}}
+  Setting: {{setting}}
+
+// =========================
+//  CHOICE BUTTON BLOCK
+// =========================
+
+// This will be HTML with buttons bound to JS functions that set a choice and regenerate.
+choices_block
+  {{choices_html || ""}}
+
+// =========================
+//  JS-LIKE ACTIONS (LOGIC)
+// =========================
+
+// Called when user clicks "Start / Continue Story"
+start_or_continue_story
+  <script>
+    // We simulate logic by setting a hidden variable "action" and letting Perchance recompute.
+    window.perchanceSet("action", "continue");
+  </script>
+
+// Called when user clicks a choice button
+make_choice
+  <script>
+    window.perchanceSet("last_choice", choice_id);
+    window.perchanceSet("action", "choice_made");
+  </script>
+
+// Called when user clicks "Reset Story"
+clear_story
+  <script>
+    window.perchanceSet("story_memory", "");
+    window.perchanceSet("current_segment", "");
+    window.perchanceSet("branch_history", "");
+    window.perchanceSet("last_choice", "None yet");
+    window.perchanceSet("choices_html", "");
+    window.perchanceSet("action", "reset");
+  </script>
+
+// Called when user clicks "Narrate Story"
+speak_story
+  <script>
+    const text = window.perchanceGet("story_memory") || "There is no story yet.";
+    const voice = window.perchanceGet("narration_voice") || "Default";
+
+    window.perchanceSet("tts_request", {
+      text,
+      voice
+    });
+  </script>
+
+// =========================
+//  ACTION HANDLER
+// =========================
+
+// This variable drives what happens next.
+action
+  {{action || "idle"}}
+
+// Based on action, we decide what to do.
+engine
+  {{#if action == "continue"}}
+    {{continue_story_engine}}
+  {{/if}}
+
+  {{#if action == "choice_made"}}
+    {{choice_story_engine}}
+  {{/if}}
+
+  {{#if action == "reset"}}
+    <!-- nothing special, state already cleared -->
+  {{/if}}
+
+// =========================
+//  PROMPT BUILDING HELPERS
+// =========================
+
+base_story_prompt
+  Write a {{segment_length}} {{genre}} story segment in a {{tone}} tone.
+  The main character is {{main_character}}.
+  The story takes place in {{setting}}.
+  Continue the story based on the following memory (if any), but do not repeat it:
+
+  {{story_memory || "No previous memory."}}
+
+  End this segment with a small cliffhanger and present 2–3 clear choices for what the protagonist can do next, labeled as "Choice 1:", "Choice 2:", etc.
+
+choice_followup_prompt
+  Write the next {{segment_length}} {{genre}} story segment in a {{tone}} tone.
+  The main character is {{main_character}}.
+  The story takes place in {{setting}}.
+
+  Here is the story so far:
+  {{story_memory}}
+
+  The last choice the reader selected was:
+  {{last_choice}}
+
+  Continue the story logically from that choice.
+  End this segment with a small cliffhanger and present 2–3 new clear choices labeled "Choice 1:", "Choice 2:", etc.
+
+// =========================
+//  AI CALLS
+// =========================
+
+// When continuing without a specific choice (first segment or generic continue)
+continue_story_engine
+  {{ai-text-plugin:generate({
+    instruction: base_story_prompt
+  }) | set("raw_segment_with_choices")}}
+
+// When continuing after a specific choice
+choice_story_engine
+  {{ai-text-plugin:generate({
+    instruction: choice_followup_prompt
+  }) | set("raw_segment_with_choices")}}
+
+// =========================
+//  POST-PROCESSING THE AI OUTPUT
+// =========================
+
+// raw_segment_with_choices is expected to contain:
+// - narrative text
+// - lines like "Choice 1: ..." "Choice 2: ..." etc.
+
+// Extract narrative vs choices (simple heuristic: split at "Choice 1:")
+segment_narrative
+  {{raw_segment_with_choices.split("Choice 1:")[0].trim()}}
+
+segment_choices_raw
+  {{"Choice 1:" + raw_segment_with_choices.split("Choice 1:")[1] || ""}}
+
+// Append narrative to memory
+updated_story_memory
+  {{(story_memory + "\n\n" + segment_narrative).trim()}}
+
+// Update branch history
+updated_branch_history
+  {{(branch_history + "\n" + "Action: " + action + ", Last choice: " + last_choice).trim()}}
+
+// Build HTML buttons for each choice line
+choices_html
+  {{
+    // Very rough parsing: split by "Choice X:" markers
+    (() => \{
+      const raw = `{{segment_choices_raw}}`;
+      if (!raw || raw.trim() === "") return "No choices were detected in the AI output.";
+
+      const lines = raw.split("\n").map(l => l.trim()).filter(l => l);
+      let html = "<h3>Choose what happens next:</h3>";
+      let choiceIndex = 1;
+
+      for (const line of lines) {
+        if (line.toLowerCase().startsWith("choice")) {
+          const label = line.replace(/^Choice\s*\d*:\s*/i, "").trim() || ("Option " + choiceIndex);
+          const id = "Choice " + choiceIndex + ": " + label;
+          html += `<button style="margin: 4px;" onclick="make_choice('${id.replace(/'/g, "\\'")}')">${label}</button><br>`;
+          choiceIndex++;
+        }
+      \}
+
+      if (choiceIndex === 1) \{
+        html += "No valid choices found in the AI output.";
+      }
+
+      return html;
+    })()
+  }\}
+
+// =========================
+//  FINAL STATE UPDATES
+// =========================
+
+// These are the "committed" values used by the UI.
+  current_segment
+    {{segment_narrative}}
+  story_memory
+    {{updated_story_memory}}
+  branch_history
+    {{updated_branch_history}}
+  choices_block
+    {{choices_html}}
+
+// =========================
+//  TEXT-TO-SPEECH PLUGIN CALL
+// =========================
+
+// When tts_request is set, we call the plugin.
+tts_request
+  {{tts_request || null}}
+
+tts_engine
+  {{#if tts_request}}
+    {{text-to-speech-plugin:speak({
+      text: tts_request.text,
+      voice: tts_request.voice
+    })}}
+    {{null | set("tts_request")}}  // clear after speaking
+  {{/if}}

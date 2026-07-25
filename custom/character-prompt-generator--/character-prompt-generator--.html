@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>character-prompt-generator-- — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  body { text-align: center; background: #1a1a2e; color: #eee; font-family: system-ui, sans-serif; margin: 0; padding: 16px; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 16px; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; max-width: 900px; margin: 0 auto 16px; }
+  .field { background: #16213e; border: 1px solid #2a2a4a; border-radius: 8px; padding: 8px; text-align: left; }
+  .field label { display: flex; justify-content: space-between; align-items: center; font-size: 11px; text-transform: uppercase; color: #88f; margin-bottom: 4px; }
+  .field .val { font-size: 14px; font-weight: 600; min-height: 18px; cursor: pointer; }
+  .lock { font-size: 10px; cursor: pointer; user-select: none; opacity: .4; }
+  .lock.on { opacity: 1; color: #fc6; }
+  #promptBox { max-width: 900px; margin: 0 auto 12px; background: #0f0f23; border: 1px solid #2a2a4a; border-radius: 8px; padding: 12px; font-size: 13px; text-align: left; white-space: pre-wrap; line-height: 1.5; min-height: 60px; }
+  #negBox { max-width: 900px; margin: 0 auto 16px; background: #0f0f23; border: 1px solid #2a2a4a; border-radius: 8px; padding: 8px 12px; font-size: 12px; text-align: left; color: #a88; }
+  .btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
+  button { background: #4a6cf7; color: white; border: none; border-radius: 6px; padding: 10px 20px; font-size: 14px; cursor: pointer; font-weight: 600; }
+  button:hover { background: #5b7df8; }
+  button.sec { background: #333; }
+  button.sec:hover { background: #444; }
+  button:disabled { opacity: .5; cursor: wait; }
+  #imgCtn { max-width: 900px; margin: 0 auto; }
+  #imgCtn img { max-width: 100%; border-radius: 8px; }
+  .hint { font-size: 11px; color: #666; margin-top: 8px; }
+</style>
+
+<h1>Character Prompt Generator</h1>
+<div class="sub">Click any value to reroll just that field. Click 🔒 to lock it.</div>
+
+<div id="grid"></div>
+
+<div id="promptBox"></div>
+<div id="negBox"></div>
+
+<div class="btns">
+  <button id="rerollBtn">🎲 Reroll All</button>
+  <button id="generateBtn" class="sec">🖼️ Generate Image</button>
+</div>
+
+<div id="imgCtn"></div>
+<div class="hint">Image generation uses your text-to-image quota and may take 10-60 seconds.</div>
+
+<script>
+  const FIELDS = [
+    "gender","ageRange","bodyType","ethnicity","hairStyle","hairColor",
+    "eyeColor","facialFeature","clothingStyle","expression","setting","artStyle","lighting"
+  ];
+  const locks = {};
+  const values = {};
+  let imgEl = null;
+
+  const gridEl = document.getElementById("grid");
+  for (const f of FIELDS) {
+    const div = document.createElement("div");
+    div.className = "field";
+    div.innerHTML = `<label>${f}<span class="lock" data-f="${f}">🔒</span></label><div class="val" data-f="${f}"></div>`;
+    gridEl.appendChild(div);
+  }
+
+  function evalField(f) {
+    return `[${f}].evaluateItem`;
+  }
+
+  async function rerollField(f) {
+    if (locks[f]) return;
+    const v = await (await (window.eval || eval))(evalField(f));
+    // evaluateItem returns a Promise-like when used via template; use perchance API:
+  }
+
+  // Use perchance template evaluation properly:
+  async function getField(f) {
+    const t = `[${f}]`;
+    return t.evaluateItem;
+  }
+
+  async function rerollAll() {
+    for (const f of FIELDS) {
+      if (!locks[f]) values[f] = await getField(f);
+    }
+    render();
+  }
+
+  async function rerollOne(f) {
+    if (locks[f]) return;
+    values[f] = await getField(f);
+    render();
+  }
+
+  function render() {
+    for (const f of FIELDS) {
+      const el = gridEl.querySelector(`.val[data-f="${f}"]`);
+      if (el) el.textContent = values[f] || "—";
+    }
+    const prompt = `[input.description ? input.description + " " : ""][gender] [ageRange] year old [bodyType] [ethnicity] person, [hairStyle] [hairColor] hair, [eyeColor] eyes, [facialFeature], wearing [clothingStyle], [expression] expression, [setting] background, [artStyle], highly detailed, [lighting]`;
+    // Build prompt from current values (locked/unlocked)
+    const parts = [];
+    const order = ["gender","ageRange","bodyType","ethnicity","hairStyle","hairColor","eyeColor","facialFeature","clothingStyle","expression","setting","artStyle","lighting"];
+    const desc = (typeof input !== "undefined" && input.description) ? input.description + " " : "";
+    const promptStr = desc +
+      `${values.gender} ${values.ageRange} year old ${values.bodyType} ${values.ethnicity} person, ` +
+      `${values.hairStyle} ${values.hairColor} hair, ${values.eyeColor} eyes, ${values.facialFeature}, ` +
+      `wearing ${values.clothingStyle}, ${values.expression} expression, ${values.setting} background, ` +
+      `${values.artStyle}, highly detailed, ${values.lighting}`;
+    document.getElementById("promptBox").textContent = promptStr;
+    const neg = (typeof input !== "undefined" && input.negative) ? input.negative : "blurry, low quality, distorted, deformed, ugly, extra limbs, bad anatomy, watermark, signature";
+    document.getElementById("negBox").textContent = "negative: " + neg;
+  }
+
+  gridEl.addEventListener("click", (e) => {
+    const lockEl = e.target.closest(".lock");
+    if (lockEl) {
+      const f = lockEl.dataset.f;
+      locks[f] = !locks[f];
+      lockEl.classList.toggle("on", locks[f]);
+      return;
+    }
+    const valEl = e.target.closest(".val");
+    if (valEl) rerollOne(valEl.dataset.f);
+  });
+
+  document.getElementById("rerollBtn").addEventListener("click", rerollAll);
+  document.getElementById("generateBtn").addEventListener("click", async () => {
+    const btn = document.getElementById("generateBtn");
+    const ctn = document.getElementById("imgCtn");
+    btn.disabled = true;
+    ctn.innerHTML = '<div style="padding:40px;color:#888">Generating image...</div>';
+    try {
+      const promptStr = document.getElementById("promptBox").textContent;
+      const neg = (typeof input !== "undefined" && input.negative) ? input.negative : "blurry, low quality, distorted, deformed, ugly, extra limbs, bad anatomy, watermark, signature";
+      const result = await root.generateImage({ prompt: promptStr, negativePrompt: neg, resolution: "768x768" });
+      ctn.innerHTML = "";
+      imgEl = document.createElement("img");
+      imgEl.src = result.dataUrl;
+      ctn.appendChild(imgEl);
+    } catch (err) {
+      ctn.innerHTML = '<div style="padding:20px;color:#f88">Error: ' + err.message + '</div>';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  rerollAll();
+</script>
+
+</body>
+</html>

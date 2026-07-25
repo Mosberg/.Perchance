@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>spore-cell — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- 
+  ABYSS OF ORIGINS - Enhanced Spore-like Cell Stage Game
+  
+  Improvements:
+  [x] Mobile compatibility (Touch controls)
+  [x] Water Physics (Currents/Flow fields using Simplex Noise)
+  [x] Visual Stylization (Organic membranes, bubbles, particles)
+  [x] Advanced Ecosystem (Predator/Peer/Prey tiers)
+  [x] Expanded Editor (More parts, visual feedback)
+  [x] Diet Identity System (Visual changes based on diet)
+-->
+<div id="gameContainer" style="position:relative; width:100vw; height:100vh; background:#00101a; overflow:hidden; font-family:sans-serif; user-select:none; touch-action:none;">
+  
+  <canvas id="gameCanvas" style="display:block;"></canvas>
+
+  <!-- Vignette Overlay for atmosphere -->
+  <div style="position:absolute; inset:0; background:radial-gradient(circle, transparent 60%, #000 100%); pointer-events:none; z-index:5;"></div>
+
+  <!-- HUD -->
+  <div id="hudLayer" hidden style="position:absolute; top:20px; left:20px; color:white; pointer-events:none; z-index:10;">
+    <div style="display:flex; flex-direction:column; gap:10px; backdrop-filter:blur(4px); background:rgba(0,0,0,0.3); padding:15px; border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
+      
+      <!-- Diet Indicator -->
+      <div id="dietIndicator" style="font-size:12px; font-weight:bold; letter-spacing:1px; color:#888; text-transform:center; margin-bottom:5px;">
+        OMNIVORE
+      </div>
+
+      <div>
+        <span style="font-size:12px; opacity:0.8; text-transform:uppercase; font-weight:600;">Biomass</span>
+        <div style="width:200px; height:8px; background:rgba(0,0,0,0.6); border-radius:4px; overflow:hidden; margin-top:4px; border:1px solid rgba(255,255,255,0.1);">
+          <div id="biomassBar" style="width:0%; height:100%; background:linear-gradient(90deg, #4ade80, #22c55e); transition:width 0.3s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+        </div>
+      </div>
+      
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <span style="font-size:12px; opacity:0.8; text-transform:uppercase; font-weight:600;">DNA</span>
+          <div id="dnaDisplay" style="font-size:24px; font-weight:800; color:#60a5fa; font-family:monospace;">000</div>
+        </div>
+        <div>
+           <span style="font-size:12px; opacity:0.8; text-transform:uppercase; font-weight:600;">Era</span>
+           <div id="eraDisplay" style="font-size:14px; color:#fbbf24;">MICROBE</div>
+        </div>
+      </div>
+
+      <div id="evoBtn" style="pointer-events:auto; margin-top:10px; background:linear-gradient(135deg, #fbbf24, #d97706); color:black; padding:12px 20px; border-radius:8px; font-weight:bold; cursor:pointer; display:none; text-align:center; box-shadow:0 4px 15px rgba(251, 191, 36, 0.3); transition:transform 0.1s, filter 0.2s;" onclick="enterEditor()">
+        ✧ EVOLVE ✧
+      </div>
+    </div>
+  </div>
+
+  <!-- Start Screen -->
+  <div id="menuLayer" style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,10,20,0.85); color:white; z-index:20; backdrop-filter:blur(10px);">
+    <h1 style="font-size:3rem; margin:0; text-shadow:0 0 30px #4ade80; letter-spacing:4px; font-weight:900; font-style:italic;">ABYSS OF ORIGINS</h1>
+    <p style="max-width:500px; text-align:center; line-height:1.6; opacity:0.8; margin-bottom:40px; font-size:1.1rem;">
+      You are a spark of life in the primordial soup.<br>
+      Drag to move. Eat to grow. Evolve to dominate.<br>
+      <span style="color:#4ade80">Green Matter</span> restores health. <span style="color:#f87171">Red Meat</span> grants DNA.
+    </p>
+    <button id="startBtn" style="padding:18px 50px; font-size:1.5rem; background:linear-gradient(135deg, #4ade80, #16a34a); border:none; border-radius:50px; cursor:pointer; font-weight:900; color:#064e3b; box-shadow:0 0 20px rgba(74, 222, 128, 0.4); transition:transform 0.1s;" onclick="startGame()">SPAWN LIFE</button>
+  </div>
+
+  <!-- Editor Screen -->
+  <div id="editorLayer" hidden style="position:absolute; inset:0; background:rgba(5,15,25,0.98); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:30;">
+    <h2 style="color:#fbbf24; margin:0 0 10px 0; font-weight:300; letter-spacing:2px;">MUTATION LAB</h2>
+    
+    <div style="display:flex; gap:40px; flex-wrap:wrap; justify-content:center; align-items:center; width:100%;">
+      
+      <!-- Preview -->
+      <div style="position:relative; width:320px; height:320px; background:radial-gradient(circle, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0) 70%); border-radius:50%; display:flex; align-items:center; justify-content:center;">
+        <canvas id="editorCanvasEl" width="300" height="300"></canvas>
+        <div style="position:absolute; bottom:10px; font-size:12px; opacity:0.5;">PREVIEW</div>
+      </div>
+      
+      <!-- Shop -->
+      <div style="flex:1; min-width:300px; max-width:400px; background:rgba(255,255,255,0.03); padding:20px; border-radius:16px; border:1px solid rgba(255,255,255,0.05);">
+        <h3 style="margin-top:0; color:#94a3b8; font-size:14px; text-transform:uppercase;">Available Mutations</h3>
+        <div id="partListEl" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:15px;">
+          <!-- Generated by JS -->
+        </div>
+      </div>
+    </div>
+    
+    <div style="margin-top:30px; display:flex; gap:20px;">
+      <button id="resumeBtn" style="padding:12px 40px; font-size:1.1rem; background:rgba(255,255,255,0.1); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:8px; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'" onclick="exitEditor()">CONTINUE SURVIVAL</button>
+    </div>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div id="gameOverLayer" hidden style="position:absolute; inset:0; background:rgba(20,0,0,0.9); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:40; backdrop-filter:blur(5px);">
+    <h1 style="font-size:4rem; color:#f87171; margin:0; font-weight:900;">EXTINCT</h1>
+    <p id="finalScore" style="font-size:1.5rem; margin-bottom:30px; opacity:0.8;"></p>
+    <button onclick="location.reload()" style="padding:15px 40px; background:white; border:none; cursor:pointer; font-size:1.2rem; font-weight:bold; border-radius:8px; box-shadow:0 0 20px rgba(255,255,255,0.2);">TRY AGAIN</button>
+  </div>
+
+</div>
+
+<script type="module">
+  import { createNoise2D } from 'https://esm.sh/simplex-noise@4.0.3';
+  
+  /* --- GAME ENGINE & STATE --- */
+  const canvas = gameCanvas;
+  const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for speed
+  const editorCanvas = editorCanvasEl;
+  const eCtx = editorCanvas.getContext('2d');
+
+  let width, height;
+  // Handle high DPI displays for crisp rendering
+  const resize = () => { 
+    width = window.innerWidth; 
+    height = window.innerHeight;
+    canvas.width = width; 
+    canvas.height = height;
+  };
+  window.addEventListener('resize', resize);
+  resize();
+
+  // Noise generation for currents
+  const noise2D = createNoise2D();
+
+  // Game Constants
+  const WORLD_SIZE = 3000;
+  const CAMERA_LERP = 0.1;
+  const WATER_DENSITY = 0.98; // Friction
+
+  // State
+  let gameRunning = false;
+  let lastTime = 0;
+  let mouse = { x: width / 2, y: height / 2, down: false };
+  let camera = { x: 0, y: 0, zoom: 1, targetZoom: 1 };
+  let time = 0; // Global time for animations
+
+  // Player Definition
+  let player = {
+    x: 0, y: 0, 
+    vx: 0, vy: 0, 
+    angle: 0,
+    radius: 25,
+    color: { r: 74, g: 222, b: 128 }, 
+    hp: 100, maxHp: 100,
+    dna: 0, biomass: 0,
+    speed: 3,
+    turnSpeed: 0.1,
+    diet: { plant: 0, meat: 0 },
+    // Parts configuration
+    parts: { front: 'mouth', rear: null, left: null, right: null } 
+  };
+
+  // Entities
+  let entities = [];
+  let particles = [];
+  let bubbles = []; // Background decor
+
+  /* --- INPUT (Mouse + Touch) --- */
+  // Unified input handler for mobile and desktop
+  const handleInputMove = (x, y) => {
+    mouse.x = x;
+    mouse.y = y;
+  };
+
+  window.addEventListener('mousemove', e => handleInputMove(e.clientX, e.clientY));
+  
+  // Touch support
+  window.addEventListener('touchstart', e => { 
+    mouse.down = true;
+    handleInputMove(e.touches[0].clientX, e.touches[0].clientY);
+  }, {passive: false});
+  
+  window.addEventListener('touchmove', e => { 
+    e.preventDefault(); // Prevent scrolling
+    handleInputMove(e.touches[0].clientX, e.touches[0].clientY);
+  }, {passive: false});
+  
+  window.addEventListener('touchend', () => mouse.down = false);
+  
+  window.addEventListener('mousedown', () => mouse.down = true);
+  window.addEventListener('mouseup', () => mouse.down = false);
+
+  /* --- UTILS --- */
+  const rand = (min, max) => Math.random() * (max - min) + min;
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  /* --- CLASSES --- */
+
+  class Entity {
+    constructor(type, x, y, radius, tier = 0) {
+      this.type = type; // 'food_plant', 'food_meat', 'herbivore', 'carnivore', 'apex'
+      this.x = x;
+      this.y = y;
+      this.radius = radius;
+      this.vx = rand(-0.5, 0.5);
+      this.vy = rand(-0.5, 0.5);
+      this.angle = rand(0, Math.PI * 2);
+      this.dead = false;
+      this.tier = tier;
+      
+      // Stats based on tier
+      this.hp = tier === 0 ? 1 : radius * 1.5;
+      this.maxSpeed = tier === 0 ? 0 : (2 + tier * 0.5);
+      
+      // Visual variation
+      this.colorOffset = rand(-20, 20);
+      this.hueOffset = rand(-10, 10);
+      
+      // Colors
+      if (type === 'food_plant') {
+        this.color = `hsl(${140 + this.hueOffset}, 70%, 60%)`;
+        this.glow = '#4ade80';
+      } else if (type === 'food_meat') {
+        this.color = `hsl(${0 + this.hueOffset}, 80%, 60%)`;
+        this.glow = '#f87171';
+      } else if (type === 'herbivore') {
+        this.color = `hsl(${200 + this.hueOffset}, 70%, 70%)`;
+        this.glow = '#60a5fa';
+      } else if (type === 'carnivore') {
+        this.color = `hsl(${0 + this.hueOffset}, 80%, 50%)`;
+        this.glow = '#ef4444';
+      } else if (type === 'apex') {
+        this.color = `hsl(${280 + this.hueOffset}, 60%, 40%)`; // Purple/Black
+        this.glow = '#a855f7';
+      }
+      
+      // Determine parts based on type/tier
+      this.parts = { front: 'mouth', rear: null, left: null, right: null };
+      if (tier >= 2) {
+        if (type === 'carnivore' || type === 'apex') this.parts.front = 'spike';
+        if (tier >= 3) this.parts.rear = 'spike';
+      }
+    }
+
+    update(dt) {
+      // Water Currents (Flow Field)
+      let noiseVal = noise2D(this.x * 0.0005, this.y * 0.0005);
+      let currentAngle = noiseVal * Math.PI * 4;
+      let currentForce = 0.05; // Gentle drift
+      
+      // Apply current
+      this.vx += Math.cos(currentAngle) * currentForce;
+      this.vy += Math.sin(currentAngle) * currentForce;
+
+      // Movement
+      this.x += this.vx;
+      this.y += this.vy;
+      this.angle += rand(-0.02, 0.02);
+
+      // Wrap world
+      if (this.x < -WORLD_SIZE) this.x = WORLD_SIZE;
+      if (this.x > WORLD_SIZE) this.x = -WORLD_SIZE;
+      if (this.y < -WORLD_SIZE) this.y = WORLD_SIZE;
+      if (this.y > WORLD_SIZE) this.y = -WORLD_SIZE;
+
+      // Friction (Water resistance)
+      this.vx *= WATER_DENSITY;
+      this.vy *= WATER_DENSITY;
+
+      // AI Logic
+      if (this.tier > 0) {
+        let d = dist(this, player);
+        let awareness = 400 + (this.tier * 100);
+        
+        if (d < awareness) {
+          let targetX = player.x;
+          let targetY = player.y;
+          let isPredator = (this.type === 'carnivore' || this.type === 'apex');
+          let isPrey = (this.type === 'herbivore');
+          
+          // Behavior Logic
+          let flee = false;
+          if (isPrey && player.radius > this.radius * 1.1) flee = true;
+          if (isPredator && player.radius < this.radius) {
+             // Chase smaller
+          } else if (isPredator && player.radius > this.radius * 1.5) {
+             flee = true; // Avoid bigger
+          }
+
+          if (flee) {
+            targetX = this.x - (player.x - this.x);
+            targetY = this.y - (player.y - this.y);
+          }
+
+          let desiredAngle = Math.atan2(targetY - this.y, targetX - this.x);
+          
+          // Smooth turn based on tier (Higher tier = slower turn)
+          let turnRate = 0.05 - (this.tier * 0.005);
+          let diff = desiredAngle - this.angle;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          this.angle += clamp(diff, -turnRate, turnRate);
+          
+          // Accelerate
+          let accel = 0.2;
+          this.vx += Math.cos(this.angle) * accel;
+          this.vy += Math.sin(this.angle) * accel;
+        }
+      }
+      
+      // Cap Speed
+      let speed = Math.hypot(this.vx, this.vy);
+      if (speed > this.maxSpeed) {
+        this.vx = (this.vx / speed) * this.maxSpeed;
+        this.vy = (this.vy / speed) * this.maxSpeed;
+      }
+    }
+
+    draw(ctx, camX, camY) {
+      let screenX = (this.x - camX) * camera.zoom + width / 2;
+      let screenY = (this.y - camY) * camera.zoom + height / 2;
+      let r = this.radius * camera.zoom;
+
+      if (screenX < -r * 2 || screenX > width + r * 2 || screenY < -r * 2 || screenY > height + r * 2) return;
+
+      ctx.save();
+      ctx.translate(screenX, screenY);
+      ctx.rotate(this.angle);
+
+      // Glow
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = this.glow;
+
+      // Draw Body (Organic shape for larger entities)
+      if (this.radius > 15) {
+        drawOrganicBlob(ctx, r, this.color, time * (5/r));
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+      }
+      
+      ctx.shadowBlur = 0; // Reset glow for internal details
+
+      // Draw parts
+      if (this.radius > 10) {
+        drawCellParts(ctx, r, this.parts);
+        
+        // Eye (always visible)
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.beginPath();
+        ctx.arc(r * 0.4, -r * 0.3, r * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'black';
+        ctx.beginPath();
+        ctx.arc(r * 0.5, -r * 0.3, r * 0.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+  }
+
+  class Particle {
+    constructor(x, y, color, type = 'bubble') {
+      this.x = x; this.y = y;
+      this.color = color;
+      this.life = 1.0;
+      this.type = type; // 'bubble', 'debris', 'spark'
+      this.vx = rand(-1, 1);
+      this.vy = rand(-1, 1);
+      if (type === 'bubble') {
+        this.vy = -rand(0.2, 0.5); // Float up
+        this.size = rand(1, 3);
+      } else {
+        this.size = rand(2, 5);
+      }
+    }
+    update() {
+      this.x += this.vx;
+      this.y += this.vy;
+      
+      // Currents affect particles too
+      let n = noise2D(this.x * 0.0005, this.y * 0.0005);
+      this.vx += Math.cos(n * Math.PI * 4) * 0.01;
+      this.vy += Math.sin(n * Math.PI * 4) * 0.01;
+      
+      this.vx *= 0.99; this.vy *= 0.99;
+      
+      this.life -= 0.01;
+    }
+    draw(ctx, cx, cy) {
+      let sx = (this.x - cx) * camera.zoom + width / 2;
+      let sy = (this.y - cy) * camera.zoom + height / 2;
+      
+      ctx.globalAlpha = this.life;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(sx, sy, this.size * camera.zoom, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /* --- RENDER HELPERS --- */
+  
+  // Procedural wobbly cell body
+  function drawOrganicBlob(ctx, r, color, wobbleTime) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    let segments = 12;
+    for (let i = 0; i <= segments; i++) {
+      let theta = (i / segments) * Math.PI * 2;
+      // Sine wave perturbation
+      let rOffset = Math.sin(theta * 3 + wobbleTime) * (r * 0.05);
+      let px = Math.cos(theta) * (r + rOffset);
+      let py = Math.sin(theta) * (r + rOffset);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    
+    // Inner gradient (pseudo-3D)
+    let grad = ctx.createRadialGradient(-r*0.3, -r*0.3, 0, 0, 0, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.3)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.1)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  function drawCellParts(ctx, r, parts) {
+    const drawSpike = () => {
+      ctx.fillStyle = '#888';
+      ctx.beginPath();
+      ctx.moveTo(r, 0);
+      ctx.quadraticCurveTo(r * 1.5, -r * 0.2, r * 1.6, 0);
+      ctx.quadraticCurveTo(r * 1.5, r * 0.2, r, 0);
+      ctx.fill();
+    };
+    
+    const drawJet = () => {
+      ctx.fillStyle = '#f59e0b'; // Orange
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.8, -r * 0.4);
+      ctx.lineTo(-r * 1.3, 0);
+      ctx.lineTo(-r * 0.8, r * 0.4);
+      ctx.fill();
+    };
+
+    const drawMouth = () => {
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.beginPath();
+      ctx.ellipse(r * 0.8, 0, r * 0.3, r * 0.2, 0, 0, Math.PI*2);
+      ctx.fill();
+    };
+    
+    const drawFilter = () => {
+        ctx.fillStyle = '#c084fc'; // Purple
+        ctx.beginPath();
+        ctx.moveTo(r*0.6, -r*0.4);
+        ctx.lineTo(r*0.9, -r*0.6);
+        ctx.lineTo(r*0.9, r*0.6);
+        ctx.lineTo(r*0.6, r*0.4);
+        ctx.fill();
+    };
+
+    const drawEye = () => {
+      // Large eye
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(r * 0.6, -r * 0.3, r * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(r * 0.7, -r * 0.3, r * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+    };
+
+    // Front (0)
+    if (parts.front === 'spike') drawSpike();
+    if (parts.front === 'mouth') drawMouth();
+    if (parts.front === 'filter') drawFilter();
+    if (parts.front === 'eye') drawEye();
+    
+    // Rear (PI)
+    ctx.save();
+    ctx.rotate(Math.PI);
+    if (parts.rear === 'spike') drawSpike();
+    if (parts.rear === 'jet') drawJet();
+    ctx.restore();
+
+    // Sides
+    ctx.save();
+    ctx.rotate(Math.PI / 2);
+    if (parts.left === 'spike') drawSpike();
+    if (parts.left === 'jet') drawJet();
+    if (parts.left === 'cilia') { 
+        // Simple hairs
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        for(let i=-1; i<=1; i+=0.5) {
+            ctx.moveTo(r, i*r*0.5);
+            ctx.lineTo(r*1.4, i*r*0.5);
+        }
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.rotate(-Math.PI / 2);
+    if (parts.right === 'spike') drawSpike();
+    if (parts.right === 'jet') drawJet();
+    if (parts.right === 'cilia') {
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        for(let i=-1; i<=1; i+=0.5) {
+            ctx.moveTo(r, i*r*0.5);
+            ctx.lineTo(r*1.4, i*r*0.5);
+        }
+        ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /* --- GAMEPLAY LOGIC --- */
+
+  function spawnEnemy() {
+    // Determine tier based on player size
+    let roll = Math.random();
+    let type, tier, size;
+    
+    // Spawn logic
+    if (player.biomass < 50) {
+      // Early game: mostly peers and small predators
+      type = roll > 0.7 ? 'carnivore' : 'herbivore';
+      tier = 1;
+      size = rand(15, 30);
+    } else if (player.biomass < 150) {
+      type = roll > 0.6 ? 'carnivore' : (roll > 0.3 ? 'herbivore' : 'apex');
+      tier = type === 'apex' ? 3 : 2;
+      size = type === 'apex' ? 80 : rand(30, 50);
+    } else {
+      // Late game
+      type = roll > 0.8 ? 'apex' : (roll > 0.4 ? 'carnivore' : 'herbivore');
+      tier = type === 'apex' ? 4 : (type === 'carnivore' ? 2 : 1);
+      size = clamp(player.radius * rand(0.8, 1.5), 20, 120);
+    }
+
+    let angle = rand(0, Math.PI * 2);
+    let d = Math.max(width, height) * 0.8; 
+    let ex = player.x + Math.cos(angle) * d;
+    let ey = player.y + Math.sin(angle) * d;
+    
+    entities.push(new Entity(type, ex, ey, size, tier));
+  }
+
+  function spawnFood() {
+    let type = Math.random() > 0.4 ? 'food_plant' : 'food_meat';
+    let angle = rand(0, Math.PI * 2);
+    let d = rand(200, width/2); // Closer spawn
+    let fx = player.x + Math.cos(angle) * d;
+    let fy = player.y + Math.sin(angle) * d;
+    
+    // Spawn in clusters for plants
+    let count = type === 'food_plant' ? rand(2,5) : 1;
+    for(let i=0; i<count; i++) {
+        entities.push(new Entity(type, fx + rand(-30,30), fy + rand(-30,30), rand(4, 8)));
+    }
+  }
+
+  function updatePlayer(dt) {
+    // Initialize speed at function scope to prevent ReferenceError
+    let speed = player.speed;
+
+    // Input Steering (Mouse or Touch)
+    let dx = mouse.x - width / 2;
+    let dy = mouse.y - height / 2;
+    
+    // Only move if input is active or far from center (deadzone)
+    if (Math.hypot(dx, dy) > 10) {
+      let targetAngle = Math.atan2(dy, dx);
+      
+      let diff = targetAngle - player.angle;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      
+      // Turn speed bonus if player has cilia
+      let turnMod = (player.parts.left === 'cilia' || player.parts.right === 'cilia') ? 1.5 : 1.0;
+      player.angle += clamp(diff, -player.turnSpeed * turnMod, player.turnSpeed * turnMod);
+
+      // Movement
+      // speed is already initialized to player.speed at top of function
+      let jetActive = false;
+      
+      // Jet boost
+      if (mouse.down && (player.parts.rear === 'jet' || player.parts.left === 'jet' || player.parts.right === 'jet')) {
+        speed *= 2.0;
+        jetActive = true;
+        if (Math.random() < 0.3) createJetParticle();
+      }
+      
+      player.vx += Math.cos(player.angle) * 0.2;
+      player.vy += Math.sin(player.angle) * 0.2;
+    }
+
+    // Water Physics (Currents)
+    let n = noise2D(player.x * 0.0005, player.y * 0.0005);
+    let cAngle = n * Math.PI * 4;
+    player.vx += Math.cos(cAngle) * 0.03;
+    player.vy += Math.sin(cAngle) * 0.03;
+
+    // Friction
+    player.vx *= WATER_DENSITY;
+    player.vy *= WATER_DENSITY;
+
+    // Cap speed
+    let currentSpeed = Math.hypot(player.vx, player.vy);
+    if (currentSpeed > speed) {
+      player.vx = (player.vx / currentSpeed) * speed;
+      player.vy = (player.vy / currentSpeed) * speed;
+    }
+
+    player.x += player.vx;
+    player.y += player.vy;
+
+    // Boundaries
+    if (Math.abs(player.x) > WORLD_SIZE) { player.x = Math.sign(player.x) * WORLD_SIZE; player.vx *= -1; }
+    if (Math.abs(player.y) > WORLD_SIZE) { player.y = Math.sign(player.y) * WORLD_SIZE; player.vy *= -1; }
+
+    // Camera follow
+    camera.x = player.x;
+    camera.y = player.y;
+    camera.zoom += (camera.targetZoom - camera.zoom) * 0.05;
+
+    // Update Diet Color & UI
+    let total = player.diet.plant + player.diet.meat;
+    if (total > 0) {
+      let meatRatio = player.diet.meat / total;
+      
+      // Interpolate color: Green (Herb) -> Red (Carn)
+      let r = 74 + (248 - 74) * meatRatio;
+      let g = 222 + (113 - 222) * meatRatio;
+      let b = 128 + (113 - 128) * meatRatio;
+      player.color = { r, g, b };
+      
+      // Update Diet Text
+      if (meatRatio < 0.2) dietIndicator.textContent = "HERBIVORE";
+      else if (meatRatio > 0.8) dietIndicator.textContent = "CARNIVORE";
+      else dietIndicator.textContent = "OMNIVORE";
+      
+      // Color code text
+      if(meatRatio < 0.2) dietIndicator.style.color = "#4ade80";
+      else if (meatRatio > 0.8) dietIndicator.style.color = "#f87171";
+      else dietIndicator.style.color = "#fbbf24";
+    }
+  }
+
+  function createJetParticle() {
+    particles.push(new Particle(
+      player.x - Math.cos(player.angle) * player.radius,
+      player.y - Math.sin(player.angle) * player.radius,
+      '#60a5fa', 'bubble'
+    ));
+  }
+
+  function checkCollisions() {
+    for (let i = entities.length - 1; i >= 0; i--) {
+      let e = entities[i];
+      let d = dist(player, e);
+      
+      // Collision Radius
+      let colDist = player.radius + e.radius * 0.8; // slightly forgiving
+      
+      if (d < colDist) {
+        // Food Logic
+        if (e.type.startsWith('food')) {
+          let canEat = false;
+          
+          // Mouth types
+          if (e.type === 'food_plant' && (player.parts.front === 'mouth' || player.parts.front === 'filter')) {
+            canEat = true;
+          } else if (e.type === 'food_meat' && player.parts.front === 'mouth') {
+            canEat = true;
+          }
+          
+          if (canEat) {
+            e.dead = true;
+            player.dna += (e.type === 'food_meat' ? 10 : 3);
+            player.biomass += (e.type === 'food_meat' ? 5 : 2);
+            
+            if (e.type === 'food_plant') {
+                player.diet.plant++;
+                player.hp = Math.min(player.hp + 2, player.maxHp);
+            }
+            if (e.type === 'food_meat') player.diet.meat++;
+            
+            // Grow slowly
+            player.radius = Math.min(player.radius + 0.2, 100);
+            
+            // Particle effect
+            for(let k=0; k<3; k++) particles.push(new Particle(e.x, e.y, e.color));
+          }
+        } 
+        // Combat Logic
+        else if (e.tier > 0) {
+          let myDamage = 0;
+          let enemyDamage = 0;
+          
+          let angleToEnemy = Math.atan2(e.y - player.y, e.x - player.x);
+          let angleDiff = Math.abs(angleToEnemy - player.angle);
+          // Normalize diff
+          while(angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - Math.PI*2);
+          
+          // Check Spikes (Front)
+          if (player.parts.front === 'spike' && angleDiff < 1.0) myDamage += 20;
+          // Check Spikes (Rear - if chasing)
+          let rearDiff = Math.abs(angleToEnemy - (player.angle + Math.PI));
+          while(rearDiff > Math.PI) rearDiff = Math.abs(rearDiff - Math.PI*2);
+          if (player.parts.rear === 'spike' && rearDiff < 1.0) myDamage += 10;
+
+          // Enemy attacking Player
+          if (e.radius > player.radius * 1.1) {
+            enemyDamage = 1; // Crush damage
+            // Screenshake effect (subtle camera shift)
+            camera.x += rand(-2,2); 
+            camera.y += rand(-2,2);
+          } else if (e.parts.front === 'spike') {
+             let eDiff = Math.abs(player.angle - (e.angle + Math.PI));
+             while(eDiff > Math.PI) eDiff = Math.abs(eDiff - Math.PI*2);
+             if (eDiff < 1.0) enemyDamage += 15;
+          }
+          
+          player.hp -= enemyDamage;
+          e.hp -= myDamage;
+
+          // Knockback
+          let kx = Math.cos(angleToEnemy) * 5;
+          let ky = Math.sin(angleToEnemy) * 5;
+          player.vx -= kx;
+          player.vy -= ky;
+          e.vx += kx;
+          e.vy += ky;
+          
+          // Hit particles
+          particles.push(new Particle((player.x+e.x)/2, (player.y+e.y)/2, '#fff', 'debris'));
+
+          if (e.hp <= 0) {
+            e.dead = true;
+            player.dna += (e.tier * 15);
+            player.biomass += 10;
+            player.diet.meat++;
+            // Explode meat
+            for(let k=0; k<5; k++) {
+              entities.push(new Entity('food_meat', e.x + rand(-15,15), e.y + rand(-15,15), 8));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function drawGame() {
+    // Clear Background
+    ctx.fillStyle = '#00101a';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw Flow Field (Currents visualization)
+    ctx.save();
+    ctx.translate(width/2 - camera.x * camera.zoom, height/2 - camera.y * camera.zoom);
+    ctx.scale(camera.zoom, camera.zoom);
+    
+    // Optimize: only draw grid lines near camera
+    ctx.strokeStyle = 'rgba(0, 100, 120, 0.1)';
+    ctx.lineWidth = 1;
+    let step = 100;
+    let startX = Math.floor((camera.x - width/2/camera.zoom)/step) * step;
+    let endX = startX + width/camera.zoom + step;
+    let startY = Math.floor((camera.y - height/2/camera.zoom)/step) * step;
+    let endY = startY + height/camera.zoom + step;
+
+    for (let x = startX; x < endX; x += step) {
+      for (let y = startY; y < endY; y += step) {
+        let n = noise2D(x * 0.0005, y * 0.0005);
+        let angle = n * Math.PI * 4;
+        let len = 10;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(angle)*len, y + Math.sin(angle)*len);
+        ctx.stroke();
+      }
+    }
+    
+    // Draw Background Bubbles (Parallax-ish)
+    bubbles.forEach(b => {
+      if (Math.abs(b.x - camera.x) < width && Math.abs(b.y - camera.y) < height) {
+         ctx.fillStyle = 'rgba(255,255,255,0.05)';
+         ctx.beginPath();
+         ctx.arc(b.x, b.y, b.size, 0, Math.PI*2);
+         ctx.fill();
+      }
+    });
+
+    // Entities
+    entities.forEach(e => e.draw(ctx, camera.x, camera.y));
+    
+    // Player
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(player.angle);
+    
+    drawOrganicBlob(ctx, player.radius, `rgb(${player.color.r}, ${player.color.g}, ${player.color.b})`, time * 0.1);
+    drawCellParts(ctx, player.radius, player.parts);
+    
+    // Eye
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(player.radius * 0.5, -player.radius * 0.3, player.radius * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.arc(player.radius * 0.6, -player.radius * 0.3, player.radius * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Particles
+    particles.forEach(p => p.draw(ctx, camera.x, camera.y));
+
+    ctx.restore();
+  }
+
+  function gameLoop(timestamp) {
+    if (!gameRunning) return;
+    let dt = (timestamp - lastTime) / 1000;
+    lastTime = timestamp;
+    time += dt;
+
+    if (dt > 0.1) dt = 0.1; // Cap lag
+
+    updatePlayer(dt);
+
+    entities.forEach(e => e.update(dt));
+    entities = entities.filter(e => !e.dead);
+    
+    particles.forEach(p => p.update());
+    particles = particles.filter(p => p.life > 0);
+    
+    bubbles.forEach(b => {
+        b.x += Math.sin(b.y * 0.01) * 0.2;
+        b.y -= 0.5;
+        if(b.y < -WORLD_SIZE) b.y = WORLD_SIZE;
+    });
+
+    // Spawning
+    if (entities.length < 30 && Math.random() < 0.05) spawnFood();
+    if (entities.length < 10 && Math.random() < 0.01) spawnEnemy();
+
+    checkCollisions();
+
+    // UI Updates
+    let biomassPercent = Math.min(100, (player.biomass / 100) * 100);
+    biomassBar.style.width = biomassPercent + '%';
+    dnaDisplay.textContent = Math.floor(player.dna).toString().padStart(3, '0');
+    
+    // Era Logic
+    let era = "MICROBE";
+    if(player.biomass > 50) era = "SCAVENGER";
+    if(player.biomass > 150) era = "PREDATOR";
+    if(player.biomass > 300) era = "APEX";
+    eraDisplay.textContent = era;
+
+    if (player.dna >= 50 && player.biomass > 30) {
+      evoBtn.style.display = 'block';
+    } else {
+      evoBtn.style.display = 'none';
+    }
+
+    // Game Over
+    if (player.hp <= 0) {
+      gameRunning = false;
+      gameOverLayer.hidden = false;
+      hudLayer.hidden = true;
+      finalScore.textContent = `Final DNA: ${Math.floor(player.dna)} | Era: ${era}`;
+    }
+
+    drawGame();
+    requestAnimationFrame(gameLoop);
+  }
+
+  /* --- EDITOR LOGIC --- */
+  const PARTS_DB = {
+    'spike': { cost: 25, desc: 'Spike: Charge Attack', slot: 'any' },
+    'mouth': { cost: 0, desc: 'Mouth: Basic Diet', slot: 'front' },
+    'jet': { cost: 30, desc: 'Jet: Burst Speed', slot: 'rear' },
+    'eye': { cost: 15, desc: 'Eye: Better Zoom', slot: 'front' },
+    'filter': { cost: 15, desc: 'Filter: Eat Plants', slot: 'front' },
+    'cilia': { cost: 10, desc: 'Cilia: Fast Turn', slot: 'side' },
+  };
+
+  function enterEditor() {
+    gameRunning = false;
+    editorLayer.hidden = false;
+    hudLayer.hidden = true;
+    
+    // Evolution cost
+    let cost = Math.floor(player.dna * 0.2); 
+    player.dna -= cost;
+    
+    renderEditorUI();
+    renderEditorCell();
+  }
+
+  function renderEditorUI() {
+    const list = partListEl;
+    list.innerHTML = '';
+    
+    for (let key in PARTS_DB) {
+      let p = PARTS_DB[key];
+      let btn = document.createElement('div');
+      btn.style.cssText = `
+        background:rgba(30,41,59,0.8); border:1px solid rgba(255,255,255,0.1); 
+        color:#e2e8f0; padding:12px; border-radius:8px; cursor:pointer;
+        display:flex; flex-direction:column; gap:4px;
+        transition:all 0.2s;
+      `;
+      btn.innerHTML = `
+        <div style="display:flex; justify-content:space-between; font-weight:bold;">
+          <span style="text-transform:uppercase; font-size:12px;">${key}</span>
+          <span style="color:#fbbf24; font-size:12px;">${p.cost} DNA</span>
+        </div>
+        <div style="font-size:10px; opacity:0.6;">${p.desc}</div>
+      `;
+      
+      btn.onmouseenter = () => { btn.style.borderColor = '#60a5fa'; btn.style.background = 'rgba(30,41,59,1)'; };
+      btn.onmouseleave = () => { btn.style.borderColor = 'rgba(255,255,255,0.1)'; btn.style.background = 'rgba(30,41,59,0.8)'; };
+
+      if (player.dna < p.cost) {
+        btn.style.opacity = '0.4';
+        btn.style.cursor = 'not-allowed';
+      } else {
+        btn.onclick = () => buyPart(key);
+      }
+      list.appendChild(btn);
+    }
+  }
+
+  function renderEditorCell() {
+    eCtx.clearRect(0,0,300,300);
+    
+    // Draw grid background
+    eCtx.strokeStyle = 'rgba(255,255,255,0.05)';
+    eCtx.beginPath();
+    for(let i=0; i<300; i+=30) { eCtx.moveTo(i,0); eCtx.lineTo(i,300); eCtx.moveTo(0,i); eCtx.lineTo(300,i); }
+    eCtx.stroke();
+
+    eCtx.save();
+    eCtx.translate(150, 150);
+    
+    // Highlight slots
+    eCtx.fillStyle = 'rgba(255,255,255,0.1)';
+    
+    // Draw current cell (Animated slightly)
+    let editorTime = performance.now() * 0.005;
+    eCtx.rotate(-Math.PI/2);
+    drawOrganicBlob(eCtx, 40, `rgb(${player.color.r}, ${player.color.g}, ${player.color.b})`, editorTime);
+    drawCellParts(eCtx, 40, player.parts);
+    
+    eCtx.restore();
+  }
+
+  function buyPart(partKey) {
+    let p = PARTS_DB[partKey];
+    if (player.dna >= p.cost) {
+      player.dna -= p.cost;
+      
+      // Apply Logic
+      if (partKey === 'spike') {
+        if (!player.parts.front) player.parts.front = 'spike';
+        else if (!player.parts.rear) player.parts.rear = 'spike';
+        else if (!player.parts.left) player.parts.left = 'spike';
+        else if (!player.parts.right) player.parts.right = 'spike';
+        else player.parts.front = 'spike';
+      } else if (partKey === 'jet') {
+        if (!player.parts.rear) player.parts.rear = 'jet';
+        else if (!player.parts.left) player.parts.left = 'jet';
+        else if (!player.parts.right) player.parts.right = 'jet';
+        else player.parts.rear = 'jet';
+      } else if (partKey === 'cilia') {
+         if (!player.parts.left) player.parts.left = 'cilia';
+         else if (!player.parts.right) player.parts.right = 'cilia';
+         else player.parts.left = 'cilia';
+      } else if (partKey === 'mouth' || partKey === 'eye' || partKey === 'filter') {
+        player.parts.front = partKey;
+      }
+      
+      // Stat upgrades
+      if (partKey === 'eye') camera.targetZoom += 0.2;
+      
+      renderEditorUI();
+      renderEditorCell();
+    }
+  }
+
+  function exitEditor() {
+    editorLayer.hidden = true;
+    hudLayer.hidden = false;
+    gameRunning = true;
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+  }
+
+  /* --- INITIALIZATION --- */
+  function startGame() {
+    menuLayer.hidden = true;
+    hudLayer.hidden = false;
+    
+    // Reset Player
+    player.x = 0; player.y = 0;
+    player.hp = 100;
+    player.dna = 10; // Start with some DNA
+    player.biomass = 0;
+    player.radius = 20;
+    player.parts = { front: 'mouth', rear: null, left: null, right: null };
+    player.color = { r: 74, g: 222, b: 128 };
+    player.diet = { plant: 0, meat: 0 };
+    camera.targetZoom = 1;
+    
+    entities = [];
+    particles = [];
+    
+    // Init Background Bubbles
+    bubbles = [];
+    for(let i=0; i<50; i++) {
+        bubbles.push({
+            x: rand(-WORLD_SIZE, WORLD_SIZE),
+            y: rand(-WORLD_SIZE, WORLD_SIZE),
+            size: rand(20, 100)
+        });
+    }
+    
+    // Initial Spawn
+    for(let i=0; i<30; i++) spawnFood();
+    
+    gameRunning = true;
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+  }
+  
+  // Expose functions to window for inline HTML onclick
+  window.startGame = startGame;
+  window.enterEditor = enterEditor;
+  window.exitEditor = exitEditor;
+
+</script>
+</body>
+</html>

@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-adventure-writer — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Completed:
+  [x] Basic story structure (Intro, Story Body, Choices)
+  [x] AI Text Generation integration using root.generateText
+  [x] Text-to-Speech (Narrator) using window.speechSynthesis
+  [x] Branching Choices (CYOA) logic
+  [x] Memory (Persistence) using root.kv (with localStorage fallback fix)
+  [x] Loading states and UI feedback
+  [x] Reset functionality
+  [x] Bug fix for undefined kv access
+  [x] Enhanced Story Setup with Genre, Tone, Segment Length, Character, Setting, Voice
+  [x] Separate "Story So Far" and "Current Segment" display
+  [x] Debug/Memory view for internal state
+  [x] Branch history tracking
+  [x] Improved choice parsing (handles "Choice 1:", "Choice 2:", etc.)
+-->
+<div
+  id="appCtn"
+  style="
+    max-width: 900px;
+    margin: 20px auto;
+    font-family: Georgia, serif;
+    color: #ddd;
+    background: #222;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  "
+>
+  <!-- Setup Panel -->
+  <div id="setupPanel" style="text-align: center">
+    <h1 style="margin-bottom: 10px">📚 AI Adventure Writer</h1>
+    <p style="color: #aaa; margin-bottom: 20px">
+      Create interactive stories with branching choices, AI narration, and
+      persistent memory.
+    </p>
+
+    <hr style="border-color: #444; margin: 20px 0" />
+
+    <h2 style="text-align: left">1. Story Setup</h2>
+    <p style="color: #aaa; text-align: left; font-size: 0.9em">
+      Choose your base parameters, then click "Begin Story".
+    </p>
+
+    <div
+      style="
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        text-align: left;
+        margin-top: 15px;
+      "
+    >
+      <!-- Genre -->
+      <div>
+        <label>Genre:</label><br />
+        <select
+          id="genreInput"
+          style="
+            width: 100%;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 1em;
+          "
+        >
+          <option>Fantasy</option>
+          <option>Science Fiction</option>
+          <option>Horror</option>
+          <option>Mystery</option>
+          <option>Romance</option>
+          <option>Adventure</option>
+        </select>
+      </div>
+
+      <!-- Tone -->
+      <div>
+        <label>Tone:</label><br />
+        <select
+          id="toneInput"
+          style="
+            width: 100%;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 1em;
+          "
+        >
+          <option>Epic</option>
+          <option>Dark</option>
+          <option>Whimsical</option>
+          <option>Comedic</option>
+          <option>Serious</option>
+        </select>
+      </div>
+
+      <!-- Segment Length -->
+      <div>
+        <label>Story length per segment:</label><br />
+        <select
+          id="segmentLengthInput"
+          style="
+            width: 100%;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 1em;
+          "
+        >
+          <option>Short</option>
+          <option selected>Medium</option>
+          <option>Long</option>
+        </select>
+      </div>
+
+      <!-- Narration Voice -->
+      <div>
+        <label>Narration voice:</label><br />
+        <select
+          id="voiceInput"
+          style="
+            width: 100%;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 1em;
+          "
+        >
+          <option selected>Default</option>
+          <option>Male</option>
+          <option>Female</option>
+          <option>Robot</option>
+          <option>Whisper</option>
+          <option>Dramatic</option>
+        </select>
+      </div>
+
+      <!-- Main Character -->
+      <div>
+        <label>Main character name:</label><br />
+        <input
+          id="characterInput"
+          type="text"
+          style="
+            width: 100%;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 1em;
+          "
+          placeholder="e.g. Aria, Jax, Liora"
+        />
+      </div>
+
+      <!-- Setting -->
+      <div>
+        <label>Setting:</label><br />
+        <input
+          id="settingInput"
+          type="text"
+          style="
+            width: 100%;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 1em;
+          "
+          placeholder="e.g. a floating city above the clouds"
+        />
+      </div>
+    </div>
+
+    <br />
+    <button
+      id="startBtn"
+      style="
+        padding: 15px 40px;
+        font-size: 1.2em;
+        background: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background 0.2s;
+      "
+    >
+      🚀 Begin Story
+    </button>
+  </div>
+
+  <!-- Game Panel (Hidden initially) -->
+  <div
+    id="gamePanel"
+    hidden
+    style="display: flex; flex-direction: column; gap: 20px"
+  >
+    <div
+      style="
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #444;
+        padding-bottom: 10px;
+      "
+    >
+      <h2 style="margin: 0">Your Story</h2>
+      <div id="saveStatusEl" style="font-size: 0.8em; color: #888">Saved</div>
+    </div>
+
+    <!-- Story So Far Display -->
+    <div>
+      <h3 style="margin: 0 0 10px 0; color: #aaa; font-size: 1em">
+        2. Story So Far
+      </h3>
+      <div
+        id="storyMemoryEl"
+        style="
+          background: #1a1a1a;
+          padding: 15px;
+          border-radius: 5px;
+          border-left: 4px solid #555;
+          white-space: pre-wrap;
+          line-height: 1.6;
+          max-height: 200px;
+          overflow-y: auto;
+          font-size: 0.9em;
+          color: #888;
+        "
+      ></div>
+    </div>
+
+    <!-- Current Segment Display -->
+    <div>
+      <h3 style="margin: 0 0 10px 0; color: #aaa; font-size: 1em">
+        3. Current Segment
+      </h3>
+      <div
+        id="storyOutputEl"
+        style="
+          background: #111;
+          padding: 20px;
+          border-radius: 5px;
+          border-left: 4px solid #4caf50;
+          white-space: pre-wrap;
+          line-height: 1.6;
+          min-height: 150px;
+        "
+      ></div>
+    </div>
+
+    <!-- Choices Container -->
+    <div>
+      <h3 style="margin: 0 0 10px 0; color: #aaa; font-size: 1em">
+        4. Choices
+      </h3>
+      <div
+        id="choicesCtn"
+        style="display: flex; flex-direction: column; gap: 10px"
+      ></div>
+    </div>
+
+    <!-- Controls -->
+    <div
+      style="
+        display: flex;
+        gap: 10px;
+        border-top: 1px solid #444;
+        padding-top: 20px;
+      "
+    >
+      <button
+        id="speakBtn"
+        style="
+          flex: 1;
+          padding: 10px;
+          background: #2196f3;
+          color: white;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+        "
+      >
+        🗣️ Narrate Story
+      </button>
+      <button
+        id="stopSpeakBtn"
+        hidden
+        style="
+          flex: 1;
+          padding: 10px;
+          background: #f44336;
+          color: white;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+        "
+      >
+        🛑 Stop
+      </button>
+      <button
+        id="resetBtn"
+        style="
+          flex: 1;
+          padding: 10px;
+          background: #555;
+          color: white;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+        "
+      >
+        🗑️ Reset Story
+      </button>
+    </div>
+
+    <!-- Debug View -->
+    <details style="margin-top: 10px">
+      <summary style="cursor: pointer; color: #666; font-size: 0.9em">
+        Show memory & internal state
+      </summary>
+      <pre
+        id="debugEl"
+        style="
+          background: #0a0a0a;
+          padding: 15px;
+          border-radius: 5px;
+          font-size: 0.8em;
+          overflow-x: auto;
+          color: #888;
+          margin-top: 10px;
+        "
+      ></pre>
+    </details>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div
+    id="loadingEl"
+    hidden
+    style="
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    "
+  >
+    <div style="font-size: 2em; margin-bottom: 20px">✨ Writing...</div>
+    <div style="font-style: italic; color: #aaa">
+      The AI is dreaming up your next adventure...
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  // Access globals. Use window as a fallback for root if root is unavailable.
+  const r = typeof root !== "undefined" ? root : window;
+  const generateText = r.generateText;
+
+  // Robust KV Fallback: If root.kv is undefined, create a localStorage-backed Proxy to mimic it.
+  // This fixes the "Cannot read properties of undefined" error.
+  const kv = r.kv
+    ? r.kv
+    : new Proxy(
+        {},
+        {
+          get: (target, prop) => {
+            // 'prop' is the folder name (e.g. "storyGenerator")
+            return {
+              set: async (key, value) =>
+                localStorage.setItem(
+                  `kv_${prop}_${key}`,
+                  JSON.stringify(value),
+                ),
+              get: async (key) => {
+                const val = localStorage.getItem(`kv_${prop}_${key}`);
+                return val ? JSON.parse(val) : null;
+              },
+              delete: async (key) =>
+                localStorage.removeItem(`kv_${prop}_${key}`),
+            };
+          },
+        },
+      );
+
+  // --- State Management ---
+  let storyState = {
+    storyMemory: "", // Full story history
+    currentSegment: "", // Current segment text
+    lastChoice: "None yet",
+    branchHistory: "",
+    genre: "Fantasy",
+    tone: "Epic",
+    segmentLength: "Medium",
+    mainCharacter: "",
+    setting: "",
+    narrationVoice: "Default",
+  };
+
+  // --- Voice Mapping ---
+  // Note: Real voice selection would require getting available voices from speechSynthesis.getVoices()
+  // This is a simplified mapping for demonstration
+  const voiceSettings = {
+    Default: { rate: 1, pitch: 1 },
+    Male: { rate: 0.9, pitch: 0.8 },
+    Female: { rate: 1.1, pitch: 1.2 },
+    Robot: { rate: 0.8, pitch: 0.5 },
+    Whisper: { rate: 0.7, pitch: 1.0 },
+    Dramatic: { rate: 0.9, pitch: 1.3 },
+  };
+
+  // --- Initialization ---
+  window.onload = async () => {
+    await loadGame();
+    updateDebugView();
+  };
+
+  async function saveGame() {
+    await kv.storyGenerator.set("current", storyState);
+    saveStatusEl.textContent = "Saved " + new Date().toLocaleTimeString();
+    updateDebugView();
+  }
+
+  async function loadGame() {
+    let saved = await kv.storyGenerator.get("current");
+    if (saved) {
+      storyState = saved;
+      // Restore UI elements
+      genreInput.value = storyState.genre || "Fantasy";
+      toneInput.value = storyState.tone || "Epic";
+      segmentLengthInput.value = storyState.segmentLength || "Medium";
+      characterInput.value = storyState.mainCharacter || "";
+      settingInput.value = storyState.setting || "";
+      voiceInput.value = storyState.narrationVoice || "Default";
+
+      setupPanel.hidden = true;
+      gamePanel.hidden = false;
+
+      // Display story memory
+      storyMemoryEl.innerText = storyState.storyMemory;
+      storyOutputEl.innerText = storyState.currentSegment;
+
+      if (
+        storyState.currentSegment.includes("Choice 1:") ||
+        storyState.currentSegment.includes("---CHOICES---")
+      ) {
+        renderChoices(storyState.currentSegment);
+      } else {
+        addContinueButton();
+      }
+    }
+  }
+
+  function updateDebugView() {
+    debugEl.textContent = `
+Memory Summary
+  Genre: ${storyState.genre}
+  Tone: ${storyState.tone}
+  Segment length: ${storyState.segmentLength}
+  Main character: ${storyState.mainCharacter}
+  Setting: ${storyState.setting}
+
+Last Choice
+  ${storyState.lastChoice}
+
+Branch History
+  ${storyState.branchHistory}
+    `.trim();
+  }
+
+  // --- Prompt Building Helpers ---
+  function getBaseStoryPrompt() {
+    let prompt = `Write a ${storyState.segmentLength} ${storyState.genre} story segment in a ${storyState.tone} tone.`;
+    if (storyState.mainCharacter)
+      prompt += ` The main character is ${storyState.mainCharacter}.`;
+    if (storyState.setting)
+      prompt += ` The story takes place in ${storyState.setting}.`;
+    return prompt;
+  }
+
+  function getChoiceFollowupPrompt() {
+    let prompt = `Write the next ${storyState.segmentLength} ${storyState.genre} story segment in a ${storyState.tone} tone.`;
+    if (storyState.mainCharacter)
+      prompt += ` The main character is ${storyState.mainCharacter}.`;
+    if (storyState.setting)
+      prompt += ` The story takes place in ${storyState.setting}.`;
+    return prompt;
+  }
+
+  // --- Core Logic ---
+
+  startBtn.onclick = async () => {
+    // Gather inputs
+    storyState.genre = genreInput.value;
+    storyState.tone = toneInput.value;
+    storyState.segmentLength = segmentLengthInput.value;
+    storyState.mainCharacter = characterInput.value;
+    storyState.setting = settingInput.value;
+    storyState.narrationVoice = voiceInput.value;
+
+    // Initialize state
+    storyState.storyMemory = "";
+    storyState.currentSegment = "";
+    storyState.lastChoice = "None yet";
+    storyState.branchHistory = "Story started";
+
+    setupPanel.hidden = true;
+    gamePanel.hidden = false;
+
+    await generateSegment(null, true);
+  };
+
+  resetBtn.onclick = async () => {
+    if (confirm("Are you sure you want to delete your story progress?")) {
+      await kv.storyGenerator.delete("current");
+      location.reload();
+    }
+  };
+
+  async function generateSegment(choiceInput, isFirst = false) {
+    setLoading(true);
+
+    try {
+      let instruction;
+      let basePrompt = getBaseStoryPrompt();
+      let followupPrompt = getChoiceFollowupPrompt();
+
+      if (isFirst) {
+        instruction = `${basePrompt}
+Start the story with an engaging opening scene.
+End this segment with a small cliffhanger and present 2-3 clear choices for what the protagonist can do next, labeled as "Choice 1:", "Choice 2:", etc.`;
+      } else {
+        instruction = `${followupPrompt}
+
+Here is the story so far:
+${storyState.storyMemory}
+
+The last choice the reader selected was:
+${storyState.lastChoice}
+
+Continue the story logically from that choice.
+End this segment with a small cliffhanger and present 2-3 new clear choices labeled "Choice 1:", "Choice 2:", etc.`;
+      }
+
+      choicesCtn.innerHTML = "";
+      let fullResponse = "";
+
+      await generateText({
+        instruction: instruction,
+        onChunk: (data) => {
+          fullResponse += data.textChunk;
+
+          // Check for "Choice 1:" marker
+          if (fullResponse.includes("Choice 1:")) {
+            let parts = fullResponse.split(/Choice\s*\d+:/);
+            let storyPart = parts[0];
+            let choicesPart = "Choice 1:" + parts.slice(1).join("Choice 1:");
+
+            storyOutputEl.innerText = storyPart;
+            renderChoices(choicesPart);
+          }
+          // Fallback for "---CHOICES---" marker
+          else if (fullResponse.includes("---CHOICES---")) {
+            let parts = fullResponse.split("---CHOICES---");
+            let storyPart = parts[0];
+            let choicesPart = parts[1] || "";
+
+            storyOutputEl.innerText = storyPart;
+            renderChoices(choicesPart);
+          } else {
+            storyOutputEl.innerText = fullResponse;
+          }
+        },
+      });
+
+      // Process the response
+      let narrativePart = fullResponse;
+      if (fullResponse.includes(/Choice\s*\d+:/)) {
+        narrativePart = fullResponse.split(/Choice\s*\d+:/)[0];
+      } else if (fullResponse.includes("---CHOICES---")) {
+        narrativePart = fullResponse.split("---CHOICES---")[0];
+      }
+
+      // Update state
+      if (storyState.storyMemory) {
+        storyState.storyMemory += "\n\n" + narrativePart.trim();
+      } else {
+        storyState.storyMemory = narrativePart.trim();
+      }
+      storyState.currentSegment = fullResponse;
+      storyMemoryEl.innerText = storyState.storyMemory;
+
+      // Update branch history
+      let actionType = isFirst ? "start_story" : "choice_made";
+      storyState.branchHistory += `\nAction: ${actionType}, Last choice: ${storyState.lastChoice}`;
+
+      await saveGame();
+    } catch (e) {
+      console.error(e);
+      storyOutputEl.innerText +=
+        "\n[Error generating story. Please try again.]";
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function renderChoices(choicesText) {
+    choicesCtn.innerHTML = "";
+
+    // Parse choices - handles both "Choice 1:" format and simple numbered format
+    let lines = choicesText.split("\n").filter((l) => l.trim().length > 0);
+    let choices = [];
+
+    // Try to match "Choice 1:", "Choice 2:", etc.
+    let choicePattern = /Choice\s*(\d+):\s*(.*)/i;
+
+    for (let line of lines) {
+      let match = line.match(choicePattern);
+      if (match) {
+        choices.push({ id: match[1], text: match[2].trim() });
+      } else if (line.match(/^\d+\.\s*/)) {
+        // Fallback for "1. " format
+        choices.push({
+          id: choices.length + 1,
+          text: line.replace(/^\d+\.\s*/, "").trim(),
+        });
+      }
+    }
+
+    if (choices.length === 0) {
+      addContinueButton();
+      return;
+    }
+
+    choices.forEach((choice) => {
+      let btn = document.createElement("button");
+      btn.innerText = choice.text;
+      btn.style.cssText =
+        "padding:15px; background:#444; color:white; border:1px solid #666; border-radius:5px; cursor:pointer; text-align:left; transition:all 0.2s; width:100%;";
+      btn.onmouseover = () => (btn.style.background = "#555");
+      btn.onmouseout = () => (btn.style.background = "#444");
+      btn.onclick = async () => {
+        window.speechSynthesis.cancel();
+        storyState.lastChoice = `Choice ${choice.id}: ${choice.text}`;
+        await generateSegment(choice.text);
+      };
+      choicesCtn.appendChild(btn);
+    });
+  }
+
+  function addContinueButton() {
+    let btn = document.createElement("button");
+    btn.innerText = "Continue Story...";
+    btn.style.cssText =
+      "padding:15px; background:#444; color:white; border:1px solid #666; border-radius:5px; cursor:pointer; width:100%;";
+    btn.onclick = async () => {
+      storyState.lastChoice = "Continue the story.";
+      storyState.branchHistory += `\nAction: continue_story`;
+      await generateSegment(null);
+    };
+    choicesCtn.appendChild(btn);
+  }
+
+  // --- Text to Speech ---
+  speakBtn.onclick = () => {
+    // Read the full story memory + current segment (excluding choices)
+    let textToRead = storyState.storyMemory;
+    if (storyState.currentSegment) {
+      // Strip out choices from the current segment
+      let segmentText = storyState.currentSegment.split(/Choice\s*\d+:/)[0];
+      segmentText = segmentText.split("---CHOICES---")[0];
+      if (textToRead) textToRead += "\n\n" + segmentText;
+      else textToRead = segmentText;
+    }
+
+    let utterance = new SpeechSynthesisUtterance(textToRead);
+
+    // Apply voice settings
+    let voiceSettings = getVoiceSettings();
+    utterance.rate = voiceSettings.rate;
+    utterance.pitch = voiceSettings.pitch;
+
+    utterance.onstart = () => {
+      speakBtn.hidden = true;
+      stopSpeakBtn.hidden = false;
+    };
+
+    utterance.onend = () => {
+      speakBtn.hidden = false;
+      stopSpeakBtn.hidden = true;
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  function getVoiceSettings() {
+    return voiceSettings[storyState.narrationVoice] || voiceSettings["Default"];
+  }
+
+  stopSpeakBtn.onclick = () => {
+    window.speechSynthesis.cancel();
+    speakBtn.hidden = false;
+    stopSpeakBtn.hidden = true;
+  };
+
+  // --- Helpers ---
+  function setLoading(isLoading) {
+    loadingEl.hidden = !isLoading;
+    startBtn.disabled = isLoading;
+  }
+</script>
+
+</body>
+</html>

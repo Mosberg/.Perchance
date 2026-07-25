@@ -1,0 +1,168 @@
+toObject(value) =>
+  if(value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+
+  if(typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if(parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch(error) {}
+  }
+
+  return {};
+
+toArray(value) =>
+  if(Array.isArray(value)) {
+    return value;
+  }
+
+  if(typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if(Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch(error) {}
+
+    return value.split(",").map(item => item.trim()).filter(Boolean);
+  }
+
+  if(value === undefined || value === null || value === "") {
+    return [];
+  }
+
+  return [value];
+
+valueType(value) =>
+  if(value === null) return "null";
+  if(Array.isArray(value)) return "array";
+  if(Number.isInteger(value)) return "integer";
+  return typeof value;
+
+typeMatches(value, expectedType) =>
+  const expected = String(expectedType || "").trim().toLowerCase();
+  if(expected === "") return true;
+
+  if(expected === "number") {
+    return typeof value === "number" && Number.isFinite(value);
+  }
+
+  if(expected === "integer") {
+    return Number.isInteger(value);
+  }
+
+  return valueType(value) === expected;
+
+requireFields(dataObj, requiredFields) =>
+  const data = toObject(dataObj);
+  const fields = toArray(requiredFields);
+  const missing = [];
+
+  for(let i = 0; i < fields.length; i += 1) {
+    const keyName = String(fields[i]);
+    if(!data.hasOwnProperty(keyName) || data[keyName] === undefined || data[keyName] === null || data[keyName] === "") {
+      missing.push(keyName);
+    }
+  }
+
+  return missing;
+
+typeErrors(dataObj, typeSpec) =>
+  const data = toObject(dataObj);
+  const spec = toObject(typeSpec);
+  const errors = [];
+
+  for(const keyName of Object.keys(spec)) {
+    if(!data.hasOwnProperty(keyName) || data[keyName] === undefined || data[keyName] === null) {
+      continue;
+    }
+
+    const expectedList = toArray(spec[keyName]).map(item => String(item).trim().toLowerCase()).filter(Boolean);
+    if(expectedList.length === 0) {
+      continue;
+    }
+
+    let matched = false;
+    for(let i = 0; i < expectedList.length; i += 1) {
+      if(typeMatches(data[keyName], expectedList[i])) {
+        matched = true;
+        break;
+      }
+    }
+
+    if(!matched) {
+      errors.push({
+        key: keyName,
+        expected: expectedList,
+        actual: valueType(data[keyName])
+      });
+    }
+  }
+
+  return errors;
+
+validate(dataObj, requiredFields, typeSpec) =>
+  const data = toObject(dataObj);
+  const missing = requireFields(data, requiredFields);
+  const types = typeErrors(data, typeSpec);
+
+  return {
+    ok: missing.length === 0 && types.length === 0,
+    missing: missing,
+    typeErrors: types,
+    data: data
+  };
+
+sanitize(dataObj, allowedFields, trimMode) =>
+  const data = toObject(dataObj);
+  const allowed = toArray(allowedFields);
+  const out = {};
+
+  for(let i = 0; i < allowed.length; i += 1) {
+    const keyName = String(allowed[i]);
+    if(!data.hasOwnProperty(keyName)) {
+      continue;
+    }
+
+    let value = data[keyName];
+    if(trimMode === "trim" && typeof value === "string") {
+      value = value.trim();
+    }
+
+    out[keyName] = value;
+  }
+
+  return out;
+
+mergeDefaults(dataObj, defaultsObj) =>
+  const defaults = toObject(defaultsObj);
+  const data = toObject(dataObj);
+  const out = {};
+
+  for(const keyName of Object.keys(defaults)) {
+    out[keyName] = defaults[keyName];
+  }
+
+  for(const keyName of Object.keys(data)) {
+    out[keyName] = data[keyName];
+  }
+
+  return out;
+
+assert(dataObj, requiredFields, typeSpec) =>
+  const report = validate(dataObj, requiredFields, typeSpec);
+  if(report.ok) {
+    return report.data;
+  }
+
+  return "error: " + JSON.stringify({ missing: report.missing, typeErrors: report.typeErrors });
+
+reportJson(dataObj, requiredFields, typeSpec) =>
+  return JSON.stringify(validate(dataObj, requiredFields, typeSpec));
+
+$meta
+  title = Schema Guard Kit
+  description = Validation and sanitation helpers for structured data contracts in larger Perchance systems.

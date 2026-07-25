@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>generator-gen-3 — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="mainCtn" style="font-family: 'Courier New', monospace; background-color: #0d0d0d; color: #00ff41; min-height: 100vh; padding: 20px; display: flex; flex-direction: column; align-items: center;">
+
+  <header style="margin-bottom: 20px; text-align: center;">
+    <h1 style="text-shadow: 0 0 10px #00ff41; margin-bottom: 5px;">EVOLVING GENERATOR SYS 3.0</h1>
+    <p style="color: #888; font-size: 0.8rem; max-width: 600px; margin-bottom: 20px;">
+      Persistent memory // Mutation paths // Skill trees // Plugin integration
+    </p>
+  </header>
+
+  <!-- UI PANEL: STATUS -->
+  <div id="statusPanel" style="
+    border: 1px solid #00ff41;
+    background: rgba(0, 20, 0, 0.8);
+    width: 100%;
+    max-width: 700px;
+    padding: 15px;
+    margin-bottom: 20px;
+    box-shadow: 0 0 15px rgba(0, 255, 65, 0.1);
+    position: relative;
+  ">
+    <div style="border-bottom: 1px solid #005500; padding-bottom: 5px; margin-bottom: 10px; color: #008f11; font-size: 0.8rem;">
+      === GENERATOR STATUS PANEL ===
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9rem;">
+      <div><span style="color: #555;">NAME:</span> <span id="dispName" class="gen-name">...</span></div>
+      <div><span style="color: #555;">STAGE:</span> <span id="dispStage" style="color: yellow;">...</span></div>
+      <div><span style="color: #555;">XP:</span> <span id="dispXp">...</span></div>
+      <div><span style="color: #555;">LINEAGE:</span> <span id="dispLineage" style="font-size: 0.8rem;">...</span></div>
+      <div style="grid-column: span 2;"><span style="color: #555;">TRAITS:</span> <span id="dispTraits" style="color: #00ccff; font-size: 0.85rem;">...</span></div>
+      <div style="grid-column: span 2;"><span style="color: #555;">PLUGINS:</span> <span id="dispPlugins" style="color: #ff0055; font-size: 0.85rem;">...</span></div>
+    </div>
+    <div style="border-top: 1px solid #005500; margin-top: 10px; padding-top: 5px; text-align: right; color: #333; font-size: 0.7rem;">
+      ==============================
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div id="controlsCtn" style="margin-bottom: 20px; display: flex; gap: 10px;">
+    <button id="evolveBtn" onclick="handleEvolve()" style="
+      background: transparent; border: 1px solid #00ff41; color: #00ff41; padding: 10px 20px; 
+      font-family: inherit; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; 
+      transition: 0.2s; min-width: 100px;">Evolve</button>
+    
+    <button id="mutateBtn" onclick="handleMutate()" style="
+      background: transparent; border: 1px solid #00ccff; color: #00ccff; padding: 10px 20px; 
+      font-family: inherit; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; 
+      transition: 0.2s; min-width: 100px;">Mutate</button>
+    
+    <button id="outputBtn" onclick="handleOutput()" style="
+      background: transparent; border: 1px solid #ff0055; color: #ff0055; padding: 10px 20px; 
+      font-family: inherit; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; 
+      transition: 0.2s; min-width: 100px;">Output</button>
+  </div>
+
+  <!-- NARRATIVE CHAIN LOG -->
+  <div id="chainCtn" style="width: 100%; max-width: 700px;"></div>
+
+</div>
+
+<style>
+  /* Animations */
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+
+  /* Utility */
+  .gen-name { color: #fff; font-weight: bold; text-shadow: 0 0 5px #00ff41; }
+  .log-entry { animation: fadeIn 0.5s forwards; margin-bottom: 15px; border-left: 2px solid #333; padding-left: 15px; }
+  
+  /* Button States */
+  button:disabled { border-color: #333 !important; color: #333 !important; cursor: not-allowed; }
+  button:hover:not(:disabled) { box-shadow: 0 0 10px currentColor; }
+
+  /* Loading Indicator */
+  .loading { animation: pulse 1s infinite; color: yellow; font-size: 0.8rem; margin-left: 10px; }
+</style>
+
+<script>
+  // ==========================================
+  // STATE MANAGEMENT
+  // ==========================================
+  let genState = {
+    name: "",
+    stage: 1,
+    xp: 0,
+    traits: [],
+    plugins: [],
+    lineage: "origin",
+    skill: "none"
+  };
+
+  // ==========================================
+  // SYSTEM INSTRUCTION (LOGIC CORE)
+  // ==========================================
+  const systemInstruction = `
+// =====================================================
+// EVOLVING GENERATOR SYSTEM 3.0
+// - True Skill Trees (World / Character / Systems)
+// - UI Buttons (Evolve | Mutate | Output)
+// - Persistent Memory
+// - Mutation Paths
+// - Plugin Integration
+// - UI Panels
+// =====================================================
+
+// Available Skill Trees & Skills
+SKILL_TREE_WORLD: [world_seed, biome_generator, lore_weaver, quest_hooker]
+SKILL_TREE_CHARACTER: [npc_builder, personality_matrix, dialogue_writer]
+SKILL_TREE_SYSTEMS: [logic_router, item_forge, description_enhancer, tone_shifter]
+
+// Available Mutations
+MUTATIONS: [branch:world_specialist, branch:character_specialist, branch:systems_specialist, boost:hyper_focus, glitch:unstable_output]
+
+// Available Plugins
+PLUGINS: [plugin:text_tools, plugin:world_tools, plugin:character_tools, plugin:logic_tools]
+
+// Rules:
+// 1. EVOLVE: Increases stage, gains XP, picks a Skill Tree path, learns a Skill, installs a Plugin.
+// 2. MUTATE: Adds a mutation type to traits, updates lineage, learns a Skill from the mutation's specialty.
+// 3. OUTPUT: Generates a final cohesive result based on all accumulated stats (Role, Lineage, Plugins).
+  `;
+
+  // ==========================================
+  // INITIALIZATION
+  // ==========================================
+  function init() {
+    // Generate a random initial name gen_[a-z]{5}
+    const chars = 'abcdefghijklmnopqrstuvwxyz';
+    let randStr = '';
+    for(let i=0; i<5; i++) randStr += chars.charAt(Math.floor(Math.random() * chars.length));
+    
+    genState = {
+      name: `gen_${randStr}`,
+      stage: 1,
+      xp: 0,
+      traits: ["seed_generator"],
+      plugins: [],
+      lineage: "origin",
+      skill: "basic_logic"
+    };
+
+    updateStatusPanel();
+    addLogEntry(`SYSTEM INITIALIZED.\nNew Generator Core Detected: ${genState.name}\nStatus: ONLINE.\nAwaiting Input...`, 'system');
+  }
+
+  // ==========================================
+  // UI UPDATES
+  // ==========================================
+  function updateStatusPanel() {
+    dispName.textContent = genState.name;
+    dispStage.textContent = genState.stage;
+    dispXp.textContent = genState.xp;
+    dispLineage.textContent = genState.lineage;
+    dispTraits.textContent = genState.length > 0 ? genState.traits.join(", ") : "none";
+    dispPlugins.textContent = genState.plugins.length > 0 ? genState.plugins.join(", ") : "none";
+  }
+
+  function addLogEntry(text, type = 'normal') {
+    let div = document.createElement("div");
+    div.className = "log-entry";
+    div.style.whiteSpace = "pre-wrap";
+    div.innerHTML = text;
+    
+    if (type === 'system') div.style.color = "#888";
+    if (type === 'evolve') div.style.borderLeftColor = "#00ff41";
+    if (type === 'mutate') div.style.borderLeftColor = "#00ccff";
+    if (type === 'final') div.style.borderLeftColor = "#ff0055";
+
+    chainCtn.appendChild(div);
+    div.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
+  function setControls(enabled) {
+    evolveBtn.disabled = !enabled;
+    mutateBtn.disabled = !enabled;
+    outputBtn.disabled = !enabled;
+    
+    let loadingText = enabled ? "" : "<span class='loading'>PROCESSING...</span>";
+    
+    // Keep button text but add/remove loading
+    if (!enabled) {
+      document.body.appendChild(document.createElement("span")).id="tempLoading";
+    }
+  }
+
+  // ==========================================
+  // ACTION HANDLERS
+  // ==========================================
+
+  async function handleEvolve() {
+    if(!canAct()) return;
+    setControls(false);
+
+    // 1. Update Local State (Deterministic)
+    let xpGain = Math.floor(Math.random() * 15) + 5;
+    genState.stage++;
+    genState.xp += xpGain;
+    genState.lineage += `,stage${genState.stage}`;
+
+    // 2. Construct Prompt
+    let prompt = `
+    ${systemInstruction}
+    
+    TASK: Execute the EVOLVE action for Generator "${genState.name}".
+    Current State: Stage ${genState.stage-1} -> ${genState.stage}, XP ${genState.xp}.
+    Lineage: ${genState.lineage}.
+    Current Traits: ${genState.traits.join(", ")}.
+    Current Plugins: ${genState.plugins.join(", ")}.
+
+    Steps:
+    1. Narrate the evolution process.
+    2. Choose ONE Skill Tree (World, Character, or Systems) and pick a specific Skill from it.
+    3. Choose ONE Plugin to install.
+    
+    Output the narrative. 
+    IMPORTANT: At the very end of your response, include a hidden line in this exact format:
+    |||META: skill={CHOSEN_SKILL}, plugin={CHOSEN_PLUGIN}|||
+    `;
+
+    // 3. Generate
+    try {
+      let resultPromise = generateText(prompt);
+      addLogEntry(`> EVOLVING TO STAGE ${genState.stage}... <span class='loading' id='loading-${genState.stage}'></span>`, 'evolve');
+      
+      // We create a temporary div to hold the streaming content, then append it to the log
+      let tempDiv = document.createElement("div");
+      let entry = chainCtn.lastElementChild;
+      entry.appendChild(tempDiv);
+      tempDiv.innerHTML = resultPromise;
+
+      await resultPromise;
+      document.getElementById(`loading-${genState.stage}`)?.remove(); // Clean up loading spinner
+
+      // 4. Parse Meta Data to update State
+      let fullText = tempDiv.innerText; // Get text content to parse
+      let metaMatch = fullText.match(/\|\|\|META: skill=(.+?), plugin=(.+?)\|\|\|/);
+      
+      if (metaMatch) {
+        genState.skill = metaMatch[1].trim();
+        let newPlugin = metaMatch[2].trim();
+        if(!genState.plugins.includes(newPlugin)) genState.plugins.push(newPlugin);
+        
+        // Clean the meta tag from display if it got rendered (innerHTML vs textContent quirk)
+        // Usually generateText puts text in. If the literal string "|||META..." appears, we hide it.
+        tempDiv.innerHTML = tempDiv.innerHTML.replace(/\|\|\|META:.*?\|\|\|/g, "<span style='opacity:0.3'>[SYSTEM UPDATED]</span>");
+      } else {
+        // Fallback if AI missed formatting
+        genState.skill = "unknown_skill";
+      }
+
+      updateStatusPanel();
+
+    } catch (e) {
+      addLogEntry("ERROR IN EVOLUTION: " + e.message, 'error');
+    }
+
+    setControls(true);
+  }
+
+  async function handleMutate() {
+    if(!canAct()) return;
+    setControls(false);
+
+    // 1. Update Local State
+    genState.lineage += `,mut_unknown`; // Placeholder, AI will pick specific one
+
+    // 2. Construct Prompt
+    let prompt = `
+    ${systemInstruction}
+
+    TASK: Execute the MUTATE action for Generator "${genState.name}".
+    Current State: Stage ${genState.stage}, XP ${genState.xp}.
+    Current Traits: ${genState.traits.join(", ")}.
+
+    Steps:
+    1. Choose a Mutation Type from the available list.
+    2. Add this mutation type to the Traits list.
+    3. Based on the mutation, learn a relevant Skill (e.g., if world_specialist, pick from World Tree).
+    4. Narrate the mutation process.
+
+    Output the narrative.
+    IMPORTANT: At the very end, include: |||META: mutation={CHOSEN_MUTATION}, skill={CHOSEN_SKILL}|||
+    `;
+
+    // 3. Generate
+    try {
+      addLogEntry(`> INITIATING MUTATION SEQUENCE... <span class='loading'></span>`, 'mutate');
+      let entry = chainCtn.lastElementChild;
+      let tempDiv = document.createElement("div");
+      entry.appendChild(tempDiv);
+
+      let resultPromise = generateText(prompt);
+      tempDiv.innerHTML = resultPromise;
+      await resultPromise;
+
+      entry.querySelector('.loading').remove();
+
+      // 4. Parse
+      let fullText = tempDiv.innerText;
+      let metaMatch = fullText.match(/\|\|\|META: mutation=(.+?), skill=(.+?)\|\|\|/);
+
+      if (metaMatch) {
+        let mutation = metaMatch[1].trim();
+        let skill = metaMatch[2].trim();
+        
+        if(!genState.traits.includes(mutation)) genState.traits.push(mutation);
+        genState.skill = skill;
+        // Update lineage with actual mutation name
+        genState.lineage = genState.lineage.replace("mut_unknown", "mut_"+mutation.split(":")[1]);
+
+        tempDiv.innerHTML = tempDiv.innerHTML.replace(/\|\|\|META:.*?\|\|\|/g, "<span style='opacity:0.3'>[SYSTEM UPDATED]</span>");
+      }
+
+      updateStatusPanel();
+
+    } catch (e) {
+      addLogEntry("ERROR IN MUTATION: " + e.message, 'error');
+    }
+
+    setControls(true);
+  }
+
+  async function handleOutput() {
+    if(!canAct()) return;
+    setControls(false);
+
+    // 1. Determine Final Role based on Stage/Traits (Simple Logic for Display, AI does flavor)
+    let role = "Generic Generator";
+    if (genState.stage >= 4) {
+       if (genState.traits.join(" ").includes("world")) role = "World Architect";
+       else if (genState.traits.join(" ").includes("character")) role = "Character Engine";
+       else if (genState.traits.join(" ").includes("systems")) role = "Logic Core";
+       else role = "Omni-Generator";
+    }
+
+    // 2. Construct Prompt
+    let prompt = `
+    ${systemInstruction}
+
+    TASK: Execute the FINAL OUTPUT for Generator "${genState.name}".
+    Role: ${role}.
+    Stage: ${genState.stage}.
+    Skills: ${genState.skill}.
+    Plugins: ${genState.plugins.join(", ")}.
+    Traits: ${genState.traits.join(", ")}.
+    Lineage: ${genState.lineage}.
+
+    Generate a high-quality, useful output based on this configuration.
+    It could be a detailed NPC, a World Seed, a Quest Hook, or a Dialogue Scene.
+    Make it feel like the culmination of its evolution.
+
+    Output format:
+    [=== FINAL FORM OUTPUT ===]
+    (Content here)
+    [Lineage: ${genState.lineage}]
+    [=== SESSION COMPLETE ===]
+    `;
+
+    // 3. Generate
+    try {
+      addLogEntry(`> COMPILING FINAL OUTPUT... <span class='loading'></span>`, 'final');
+      let entry = chainCtn.lastElementChild;
+      let tempDiv = document.createElement("div");
+      entry.appendChild(tempDiv);
+
+      let resultPromise = generateText(prompt);
+      tempDiv.innerHTML = resultPromise;
+      await resultPromise;
+      
+      entry.querySelector('.loading').remove();
+      
+      // 4. Reset / Chain to new generator after delay?
+      addLogEntry("\n// SYSTEM NOTE: This generator has reached its potential. A new seed is required.", "system");
+
+    } catch (e) {
+      addLogEntry("ERROR IN OUTPUT: " + e.message, 'error');
+    }
+
+    // Disable Output button to prevent re-running, enable Evolve/Mutate just in case they want to keep going, 
+    // or strictly speaking, output is final. Let's allow them to keep evolving or just restart manually.
+    // For now, just re-enable controls.
+    setControls(true);
+  }
+
+  // Helper to prevent spamming
+  function canAct() {
+    return !evolveBtn.disabled;
+  }
+
+  // Start
+  init();
+
+</script>
+</body>
+</html>

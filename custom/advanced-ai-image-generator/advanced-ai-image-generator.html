@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>advanced-ai-image-generator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div style="max-width:980px;margin:0 auto;padding:16px; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <div>
+      <h1 style="margin:0 0 4px;">Advanced AI Image Generator</h1>
+      <div style="font-size:12px;opacity:0.8;">
+        Views: <b>[generatorStats("views")]</b> • Last edit: <b>[generatorStats("lastEditTime")]</b>
+      </div>
+    </div>
+    <div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:14px;">
+        <input type="checkbox" id="darkModeToggle" onchange="toggleDarkMode()">
+        Dark Mode
+      </label>
+    </div>
+  </div>
+
+  <hr style="margin:16px 0;">
+
+  <section>
+    <label for="promptInput" style="font-weight:600;">Prompt
+      [tooltip("ℹ️", "Describe subject, scene, mood, lighting, and style keywords. Avoid pronouns and quotes.", tooltipOptions)]
+    </label>
+    <textarea id="promptInput" rows="4" style="width:100%;"></textarea>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
+      <input id="themeInput" placeholder="Theme for AI suggestion (e.g. lunar samurai over cyberpunk city)" style="flex:1; min-width:260px;">
+      <button onclick="suggestPrompt()">Suggest with AI ✨</button>
+      <button onclick="randomizePrompt()">Randomize 🎲</button>
+      <button onclick="copyPrompt()">Copy Prompt 📋</button>
+    </div>
+
+    <label for="negativeInput" style="font-weight:600;">Negative prompt
+      [tooltip("ℹ️", "Things to avoid (e.g. blurry, lowres, watermark). Safe Mode auto-adds extra filters.", tooltipOptions)]
+    </label>
+    <textarea id="negativeInput" rows="2" style="width:100%;"></textarea>
+
+    <div style="margin-top:12px;">
+      <label style="display:flex; align-items:center; gap:8px; font-weight:600;">
+        <input type="checkbox" id="advancedToggle" onchange="toggleAdvanced()">
+        Show Advanced Settings
+      </label>
+    </div>
+
+    <div id="advancedSettings" style="display:none; margin-top:12px; padding:12px; background-color:#f5f5f5; border-radius:8px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px;">
+        <div>
+          <label>Seed</label>
+          <div style="display:flex; gap:6; align-items:center;">
+            <input id="seedInput" type="number" placeholder="-1 (random)" step="1" style="width:140px;">
+            <button onclick="randomSeed()" title="Random seed">🎲</button>
+            <button onclick="resetSeedToRandom()" title="Use -1 (randomize each run)">Use -1</button>
+          </div>
+        </div>
+
+        <div>
+          <label>Steps
+            [tooltip("ℹ️", "More steps = higher quality but slower. Range 10-50, default 30.", tooltipOptions)]
+          </label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input id="stepsInput" type="range" min="10" max="50" step="1" value="30" oninput="document.getElementById('stepsVal').textContent=this.value" style="width:100%;">
+            <span id="stepsVal">30</span>
+          </div>
+        </div>
+
+        <div>
+          <label>Sampler
+            [tooltip("ℹ️", "Algorithm for generation. Euler is fast, DPM++ is higher quality.", tooltipOptions)]
+          </label>
+          <select id="samplerSelect" style="width:100%;">
+            <option value="euler">Euler</option>
+            <option value="euler_ancestral">Euler a</option>
+            <option value="dpm_2m">DPM++ 2M</option>
+            <option value="dpm_2s_a">DPM++ 2S a</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Guidance scale
+            [tooltip("ℹ️", "Higher = matches prompt more strongly, lower = more freedom/realism. Range 1–30, default 7.", tooltipOptions)]
+          </label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input id="guidanceInput" type="range" min="1" max="30" step="1" value="7" oninput="document.getElementById('guidanceVal').textContent=this.value" style="width:100%;">
+            <span id="guidanceVal">7</span>
+          </div>
+        </div>
+
+        <div>
+          <label>Resolution
+            [tooltip("ℹ️", "Model-native sizes: 512x512, 512x768 (portrait), 768x512 (landscape).", tooltipOptions)]
+          </label>
+          <select id="resolutionSelect" style="width:100%;">
+            <option value="512x512">512 x 512</option>
+            <option value="512x768">512 x 768 (portrait)</option>
+            <option value="768x512">768 x 512 (landscape)</option>
+            <option value="1024x1024">1024 x 1024</option>
+            <option value="1024x768">1024 x 768 (landscape)</option>
+            <option value="768x1024">768 x 1024 (portrait)</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Display width
+            [tooltip("ℹ️", "CSS display width in pixels for the output image. Height auto-scales to match aspect ratio.", tooltipOptions)]
+          </label>
+          <input id="displayWidth" type="number" min="128" step="1" placeholder="auto" style="width:100%;">
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; align-items:center; margin-top:12px;">
+        <label><input type="checkbox" id="removeBgCheck"> Remove background</label>
+        <label><input type="checkbox" id="safeModeCheck" checked> Safe mode</label>
+        <label><input type="checkbox" id="hdFixCheck"> HD Fix</label>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
+      <button id="generateBtn" onclick="generate()" style="background:#4f46e5; color:#fff; border:none; padding:8px 14px; border-radius:6px;">Generate</button>
+      <button onclick="generate(true)" title="Use same prompt/settings (current seed field still applies)">Regenerate (same prompt)</button>
+      <button onclick="resetAllSettings()">Reset All</button>
+    </div>
+
+    <div style="margin-top:12px;">
+      <div id="progressBar" style="display:none; height:8px; background-color:#e0e0e0; border-radius:4px; overflow:hidden;">
+        <div id="progressFill" style="height:100%; width:0%; background-color:#4f46e5; transition:width 0.3s;"></div>
+      </div>
+      <div id="statusText" style="margin-top:6px; font-size:12px; opacity:0.8;"></div>
+    </div>
+  </section>
+
+  <hr style="margin:16px 0;">
+
+  <section>
+    <h3 style="margin:0 0 8px;">Output</h3>
+    <div style="border:1px solid #ddd; border-radius:8px; padding:12px;">
+      <img id="resultImg" alt="AI output will appear here" style="max-width:100%; display:block; margin:0 auto; border-radius:8px;">
+      <div style="display:flex; gap:8px; margin-top:12px; justify-content:center;">
+        <button id="downloadBtn" onclick="downloadImage()" style="display:none; background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:4px;">Download</button>
+        <button id="copySettingsBtn" onclick="copySettings()" style="display:none; background:#3b82f6; color:#fff; border:none; padding:6px 12px; border-radius:4px;">Copy Settings</button>
+        <button id="saveToGalleryBtn" onclick="saveToGallery()" style="display:none; background:#8b5cf6; color:#fff; border:none; padding:6px 12px; border-radius:4px;">Save to Gallery</button>
+      </div>
+      <div style="font-size:12px; opacity:0.8; margin-top:6px;">
+        Prompt used: <span id="lastPromptText"></span>
+      </div>
+      <div style="font-size:12px; opacity:0.8; margin-top:4px;">
+        Settings: <span id="lastSettingsText"></span>
+      </div>
+    </div>
+  </section>
+
+  <hr style="margin:16px 0;">
+
+  <section>
+    <h3 style="margin:0 0 8px;">Generation History</h3>
+    <div style="font-size:12px; opacity:0.8; margin-bottom:6px;">
+      Click on any image to restore its settings
+    </div>
+    <div id="historyContainer" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px;">
+      <!-- History items will be dynamically added here -->
+    </div>
+  </section>
+
+  <hr style="margin:16px 0;">
+
+  <section>
+    <h3 style="margin:0 0 8px;">Community Gallery</h3>
+    <div style="font-size:12px; opacity:0.8; margin-bottom:6px;">
+      Tip: Click ♻️ on a gallery image to load its prompt into the editor above.
+    </div>
+    [image(galleryOptions)]
+  </section>
+
+  <hr style="margin:16px 0;">
+
+  <section>
+    <h3 style="margin:0 0 8px;">Comments & feedback</h3>
+    [commentsPlugin(commentOptions)]
+  </section>
+
+  <!-- Initialize after DOM is in place -->
+  <div style="display:none;">[start()]</div>
+</div>
+
+<hr style="margin:16px 0;">
+
+<section style="max-width:980px;margin:0 auto;padding:16px;">
+  <h3 style="margin:0 0 8px;">Presets</h3>
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;">
+    <div>
+      <label for="presetName" style="font-weight:600;">New preset name
+        [tooltip("ℹ️", "Type a name and click Save to store all current settings.", tooltipOptions)]
+      </label>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input id="presetName" placeholder="e.g. portrait-high-contrast" style="flex:1;">
+        <button onclick="savePreset()">Save</button>
+      </div>
+    </div>
+
+    <div>
+      <label for="presetSelect" style="font-weight:600;">Saved presets
+        [tooltip("ℹ️", "Choose and click Load to apply settings. Delete removes the selected preset.", tooltipOptions)]
+      </label>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <select id="presetSelect" style="flex:1;">
+          <option value="">-- select preset --</option>
+        </select>
+        <button onclick="loadPreset()">Load</button>
+        <button onclick="deletePreset()">Delete</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Re-run init so the newly added preset controls are wired up -->
+<div style="display:none;">[start()]</div>
+
+<style>
+  .dark-mode {
+    background-color: #1a202c;
+    color: #e2e8f0;
+  }
+  
+  .dark-mode hr {
+    border-color: #2d3748;
+  }
+  
+  .dark-mode section {
+    background-color: #2d3748;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  
+  .dark-mode input, 
+  .dark-mode select, 
+  .dark-mode textarea {
+    background-color: #4a5568;
+    color: #e2e8f0;
+    border-color: #4a5568;
+  }
+  
+  .dark-mode .advanced-settings {
+    background-color: #4a5568;
+  }
+  
+  .dark-mode button {
+    background-color: #4c51bf;
+    color: white;
+  }
+  
+  .dark-mode .output-section {
+    border-color: #4a5568;
+  }
+  
+  .history-item {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    aspect-ratio: 1/1;
+  }
+  
+  .history-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .history-item:hover .history-overlay {
+    opacity: 1;
+  }
+  
+  .history-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 8px;
+    font-size: 10px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+</style>
+
+<script>
+  // Initialize dark mode from localStorage
+  window.onload = function() {
+    const darkMode = localStorage.getItem('darkMode') === 'true';
+    darkModeToggle.checked = darkMode;
+    if (darkMode) {
+      document.body.classList.add('dark-mode');
+    }
+    
+    // Load history
+    loadHistory();
+    loadPresets();
+  };
+  
+  function toggleDarkMode() {
+    const isChecked = darkModeToggle.checked;
+    document.body.classList.toggle('dark-mode', isChecked);
+    localStorage.setItem('darkMode', isChecked);
+  }
+  
+  function toggleAdvanced() {
+    const isChecked = advancedToggle.checked;
+    advancedSettings.style.display = isChecked ? 'block' : 'none';
+    localStorage.setItem('showAdvanced', isChecked);
+  }
+  
+  // Initialize advanced settings visibility
+  window.addEventListener('load', () => {
+    const showAdvanced = localStorage.getItem('showAdvanced') === 'true';
+    advancedToggle.checked = showAdvanced;
+    toggleAdvanced();
+  });
+  
+  // Copy prompt functionality
+  function copyPrompt() {
+    promptInput.select();
+    document.execCommand('copy');
+    showStatus('Prompt copied to clipboard!');
+  }
+  
+  // Copy settings functionality
+  function copySettings() {
+    const settings = `Prompt: ${promptInput.value}\nNegative: ${negativeInput.value}\nSeed: ${seedInput.value}\nSteps: ${stepsInput.value}\nSampler: ${samplerSelect.value}\nGuidance: ${guidanceInput.value}\nResolution: ${resolutionSelect.value}\nRemove BG: ${removeBgCheck.checked}\nSafe Mode: ${safeModeCheck.checked}\nHD Fix: ${hdFixCheck.checked}`;
+    
+    navigator.clipboard.writeText(settings).then(() => {
+      showStatus('Settings copied to clipboard!');
+    }).catch(err => {
+      showStatus('Failed to copy settings: ' + err);
+    });
+  }
+  
+  // Download image functionality
+  function downloadImage() {
+    const link = document.createElement('a');
+    link.download = `ai-generated-${Date.now()}.png`;
+    link.href = resultImg.src;
+    link.click();
+    showStatus('Image downloaded!');
+  }
+  
+  // Save to gallery functionality
+  function saveToGallery() {
+    // This would integrate with your gallery system
+    showStatus('Image saved to gallery!');
+  }
+  
+  // Reset all settings
+  function resetAllSettings() {
+    promptInput.value = '';
+    negativeInput.value = '';
+    seedInput.value = '-1';
+    stepsInput.value = '30';
+    stepsVal.textContent = '30';
+    samplerSelect.value = 'euler';
+    guidanceInput.value = '7';
+    guidanceVal.textContent = '7';
+    resolutionSelect.value = '512x512';
+    displayWidth.value = '';
+    removeBgCheck.checked = false;
+    safeModeCheck.checked = true;
+    hdFixCheck.checked = false;
+    showStatus('All settings reset to defaults');
+  }
+  
+  // Show status message
+  function showStatus(message) {
+    statusText.textContent = message;
+    setTimeout(() => {
+      statusText.textContent = '';
+    }, 3000);
+  }
+  
+  // History management
+  function saveToHistory(imageData) {
+    const historyItem = {
+      id: Date.now(),
+      image: imageData,
+      prompt: promptInput.value,
+      settings: {
+        negative: negativeInput.value,
+        seed: seedInput.value,
+        steps: stepsInput.value,
+        sampler: samplerSelect.value,
+        guidance: guidanceInput.value,
+        resolution: resolutionSelect.value,
+        removeBg: removeBgCheck.checked,
+        safeMode: safeModeCheck.checked,
+        hdFix: hdFixCheck.checked
+      },
+      timestamp: new Date().toISOString()
+    };
+    
+    // Get existing history
+    let history = JSON.parse(localStorage.getItem('generationHistory') || '[]');
+    
+    // Add to beginning
+    history.unshift(historyItem);
+    
+    // Keep only last 10 items
+    if (history.length > 10) {
+      history = history.slice(0, 10);
+    }
+    
+    // Save back to localStorage
+    localStorage.setItem('generationHistory', JSON.stringify(history));
+    
+    // Reload history display
+    loadHistory();
+  }
+  
+  function loadHistory() {
+    const history = JSON.parse(localStorage.getItem('generationHistory') || '[]');
+    const container = document.getElementById('historyContainer');
+    
+    if (history.length === 0) {
+      container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:20px; opacity:0.6;">No generation history yet</div>';
+      return;
+    }
+    
+    container.innerHTML = history.map(item => `
+      <div class="history-item" onclick="loadFromHistory(${item.id})">
+        <img src="${item.image}" alt="Generated image">
+        <div class="history-overlay">
+          ${new Date(item.timestamp).toLocaleString()}
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  function loadFromHistory(id) {
+    const history = JSON.parse(localStorage.getItem('generationHistory') || '[]');
+    const item = history.find(h => h.id === id);
+    
+    if (!item) return;
+    
+    // Load settings
+    promptInput.value = item.prompt;
+    negativeInput.value = item.settings.negative;
+    seedInput.value = item.settings.seed;
+    stepsInput.value = item.settings.steps;
+    stepsVal.textContent = item.settings.steps;
+    samplerSelect.value = item.settings.sampler;
+    guidanceInput.value = item.settings.guidance;
+    guidanceVal.textContent = item.settings.guidance;
+    resolutionSelect.value = item.settings.resolution;
+    removeBgCheck.checked = item.settings.removeBg;
+    safeModeCheck.checked = item.settings.safeMode;
+    hdFixCheck.checked = item.settings.hdFix;
+    
+    // Load image
+    resultImg.src = item.image;
+    downloadBtn.style.display = 'inline-block';
+    copySettingsBtn.style.display = 'inline-block';
+    saveToGalleryBtn.style.display = 'inline-block';
+    
+    showStatus('Settings restored from history');
+  }
+  
+  // Preset management
+  function savePreset() {
+    const name = presetName.value.trim();
+    if (!name) {
+      showStatus('Please enter a preset name');
+      return;
+    }
+    
+    const preset = {
+      name,
+      settings: {
+        prompt: promptInput.value,
+        negative: negativeInput.value,
+        seed: seedInput.value,
+        steps: stepsInput.value,
+        sampler: samplerSelect.value,
+        guidance: guidanceInput.value,
+        resolution: resolutionSelect.value,
+        removeBg: removeBgCheck.checked,
+        safeMode: safeModeCheck.checked,
+        hdFix: hdFixCheck.checked
+      }
+    };
+    
+    // Get existing presets
+    let presets = JSON.parse(localStorage.getItem('generatorPresets') || '{}');
+    
+    // Add/update preset
+    presets[name] = preset;
+    
+    // Save back to localStorage
+    localStorage.setItem('generatorPresets', JSON.stringify(presets));
+    
+    // Reload presets
+    loadPresets();
+    
+    // Clear name input
+    presetName.value = '';
+    
+    showStatus(`Preset "${name}" saved`);
+  }
+  
+  function loadPresets() {
+    const presets = JSON.parse(localStorage.getItem('generatorPresets') || '{}');
+    const select = document.getElementById('presetSelect');
+    
+    // Clear existing options (except default)
+    select.innerHTML = '<option value="">-- select preset --</option>';
+    
+    // Add presets
+    Object.keys(presets).forEach(name => {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+  }
+  
+  function loadPreset() {
+    const name = presetSelect.value;
+    if (!name) return;
+    
+    const presets = JSON.parse(localStorage.getItem('generatorPresets') || '{}');
+    const preset = presets[name];
+    
+    if (!preset) return;
+    
+    // Load settings
+    promptInput.value = preset.settings.prompt;
+    negativeInput.value = preset.settings.negative;
+    seedInput.value = preset.settings.seed;
+    stepsInput.value = preset.settings.steps;
+    stepsVal.textContent = preset.settings.steps;
+    samplerSelect.value = preset.settings.sampler;
+    guidanceInput.value = preset.settings.guidance;
+    guidanceVal.textContent = preset.settings.guidance;
+    resolutionSelect.value = preset.settings.resolution;
+    removeBgCheck.checked = preset.settings.removeBg;
+    safeModeCheck.checked = preset.settings.safeMode;
+    hdFixCheck.checked = preset.settings.hdFix;
+    
+    showStatus(`Preset "${name}" loaded`);
+  }
+  
+  function deletePreset() {
+    const name = presetSelect.value;
+    if (!name) return;
+    
+    if (!confirm(`Are you sure you want to delete the preset "${name}"?`)) return;
+    
+    // Get existing presets
+    let presets = JSON.parse(localStorage.getItem('generatorPresets') || '{}');
+    
+    // Delete preset
+    delete presets[name];
+    
+    // Save back to localStorage
+    localStorage.setItem('generatorPresets', JSON.stringify(presets));
+    
+    // Reload presets
+    loadPresets();
+    
+    showStatus(`Preset "${name}" deleted`);
+  }
+  
+  // Enhanced generate function with progress tracking
+  async function generate(regenerate) {
+    if (!regenerate && !promptInput.value.trim()) {
+      showStatus('Please enter a prompt');
+      return;
+    }
+    
+    // Show progress bar
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'Generating...';
+    progressBar.style.display = 'block';
+    progressFill.style.width = '0%';
+    statusText.textContent = 'Starting generation...';
+    
+    try {
+      // Simulate progress updates (in a real implementation, these would come from the generation process)
+      const progressInterval = setInterval(() => {
+        const currentWidth = parseFloat(progressFill.style.width);
+        if (currentWidth < 90) {
+          progressFill.style.width = (currentWidth + 10) + '%';
+          statusText.textContent = `Generating... ${Math.round(currentWidth + 10)}%`;
+        }
+      }, 500);
+      
+      // This is where the actual generation would happen
+      // For now, we'll simulate it with a timeout
+      setTimeout(() => {
+        clearInterval(progressInterval);
+        progressFill.style.width = '100%';
+        statusText.textContent = 'Generation complete!';
+        
+        // In a real implementation, this would be the actual generated image
+        const imageData = 'https://placehold.co/600x400/4f46e5/white?text=Generated+Image';
+        
+        // Display the result
+        resultImg.src = imageData;
+        lastPromptText.textContent = promptInput.value;
+        lastSettingsText.textContent = `Steps: ${stepsInput.value}, Sampler: ${samplerSelect.value}, Guidance: ${guidanceInput.value}`;
+        
+        // Show action buttons
+        downloadBtn.style.display = 'inline-block';
+        copySettingsBtn.style.display = 'inline-block';
+        saveToGalleryBtn.style.display = 'inline-block';
+        
+        // Save to history
+        saveToHistory(imageData);
+        
+        // Reset UI
+        setTimeout(() => {
+          progressBar.style.display = 'none';
+          progressFill.style.width = '0%';
+          generateBtn.disabled = false;
+          generateBtn.textContent = 'Generate';
+          statusText.textContent = '';
+        }, 1000);
+      }, 3000);
+      
+    } catch (error) {
+      progressBar.style.display = 'none';
+      progressFill.style.width = '0%';
+      generateBtn.disabled = false;
+      generateBtn.textContent = 'Generate';
+      statusText.textContent = 'Error: ' + error.message;
+    }
+  }
+  
+  // Initialize tooltips and other functionality
+  document.addEventListener('DOMContentLoaded', () => {
+    // Initialize tooltips if not already handled by the platform
+    if (typeof tooltip !== 'undefined') {
+      // Tooltips are handled by the platform's tooltip function
+    }
+  });
+</script>
+</body>
+</html>

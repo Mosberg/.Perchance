@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-lpc-spritesheet-generator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+AI LPC Spritesheet Character Generator
+Generates a pixel-art LPC-style spritesheet via AI, then previews/slices it.
+New features: prompt enhancer, quick presets, persistent config/history via kv-plugin,
+ai-text-plugin for prompt expansion, text-to-image-plugin for generation, remember-plugin
+for user memory, super-fetch-plugin for external image import,
+extracted frames grid with individual download, zoom, step controls, customizable grid colors,
+preview background toggle, and auto-save of last used settings.
+-->
+<div id="appCtn" style="font-family:system-ui,sans-serif; max-width:1400px; margin:0 auto; padding:12px; text-align:left;">
+  <h2 style="margin-top:0;">AI LPC Spritesheet Generator</h2>
+  <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start;">
+
+    <!-- Controls Column -->
+    <div style="flex:1 1 320px; min-width:280px; display:flex; flex-direction:column; gap:10px;">
+
+      <!-- Generation -->
+      <details open style="border:1px solid #ccc; border-radius:6px; padding:8px;">
+        <summary style="cursor:pointer; font-weight:bold; user-select:none;">AI Generation</summary>
+        <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
+          <label>Quick Preset:</label>
+          <div style="display:flex; gap:4px; flex-wrap:wrap;">
+            <button onclick="applyPreset('warrior')">Warrior</button>
+            <button onclick="applyPreset('mage')">Mage</button>
+            <button onclick="applyPreset('rogue')">Rogue</button>
+            <button onclick="applyPreset('npc')">Villager</button>
+          </div>
+
+          <label>Simple Idea (optional):</label>
+          <input id="simplePromptInput" type="text" placeholder="e.g., a dark knight with red cape" style="width:100%; padding:4px;">
+          <button onclick="enhancePrompt()" id="enhanceBtn" style="align-self:flex-start;">✨ Enhance to Advanced Prompt</button>
+
+          <label>Advanced Prompt:</label>
+          <textarea id="advancedPromptInput" rows="4" style="width:100%;">LPC style pixel art character spritesheet, 64x64 frames, 4 rows (down,left,right,up), 9 columns walk cycle, top-down oblique perspective, consistent design, vibrant colors, transparent background, game asset, evenly spaced grid</textarea>
+
+          <label>Negative Prompt:</label>
+          <input id="negPromptInput" type="text" placeholder="e.g. blurry, extra limbs, lowres, bad anatomy" style="width:100%; padding:4px;">
+
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+            <div style="flex:1 1 120px;">
+              <label>Resolution:</label>
+              <select id="resSelect" style="width:100%;"><option value="512x512">512×512</option><option value="512x768">512×768</option><option value="768x512">768×512</option><option value="768x768" selected>768×768</option></select>
+            </div>
+            <div style="flex:1 1 100px;">
+              <label>Seed:</label>
+              <input id="seedInput" type="number" placeholder="random" style="width:100%;">
+            </div>
+            <div style="flex:2 1 180px;">
+              <label>Creativity (temp): <span id="tempValEl">0.7</span></label>
+              <input id="tempInput" type="range" min="0" max="1" step="0.1" value="0.7" oninput="tempValEl.textContent=this.value" style="width:100%;">
+            </div>
+          </div>
+
+          <button id="generateBtn" onclick="generateSheet()" style="width:100%; padding:8px; font-weight:bold;">Generate Spritesheet</button>
+          <div id="statusEl" style="color:#555; font-size:0.9em; min-height:1.2em;"></div>
+          <div style="font-size:0.85em; color:#666;">Generations: <span id="genCountEl">0</span></div>
+
+          <details style="font-size:0.85em;">
+            <summary style="cursor:pointer;">Import Image URL (superFetch)</summary>
+            <div style="display:flex; gap:4px; margin-top:4px;">
+              <input id="importUrlInput" type="text" placeholder="https://example.com/sheet.png" style="flex:1; padding:4px;">
+              <button onclick="importFromUrl()" style="padding:4px 8px;">Fetch & Load</button>
+            </div>
+          </details>
+
+          <details style="font-size:0.85em; margin-top:2px;">
+            <summary style="cursor:pointer;">AI Memory (rememberPlugin)</summary>
+            <div id="memoryCtn" style="margin-top:4px; color:#555;"></div>
+            <button onclick="saveMemory()" style="margin-top:4px; padding:4px 8px; font-size:0.85em;">💾 Remember Current Idea</button>
+          </details>
+
+          <details style="font-size:0.85em;">
+            <summary style="cursor:pointer;">Recent Prompts</summary>
+            <div id="promptHistoryCtn" style="max-height:120px; overflow-y:auto; margin-top:4px;"></div>
+            <button onclick="clearHistory()" style="margin-top:4px; font-size:0.85em;">Clear History (kv deleteMany)</button>
+          </details>
+        </div>
+      </details>
+
+      <!-- Grid Settings -->
+      <details open style="border:1px solid #ccc; border-radius:6px; padding:8px;">
+        <summary style="cursor:pointer; font-weight:bold; user-select:none;">Grid & Frame Settings</summary>
+        <div style="margin-top:8px; display:grid; grid-template-columns:auto 1fr auto 1fr; gap:6px; align-items:center;">
+          <label>Frame:</label>
+          <input id="fwInput" type="number" value="64" style="width:100%;" onchange="updateFromInputs()">
+          <span style="text-align:center;">×</span>
+          <input id="fhInput" type="number" value="64" style="width:100%;" onchange="updateFromInputs()">
+
+          <label>Grid:</label>
+          <input id="colsInput" type="number" value="9" style="width:100%;" onchange="updateFromInputs()">
+          <span style="text-align:center;">×</span>
+          <input id="rowsInput" type="number" value="4" style="width:100%;" onchange="updateFromInputs()">
+
+          <label>Offset:</label>
+          <input id="offXInput" type="number" value="0" style="width:100%;" onchange="updateFromInputs()">
+          <span style="text-align:center;">,</span>
+          <input id="offYInput" type="number" value="0" style="width:100%;" onchange="updateFromInputs()">
+
+          <label>Grid Color:</label>
+          <input id="gridColorInput" type="color" value="#ff0000" style="width:100%; border:none; height:28px;" onchange="updateFromInputs()">
+          <label>Hi Color:</label>
+          <input id="hiColorInput" type="color" value="#00ffff" style="width:100%; border:none; height:28px;" onchange="updateFromInputs()">
+        </div>
+        <div style="margin-top:8px; display:flex; gap:6px;">
+          <button onclick="resetGridDefaults()" style="flex:1;">Reset Defaults</button>
+          <button onclick="savePreset()" style="flex:1;">💾 Save Config</button>
+        </div>
+        <div style="margin-top:6px; display:flex; gap:6px; align-items:center;">
+          <select id="loadPresetSelect" onchange="loadPreset(this.value)" style="flex:1;"><option value="">-- Load Saved Config --</option></select>
+          <button onclick="deletePreset()" style="flex:0 0 auto;" title="Delete selected preset">🗑️</button>
+        </div>
+      </details>
+
+      <!-- Animation Settings -->
+      <details open style="border:1px solid #ccc; border-radius:6px; padding:8px;">
+        <summary style="cursor:pointer; font-weight:bold; user-select:none;">Animation Preview</summary>
+        <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
+          <label>Preview Row:</label>
+          <select id="rowSelect" onchange="setPreviewRow(this.value)" style="width:100%;">
+            <option value="0">0 – Down / South</option>
+            <option value="1">1 – Left / West</option>
+            <option value="2">2 – Right / East</option>
+            <option value="3">3 – Up / North</option>
+          </select>
+
+          <div style="display:flex; gap:6px; align-items:center;">
+            <label style="white-space:nowrap;">Speed:</label>
+            <input id="fpsInput" type="number" value="10" style="width:60px;" onchange="updateSpeed()">
+            <span>fps</span>
+            <button id="playPauseBtn" onclick="togglePlay()" style="margin-left:auto; min-width:70px;">Pause</button>
+          </div>
+
+          <div style="display:flex; gap:6px;">
+            <button onclick="stepFrame(-1)" style="flex:1;">⏮ Step</button>
+            <button onclick="stepFrame(1)" style="flex:1;">Step ⏭</button>
+          </div>
+
+          <label>Preview BG:</label>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <input id="previewBgColorInput" type="color" value="#e5e5e5" onchange="drawPreview()">
+            <button onclick="toggleCheckerboard()" style="flex:1;">Toggle Checkerboard</button>
+          </div>
+        </div>
+      </details>
+
+      <button id="downloadSheetBtn" onclick="downloadSheet()" disabled style="width:100%; padding:10px; font-weight:bold;">⬇ Download Full Sheet</button>
+    </div>
+
+    <!-- Preview Column -->
+    <div style="flex:2 1 500px; min-width:300px; display:flex; flex-direction:column; gap:12px;">
+
+      <!-- Sheet Viewer -->
+      <div style="border:1px solid #ccc; border-radius:6px; padding:8px; background:#fff;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <label style="font-weight:bold;">Sheet Viewer</label>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <label>Zoom:</label>
+            <input id="zoomInput" type="range" min="0.5" max="4" step="0.1" value="1" oninput="setZoom(this.value)">
+            <span id="zoomValEl">1×</span>
+          </div>
+        </div>
+        <div id="sheetContainerCtn" style="position:relative; overflow:auto; max-height:600px; background:#f8f8f8; border-radius:4px;">
+          <canvas id="sheetCanvas" style="display:block; image-rendering:pixelated; transform-origin:top left;"></canvas>
+        </div>
+      </div>
+
+      <!-- Animation Preview -->
+      <div style="border:1px solid #ccc; border-radius:6px; padding:8px; background:#fff;">
+        <label style="font-weight:bold;">Animation Preview</label>
+        <div style="margin-top:6px;">
+          <canvas id="previewCanvas" width="256" height="256" style="display:block; image-rendering:pixelated; border:1px solid #ddd; border-radius:4px; width:100%; max-width:256px; background:repeating-conic-gradient(#eee 0% 25%, transparent 0% 50%) 50% / 20px 20px;"></canvas>
+        </div>
+      </div>
+
+      <!-- Extracted Frames -->
+      <div style="border:1px solid #ccc; border-radius:6px; padding:8px; background:#fff;">
+        <label style="font-weight:bold;">Extracted Frames (click to download)</label>
+        <div id="extractedFramesCtn" style="margin-top:6px; display:grid; grid-template-columns:repeat(auto-fill, minmax(80px, 1fr)); gap:6px; max-height:320px; overflow-y:auto;"></div>
+        <button onclick="downloadAllFrames()" id="downloadFramesBtn" disabled style="margin-top:8px; width:100%;">Download All Frames as PNGs</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+  body { text-align:left; }
+  button { cursor:pointer; }
+  details > summary { list-style:none; }
+  details > summary::-webkit-details-marker { display:none; }
+  .frame-thumb { position:relative; image-rendering:pixelated; border:1px solid #ddd; border-radius:4px; background:repeating-conic-gradient(#eee 0% 25%, transparent 0% 50%) 50% / 16px 16px; cursor:pointer; width:100%; aspect-ratio:1; }
+  .frame-thumb:hover { border-color:#333; }
+  .frame-label { position:absolute; bottom:2px; right:4px; font-size:10px; background:rgba(0,0,0,0.6); color:#fff; padding:1px 3px; border-radius:3px; pointer-events:none; }
+</style>
+
+<script type="module">
+  // Platform globals via root (module-scope safe)
+  let aiTextPlugin = root?.aiTextPlugin;        // ai-text-plugin features
+  let textToImagePlugin = root?.textToImagePlugin; // text-to-image-plugin features
+  let rememberPlugin = root?.rememberPlugin;    // remember-plugin features
+  let superFetch = root?.superFetch;            // super-fetch-plugin features
+  let kv = root?.kv?.lpcGen;                   // kv-plugin folder namespace
+
+  let sheetImage = new Image();
+  let frameW = 64, frameH = 64, cols = 9, rows = 4, offX = 0, offY = 0;
+  let previewRow = 0, fps = 10, isPlaying = true, currentFrame = 0, lastTime = 0;
+  let gridColor = "rgba(255,0,0,0.35)", hiColor = "rgba(0,255,255,0.9)";
+  let useCheckerboard = true;
+  let sheetZoom = 1;
+  let sheetCtx = sheetCanvas.getContext('2d');
+  let previewCtx = previewCanvas.getContext('2d');
+  let saveTimer = 0;
+
+  const PRESETS = {
+    warrior: { p: "LPC style pixel art character spritesheet, 64x64 frames, 4 rows down/left/right/up, 9 columns walk cycle, male warrior in plate armor with iron sword and kite shield, top-down oblique perspective, consistent design, metallic grays and royal blues, transparent background, game asset, evenly spaced grid", fw:64, fh:64, r:4, c:9 },
+    mage:    { p: "LPC style pixel art character spritesheet, 64x64 frames, 4 rows down/left/right/up, 9 columns walk cycle, female mage in flowing robes holding wooden staff with crystal, top-down oblique perspective, consistent design, deep purples and gold trim, transparent background, game asset, evenly spaced grid", fw:64, fh:64, r:4, c:9 },
+    rogue:   { p: "LPC style pixel art character spritesheet, 64x64 frames, 4 rows down/left/right/up, 9 columns walk cycle, hooded rogue with dual daggers and leather armor, top-down oblique perspective, consistent design, dark browns and forest greens, transparent background, game asset, evenly spaced grid", fw:64, fh:64, r:4, c:9 },
+    npc:     { p: "LPC style pixel art character spritesheet, 64x64 frames, 4 rows down/left/right/up, 9 columns walk cycle, villager in simple tunic and apron carrying a basket, top-down oblique perspective, consistent design, earth tones and soft pastels, transparent background, game asset, evenly spaced grid", fw:64, fh:64, r:4, c:9 }
+  };
+
+  window.addEventListener('DOMContentLoaded', init);
+
+  async function init() {
+    await loadAllViaKv();      // bulk kv-plugin restore via getMany
+    await loadMemory();        // remember-plugin restore
+    await refreshPromptHistory();
+    await refreshPresetList(); // uses kv.entries() and kv.values()
+    // Demonstrate kv-plugin keys() for diagnostics
+    if (kv) {
+      let allKeys = await kv.settings.keys();
+      console.log('kv settings keys:', allKeys);
+    }
+    readInputs();
+    requestAnimationFrame(loop);
+  }
+
+  function readInputs() {
+    frameW = parseInt(fwInput.value) || 64;
+    frameH = parseInt(fhInput.value) || 64;
+    cols = parseInt(colsInput.value) || 9;
+    rows = parseInt(rowsInput.value) || 4;
+    offX = parseInt(offXInput.value) || 0;
+    offY = parseInt(offYInput.value) || 0;
+    gridColor = hexToRgba(gridColorInput.value, 0.35);
+    hiColor = hexToRgba(hiColorInput.value, 0.9);
+  }
+
+  function hexToRgba(hex, a) {
+    let r = parseInt(hex.slice(1,3),16);
+    let g = parseInt(hex.slice(3,5),16);
+    let b = parseInt(hex.slice(5,7),16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  // --- Presets & Prompts ---
+  window.applyPreset = function(key) {
+    let pre = PRESETS[key];
+    if (!pre) return;
+    advancedPromptInput.value = pre.p;
+    fwInput.value = pre.fw; fhInput.value = pre.fh;
+    rowsInput.value = pre.r; colsInput.value = pre.c;
+    offXInput.value = 0; offYInput.value = 0;
+    updateFromInputs();
+  };
+
+  window.enhancePrompt = async function() {
+    if (!aiTextPlugin) { statusEl.textContent = "ai-text-plugin unavailable."; return; }
+    let idea = simplePromptInput.value.trim();
+    if (!idea) { statusEl.textContent = "Enter a simple idea first."; return; }
+    enhanceBtn.disabled = true;
+    enhanceBtn.textContent = "Enhancing...";
+    statusEl.textContent = "✍️ Expanding prompt via aiTextPlugin...";
+    try {
+      let instruction = `Turn this short idea into a detailed prompt for an LPC style pixel art spritesheet (64x64 frames, 4 rows down/left/right/up, 9 columns walk cycle, top-down oblique perspective, transparent background, game asset, evenly spaced grid, consistent design, vibrant colors). Keep it under 80 words.\nIdea: ${idea}`;
+      // Using aiTextPlugin with advanced options: temperature, maxTokens, stopSequences
+      let result = await aiTextPlugin({
+        instruction: instruction,
+        temperature: parseFloat(tempInput.value) || 0.7,
+        maxTokens: 300,
+        stopSequences: ["\n\n"]
+      });
+      let text = typeof result === 'string' ? result : result?.text || String(result);
+      advancedPromptInput.value = text.replace(/^["']|["']$/g, '').trim();
+      statusEl.textContent = "✅ Prompt enhanced via aiTextPlugin.";
+    } catch(e) {
+      statusEl.textContent = "Enhance error: " + (e?.message || String(e));
+    } finally {
+      enhanceBtn.disabled = false;
+      enhanceBtn.textContent = "✨ Enhance to Advanced Prompt";
+    }
+  };
+
+  // --- Generation ---
+  window.generateSheet = async function() {
+    if (!textToImagePlugin) { statusEl.textContent = "⚠️ text-to-image-plugin is not available."; return; }
+    let prompt = advancedPromptInput.value.trim() || "LPC style pixel art character spritesheet";
+    statusEl.textContent = "⏳ Generating via textToImagePlugin…";
+    generateBtn.disabled = true;
+    downloadSheetBtn.disabled = true;
+    downloadFramesBtn.disabled = true;
+    try {
+      // Build options object showcasing text-to-image-plugin settings
+      let opts = {
+        resolution: resSelect.value,
+        seed: seedInput.value ? parseInt(seedInput.value) : undefined,
+        negativePrompt: negPromptInput.value.trim() || undefined
+      };
+      let dataUrl = await textToImagePlugin(prompt, opts);
+      await new Promise((res, rej) => {
+        sheetImage = new Image();
+        sheetImage.onload = () => res();
+        sheetImage.onerror = () => rej(new Error("Image failed to load"));
+        sheetImage.src = dataUrl;
+      });
+      sheetCanvas.width = sheetImage.naturalWidth;
+      sheetCanvas.height = sheetImage.naturalHeight;
+      statusEl.textContent = "✅ Done";
+      downloadSheetBtn.disabled = false;
+      downloadFramesBtn.disabled = false;
+      drawOverlay();
+      extractFrames();
+      // Atomic increment of generation count via kv-plugin update()
+      if (kv) {
+        await kv.settings.update('generationCount', v => (v || 0) + 1);
+        let c = await kv.settings.get('generationCount');
+        genCountEl.textContent = c || 0;
+      }
+      await addToHistory(prompt);
+      queueSaveSettings();
+    } catch (err) {
+      statusEl.textContent = "Error: " + (err?.message || String(err));
+    } finally {
+      generateBtn.disabled = false;
+    }
+  };
+
+  // --- Import via superFetch ---
+  window.importFromUrl = async function() {
+    if (!superFetch) { statusEl.textContent = "super-fetch-plugin unavailable."; return; }
+    let url = importUrlInput.value.trim();
+    if (!url) { statusEl.textContent = "Enter a URL to import."; return; }
+    statusEl.textContent = "⏳ Fetching image via superFetch…";
+    try {
+      let resp = await superFetch(url);
+      let blob = await resp.blob();
+      let objUrl = URL.createObjectURL(blob);
+      sheetImage = new Image();
+      sheetImage.onload = () => {
+        sheetCanvas.width = sheetImage.naturalWidth;
+        sheetCanvas.height = sheetImage.naturalHeight;
+        drawOverlay();
+        extractFrames();
+        downloadSheetBtn.disabled = false;
+        downloadFramesBtn.disabled = false;
+        statusEl.textContent = "✅ Imported via superFetch.";
+      };
+      sheetImage.onerror = () => { statusEl.textContent = "Failed to decode fetched image."; };
+      sheetImage.src = objUrl;
+    } catch (e) {
+      statusEl.textContent = "superFetch error: " + (e?.message || String(e));
+    }
+  };
+
+  // --- Overlay & Preview ---
+  window.drawOverlay = function() {
+    if (!sheetImage.src) return;
+    readInputs();
+
+    let w = sheetCanvas.width, h = sheetCanvas.height;
+    sheetCtx.clearRect(0, 0, w, h);
+    sheetCtx.drawImage(sheetImage, 0, 0);
+
+    // Grid lines
+    sheetCtx.strokeStyle = gridColor;
+    sheetCtx.lineWidth = 1;
+    let maxX = offX + cols * frameW;
+    let maxY = offY + rows * frameH;
+    for (let c = 0; c <= cols; c++) {
+      let x = offX + c * frameW + 0.5;
+      sheetCtx.beginPath(); sheetCtx.moveTo(x, offY); sheetCtx.lineTo(x, maxY); sheetCtx.stroke();
+    }
+    for (let r = 0; r <= rows; r++) {
+      let y = offY + r * frameH + 0.5;
+      sheetCtx.beginPath(); sheetCtx.moveTo(offX, y); sheetCtx.lineTo(maxX, y); sheetCtx.stroke();
+    }
+
+    // Highlight current preview frame
+    let hx = offX + currentFrame * frameW;
+    let hy = offY + previewRow * frameH;
+    sheetCtx.strokeStyle = hiColor;
+    sheetCtx.lineWidth = 2;
+    sheetCtx.strokeRect(hx + 0.5, hy + 0.5, frameW - 1, frameH - 1);
+
+    drawPreview();
+  };
+
+  function drawPreview() {
+    if (!sheetImage.src) return;
+    previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    if (!useCheckerboard) {
+      previewCtx.fillStyle = previewBgColorInput.value;
+      previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+    }
+
+    let sx = offX + currentFrame * frameW;
+    let sy = offY + previewRow * frameH;
+    let scale = Math.min(previewCanvas.width / frameW, previewCanvas.height / frameH);
+    let dw = frameW * scale;
+    let dh = frameH * scale;
+    let dx = (previewCanvas.width - dw) / 2;
+    let dy = (previewCanvas.height - dh) / 2;
+    previewCtx.imageSmoothingEnabled = false;
+    previewCtx.drawImage(sheetImage, sx, sy, frameW, frameH, dx, dy, dw, dh);
+  }
+
+  function loop(ts) {
+    if (isPlaying && sheetImage.src && ts - lastTime > 1000 / fps) {
+      currentFrame = (currentFrame + 1) % cols;
+      lastTime = ts;
+      drawOverlay();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  window.setPreviewRow = function(v) {
+    previewRow = parseInt(v) || 0;
+    drawOverlay();
+  };
+
+  window.updateSpeed = function() {
+    fps = parseInt(fpsInput.value) || 10;
+    lastTime = performance.now();
+  };
+
+  window.togglePlay = function() {
+    isPlaying = !isPlaying;
+    playPauseBtn.textContent = isPlaying ? "Pause" : "Play";
+    if (isPlaying) lastTime = performance.now();
+  };
+
+  window.stepFrame = function(dir) {
+    isPlaying = false;
+    playPauseBtn.textContent = "Play";
+    currentFrame = (currentFrame + dir + cols) % cols;
+    drawOverlay();
+  };
+
+  window.toggleCheckerboard = function() {
+    useCheckerboard = !useCheckerboard;
+    previewCanvas.style.background = useCheckerboard ? "repeating-conic-gradient(#eee 0% 25%, transparent 0% 50%) 50% / 20px 20px" : previewBgColorInput.value;
+    drawPreview();
+  };
+
+  window.setZoom = function(v) {
+    sheetZoom = parseFloat(v);
+    zoomValEl.textContent = sheetZoom + "×";
+    sheetCanvas.style.transform = `scale(${sheetZoom})`;
+  };
+
+  window.updateFromInputs = function() {
+    readInputs();
+    drawOverlay();
+    extractFrames();
+    queueSaveSettings();
+  };
+
+  window.resetGridDefaults = function() {
+    fwInput.value = 64; fhInput.value = 64;
+    colsInput.value = 9; rowsInput.value = 4;
+    offXInput.value = 0; offYInput.value = 0;
+    gridColorInput.value = "#ff0000"; hiColorInput.value = "#00ffff";
+    updateFromInputs();
+  };
+
+  // --- Frame Extraction ---
+  window.extractFrames = function() {
+    if (!sheetImage.src) { extractedFramesCtn.innerHTML = ""; return; }
+    readInputs();
+    extractedFramesCtn.innerHTML = "";
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        let canvas = document.createElement('canvas');
+        canvas.width = frameW; canvas.height = frameH;
+        let ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(sheetImage, offX + c * frameW, offY + r * frameH, frameW, frameH, 0, 0, frameW, frameH);
+        canvas.className = "frame-thumb";
+        canvas.title = `Row ${r}, Col ${c}`;
+        canvas.onclick = () => downloadSpecificFrame(r, c);
+        let lbl = document.createElement('span');
+        lbl.className = "frame-label";
+        lbl.textContent = `${r},${c}`;
+        let wrapper = document.createElement('div');
+        wrapper.style.position = "relative";
+        wrapper.appendChild(canvas);
+        wrapper.appendChild(lbl);
+        extractedFramesCtn.appendChild(wrapper);
+      }
+    }
+  };
+
+  // --- Downloads ---
+  window.downloadSheet = function() {
+    if (!sheetImage.src) return;
+    let a = document.createElement('a');
+    a.href = sheetImage.src;
+    a.download = 'lpc-spritesheet.png';
+    a.click();
+  };
+
+  window.downloadSpecificFrame = function(r, c) {
+    if (!sheetImage.src) return;
+    let canvas = document.createElement('canvas');
+    canvas.width = frameW; canvas.height = frameH;
+    let ctx = canvas.getContext('2d');
+    ctx.drawImage(sheetImage, offX + c * frameW, offY + r * frameH, frameW, frameH, 0, 0, frameW, frameH);
+    let a = document.createElement('a');
+    a.download = `frame_r${r}_c${c}.png`;
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  };
+
+  window.downloadAllFrames = function() {
+    if (!sheetImage.src) return;
+    let i = 0;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        setTimeout(() => downloadSpecificFrame(r, c), i * 150);
+        i++;
+      }
+    }
+  };
+
+  // --- remember-plugin integration ---
+  async function loadMemory() {
+    if (!rememberPlugin) { memoryCtn.innerHTML = "<em>remember-plugin unavailable.</em>"; return; }
+    try {
+      let idea = await rememberPlugin.get('lastSimpleIdea');
+      let arch = await rememberPlugin.get('favoriteArchetype');
+      let lines = [];
+      if (idea) lines.push(`<b>Last idea:</b> ${idea}`);
+      if (arch) lines.push(`<b>Favorite archetype:</b> ${arch}`);
+      memoryCtn.innerHTML = lines.length ? lines.join('<br>') : "<em>No memories yet.</em>";
+    } catch (e) {
+      memoryCtn.innerHTML = "<em>Could not load memories.</em>";
+    }
+  }
+
+  window.saveMemory = async function() {
+    if (!rememberPlugin) { statusEl.textContent = "rememberPlugin unavailable."; return; }
+    try {
+      await rememberPlugin.set('lastSimpleIdea', simplePromptInput.value.trim());
+      await rememberPlugin.set('favoriteArchetype', detectArchetype());
+      statusEl.textContent = "💾 Remembered via rememberPlugin.";
+      await loadMemory();
+    } catch (e) {
+      statusEl.textContent = "Remember error: " + (e?.message || String(e));
+    }
+  };
+
+  function detectArchetype() {
+    let p = advancedPromptInput.value.toLowerCase();
+    if (p.includes('warrior') || p.includes('knight')) return 'warrior';
+    if (p.includes('mage') || p.includes('wizard') || p.includes('witch')) return 'mage';
+    if (p.includes('rogue') || p.includes('thief') || p.includes('assassin')) return 'rogue';
+    if (p.includes('villager') || p.includes('npc')) return 'npc';
+    return 'custom';
+  }
+
+  window.clearHistory = async function() {
+    if (!kv) return;
+    await kv.history.deleteMany(['prompts']);
+    await refreshPromptHistory();
+  };
+
+  // --- KV Persistence (presets + history + last session) ---
+  // Uses getMany, setMany, update, entries, values, keys, deleteMany for full kv-plugin feature coverage
+
+  function queueSaveSettings() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveCurrentToLast, 800);
+  }
+
+  async function saveCurrentToLast() {
+    if (!kv) return;
+    let data = {
+      prompt: advancedPromptInput.value,
+      fw: fwInput.value, fh: fhInput.value,
+      cols: colsInput.value, rows: rowsInput.value,
+      offX: offXInput.value, offY: offYInput.value,
+      gridColor: gridColorInput.value, hiColor: hiColorInput.value,
+      negPrompt: negPromptInput.value,
+      res: resSelect.value,
+      temp: tempInput.value
+    };
+    // Demonstrate setMany: save both last session and timestamp
+    await kv.settings.setMany([
+      ['__last__', data],
+      ['lastSavedAt', Date.now()]
+    ]);
+  }
+
+  async function loadAllViaKv() {
+    if (!kv) return;
+    // Bulk load via getMany for efficiency
+    let [last, count] = await kv.settings.getMany(['__last__', 'generationCount']);
+    if (last) {
+      advancedPromptInput.value = last.prompt || advancedPromptInput.value;
+      fwInput.value = last.fw ?? 64; fhInput.value = last.fh ?? 64;
+      colsInput.value = last.cols ?? 9; rowsInput.value = last.rows ?? 4;
+      offXInput.value = last.offX ?? 0; offYInput.value = last.offY ?? 0;
+      gridColorInput.value = last.gridColor ?? "#ff0000";
+      hiColorInput.value = last.hiColor ?? "#00ffff";
+      negPromptInput.value = last.negPrompt ?? "";
+      if (last.res) resSelect.value = last.res;
+      if (last.temp) { tempInput.value = last.temp; tempValEl.textContent = last.temp; }
+    }
+    genCountEl.textContent = count || 0;
+  }
+
+  window.savePreset = async function() {
+    if (!kv) { statusEl.textContent = "Storage unavailable."; return; }
+    let name = prompt("Preset name?");
+    if (!name) return;
+    let data = {
+      prompt: advancedPromptInput.value,
+      fw: fwInput.value, fh: fhInput.value,
+      cols: colsInput.value, rows: rowsInput.value,
+      offX: offXInput.value, offY: offYInput.value,
+      gridColor: gridColorInput.value, hiColor: hiColorInput.value
+    };
+    await kv.settings.set(name, data);
+    await refreshPresetList();
+    loadPresetSelect.value = name;
+  };
+
+  window.loadPreset = async function(name) {
+    if (!kv || !name) return;
+    let data = await kv.settings.get(name);
+    if (!data) return;
+    advancedPromptInput.value = data.prompt || "";
+    fwInput.value = data.fw || 64; fhInput.value = data.fh || 64;
+    colsInput.value = data.cols || 9; rowsInput.value = data.rows || 4;
+    offXInput.value = data.offX || 0; offYInput.value = data.offY || 0;
+    gridColorInput.value = data.gridColor || "#ff0000";
+    hiColorInput.value = data.hiColor || "#00ffff";
+    updateFromInputs();
+  };
+
+  window.deletePreset = async function() {
+    if (!kv) return;
+    let name = loadPresetSelect.value;
+    if (!name) return;
+    if (!confirm(`Delete preset "${name}"?`)) return;
+    await kv.settings.delete(name);
+    await refreshPresetList();
+  };
+
+  async function refreshPresetList() {
+    if (!kv) return;
+    // Showcase entries() to get both keys and values for richer listing
+    let entries = await kv.settings.entries();
+    // Showcase values() to show total count in dropdown label
+    let vals = await kv.settings.values();
+    loadPresetSelect.innerHTML = `<option value="">-- Load Saved Config (${vals.length}) --</option>`;
+    entries.filter(([k]) => k !== '__last__' && k !== 'generationCount' && k !== 'lastSavedAt').forEach(([k, v]) => {
+      let opt = document.createElement('option');
+      opt.value = k; opt.textContent = k;
+      loadPresetSelect.appendChild(opt);
+    });
+  }
+
+  async function addToHistory(prompt) {
+    if (!kv) return;
+    let hist = await kv.history.get('prompts') || [];
+    hist.unshift(prompt);
+    if (hist.length > 10) hist = hist.slice(0, 10);
+    await kv.history.set('prompts', hist);
+    await refreshPromptHistory();
+  }
+
+  async function refreshPromptHistory() {
+    if (!kv) { promptHistoryCtn.innerHTML = "<em>Storage unavailable.</em>"; return; }
+    let hist = await kv.history.get('prompts') || [];
+    if (!hist.length) { promptHistoryCtn.innerHTML = "<em>No history yet.</em>"; return; }
+    promptHistoryCtn.innerHTML = "";
+    hist.forEach((p, i) => {
+      let div = document.createElement('div');
+      div.style.cssText = "padding:4px; border-bottom:1px solid #eee; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;";
+      div.title = p;
+      div.textContent = `${i+1}. ${p}`;
+      div.onclick = () => { advancedPromptInput.value = p; };
+      promptHistoryCtn.appendChild(div);
+    });
+  }
+</script>
+</body>
+</html>

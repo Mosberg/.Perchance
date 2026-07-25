@@ -1,0 +1,225 @@
+$meta
+  title = Snapshot Archive Kit
+  description = Versioned in-memory snapshots with labels, rollback, retention controls, and export workflows.
+  image = https://user.uploads.dev/file/8c7563d0ece7c9ed36c8a83f8361a7a7.webp
+  tags = snapshots, versioning, rollback, archive management
+
+ensureSnapshotStore() =>
+  if(!window.__snapshotArchiveKitV1) {
+    window.__snapshotArchiveKitV1 = {};
+  }
+  return window.__snapshotArchiveKitV1;
+
+normalizeNamespace(namespace) =>
+  const raw = namespace === undefined || namespace === null ? "default" : String(namespace).trim();
+  return raw === "" ? "default" : raw;
+
+normalizeSnapshotId(snapshotId) =>
+  const raw = snapshotId === undefined || snapshotId === null ? "" : String(snapshotId).trim();
+  return raw;
+
+safeClone(value) =>
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch(error) {
+    return value;
+  }
+
+ensureNamespace(namespace) =>
+  const ns = normalizeNamespace(namespace);
+  const store = ensureSnapshotStore();
+
+  if(!store[ns]) {
+    store[ns] = {
+      counter: 0,
+      snapshots: []
+    };
+  }
+
+  return store[ns];
+
+nextId(space) =>
+  space.counter += 1;
+  return `snap-${space.counter}`;
+
+create(namespace, data, label) =>
+  const space = ensureNamespace(namespace);
+  const id = nextId(space);
+  const snapshot = {
+    id: id,
+    label: label === undefined ? "" : String(label),
+    timestamp: Date.now(),
+    data: safeClone(data)
+  };
+
+  space.snapshots.push(snapshot);
+  return id;
+
+latest(namespace, fallback) =>
+  const space = ensureNamespace(namespace);
+  if(space.snapshots.length === 0) {
+    return fallback === undefined ? "" : fallback;
+  }
+
+  return space.snapshots[space.snapshots.length - 1];
+
+get(namespace, snapshotId, fallback) =>
+  const id = normalizeSnapshotId(snapshotId);
+  if(id === "") return fallback === undefined ? "" : fallback;
+
+  const space = ensureNamespace(namespace);
+  for(let i = 0; i < space.snapshots.length; i += 1) {
+    if(space.snapshots[i].id === id) {
+      return space.snapshots[i];
+    }
+  }
+
+  return fallback === undefined ? "" : fallback;
+
+restore(namespace, snapshotId, fallback, mode) =>
+  const snap = get(namespace, snapshotId, undefined);
+  if(snap === undefined) {
+    return fallback === undefined ? "" : fallback;
+  }
+
+  if(mode === "raw") {
+    return snap.data;
+  }
+
+  return safeClone(snap.data);
+
+list(namespace, mode, separator) =>
+  const space = ensureNamespace(namespace);
+  const sep = separator === undefined ? "," : String(separator);
+
+  const rows = [];
+  for(let i = 0; i < space.snapshots.length; i += 1) {
+    const snap = space.snapshots[i];
+    if(mode === "labels") {
+      rows.push(snap.label);
+    } else if(mode === "ids") {
+      rows.push(snap.id);
+    } else {
+      rows.push(`${snap.id}:${snap.label}`);
+    }
+  }
+
+  return rows.join(sep);
+
+remove(namespace, snapshotId) =>
+  const id = normalizeSnapshotId(snapshotId);
+  if(id === "") return false;
+
+  const space = ensureNamespace(namespace);
+  for(let i = 0; i < space.snapshots.length; i += 1) {
+    if(space.snapshots[i].id === id) {
+      space.snapshots.splice(i, 1);
+      return true;
+    }
+  }
+
+  return false;
+
+prune(namespace, maxCount) =>
+  const space = ensureNamespace(namespace);
+  let keep = Number(maxCount);
+  if(!Number.isFinite(keep) || keep < 0) {
+    keep = 0;
+  }
+
+  if(space.snapshots.length <= keep) {
+    return 0;
+  }
+
+  const removeCount = space.snapshots.length - keep;
+  space.snapshots.splice(0, removeCount);
+  return removeCount;
+
+clear(namespace) =>
+  const ns = normalizeNamespace(namespace);
+  const store = ensureSnapshotStore();
+  if(!store[ns]) {
+    return 0;
+  }
+
+  const removed = store[ns].snapshots.length;
+  delete store[ns];
+  return removed;
+
+count(namespace) =>
+  return ensureNamespace(namespace).snapshots.length;
+
+diffLatest(namespace, data) =>
+  const current = latest(namespace, undefined);
+  if(current === undefined) {
+    return {
+      ok: false,
+      reason: "no snapshots"
+    };
+  }
+
+  let before;
+  let after;
+  try {
+    before = JSON.stringify(current.data);
+    after = JSON.stringify(data);
+  } catch(error) {
+    return {
+      ok: false,
+      reason: "unable to compare"
+    };
+  }
+
+  return {
+    ok: true,
+    changed: before !== after,
+    latestId: current.id,
+    latestLabel: current.label
+  };
+
+exportJson(namespace) =>
+  const space = ensureNamespace(namespace);
+  return JSON.stringify({
+    counter: space.counter,
+    snapshots: space.snapshots
+  });
+
+importJson(namespace, jsonText, mode) =>
+  let parsed;
+  try {
+    parsed = JSON.parse(String(jsonText));
+  } catch(error) {
+    return "error: invalid json";
+  }
+
+  if(!parsed || typeof parsed !== "object" || !Array.isArray(parsed.snapshots)) {
+    return "error: invalid archive payload";
+  }
+
+  const space = ensureNamespace(namespace);
+  if(mode === "replace") {
+    space.counter = 0;
+    space.snapshots = [];
+  }
+
+  for(let i = 0; i < parsed.snapshots.length; i += 1) {
+    const snap = parsed.snapshots[i];
+    if(!snap || typeof snap !== "object") {
+      continue;
+    }
+
+    const next = {
+      id: String(snap.id || nextId(space)),
+      label: String(snap.label || ""),
+      timestamp: Number(snap.timestamp || Date.now()),
+      data: safeClone(snap.data)
+    };
+
+    space.snapshots.push(next);
+  }
+
+  if(Number.isFinite(Number(parsed.counter))) {
+    space.counter = Math.max(space.counter, Number(parsed.counter));
+  }
+
+  return space.snapshots.length;

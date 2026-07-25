@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>rml9yfob1p — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<h1>
+  [title]
+</h1>
+
+<script>
+// --- BASIC PLUGIN REGISTRATION (ASSUMED PERCHANCE API) ---
+(function () {
+  // Fallback if plugin API changes; you can adapt to your environment.
+  const perchance = window.perchance || window.perchancePlugins || {};
+  const register = perchance.registerPlugin || function (config) {
+    console.log("Plugin registered (mock):", config.id || config.name);
+  };
+
+  register({
+    id: "new-computer-control-center",
+    name: "New Computer Control Center",
+    version: "1.0.0",
+
+    init: function (api) {
+      // api: assumed Perchance plugin API object
+
+      // --- PLUGIN DEPENDENCIES (OTHER PLUGINS) ---
+      const kv = api.usePlugin && api.usePlugin("kv-plugin");
+      const remember = api.usePlugin && api.usePlugin("remember-plugin");
+      const stats = api.usePlugin && api.usePlugin("generator-stats-plugin");
+      const tooltip = api.usePlugin && api.usePlugin("tooltip-plugin");
+      const superFetch = api.usePlugin && api.usePlugin("super-fetch-plugin");
+      const aiText = api.usePlugin && api.usePlugin("ai-text-plugin");
+      const textToImage = api.usePlugin && api.usePlugin("text-to-image-plugin");
+      const upload = api.usePlugin && api.usePlugin("upload-plugin");
+
+      // --- KEYS ---
+      const KV_SETTINGS_KEY = "newComputer.settings";
+      const REMEMBER_THEME_KEY = "newComputer.theme";
+
+      // --- DEFAULT SETTINGS ---
+      const defaultSettings = {
+        theme: "light",
+        fontSize: "16px",
+        compact: false
+      };
+
+      // --- LOAD SETTINGS (KV + REMEMBER) ---
+      function loadSettings() {
+        let settings = { ...defaultSettings };
+
+        if (kv && kv.get) {
+          const stored = kv.get(KV_SETTINGS_KEY);
+          if (stored) {
+            try {
+              settings = { ...settings, ...stored };
+            } catch (e) {}
+          }
+        }
+
+        if (remember && remember.get) {
+          const rememberedTheme = remember.get(REMEMBER_THEME_KEY);
+          if (rememberedTheme) {
+            settings.theme = rememberedTheme;
+          }
+        }
+
+        return settings;
+      }
+
+      // --- SAVE SETTINGS ---
+      function saveSettings(settings) {
+        if (kv && kv.set) {
+          kv.set(KV_SETTINGS_KEY, settings);
+        }
+        if (remember && remember.set) {
+          remember.set(REMEMBER_THEME_KEY, settings.theme);
+        }
+      }
+
+      // --- APPLY SETTINGS TO UI WRAPPER ---
+      function applySettings(settings) {
+        const wrapper = document.getElementById("pc-wrapper");
+        if (!wrapper) return;
+
+        wrapper.setAttribute("data-theme", settings.theme);
+        wrapper.style.fontSize = settings.fontSize;
+        wrapper.classList.toggle("pc-compact", !!settings.compact);
+      }
+
+      // --- CREATE SIDEBAR UI ---
+      function createSidebar(settings) {
+        const sidebar = api.createSidebar && api.createSidebar("New Computer");
+        if (!sidebar) return;
+
+        // Theme select
+        sidebar.addSelect("Theme", ["light", "dark", "oled"], settings.theme, function (value) {
+          settings.theme = value;
+          applySettings(settings);
+          saveSettings(settings);
+        });
+
+        // Font size
+        sidebar.addSelect("Font size", ["14px", "16px", "18px"], settings.fontSize, function (value) {
+          settings.fontSize = value;
+          applySettings(settings);
+          saveSettings(settings);
+        });
+
+        // Compact mode
+        sidebar.addToggle("Compact layout", settings.compact, function (value) {
+          settings.compact = value;
+          applySettings(settings);
+          saveSettings(settings);
+        });
+
+        // Diagnostics refresh
+        sidebar.addButton("Refresh diagnostics", function () {
+          pcRefreshDiag();
+        });
+
+        // Software links
+        sidebar.addSection("Software");
+        sidebar.addButton("Essential software", function () {
+          window.open("https://ninite.com/", "_blank");
+        });
+        sidebar.addButton("Programming tools", function () {
+          window.open("https://code.visualstudio.com/", "_blank");
+        });
+        sidebar.addButton("Gaming software", function () {
+          window.open("https://store.steampowered.com/about/", "_blank");
+        });
+        sidebar.addButton("Streaming tools", function () {
+          window.open("https://obsproject.com/", "_blank");
+        });
+
+        // PC build presets
+        sidebar.addSection("PC builds");
+        sidebar.addButton("Gaming build", function () {
+          api.log && api.log("Preset: RTX Gaming Beast – Ryzen 7, RTX 4070, 32GB DDR5");
+        });
+        sidebar.addButton("Workstation build", function () {
+          api.log && api.log("Preset: Creator Workstation – i9, RTX 4080, 64GB RAM");
+        });
+        sidebar.addButton("Compact build", function () {
+          api.log && api.log("Preset: Mini-ITX Compact – Ryzen 5, RTX 4060, SFF case");
+        });
+      }
+
+      // --- CUSTOM COMMANDS ---
+      if (api.registerCommand) {
+        // /theme <light|dark|oled>
+        api.registerCommand("theme", "Set theme: /theme light|dark|oled", function (args) {
+          const settings = loadSettings();
+          const theme = (args[0] || "").toLowerCase();
+          if (["light", "dark", "oled"].includes(theme)) {
+            settings.theme = theme;
+            applySettings(settings);
+            saveSettings(settings);
+            return "Theme set to " + theme;
+          }
+          return "Invalid theme. Use: light, dark, oled.";
+        });
+
+        // /diag
+        api.registerCommand("diag", "Refresh diagnostics", function () {
+          pcRefreshDiag();
+          return "Diagnostics refreshed.";
+        });
+
+        // /export-settings
+        api.registerCommand("export-settings", "Export settings as JSON", function () {
+          const settings = loadSettings();
+          return JSON.stringify(settings);
+        });
+
+        // /import-settings <json>
+        api.registerCommand("import-settings", "Import settings from JSON", function (args) {
+          const json = args.join(" ");
+          try {
+            const parsed = JSON.parse(json);
+            const settings = { ...defaultSettings, ...parsed };
+            applySettings(settings);
+            saveSettings(settings);
+            return "Settings imported.";
+          } catch (e) {
+            return "Invalid JSON.";
+          }
+        });
+      }
+
+      // --- MAIN UI INJECTION (OUR CONTROL CENTER) ---
+      function injectUI() {
+        if (document.getElementById("pc-wrapper")) return;
+
+        const container = api.getContainer ? api.getContainer() : document.body;
+        const wrapper = document.createElement("div");
+        wrapper.id = "pc-wrapper";
+        wrapper.setAttribute("data-theme", "light");
+        wrapper.innerHTML = `
+          <style>
+            #pc-wrapper {
+              font-family: system-ui, sans-serif;
+              color: var(--text, #222);
+              background: var(--bg, #fff);
+              padding: 20px;
+              line-height: 1.6;
+            }
+            #pc-wrapper[data-theme="light"] { --bg:#fff; --text:#222; --card:#f5f5f5; --border:#ddd; --accent:#4a7dff; }
+            #pc-wrapper[data-theme="dark"] { --bg:#0f0f0f; --text:#eee; --card:#1a1a1a; --border:#333; --accent:#6aa2ff; }
+            #pc-wrapper[data-theme="oled"] { --bg:#000; --text:#fff; --card:#000; --border:#111; --accent:#4a7dff; }
+            .pc-hero { text-align:center; margin-bottom:30px; }
+            .pc-hero h1 { font-size:2.4rem; margin:0; }
+            .pc-hero p { opacity:0.8; }
+            .pc-btn { display:inline-block; padding:10px 18px; border-radius:8px; background:var(--accent); color:#fff; text-decoration:none; margin:5px; cursor:pointer; transition:0.2s; }
+            .pc-btn:hover { transform:translateY(-2px); }
+            .pc-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:15px; }
+            .pc-card { background:var(--card); border:1px solid var(--border); padding:15px; border-radius:12px; cursor:pointer; transition:0.25s; }
+            .pc-card:hover { transform:translateY(-4px); border-color:var(--accent); }
+            .pc-diag-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:15px; margin-top:10px; }
+            .pc-diag-card { background:var(--card); border:1px solid var(--border); padding:12px; border-radius:10px; }
+            .pc-diag-value { font-size:1.4rem; font-weight:700; }
+            .pc-gallery-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:15px; margin-top:10px; }
+            .pc-build-card { background:var(--card); border:1px solid var(--border); padding:12px; border-radius:12px; }
+          </style>
+
+          <div class="pc-hero">
+            <h1>New Computer Control Center</h1>
+            <p>Software, diagnostics, and PC build inspiration – now as a Perchance plugin.</p>
+            <div>
+              <span class="pc-btn" onclick="pcScroll('#pc-software')">Software</span>
+              <span class="pc-btn" onclick="pcScroll('#pc-diagnostics')">Diagnostics</span>
+              <span class="pc-btn" onclick="pcScroll('#pc-gallery')">PC Builds</span>
+            </div>
+          </div>
+
+          <h2 id="pc-software">Software Hub</h2>
+          <div class="pc-grid">
+            <div class="pc-card" onclick="pcOpen('https://ninite.com/')">
+              <h3>🧰 Essential Software</h3>
+              <p>Browsers, utilities, security tools.</p>
+            </div>
+            <div class="pc-card" onclick="pcOpen('https://code.visualstudio.com/')">
+              <h3>💻 Programming Tools</h3>
+              <p>VS Code, Git, SDKs.</p>
+            </div>
+            <div class="pc-card" onclick="pcOpen('https://store.steampowered.com/about/')">
+              <h3>🎮 Gaming Software</h3>
+              <p>Steam, drivers, overlays.</p>
+            </div>
+            <div class="pc-card" onclick="pcOpen('https://obsproject.com/')">
+              <h3>📡 Streaming Tools</h3>
+              <p>OBS, recording, overlays.</p>
+            </div>
+          </div>
+
+          <h2 id="pc-diagnostics" style="margin-top:30px;">System Diagnostics</h2>
+          <div class="pc-diag-grid">
+            <div class="pc-diag-card">CPU Usage: <span class="pc-diag-value" id="pc-cpu">0%</span></div>
+            <div class="pc-diag-card">GPU Load: <span class="pc-diag-value" id="pc-gpu">0%</span></div>
+            <div class="pc-diag-card">RAM Usage: <span class="pc-diag-value" id="pc-ram">0%</span></div>
+            <div class="pc-diag-card">Temp: <span class="pc-diag-value" id="pc-temp">0°C</span></div>
+          </div>
+          <div style="margin-top:10px;">
+            <span class="pc-btn" onclick="pcRefreshDiag()">Refresh</span>
+          </div>
+
+          <h2 id="pc-gallery" style="margin-top:30px;">PC Build Showcase</h2>
+          <div class="pc-gallery-grid">
+            <div class="pc-build-card">
+              <strong>RTX Gaming Beast</strong><br>
+              Ryzen 7 • RTX 4070 • 32GB DDR5
+            </div>
+            <div class="pc-build-card">
+              <strong>Creator Workstation</strong><br>
+              i9 • 64GB RAM • RTX 4080
+            </div>
+            <div class="pc-build-card">
+              <strong>Mini-ITX Compact</strong><br>
+              Ryzen 5 • RTX 4060 • SFF Case
+            </div>
+          </div>
+        `;
+        container.appendChild(wrapper);
+      }
+
+      // --- GLOBAL HELPERS (ATTACHED TO WINDOW FOR INLINE HANDLERS) ---
+      window.pcScroll = function (sel) {
+        const el = document.querySelector(sel);
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      };
+      window.pcOpen = function (url) {
+        window.open(url, "_blank");
+      };
+      window.pcRand = function (min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      };
+      window.pcRefreshDiag = function () {
+        const cpu = document.getElementById("pc-cpu");
+        const gpu = document.getElementById("pc-gpu");
+        const ram = document.getElementById("pc-ram");
+        const temp = document.getElementById("pc-temp");
+        if (!cpu) return;
+        cpu.textContent = pcRand(5, 95) + "%";
+        gpu.textContent = pcRand(5, 95) + "%";
+        ram.textContent = pcRand(20, 80) + "%";
+        temp.textContent = pcRand(35, 80) + "°C";
+      };
+
+      // --- INIT FLOW ---
+      const settings = loadSettings();
+      injectUI();
+      applySettings(settings);
+      createSidebar(settings);
+
+      if (stats && stats.increment) {
+        stats.increment("newComputer.pluginLoaded");
+      }
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

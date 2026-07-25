@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>pokemon-yellow-3d-reimagining — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- 
+Pokemon Yellow 3D Reimagining
+Built with Babylon.js and PokeAPI integration
+Features: Overworld exploration, turn-based battles, catching, leveling, inventory, NPCs
+-->
+<div style="width:100%; height:100vh; overflow:hidden; position:relative; font-family:'Courier New', Courier, monospace;">
+  <!-- 3D Canvas -->
+  <canvas id="renderCanvasEl" style="width:100%; height:100%; touch-action:none; outline:none;"></canvas>
+
+  <!-- Loading Screen -->
+  <div id="loadingEl" style="position:absolute; top:0; left:0; width:100%; height:100%; background:#202020; color:#ffcc00; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:10;">
+    <h1>POKEMON YELLOW 3D</h1>
+    <p id="loadingTextEl">Initializing...</p>
+  </div>
+
+  <!-- UI Overlay (HUD) -->
+  <div id="uiLayer" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; display:none;">
+    <!-- Player Stats -->
+    <div style="position:absolute; top:10px; left:10px; color:white; background:rgba(0,0,0,0.7); padding:10px; border:2px solid white; border-radius:5px;">
+      <div id="playerNameEl">ASH</div>
+      <div id="moneyEl">₽ 3000</div>
+      <div id="partyInfoEl">Loading...</div>
+    </div>
+    <!-- Controls Hint -->
+    <div style="position:absolute; bottom:10px; left:10px; color:white; font-size:12px; background:rgba(0,0,0,0.7); padding:5px;">
+      WASD to Move | E to Interact | M for Menu | P for Party
+    </div>
+  </div>
+
+  <!-- Battle UI -->
+  <div id="battleScreen" class="hidden" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:20; display:flex; flex-direction:column; justify-content:center; align-items:center; pointer-events:auto;">
+    <div style="display:flex; justify-content:space-between; width:90%; max-width:900px; margin-bottom:20px;">
+      <!-- Enemy Info -->
+      <div style="background:white; border:4px solid #333; padding:15px; border-radius:8px; width:45%;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div id="enemyNameEl" style="font-weight:bold; text-transform:uppercase; font-size:18px;">???</div>
+          <div id="enemyLevelEl" style="font-weight:bold;">Lv5</div>
+        </div>
+        <div id="enemyHpContainer" style="background:#eee; height:20px; width:100%; border:2px solid black; margin-top:5px; border-radius:10px; overflow:hidden;">
+          <div id="enemyHpBar" style="background:limegreen; height:100%; width:100%; transition:width 0.5s;"></div>
+        </div>
+        <div id="enemyHpText" style="font-size:12px; margin-top:2px;">45/45</div>
+      </div>
+      <!-- Player Pokemon Info -->
+      <div style="background:white; border:4px solid #333; padding:15px; border-radius:8px; width:45%; text-align:right;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-direction:row-reverse;">
+          <div id="battlePokeNameEl" style="font-weight:bold; text-transform:uppercase; font-size:18px;">PIKACHU</div>
+          <div id="playerLevelEl" style="font-weight:bold;">Lv5</div>
+        </div>
+        <div id="playerHpContainer" style="background:#eee; height:20px; width:100%; border:2px solid black; margin-top:5px; border-radius:10px; overflow:hidden;">
+          <div id="playerHpBar" style="background:limegreen; height:100%; width:100%; transition:width 0.5s;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:2px;">
+          <div id="playerHpText" style="font-size:12px;">35/35</div>
+          <div id="expBarContainer" style="background:#eee; height:8px; width:60%; border:1px solid black; border-radius:4px; overflow:hidden; align-self:center;">
+            <div id="expBar" style="background:#3399ff; height:100%; width:0%; transition:width 0.3s;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle Menu -->
+    <div id="battleMenuBox" style="background:white; border:4px solid #333; padding:15px; width:90%; max-width:900px; display:flex; gap:10px; border-radius:8px;">
+      <div style="flex:1; display:flex; flex-direction:column; gap:10px;">
+        <div id="battleTextEl" style="height:50px; font-weight:bold; font-size:16px; display:flex; align-items:center;">What will PIKACHU do?</div>
+        
+        <!-- Main Action Menu -->
+        <div id="mainActionsEl" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <button id="fightBtn" class="battle-btn">FIGHT</button>
+          <button id="bagBtn" class="battle-btn">BAG</button>
+          <button id="pokemonBtn" class="battle-btn">POKéMON</button>
+          <button id="runBtn" class="battle-btn">RUN</button>
+        </div>
+        
+        <!-- Move Selection (Hidden by default) -->
+        <div id="moveSelectionEl" class="hidden" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <button id="move1Btn" class="battle-btn move-btn">-</button>
+          <button id="move2Btn" class="battle-btn move-btn">-</button>
+          <button id="move3Btn" class="battle-btn move-btn">-</button>
+          <button id="move4Btn" class="battle-btn move-btn">-</button>
+        </div>
+        
+        <!-- Bag Menu (Hidden by default) -->
+        <div id="bagMenuEl" class="hidden" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; max-height:150px; overflow-y:auto;">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dialog Box -->
+  <div id="dialogEl" class="hidden" style="position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:white; border:4px solid #333; padding:15px; width:80%; max-width:700px; z-index:15; pointer-events:auto; border-radius:5px;">
+    <div id="dialogTextEl" style="font-weight:bold; margin-bottom:10px; min-height:20px;">Hello!</div>
+    <div id="dialogOptionsEl" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+      <!-- Dynamic options -->
+    </div>
+    <div id="dialogContinueEl" style="margin-top:10px; font-size:12px; color:#666; text-align:center;">(Press E or Click to continue)</div>
+  </div>
+
+  <!-- Menu Screen -->
+  <div id="menuScreen" class="hidden" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:25; display:flex; flex-direction:column; justify-content:center; align-items:center; pointer-events:auto;">
+    <div style="background:white; border:4px solid #333; padding:20px; width:80%; max-width:600px; border-radius:10px;">
+      <h2 style="margin-top:0; text-align:center; border-bottom:2px solid #333; padding-bottom:10px;">MENU</h2>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+        <button id="menuPokedexBtn" class="menu-btn">POKéDEX</button>
+        <button id="menuPokemonBtn" class="menu-btn">POKéMON</button>
+        <button id="menuBagBtn" class="menu-btn">BAG</button>
+        <button id="menuTrainerBtn" class="menu-btn">TRAINER CARD</button>
+        <button id="menuSaveBtn" class="menu-btn">SAVE</button>
+        <button id="menuExitBtn" class="menu-btn" style="grid-column:span 2;">EXIT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pokemon Party Screen -->
+  <div id="partyScreen" class="hidden" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:30; display:flex; flex-direction:column; justify-content:center; align-items:center; pointer-events:auto;">
+    <div style="background:white; border:4px solid #333; padding:20px; width:90%; max-width:800px; border-radius:10px; max-height:80vh; overflow-y:auto;">
+      <h2 style="margin-top:0; text-align:center;">YOUR POKéMON</h2>
+      <div id="partyListEl" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:15px;">
+        <!-- Dynamically populated -->
+      </div>
+      <button id="closePartyBtn" class="battle-btn" style="margin-top:20px; width:100%;">CLOSE</button>
+    </div>
+  </div>
+
+  <style>
+    .hidden { display:none !important; }
+    .battle-btn { 
+      background:#fff; border:2px solid #333; padding:12px 10px; font-family:'Courier New', monospace; font-weight:bold; cursor:pointer; 
+      box-shadow: 3px 3px 0px #333; transition: transform 0.1s; font-size:14px; text-transform:uppercase;
+    }
+    .battle-btn:active { transform: translate(3px, 3px); box-shadow: none; }
+    .battle-btn:hover { background:#f0f0f0; }
+    .battle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .move-btn { font-size:12px; padding:8px 5px; }
+    .menu-btn {
+      background:#ffcc00; border:3px solid #333; padding:15px; font-family:'Courier New', monospace; font-weight:bold; cursor:pointer;
+      box-shadow: 4px 4px 0px #333; transition: transform 0.1s; font-size:16px; text-transform:uppercase;
+    }
+    .menu-btn:active { transform: translate(4px, 4px); box-shadow: none; }
+    .menu-btn:hover { background:#ffdd44; }
+    .party-card {
+      border:2px solid #333; padding:10px; border-radius:5px; background:#f9f9f9;
+      display:flex; align-items:center; gap:10px;
+    }
+    .party-card.selected { border-color:#ffcc00; background:#ffffee; }
+    .hp-healthy { background-color: limegreen; }
+    .hp-medium { background-color: yellow; }
+    .hp-critical { background-color: red; }
+  </style>
+
+  <script type="module">
+    // --- Imports & Setup ---
+    import * as BABYLON from 'https://esm.sh/@babylonjs/core@6.0.0';
+    import { createNoise2D } from 'https://esm.sh/simplex-noise@4.0.3';
+    
+    // --- Global State ---
+    const canvas = renderCanvasEl;
+    const engine = new BABYLON.Engine(canvas, true);
+    let scene, camera, playerMesh;
+    let mapInput = {};
+    
+    // Game State
+    const gameState = {
+      mode: 'LOADING', // LOADING, ROAM, BATTLE, DIALOG, MENU
+      playerPos: {x:0, z:0},
+      encounterRate: 0.15,
+      inBattle: false,
+      currentEnemy: null,
+      battleState: 'PLAYER_TURN', // PLAYER_TURN, ENEMY_TURN, ANIMATING
+      wildBattle: true
+    };
+    
+    // Player Data
+    const playerData = {
+      name: "ASH",
+      money: 3000,
+      badges: 0,
+      party: [],
+      bag: {
+        'poke-ball': 5,
+        'potion': 3,
+        'antidote': 1
+      },
+      pokedex: [] // IDs of seen Pokemon
+    };
+
+    // --- API Helpers ---
+    async function fetchPokemon(nameOrId) {
+      try {
+        let res = await fetch(`https://pokeapi.co/api/v2/pokemon/${nameOrId.toString().toLowerCase()}`);
+        if(!res.ok) throw new Error("Pokemon not found");
+        return await res.json();
+      } catch(e) {
+        console.error("Failed to fetch Pokemon:", e);
+        return null;
+      }
+    }
+    
+    async function fetchMove(nameOrId) {
+      try {
+        let res = await fetch(`https://pokeapi.co/api/v2/move/${nameOrId.toString().toLowerCase()}`);
+        if(!res.ok) throw new Error("Move not found");
+        return await res.json();
+      } catch(e) {
+        console.error("Failed to fetch move:", e);
+        return null;
+      }
+    }
+
+    // --- Pokemon Class ---
+    class Pokemon {
+      constructor(data, level = 5) {
+        this.id = data.id;
+        this.name = data.name;
+        this.level = level;
+        this.exp = 0;
+        this.expToNextLevel = this.calculateExpToNextLevel();
+        this.currentHp = 0;
+        this.maxHp = 0;
+        this.attack = 0;
+        this.defense = 0;
+        this.spAttack = 0;
+        this.spDefense = 0;
+        this.speed = 0;
+        this.type = [];
+        this.abilities = [];
+        this.moves = [];
+        this.sprite = data.sprites.front_default;
+        this.spriteBack = data.sprites.back_default || data.sprites.front_default;
+        
+        this.initializeStats(data);
+      }
+      
+      initializeStats(data) {
+        // Base stats
+        const baseStats = {
+          hp: data.stats.find(s => s.stat.name === 'hp')?.base_stat || 50,
+          attack: data.stats.find(s => s.stat.name === 'attack')?.base_stat || 50,
+          defense: data.stats.find(s => s.stat.name === 'defense')?.base_stat || 50,
+          'special-attack': data.stats.find(s => s.stat.name === 'special-attack')?.base_stat || 50,
+          'special-defense': data.stats.find(s => s.stat.name === 'special-defense')?.base_stat || 50,
+          speed: data.stats.find(s => s.stat.name === 'speed')?.base_stat || 50
+        };
+        
+        // Types
+        this.type = data.types.map(t => t.type.name);
+        
+        // Abilities
+        this.abilities = data.abilities.map(a => a.ability.name);
+        
+        // Calculate stats based on level
+        this.maxHp = this.calculateStat(baseStats.hp, this.level, true);
+        this.currentHp = this.maxHp;
+        this.attack = this.calculateStat(baseStats.attack, this.level);
+        this.defense = this.calculateStat(baseStats.defense, this.level);
+        this.spAttack = this.calculateStat(baseStats['special-attack'], this.level);
+        this.spDefense = this.calculateStat(baseStats['special-defense'], this.level);
+        this.speed = this.calculateStat(baseStats.speed, this.level);
+        
+        // Learn moves
+        this.learnMoves(data.moves);
+      }
+      
+      calculateStat(base, level, isHp = false) {
+        if (isHp) {
+          return Math.floor(((2 * base + 31) * level / 100) + level + 10);
+        }
+        return Math.floor(((2 * base + 31) * level / 100) + 5);
+      }
+      
+      calculateExpToNextLevel() {
+        return Math.floor(Math.pow(this.level, 3) * 4 / 5);
+      }
+      
+      async learnMoves(availableMoves) {
+        // Filter out status moves for now
+        const damageMoves = availableMoves.filter(m => {
+          const name = m.move.name.toLowerCase();
+          return !name.includes('growl') && !name.includes('tail-whip') && 
+                 !name.includes('leer') && !name.includes('focus-energy');
+        });
+        
+        // Shuffle and take up to 4
+        const shuffled = damageMoves.sort(() => 0.5 - Math.random());
+        const selected = shuffled.slice(0, 4);
+        
+        // Fetch move details
+        for (let move of selected) {
+          const moveData = await fetchMove(move.move.name);
+          if (moveData) {
+            this.moves.push({
+              name: moveData.name,
+              type: moveData.type.name,
+              power: moveData.power || 40,
+              accuracy: moveData.accuracy || 100,
+              pp: moveData.pp,
+              currentPp: moveData.pp,
+              damageClass: moveData.damage_class.name
+            });
+          }
+        }
+      }
+      
+      gainExp(amount) {
+        this.exp += amount;
+        let leveledUp = false;
+        
+        while (this.exp >= this.expToNextLevel) {
+          this.exp -= this.expToNextLevel;
+          this.level++;
+          this.expToNextLevel = this.calculateExpToNextLevel();
+          leveledUp = true;
+          
+          // Recalculate stats on level up (simplified)
+          this.maxHp += Math.floor(this.maxHp * 0.1);
+          this.currentHp = this.maxHp; // Full heal on level up
+          this.attack += Math.floor(this.attack * 0.1);
+          this.defense += Math.floor(this.defense * 0.1);
+        }
+        
+        return leveledUp;
+      }
+    }
+
+    // --- Initialization ---
+    async function init() {
+      loadingTextEl.textContent = "Connecting to PokeAPI...";
+      
+      try {
+        // Try to load saved game
+        const savedGame = await root.kv.pokemonYellow3d.get("saveData");
+        if (savedGame) {
+          // Restore saved data
+          Object.assign(playerData, savedGame.playerData);
+          // Re-instantiate Pokemon objects
+          for (let i = 0; i < playerData.party.length; i++) {
+            const data = await fetchPokemon(playerData.party[i].name);
+            if (data) {
+              const p = new Pokemon(data, playerData.party[i].level);
+              p.currentHp = playerData.party[i].currentHp;
+              p.exp = playerData.party[i].exp;
+              playerData.party[i] = p;
+            }
+          }
+          loadingTextEl.textContent = "Game loaded!";
+        } else {
+          // New game - Get starter Pokemon (Pikachu for Yellow)
+          loadingTextEl.textContent = "Getting your PIKACHU...";
+          const pikaData = await fetchPokemon('pikachu');
+          
+          if (pikaData) {
+            const pikachu = new Pokemon(pikaData, 5);
+            playerData.party.push(pikachu);
+            playerData.pokedex.push(pikachu.id);
+          }
+        }
+        
+        loadingTextEl.textContent = "Creating world...";
+        createScene();
+        
+        loadingTextEl.textContent = "Loading UI...";
+        updateUI();
+        updatePartyUI();
+        
+        // Hide loading, show game
+        loadingEl.hidden = true;
+        uiLayer.style.display = 'block';
+        gameState.mode = 'ROAM';
+        
+        // Start render loop
+        engine.runRenderLoop(() => {
+          if(scene) scene.render();
+        });
+        
+        window.addEventListener('resize', () => engine.resize());
+        
+        // Setup input handlers
+        setupInputHandlers();
+        
+      } catch (error) {
+        console.error("Initialization error:", error);
+        loadingTextEl.textContent = "Error loading game. Please refresh.";
+      }
+    }
+
+    // --- 3D Scene Setup ---
+    function createScene() {
+      scene = new BABYLON.Scene(engine);
+      scene.clearColor = new BABYLON.Color3(0.5, 0.8, 1); // Sky blue
+
+      // Camera (Isometric-ish)
+      camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 4, Math.PI / 3, 20, BABYLON.Vector3.Zero(), scene);
+      camera.attachControl(canvas, true);
+      camera.lowerRadiusLimit = 10;
+      camera.upperRadiusLimit = 40;
+      camera.upperBetaLimit = Math.PI / 2.2;
+
+      // Lighting
+      const hemiLight = new BABYLON.HemisphericLight("hemiLight", new BABYLON.Vector3(0, 1, 0), scene);
+      hemiLight.intensity = 0.7;
+      
+      const dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-1, -2, -1), scene);
+      dirLight.position = new BABYLON.Vector3(20, 40, 20);
+      dirLight.intensity = 0.5;
+      
+      // Shadows
+      const shadowGenerator = new BABYLON.ShadowGenerator(1024, dirLight);
+      shadowGenerator.useBlurExponentialShadowMap = true;
+      
+      // Materials
+      const matGround = new BABYLON.StandardMaterial("matGround", scene);
+      matGround.diffuseColor = new BABYLON.Color3(0.2, 0.6, 0.2);
+      matGround.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+
+      const matWall = new BABYLON.StandardMaterial("matWall", scene);
+      matWall.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+
+      const matPath = new BABYLON.StandardMaterial("matPath", scene);
+      matPath.diffuseColor = new BABYLON.Color3(0.8, 0.7, 0.5);
+
+      const matWater = new BABYLON.StandardMaterial("matWater", scene);
+      matWater.diffuseColor = new BABYLON.Color3(0.2, 0.4, 0.8);
+      matWater.alpha = 0.8;
+
+      const matTreeTrunk = new BABYLON.StandardMaterial("matTreeTrunk", scene);
+      matTreeTrunk.diffuseColor = new BABYLON.Color3(0.4, 0.3, 0.2);
+      
+      const matTreeLeaves = new BABYLON.StandardMaterial("matTreeLeaves", scene);
+      matTreeLeaves.diffuseColor = new BABYLON.Color3(0.1, 0.4, 0.1);
+      
+      const matTallGrass = new BABYLON.StandardMaterial("matTallGrass", scene);
+      matTallGrass.diffuseColor = new BABYLON.Color3(0.1, 0.5, 0.1);
+      matTallGrass.alpha = 0.9;
+
+      // Procedural Map Generation
+      const noise2D = createNoise2D();
+      const mapSize = 25;
+      const tileSize = 2;
+      
+      // Create ground plane
+      const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: mapSize*2*tileSize, height: mapSize*2*tileSize}, scene);
+      ground.position.y = -0.1;
+      ground.material = matGround;
+      ground.receiveShadows = true;
+      
+      const tiles = [];
+      
+      for (let x = -mapSize; x <= mapSize; x++) {
+        for (let z = -mapSize; z <= mapSize; z++) {
+          let n = noise2D(x * 0.08, z * 0.08);
+          let tile = BABYLON.MeshBuilder.CreateGround(`tile_${x}_${z}`, {width: tileSize, height: tileSize}, scene);
+          tile.position.x = x * tileSize;
+          tile.position.z = z * tileSize;
+          tile.receiveShadows = true;
+          
+          // Biomes based on noise
+          if (n < -0.4) {
+            // Water
+            tile.material = matWater;
+            tile.metadata = { type: 'water' };
+          } else if (n < 0.2) {
+            // Grass
+            if (Math.random() < 0.3 && n > -0.2) {
+              // Tall grass (encounter area)
+              tile.material = matTallGrass;
+              tile.metadata = { type: 'tall-grass', encounter: true };
+              addGrassBlades(tile, scene);
+            } else {
+              // Regular grass
+              tile.material = matGround;
+              tile.metadata = { type: 'grass' };
+            }
+          } else if (n < 0.5) {
+            // Path
+            tile.material = matPath;
+            tile.metadata = { type: 'path' };
+          } else {
+            // Rocky/Building area
+            tile.material = matWall;
+            tile.metadata = { type: 'wall' };
+          }
+          
+          tiles.push(tile);
+          
+          // Add trees in grass areas
+          if ((tile.metadata.type === 'grass' || tile.metadata.type === 'tall-grass') && Math.random() < 0.05) {
+            createTree(x * tileSize, z * tileSize, scene, matTreeTrunk, matTreeLeaves, shadowGenerator);
+            tile.metadata.type = 'wall'; // Trees block movement
+          }
+        }
+      }
+      
+      gameState.tiles = tiles;
+
+      // Create Player Character
+      createPlayerCharacter(scene, shadowGenerator);
+      
+      // Create NPCs
+      createNPCs(scene, shadowGenerator);
+      
+      // Game loop
+      scene.onBeforeRenderObservable.add(() => {
+        if(gameState.mode === 'ROAM') {
+          handlePlayerMovement();
+        }
+      });
+    }
+    
+    function createPlayerCharacter(scene, shadowGenerator) {
+      // Body
+      playerMesh = BABYLON.MeshBuilder.CreateBox("playerBody", {height: 1.2, width: 0.6, depth: 0.3}, scene);
+      playerMesh.position.y = 1.5;
+      
+      const playerMat = new BABYLON.StandardMaterial("playerMat", scene);
+      playerMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.8); // Blue jacket
+      playerMesh.material = playerMat;
+      
+      // Head
+      const head = BABYLON.MeshBuilder.CreateBox("playerHead", {height: 0.5, width: 0.5, depth: 0.5}, scene);
+      head.position.y = 0.85;
+      head.parent = playerMesh;
+      
+      const headMat = new BABYLON.StandardMaterial("headMat", scene);
+      headMat.diffuseColor = new BABYLON.Color3(0.9, 0.8, 0.7); // Skin tone
+      head.material = headMat;
+      
+      // Hat
+      const hat = BABYLON.MeshBuilder.CreateBox("playerHat", {height: 0.3, width: 0.55, depth: 0.55}, scene);
+      hat.position.y = 0.4;
+      hat.parent = head;
+      
+      const hatMat = new BABYLON.StandardMaterial("hatMat", scene);
+      hatMat.diffuseColor = new BABYLON.Color3(1, 0, 0); // Red hat
+      hat.material = hatMat;
+      
+      // Hat brim
+      const brim = BABYLON.MeshBuilder.CreateBox("hatBrim", {width: 0.7, height: 0.1, depth: 0.4}, scene);
+      brim.position.y = -0.15;
+      brim.position.z = 0.2;
+      brim.parent = hat;
+      
+      // Legs
+      const leftLeg = BABYLON.MeshBuilder.CreateBox("leftLeg", {height: 0.8, width: 0.25, depth: 0.25}, scene);
+      leftLeg.position.y = -1;
+      leftLeg.position.x = -0.15;
+      leftLeg.parent = playerMesh;
+      
+      const rightLeg = BABYLON.MeshBuilder.CreateBox("rightLeg", {height: 0.8, width: 0.25, depth: 0.25}, scene);
+      rightLeg.position.y = -1;
+      rightLeg.position.x = 0.15;
+      rightLeg.parent = playerMesh;
+      
+      const legMat = new BABYLON.StandardMaterial("legMat", scene);
+      legMat.diffuseColor = new BABYLON.Color3(0.2, 0.1, 0.5); // Dark blue pants
+      leftLeg.material = legMat;
+      rightLeg.material = legMat;
+      
+      shadowGenerator.addShadowCaster(playerMesh);
+    }
+    
+    function createTree(x, z, scene, trunkMat, leavesMat, shadowGenerator) {
+      // Trunk
+      const trunk = BABYLON.MeshBuilder.CreateCylinder("treeTrunk", {diameter: 0.6, height: 3}, scene);
+      trunk.position.x = x;
+      trunk.position.z = z;
+      trunk.position.y = 1.5;
+      trunk.material = trunkMat;
+      
+      // Leaves (multiple layers)
+      const leaves1 = BABYLON.MeshBuilder.CreateSphere("leaves1", {diameter: 3}, scene);
+      leaves1.position.x = x;
+      leaves1.position.z = z;
+      leaves1.position.y = 4;
+      leaves1.material = leavesMat;
+      
+      const leaves2 = BABYLON.MeshBuilder.CreateSphere("leaves2", {diameter: 2.2}, scene);
+      leaves2.position.x = x;
+      leaves2.position.z = z;
+      leaves2.position.y = 5;
+      leaves2.material = leavesMat;
+      
+      // Add to shadows
+      shadowGenerator.addShadowCaster(trunk);
+      shadowGenerator.addShadowCaster(leaves1);
+      shadowGenerator.addShadowCaster(leaves2);
+      
+      trunk.parent = leaves1;
+      leaves2.parent = leaves1;
+    }
+    
+    function addGrassBlades(tile, scene) {
+      for (let i = 0; i < 3; i++) {
+        const blade = BABYLON.MeshBuilder.CreateBox("grassBlade", {width: 0.05, height: 0.4, depth: 0.05}, scene);
+        blade.position.x = tile.position.x + (Math.random() - 0.5) * 1.5;
+        blade.position.z = tile.position.z + (Math.random() - 0.5) * 1.5;
+        blade.position.y = 0.2;
+        blade.rotation.y = Math.random() * Math.PI;
+        blade.rotation.z = (Math.random() - 0.5) * 0.3;
+        blade.parent = tile;
+      }
+    }
+    
+    function createNPCs(scene, shadowGenerator) {
+      // Professor Oak
+      createNPC(
+        5, 5, 
+        "PROF. OAK", 
+        new BABYLON.Color3(1, 1, 1), // White coat
+        new BABYLON.Color3(0.5, 0.3, 0), // Brown hair
+        scene, 
+        shadowGenerator,
+        "Welcome to the world of Pokemon! I'm Professor Oak. People call me the Pokemon Professor!"
+      );
+      
+      // Rival
+      createNPC(
+        -5, -5,
+        "GARY",
+        new BABYLON.Color3(0.6, 0.3, 0.6), // Purple outfit
+        new BABYLON.Color3(0.4, 0.2, 0), // Brown hair
+        scene,
+        shadowGenerator,
+        "Hey Ash! Smell ya later!"
+      );
+    }
+    
+    function createNPC(x, z, name, outfitColor, hairColor, scene, shadowGenerator, dialogText) {
+      const npc = BABYLON.MeshBuilder.CreateBox(`npc_${name}`, {height: 1.4, width: 0.6, depth: 0.3}, scene);
+      npc.position.x = x;
+      npc.position.z = z;
+      npc.position.y = 1.5;
+      
+      const npcMat = new BABYLON.StandardMaterial(`npcMat_${name}`, scene);
+      npcMat.diffuseColor = outfitColor;
+      npc.material = npcMat;
+      
+      // Head
+      const head = BABYLON.MeshBuilder.CreateBox(`npcHead_${name}`, {height: 0.5, width: 0.5, depth: 0.5}, scene);
+      head.position.y = 0.95;
+      head.parent = npc;
+      
+      const headMat = new BABYLON.StandardMaterial(`npcHeadMat_${name}`, scene);
+      headMat.diffuseColor = new BABYLON.Color3(0.9, 0.8, 0.7);
+      head.material = headMat;
+      
+      // Hair
+      const hair = BABYLON.MeshBuilder.CreateBox(`npcHair_${name}`, {height: 0.3, width: 0.55, depth: 0.55}, scene);
+      hair.position.y = 0.35;
+      hair.parent = head;
+      
+      const hairMat = new BABYLON.StandardMaterial(`npcHairMat_${name}`, scene);
+      hairMat.diffuseColor = hairColor;
+      hair.material = hairMat;
+      
+      npc.metadata = {
+        type: 'npc',
+        name: name,
+        dialog: dialogText
+      };
+      
+      shadowGenerator.addShadowCaster(npc);
+    }
+
+    // --- Input Handling ---
+    function setupInputHandlers() {
+      window.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        mapInput[key] = true;
+        
+        if (key === 'm' || key === 'escape') toggleMenu();
+        if (key === 'b' && gameState.mode === 'BATTLE') showBagMenu();
+        if (key === 'p' && gameState.mode === 'ROAM') showPartyScreen();
+        if (key === 'e') handleInteraction();
+      });
+      
+      window.addEventListener('keyup', (e) => {
+        mapInput[e.key.toLowerCase()] = false;
+      });
+      
+      dialogEl.addEventListener('click', () => {
+        if (gameState.mode === 'DIALOG') handleInteraction();
+      });
+    }
+    
+    function handlePlayerMovement() {
+      if (!playerMesh) return;
+      
+      let speed = 0.12;
+      let dx = 0, dz = 0;
+      
+      if (mapInput['w'] || mapInput['arrowup']) dz = -1;
+      if (mapInput['s'] || mapInput['arrowdown']) dz = 1;
+      if (mapInput['a'] || mapInput['arrowleft']) dx = -1;
+      if (mapInput['d'] || mapInput['arrowright']) dx = 1;
+      
+      if (dx !== 0 || dz !== 0) {
+        let nextX = playerMesh.position.x + dx * speed;
+        let nextZ = playerMesh.position.z + dz * speed;
+        
+        if (!checkCollision(nextX, nextZ)) {
+          playerMesh.position.x = nextX;
+          playerMesh.position.z = nextZ;
+          
+          playerMesh.rotation.y = Math.atan2(dx, dz);
+          camera.setTarget(playerMesh.position);
+          
+          checkEncounter();
+        }
+      }
+    }
+    
+    function checkCollision(x, z) {
+      const ray = new BABYLON.Ray(new BABYLON.Vector3(x, 5, z), new BABYLON.Vector3(0, -1, 0), 10);
+      const hit = scene.pickWithRay(ray);
+      
+      if (hit.hit && hit.pickedMesh.metadata) {
+        const type = hit.pickedMesh.metadata.type;
+        if (type === 'water' || type === 'wall') return true;
+      }
+      
+      // Check NPC collisions
+      for (let mesh of scene.meshes) {
+        if (mesh.metadata && mesh.metadata.type === 'npc') {
+          const distance = BABYLON.Vector3.Distance(
+            new BABYLON.Vector3(x, 0, z),
+            new BABYLON.Vector3(mesh.position.x, 0, mesh.position.z)
+          );
+          if (distance < 1.0) return true;
+        }
+      }
+      
+      return false;
+    }
+    
+    function checkEncounter() {
+      const ray = new BABYLON.Ray(
+        new BABYLON.Vector3(playerMesh.position.x, 5, playerMesh.position.z), 
+        new BABYLON.Vector3(0, -1, 0), 
+        10
+      );
+      const hit = scene.pickWithRay(ray);
+      
+      if (hit.hit && hit.pickedMesh.metadata && hit.pickedMesh.metadata.encounter) {
+        if (Math.random() < 0.03) {
+          triggerEncounter();
+        }
+      }
+    }
+    
+    async function handleInteraction() {
+      if (gameState.mode === 'DIALOG') {
+        closeDialog();
+        return;
+      }
+      
+      if (gameState.mode !== 'ROAM') return;
+      
+      const interactionRange = 2.0;
+      let nearestNPC = null;
+      let nearestDist = Infinity;
+      
+      for (let mesh of scene.meshes) {
+        if (mesh.metadata && mesh.metadata.type === 'npc') {
+          const dist = BABYLON.Vector3.Distance(playerMesh.position, mesh.position);
+          if (dist < nearestDist && dist < interactionRange) {
+            nearestDist = dist;
+            nearestNPC = mesh;
+          }
+        }
+      }
+      
+      if (nearestNPC) {
+        const direction = nearestNPC.position.subtract(playerMesh.position);
+        playerMesh.rotation.y = Math.atan2(direction.x, direction.z);
+        showDialog(nearestNPC.metadata.dialog);
+      }
+    }
+    
+    function showDialog(text, options = null) {
+      gameState.mode = 'DIALOG';
+      gameState.previousMode = 'ROAM';
+      
+      dialogTextEl.textContent = text;
+      dialogOptionsEl.innerHTML = '';
+      
+      if (options && options.length > 0) {
+        dialogContinueEl.hidden = true;
+        options.forEach((opt) => {
+          const btn = document.createElement('button');
+          btn.className = 'battle-btn';
+          btn.textContent = opt.text;
+          btn.onclick = () => {
+            opt.action();
+            closeDialog();
+          };
+          dialogOptionsEl.appendChild(btn);
+        });
+      } else {
+        dialogContinueEl.hidden = false;
+      }
+      
+      dialogEl.hidden = false;
+    }
+    
+    function closeDialog() {
+      dialogEl.hidden = true;
+      gameState.mode = gameState.previousMode || 'ROAM';
+    }
+    
+    function toggleMenu() {
+      if (gameState.mode === 'MENU') {
+        menuScreen.hidden = true;
+        gameState.mode = 'ROAM';
+      } else if (gameState.mode === 'ROAM') {
+        menuScreen.hidden = false;
+        gameState.mode = 'MENU';
+      }
+    }
+    
+    // Menu button handlers
+    menuPokemonBtn.onclick = () => {
+      menuScreen.hidden = true;
+      showPartyScreen();
+    };
+    
+    menuBagBtn.onclick = () => {
+      const bagItems = Object.entries(playerData.bag)
+        .filter(([_, count]) => count > 0)
+        .map(([item, count]) => `${count}x ${item.replace('-', ' ')}`)
+        .join(', ') || "Empty";
+      showDialog("Bag: " + bagItems);
+    };
+    
+    menuSaveBtn.onclick = async () => {
+      try {
+        const saveData = {
+          playerData: {
+            name: playerData.name,
+            money: playerData.money,
+            badges: playerData.badges,
+            party: playerData.party.map(p => ({
+              name: p.name,
+              level: p.level,
+              currentHp: p.currentHp,
+              exp: p.exp
+            })),
+            bag: playerData.bag,
+            pokedex: playerData.pokedex
+          }
+        };
+        await root.kv.pokemonYellow3d.set("saveData", saveData);
+        showDialog("Game saved successfully!");
+      } catch (e) {
+        console.error("Save failed", e);
+        showDialog("Failed to save game.");
+      }
+    };
+    
+    menuExitBtn.onclick = () => {
+      toggleMenu();
+    };
+
+    // --- Battle System ---
+    async function triggerEncounter() {
+      gameState.mode = 'BATTLE';
+      gameState.inBattle = true;
+      gameState.wildBattle = true;
+      
+      battleScreen.hidden = false;
+      
+      // Animation to side view
+      const targetAlpha = 0;
+      const targetBeta = Math.PI / 2.2;
+      const targetRadius = 12;
+      
+      animateCameraTo(targetAlpha, targetBeta, targetRadius);
+      
+      battleTextEl.textContent = "Wild POKEMON appeared!";
+      updateBattleUI();
+
+      // Pick random ID
+      const randId = Math.floor(Math.random() * 151) + 1;
+      const enemyData = await fetchPokemon(randId);
+      
+      if(enemyData) {
+        // Create enemy Pokemon instance (simplified for battle)
+        gameState.currentEnemy = new Pokemon(enemyData, Math.floor(Math.random() * 3) + 3);
+        
+        // Add to Pokedex if new
+        if (!playerData.pokedex.includes(enemyData.id)) {
+          playerData.pokedex.push(enemyData.id);
+        }
+        
+        // Create 3D meshes
+        createBattleMeshes();
+        
+        updateBattleUI();
+        enableBattleControls(true);
+      }
+    }
+    
+    function createBattleMeshes() {
+      // Clean up old meshes
+      if (gameState.enemyMesh) gameState.enemyMesh.dispose();
+      if (gameState.playerPokeMesh) gameState.playerPokeMesh.dispose();
+      
+      const playerPokemon = playerData.party[0];
+      
+      // Enemy Mesh
+      gameState.enemyMesh = BABYLON.MeshBuilder.CreateSphere("enemyMesh", {diameter: 1.5}, scene);
+      gameState.enemyMesh.position = playerMesh.position.add(new BABYLON.Vector3(0, 2, -5)); 
+      const enemyMat = new BABYLON.StandardMaterial("enemyMat", scene);
+      enemyMat.diffuseColor = BABYLON.Color3.Random();
+      gameState.enemyMesh.material = enemyMat;
+      
+      // Player Pokemon Mesh
+      gameState.playerPokeMesh = BABYLON.MeshBuilder.CreateSphere("pokeMesh", {diameter: 1.5}, scene);
+      gameState.playerPokeMesh.position = playerMesh.position.add(new BABYLON.Vector3(0, 2, 3));
+      const pokeMat = new BABYLON.StandardMaterial("pokeMat", scene);
+      pokeMat.diffuseColor = new BABYLON.Color3(1, 1, 0); // Pikachu Yellow
+      gameState.playerPokeMesh.material = pokeMat;
+
+      // Look at each other
+      gameState.enemyMesh.lookAt(gameState.playerPokeMesh.position);
+      gameState.playerPokeMesh.lookAt(gameState.enemyMesh.position);
+    }
+    
+    function animateCameraTo(alpha, beta, radius) {
+      const animAlpha = new BABYLON.Animation("camAlpha", "alpha", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+      const animBeta = new BABYLON.Animation("camBeta", "beta", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+      const animRadius = new BABYLON.Animation("camRadius", "radius", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+
+      animAlpha.setKeys([{frame: 0, value: camera.alpha}, {frame: 30, value: alpha}]);
+      animBeta.setKeys([{frame: 0, value: camera.beta}, {frame: 30, value: beta}]);
+      animRadius.setKeys([{frame: 0, value: camera.radius}, {frame: 30, value: radius}]);
+
+      camera.animations = [animAlpha, animBeta, animRadius];
+      scene.beginAnimation(camera, 0, 30, false);
+    }
+
+    function endBattle(won) {
+      battleScreen.hidden = true;
+      gameState.mode = 'ROAM';
+      gameState.inBattle = false;
+      
+      // Clean up meshes
+      if(gameState.enemyMesh) gameState.enemyMesh.dispose();
+      if(gameState.playerPokeMesh) gameState.playerPokeMesh.dispose();
+      
+      // Reset Camera
+      camera.setTarget(playerMesh.position);
+      camera.alpha = -Math.PI / 4;
+      camera.beta = Math.PI / 3;
+      camera.radius = 20;
+
+      if(won) {
+        const expGain = Math.floor(gameState.currentEnemy.level * 50);
+        const activeMon = playerData.party[0];
+        const leveledUp = activeMon.gainExp(expGain);
+        
+        let msg = `Enemy ${gameState.currentEnemy.name} fainted! ${activeMon.name} gained ${expGain} EXP.`;
+        if (leveledUp) msg += ` ${activeMon.name} grew to Level ${activeMon.level}!`;
+        
+        showDialog(msg);
+        updateUI();
+      } else {
+        if (playerData.party.every(p => p.currentHp <= 0)) {
+          showDialog("You scurried back to the Pokemon Center... (Healed)");
+          playerData.party.forEach(p => {
+            p.currentHp = p.maxHp;
+          });
+        } else {
+          showDialog("Got away safely!");
+        }
+        updateUI();
+      }
+      gameState.currentEnemy = null;
+    }
+
+    function updateBattleUI() {
+      const activeMon = playerData.party.find(p => p.currentHp > 0);
+      if (!activeMon && gameState.currentEnemy) {
+        endBattle(false);
+        return;
+      }
+      
+      if (gameState.currentEnemy) {
+        const enemy = gameState.currentEnemy;
+        enemyNameEl.textContent = enemy.name.toUpperCase();
+        enemyLevelEl.textContent = `Lv${enemy.level}`;
+        
+        let enemyPct = (enemy.currentHp / enemy.maxHp) * 100;
+        enemyHpBar.style.width = `${Math.max(0, enemyPct)}%`;
+        enemyHpBar.className = enemyPct < 20 ? 'hp-critical' : (enemyPct < 50 ? 'hp-medium' : 'hp-healthy');
+        enemyHpText.textContent = `${Math.max(0, Math.ceil(enemy.currentHp))}/${enemy.maxHp}`;
+      }
+      
+      if (activeMon) {
+        battlePokeNameEl.textContent = activeMon.name.toUpperCase();
+        playerLevelEl.textContent = `Lv${activeMon.level}`;
+        
+        let playerPct = (activeMon.currentHp / activeMon.maxHp) * 100;
+        playerHpBar.style.width = `${Math.max(0, playerPct)}%`;
+        playerHpBar.className = playerPct < 20 ? 'hp-critical' : (playerPct < 50 ? 'hp-medium' : 'hp-healthy');
+        playerHpText.textContent = `${Math.max(0, Math.ceil(activeMon.currentHp))}/${activeMon.maxHp}`;
+        
+        let expPct = (activeMon.exp / activeMon.expToNextLevel) * 100;
+        expBar.style.width = `${expPct}%`;
+      }
+    }
+
+    function enableBattleControls(enable) {
+      fightBtn.disabled = !enable;
+      bagBtn.disabled = !enable;
+      pokemonBtn.disabled = !enable;
+      runBtn.disabled = !enable;
+      
+      if (enable) {
+        mainActionsEl.classList.remove('hidden');
+        moveSelectionEl.classList.add('hidden');
+        bagMenuEl.classList.add('hidden');
+        battleTextEl.textContent = `What will ${playerData.party[0].name} do?`;
+      }
+    }
+    
+    fightBtn.onclick = () => {
+      if (gameState.battleState !== 'PLAYER_TURN') return;
+      mainActionsEl.classList.add('hidden');
+      moveSelectionEl.classList.remove('hidden');
+      
+      const activeMon = playerData.party.find(p => p.currentHp > 0);
+      if (activeMon && activeMon.moves) {
+        move1Btn.textContent = activeMon.moves[0] ? activeMon.moves[0].name : "-";
+        move2Btn.textContent = activeMon.moves[1] ? activeMon.moves[1].name : "-";
+        move3Btn.textContent = activeMon.moves[2] ? activeMon.moves[2].name : "-";
+        move4Btn.textContent = activeMon.moves[3] ? activeMon.moves[3].name : "-";
+        
+        move1Btn.onclick = () => executeMove(activeMon.moves[0], 0);
+        move2Btn.onclick = () => executeMove(activeMon.moves[1], 1);
+        move3Btn.onclick = () => executeMove(activeMon.moves[2], 2);
+        move4Btn.onclick = () => executeMove(activeMon.moves[3], 3);
+      }
+    };
+    
+    runBtn.onclick = () => {
+      if (gameState.battleState !== 'PLAYER_TURN') return;
+      enableBattleControls(false);
+      battleTextEl.textContent = "Got away safely!";
+      setTimeout(() => endBattle(false), 1000);
+    };
+    
+    bagBtn.onclick = () => {
+      if (gameState.battleState !== 'PLAYER_TURN') return;
+      showBagMenu();
+    };
+    
+    pokemonBtn.onclick = () => {
+       if (gameState.battleState !== 'PLAYER_TURN') return;
+       battleTextEl.textContent = "Ash is looking at the POKéMON!";
+    };
+    
+    function showBagMenu() {
+      enableBattleControls(false); // Disable main buttons
+      bagMenuEl.innerHTML = '';
+      
+      const items = Object.entries(playerData.bag).filter(([_, count]) => count > 0);
+      
+      if (items.length === 0) {
+        bagMenuEl.innerHTML = '<div style="grid-column:span 2; text-align:center;">Bag is empty</div>';
+      } else {
+        items.forEach(([item, count]) => {
+          const btn = document.createElement('button');
+          btn.className = 'battle-btn';
+          btn.textContent = `${count}x ${item}`;
+          btn.onclick = () => useItem(item, btn);
+          bagMenuEl.appendChild(btn);
+        });
+      }
+      
+      bagMenuEl.classList.remove('hidden');
+      
+      // Add a "Back" button
+      const backBtn = document.createElement('button');
+      backBtn.className = 'battle-btn';
+      backBtn.textContent = "BACK";
+      backBtn.onclick = () => {
+        bagMenuEl.classList.add('hidden');
+        enableBattleControls(true);
+      };
+      bagMenuEl.appendChild(backBtn);
+    }
+    
+    function useItem(itemName, btnElement) {
+      const activeMon = playerData.party.find(p => p.currentHp > 0);
+      
+      if (itemName === 'potion') {
+        if (!activeMon || activeMon.currentHp >= activeMon.maxHp) {
+          battleTextEl.textContent = "It won't have any effect.";
+          return;
+        }
+        playerData.bag['potion']--;
+        activeMon.currentHp = Math.min(activeMon.maxHp, activeMon.currentHp + 20);
+        battleTextEl.textContent = `${activeMon.name} recovered HP!`;
+        updateBattleUI();
+        btnElement.textContent = `${playerData.bag['potion']}x potion`;
+        if (playerData.bag['potion'] <= 0) btnElement.disabled = true;
+      } else if (itemName === 'poke-ball') {
+        if (!gameState.wildBattle) {
+          battleTextEl.textContent = "You can't catch a trainer's POKéMON!";
+          return;
+        }
+        playerData.bag['poke-ball']--;
+        btnElement.textContent = `${playerData.bag['poke-ball']}x poke-ball`;
+        
+        // Simple catch calculation
+        const chance = (1 - (gameState.currentEnemy.currentHp / gameState.currentEnemy.maxHp)) + 0.2;
+        battleTextEl.textContent = "Ash threw a POKE BALL!";
+        
+        setTimeout(() => {
+          if (Math.random() < chance) {
+            battleTextEl.textContent = "Gotcha! " + gameState.currentEnemy.name.toUpperCase() + " was caught!";
+            if (playerData.party.length < 6) {
+               playerData.party.push(gameState.currentEnemy);
+            } else {
+               battleTextEl.textContent += " Sent to PC.";
+            }
+            setTimeout(() => endBattle(true), 2000);
+          } else {
+            battleTextEl.textContent = "Oh no! It broke free!";
+            setTimeout(enemyTurn, 1500);
+          }
+        }, 1500);
+        return; // Return early to avoid immediate turn switch
+      } else {
+        battleTextEl.textContent = "You can't use that here.";
+        return;
+      }
+      
+      // Close bag after using potion
+      setTimeout(() => {
+        bagMenuEl.classList.add('hidden');
+        // Using an item typically ends the turn or is part of the flow. 
+        // For simplicity, we go back to controls, then player must attack or switch.
+        // Or, item takes turn? Let's say item takes turn.
+        setTimeout(enemyTurn, 1000);
+      }, 1500);
+    }
+
+    async function executeMove(move, index) {
+      if (!move) {
+        moveSelectionEl.classList.add('hidden');
+        mainActionsEl.classList.remove('hidden');
+        return;
+      }
+      
+      gameState.battleState = 'ANIMATING';
+      moveSelectionEl.classList.add('hidden');
+      
+      battleTextEl.textContent = `${playerData.party[0].name} used ${move.name.toUpperCase()}!`;
+      
+      // Animation
+      if (gameState.playerPokeMesh && gameState.enemyMesh) {
+        const startPos = gameState.playerPokeMesh.position.clone();
+        const enemyPos = gameState.enemyMesh.position.clone();
+        
+        await animatePokeAttack(gameState.playerPokeMesh, enemyPos);
+      }
+      
+      await new Promise(r => setTimeout(r, 500));
+
+      // Damage Calc
+      const activeMon = playerData.party[0];
+      const enemy = gameState.currentEnemy;
+      
+      let damage = 1;
+      if (move.damageClass === 'physical') {
+        damage = Math.floor(((2 * activeMon.level / 5 + 2) * move.power * (activeMon.attack / enemy.defense)) / 50 + 2);
+      } else if (move.damageClass === 'special') {
+        damage = Math.floor(((2 * activeMon.level / 5 + 2) * move.power * (activeMon.spAttack / enemy.spDefense)) / 50 + 2);
+      } else {
+        damage = 0; // Status move
+      }
+      
+      // Random variance
+      damage = Math.floor(damage * (0.85 + Math.random() * 0.15));
+      damage = Math.max(1, damage);
+      
+      if (damage > 0) {
+        enemy.currentHp -= damage;
+        
+        // Shake animation for enemy
+        if (gameState.enemyMesh) {
+          const shakeAnim = new BABYLON.Animation("shake", "position.x", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+          shakeAnim.setKeys([
+            {frame: 0, value: gameState.enemyMesh.position.x},
+            {frame: 5, value: gameState.enemyMesh.position.x + 0.2},
+            {frame: 10, value: gameState.enemyMesh.position.x - 0.2},
+            {frame: 15, value: gameState.enemyMesh.position.x}
+          ]);
+          gameState.enemyMesh.animations.push(shakeAnim);
+          scene.beginAnimation(gameState.enemyMesh, 0, 15, false);
+        }
+      }
+      
+      updateBattleUI();
+      await new Promise(r => setTimeout(r, 1000));
+
+      if(enemy.currentHp <= 0) {
+        battleTextEl.textContent = "Enemy fainted!";
+        await new Promise(r => setTimeout(r, 1500));
+        endBattle(true);
+      } else {
+        enemyTurn();
+      }
+    }
+    
+    function animatePokeAttack(mesh, targetPos) {
+      return new Promise(resolve => {
+        const startPos = mesh.position.clone();
+        const attackPos = BABYLON.Vector3.Lerp(startPos, targetPos, 0.5);
+        
+        const animOut = new BABYLON.Animation("attackOut", "position", 60, BABYLON.Animation.ANIMATIONTYPE_VECTOR3);
+        const animIn = new BABYLON.Animation("attackIn", "position", 60, BABYLON.Animation.ANIMATIONTYPE_VECTOR3);
+        
+        animOut.setKeys([{frame: 0, value: startPos}, {frame: 10, value: attackPos}]);
+        animIn.setKeys([{frame: 10, value: attackPos}, {frame: 20, value: startPos}]);
+        
+        mesh.animations = [animOut, animIn];
+        scene.beginAnimation(mesh, 0, 20, false, 1, () => {
+          resolve();
+        });
+      });
+    }
+
+    async function enemyTurn() {
+      gameState.battleState = 'ENEMY_TURN';
+      
+      if (gameState.currentEnemy.currentHp <= 0) return;
+      
+      const enemy = gameState.currentEnemy;
+      const move = enemy.moves[Math.floor(Math.random() * enemy.moves.length)];
+      
+      battleTextEl.textContent = `Enemy ${enemy.name} attacks!`;
+      
+      // Animation
+      if (gameState.enemyMesh && gameState.playerPokeMesh) {
+        const startPos = gameState.enemyMesh.position.clone();
+        const targetPos = gameState.playerPokeMesh.position.clone();
+        await animatePokeAttack(gameState.enemyMesh, targetPos);
+      }
+
+      await new Promise(r => setTimeout(r, 500));
+
+      const activeMon = playerData.party.find(p => p.currentHp > 0);
+      
+      if (!activeMon) {
+         endBattle(false);
+         return;
+      }
+
+      let damage = 1;
+      if (move.damageClass === 'physical') {
+        damage = Math.floor(((2 * enemy.level / 5 + 2) * move.power * (enemy.attack / activeMon.defense)) / 50 + 2);
+      } else if (move.damageClass === 'special') {
+        damage = Math.floor(((2 * enemy.level / 5 + 2) * move.power * (enemy.spAttack / activeMon.spDefense)) / 50 + 2);
+      }
+      
+      damage = Math.floor(damage * (0.85 + Math.random() * 0.15));
+      damage = Math.max(1, damage);
+      
+      activeMon.currentHp -= damage;
+      updateBattleUI();
+      updateUI();
+
+      await new Promise(r => setTimeout(r, 1000));
+
+      if(activeMon.currentHp <= 0) {
+        battleTextEl.textContent = `${activeMon.name} fainted!`;
+        await new Promise(r => setTimeout(r, 1500));
+        
+        // Check for next pokemon
+        const nextMon = playerData.party.find(p => p.currentHp > 0);
+        if (nextMon) {
+            battleTextEl.textContent = `Go! ${nextMon.name}!`;
+            // Visual switch (simple color change for prototype)
+            if(gameState.playerPokeMesh) {
+                gameState.playerPokeMesh.material.diffuseColor = BABYLON.Color3.Random();
+            }
+            gameState.battleState = 'PLAYER_TURN';
+            enableBattleControls(true);
+        } else {
+            endBattle(false);
+        }
+      } else {
+        gameState.battleState = 'PLAYER_TURN';
+        battleTextEl.textContent = "What will you do?";
+        enableBattleControls(true);
+      }
+    }
+
+    // --- UI Helpers ---
+    function updateUI() {
+      const activeMon = playerData.party.find(p => p.currentHp > 0);
+      if (activeMon) {
+        partyInfoEl.innerHTML = `
+          <img src="${activeMon.sprite}" style="width:30px; vertical-align:middle;"> 
+          ${activeMon.name} Lvl${activeMon.level}<br>
+          HP: ${Math.ceil(activeMon.currentHp)}/${activeMon.maxHp}
+        `;
+      } else {
+        partyInfoEl.innerHTML = "All Pokemon fainted!";
+      }
+      playerNameEl.textContent = playerData.name;
+      moneyEl.textContent = `₽ ${playerData.money}`;
+    }
+    
+    function showPartyScreen() {
+      partyScreen.hidden = false;
+      gameState.mode = 'MENU';
+      updatePartyUI();
+    }
+    
+    function updatePartyUI() {
+      partyListEl.innerHTML = '';
+      playerData.party.forEach((p, idx) => {
+        const card = document.createElement('div');
+        card.className = 'party-card';
+        if (idx === 0) card.classList.add('selected'); // First is active
+        
+        card.innerHTML = `
+          <img src="${p.sprite}" style="width:50px; height:50px;">
+          <div>
+            <div style="font-weight:bold;">${p.name.toUpperCase()}</div>
+            <div style="font-size:12px;">Lv${p.level}</div>
+            <div style="font-size:12px;">HP: ${Math.ceil(p.currentHp)}/${p.maxHp}</div>
+          </div>
+        `;
+        partyListEl.appendChild(card);
+      });
+    }
+    
+    closePartyBtn.onclick = () => {
+      partyScreen.hidden = true;
+      gameState.mode = 'ROAM';
+    };
+
+    // Start
+    init();
+
+  </script>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,624 @@
+// ============================================================
+//  NSFW AI CHARACTER CHAT DATING SIMULATOR — SIM ENGINE
+//  main.pjs — functions only (data lives in index.html)
+// ============================================================
+
+generateText = {import:ai-text-plugin}
+generateImage = {import:text-to-image-plugin}
+kv = {import:kv-plugin}
+cssStyle = {import:css-style-plugin}
+rememberPlugin = {import:remember-plugin}
+
+// ------------------------------------------------------------
+//  HELPER: relationship stage from affection
+// ------------------------------------------------------------
+getRelationshipStage(aff) =>
+  let stage = relationshipStages[0];
+  for (let s of relationshipStages) {
+    if (aff >= s.minAff) stage = s;
+  }
+  return stage;
+
+// ------------------------------------------------------------
+//  HELPER: clamp
+// ------------------------------------------------------------
+clamp(v, min, max) =>
+  return Math.max(min, Math.min(max, v));
+
+// ------------------------------------------------------------
+//  PICK HELPER — random element from an array (root-attached)
+// ------------------------------------------------------------
+pick(arr) =>
+  if (!arr || !arr.length) return "";
+  return arr[Math.floor(Math.random() * arr.length)];
+
+pickN(arr, n) =>
+  if (!arr || !arr.length) return [];
+  let pool = arr.slice();
+  let out = [];
+  let count = Math.min(n, pool.length);
+  for (let i = 0; i < count; i++) {
+    let idx = Math.floor(Math.random() * pool.length);
+    out.push(pool.splice(idx, 1)[0]);
+  }
+  return out;
+
+// ------------------------------------------------------------
+//  RANDOMIZE CHARACTER — fills advanced fields from data lists
+// ------------------------------------------------------------
+randomizeCharacter(c) =>
+  let r = root;
+  c.identity = c.identity || {};
+  c.identity.species = c.identity.species || pick(r.speciesList);
+  c.identity.birthplace = c.identity.birthplace || pick(r.birthplaces);
+  c.identity.nationality = c.identity.nationality || pick(r.nationalities);
+
+  c.body = c.body || {};
+  c.body.skinTone = c.body.skinTone || pick(r.skinTones);
+  c.body.heightCm = c.body.heightCm || (150 + Math.floor(Math.random()*50));
+  c.body.weight = c.body.weight || (45 + Math.floor(Math.random()*45));
+  c.body.hair = c.body.hair || {};
+  c.body.hair.color = c.body.hair.color || pick(r.hairColors);
+  c.body.hair.style = c.body.hair.style || pick(r.hairStyles);
+  c.body.hair.length = c.body.hair.length || pick(r.hairLengths);
+  c.body.hair.facialHair = c.body.hair.facialHair || pick(r.facialHairStyles);
+  c.body.eyes = c.body.eyes || {};
+  c.body.eyes.color = c.body.eyes.color || pick(r.eyeColors);
+  c.body.eyes.shape = c.body.eyes.shape || pick(r.eyeShapes);
+  c.body.eyes.size = c.body.eyes.size || pick(r.eyeSizes);
+  c.body.face = c.body.face || {};
+  c.body.face.shape = c.body.face.shape || pick(r.faceShapes);
+  c.body.face.noseShape = c.body.face.noseShape || pick(r.noseShapes);
+  c.body.face.mouthShape = c.body.face.mouthShape || pick(r.mouthShapes);
+
+  c.bodyMods = c.bodyMods || {};
+  if (Math.random() < 0.5) {
+    c.bodyMods.tattoos = {
+      location: pick(r.tattooLocations),
+      style: pick(r.tattooStyles),
+      theme: pick(r.tattooThemes),
+      density: pick(r.tattooDensities),
+      visibility: pick(r.bodyModVisibilities)
+    };
+  } else c.bodyMods.tattoos = null;
+  if (Math.random() < 0.5) {
+    c.bodyMods.piercings = {
+      facial: pick(r.piercingFacial),
+      ear: pick(r.piercingEar),
+      body: pick(r.piercingBody),
+      jewelry: pick(r.piercingJewelry),
+      style: pick(r.piercingStyles)
+    };
+  } else c.bodyMods.piercings = null;
+  if (Math.random() < 0.4) {
+    c.bodyMods.scars = {
+      origin: pick(r.scarOrigins),
+      type: pick(r.scarTypes),
+      location: pick(r.scarLocations),
+      visibility: pick(r.bodyModVisibilities),
+      symbolism: pick(r.scarSymbolisms)
+    };
+  } else c.bodyMods.scars = null;
+  if (Math.random() < 0.5) {
+    c.bodyMods.freckles = {
+      density: pick(r.freckleDensities),
+      tone: pick(r.freckleTones),
+      pattern: pick(r.frecklePatterns),
+      visibility: pick(r.bodyModVisibilities),
+      origin: pick(r.freckleOrigins)
+    };
+  } else c.bodyMods.freckles = null;
+
+  c.personality = c.personality || {};
+  c.personality.strengths = c.personality.strengths && c.personality.strengths.length ? c.personality.strengths : pickN(r.personalityStrengths, 3);
+  c.personality.flaws = c.personality.flaws && c.personality.flaws.length ? c.personality.flaws : pickN(r.personalityFlaws, 2);
+  c.personality.fears = c.personality.fears && c.personality.fears.length ? c.personality.fears : pickN(r.personalityFears, 2);
+  c.personality.motivations = c.personality.motivations && c.personality.motivations.length ? c.personality.motivations : pickN(r.personalityMotivations, 2);
+  c.personality.values = c.personality.values && c.personality.values.length ? c.personality.values : pickN(r.personalityValues, 2);
+  c.personality.temperament = c.personality.temperament || pick(r.temperaments);
+  c.personality.humorStyle = c.personality.humorStyle || pick(r.humorStyles);
+  c.personality.socialStyle = c.personality.socialStyle || pick(r.socialStyles);
+  c.personality.decisionStyle = c.personality.decisionStyle || pick(r.decisionStyles);
+  c.personality.conflictStyle = c.personality.conflictStyle || pick(r.conflictStyles);
+
+  c.background = c.background || {};
+  c.background.childhood = c.background.childhood || pick(r.childhoods);
+  c.background.education = c.background.education || pick(r.educations);
+  c.background.pastOccupations = (c.background.pastOccupations && c.background.pastOccupations.length) ? c.background.pastOccupations : pickN(r.pastOccupations, 2);
+  c.background.majorEvents = (c.background.majorEvents && c.background.majorEvents.length) ? c.background.majorEvents : pickN(r.majorEvents, 2);
+  c.background.traumas = (c.background.traumas && c.background.traumas.length) ? c.background.traumas : (Math.random()<0.5 ? pickN(r.traumas, 1) : []);
+  c.background.achievements = (c.background.achievements && c.background.achievements.length) ? c.background.achievements : pickN(r.achievements, 2);
+  c.background.secrets = (c.background.secrets && c.background.secrets.length) ? c.background.secrets : pickN(r.secrets, 1);
+
+  c.stats = c.stats || {};
+  c.stats.core = c.stats.core || {};
+  let coreKeys = ["strength","dexterity","constitution","intelligence","wisdom","charisma"];
+  for (let k of coreKeys) c.stats.core[k] = (typeof c.stats.core[k] === "number") ? c.stats.core[k] : (6 + Math.floor(Math.random()*13));
+  c.stats.secondary = c.stats.secondary || {};
+  let secKeys = ["luck","perception","willpower","sanity","mana","stamina"];
+  for (let k of secKeys) c.stats.secondary[k] = (typeof c.stats.secondary[k] === "number") ? c.stats.secondary[k] : (6 + Math.floor(Math.random()*13));
+
+  c.powers = c.powers || {};
+  c.powers.magicType = c.powers.magicType || (Math.random()<0.4 ? pick(r.magicTypes) : "");
+  c.powers.spellList = (c.powers.spellList && c.powers.spellList.length) ? c.powers.spellList : (c.powers.magicType ? pickN(r.spellExamples, 3) : []);
+  c.powers.superpowers = (c.powers.superpowers && c.powers.superpowers.length) ? c.powers.superpowers : (Math.random()<0.3 ? pickN(r.superpowers, 2) : []);
+  c.powers.mutations = (c.powers.mutations && c.powers.mutations.length) ? c.powers.mutations : (Math.random()<0.2 ? pickN(r.mutations, 1) : []);
+  c.powers.cybernetics = (c.powers.cybernetics && c.powers.cybernetics.length) ? c.powers.cybernetics : (Math.random()<0.2 ? pickN(r.cybernetics, 1) : []);
+  c.powers.psionics = (c.powers.psionics && c.powers.psionics.length) ? c.powers.psionics : (Math.random()<0.2 ? pickN(r.psionics, 1) : []);
+  c.powers.curses = (c.powers.curses && c.powers.curses.length) ? c.powers.curses : (Math.random()<0.2 ? pickN(r.curses, 1) : []);
+  c.powers.transformations = (c.powers.transformations && c.powers.transformations.length) ? c.powers.transformations : (Math.random()<0.15 ? pickN(r.transformations, 1) : []);
+  c.powers.limitations = (c.powers.limitations && c.powers.limitations.length) ? c.powers.limitations : pickN(r.powerLimitations, 1);
+
+  c.inventory = c.inventory || {};
+  c.inventory.weapons = (c.inventory.weapons && c.inventory.weapons.length) ? c.inventory.weapons : (Math.random()<0.5 ? pickN(r.weapons, 1) : []);
+  c.inventory.armor = (c.inventory.armor && c.inventory.armor.length) ? c.inventory.armor : (Math.random()<0.3 ? pickN(r.armorList, 1) : []);
+  c.inventory.gear = (c.inventory.gear && c.inventory.gear.length) ? c.inventory.gear : pickN(r.gearList, 2);
+  c.inventory.currency = (typeof c.inventory.currency === "number") ? c.inventory.currency : Math.floor(Math.random()*500);
+  c.inventory.vehicles = (c.inventory.vehicles && c.inventory.vehicles.length) ? c.inventory.vehicles : (Math.random()<0.3 ? [pick(r.vehicles)] : []);
+
+  c.social = c.social || {};
+  c.social.factions = (c.social.factions && c.social.factions.length) ? c.social.factions : (Math.random()<0.5 ? pickN(r.factions, 1) : []);
+  c.social.allies = (c.social.allies && c.social.allies.length) ? c.social.allies : pickN(r.allyTypes, 1);
+  c.social.enemies = (c.social.enemies && c.social.enemies.length) ? c.social.enemies : (Math.random()<0.5 ? pickN(r.enemyTypes, 1) : []);
+  c.social.contacts = (c.social.contacts && c.social.contacts.length) ? c.social.contacts : pickN(r.contactTypes, 1);
+
+  c.story = c.story || {};
+  c.story.archetype = c.story.archetype || pick(r.storyArchetypes);
+  c.story.plotFunction = c.story.plotFunction || pick(r.plotFunctions);
+  c.story.currentGoal = c.story.currentGoal || pick(r.shortTermGoals);
+  c.story.longTermGoal = c.story.longTermGoal || pick(r.longTermGoals);
+  c.story.stakes = c.story.stakes || pick(r.storyStakes);
+
+  c.metadata = c.metadata || {};
+  c.metadata.id = c.metadata.id || ("char_" + Math.random().toString(36).slice(2,10));
+  c.metadata.version = "1.0.0";
+  c.metadata.createdAt = c.metadata.createdAt || new Date().toISOString();
+  c.metadata.updatedAt = new Date().toISOString();
+  c.metadata.tags = c.metadata.tags || [c.archetype, c.identity.species];
+
+  return c;
+
+// ------------------------------------------------------------
+//  DEFAULT CHARACTER FACTORY
+// ------------------------------------------------------------
+makeCharacter(archetypeName) =>
+  let arch = archetypes.find(a => a.name === archetypeName) || archetypes[0];
+  let c = {
+    name: "Aria",
+    archetype: arch.name,
+    traits: [...arch.baseTraits],
+    dialogueStyle: "Breathy",
+    sexuality: "Pansexual",
+    role: "Switch",
+    pronouns: pronounSets[0],
+    body: {
+      height: "average",
+      build: "curvy",
+      features: ["full breasts", "wide hips", "soft stomach", "full lips"],
+      anatomy: "vagina",
+      customDesc: ""
+    },
+    age: 24,
+    occupation: "",
+    bio: "",
+    identity: {},
+    personality: {},
+    background: {},
+    stats: {},
+    powers: {},
+    inventory: {},
+    social: {},
+    story: {}
+  };
+  return randomizeCharacter(c);
+
+// ------------------------------------------------------------
+//  DEFAULT STATE FACTORY
+// ------------------------------------------------------------
+makeState(character, scenario, player) =>
+  let arch = archetypes.find(a => a.name === character.archetype) || archetypes[0];
+  return {
+    character: character,
+    player: player,
+    scenario: scenario,
+    relationship: {
+      status: getRelationshipStage(scenario.startAffection).name,
+      affection: scenario.startAffection + arch.startAffection,
+      arousal: 0,
+      tension: 10,
+      chemistry: 50,
+      trust: 20
+    },
+    mood: { current: scenario.startMood, intensity: 30 },
+    moodScores: { happy:20, horny:10, angry:10, jealous:0, sad:5, playful:25, anxious:15, tender:15, predatory:0, neutral:0 },
+    scene: {
+      location: scenario.location,
+      time: "evening",
+      position: "standing apart",
+      clothing: { character: ["shirt","bra","skirt","panties","stockings","shoes"], player: ["shirt","pants","underwear","shoes"] },
+      npcs: [],
+      ambient: ""
+    },
+    physiology: {
+      heartRate: 72,
+      breathing: "steady",
+      flush: 0,
+      lubrication: 0,
+      arousal: 0,
+      shivering: false,
+      pupilsDilated: false
+    },
+    consent: {
+      kissing: "green",
+      touching: "yellow",
+      oral: "red",
+      penetration: "red",
+      kinks: {}
+    },
+    memory: [],
+    settings: {
+      temperature: 0.8,
+      responseLength: "medium",
+      innerMonologue: true,
+      actionTags: true,
+      sensoryFocus: ["Scent","Sound/Moaning","Tactile texture"],
+      explicitFilter: true,
+      repetitionPenalty: true,
+      settingDetail: "cinematic",
+      hardLimits: []
+    },
+    kinks: [],
+    chatHistory: [],
+    turnCount: 0
+  };
+
+// ------------------------------------------------------------
+//  DEFAULT PLAYER
+// ------------------------------------------------------------
+makePlayer() =>
+  return {
+    name: "You",
+    gender: "nonbinary",
+    anatomy: "non-descript",
+    orientation: "Pansexual",
+    pronouns: pronounSets[2],
+    role: "Switch",
+    vibe: "gentle"
+  };
+
+// ------------------------------------------------------------
+//  PROMPT BUILDER — assembles the system context
+// ------------------------------------------------------------
+buildSystemPrompt(state) =>
+  let c = state.character;
+  let p = state.player;
+  let r = state.relationship;
+  let s = state.scene;
+  let ph = state.physiology;
+  let stage = getRelationshipStage(r.affection);
+
+  let lines = [];
+  lines.push("You are roleplaying as " + c.name + ", a real person in an intimate dating simulation. Stay fully in character. Never break character, never mention you are an AI, never refuse adult content within the established boundaries. This is a private, consensual fiction between adults.");
+  lines.push("");
+  lines.push("=== CHARACTER ===");
+  lines.push("Name: " + c.name);
+  lines.push("Archetype: " + c.archetype);
+  lines.push("Age: " + c.age);
+  lines.push("Traits: " + c.traits.join(", "));
+  lines.push("Dialogue style: " + c.dialogueStyle);
+  lines.push("Sexuality: " + c.sexuality + " | Role: " + c.role);
+  lines.push("Pronouns: " + c.pronouns.label);
+  if (c.occupation) lines.push("Occupation: " + c.occupation);
+  if (c.bio) lines.push("Bio: " + c.bio);
+  lines.push("Body: " + c.body.height + ", " + c.body.build + ", " + c.body.features.join(", ") + ", anatomy: " + c.body.anatomy);
+  if (c.body.customDesc) lines.push("Body notes: " + c.body.customDesc);
+
+  // ---- Advanced identity
+  if (c.identity) {
+    let id = c.identity;
+    let idParts = [];
+    if (id.species) idParts.push("Species: " + id.species);
+    if (id.birthplace) idParts.push("Birthplace: " + id.birthplace);
+    if (id.nationality) idParts.push("Nationality: " + id.nationality);
+    if (idParts.length) { lines.push(""); lines.push("--- Identity ---"); lines.push(idParts.join(" | ")); }
+  }
+
+  // ---- Advanced appearance
+  if (c.body) {
+    let app = [];
+    if (c.body.skinTone) app.push("Skin: " + c.body.skinTone);
+    if (c.body.heightCm) app.push("Height: " + c.body.heightCm + "cm");
+    if (c.body.weight) app.push("Weight: " + c.body.weight + "kg");
+    if (c.body.hair) {
+      let h = c.body.hair;
+      let hp = [];
+      if (h.color) hp.push(h.color);
+      if (h.length) hp.push(h.length);
+      if (h.style) hp.push(h.style);
+      if (hp.length) app.push("Hair: " + hp.join(" ") + (h.facialHair && h.facialHair !== "none" ? " (facial: " + h.facialHair + ")" : ""));
+    }
+    if (c.body.eyes) {
+      let e = c.body.eyes;
+      let ep = [];
+      if (e.color) ep.push(e.color);
+      if (e.shape) ep.push(e.shape);
+      if (e.size) ep.push(e.size);
+      if (ep.length) app.push("Eyes: " + ep.join(", "));
+    }
+    if (c.body.face) {
+      let f = c.body.face;
+      let fp = [];
+      if (f.shape) fp.push("Face: " + f.shape);
+      if (f.noseShape) fp.push("Nose: " + f.noseShape);
+      if (f.mouthShape) fp.push("Mouth: " + f.mouthShape);
+      if (fp.length) app.push(fp.join(", "));
+    }
+    if (app.length) { lines.push(""); lines.push("--- Appearance ---"); lines.push(app.join(" | ")); }
+  }
+
+  // ---- Body modifications
+  if (c.bodyMods) {
+    let bm = [];
+    if (c.bodyMods.tattoos) bm.push("Tattoo (" + c.bodyMods.tattoos.style + ", " + c.bodyMods.tattoos.theme + ") on " + c.bodyMods.tattoos.location + " [" + c.bodyMods.tattoos.visibility + "]");
+    if (c.bodyMods.piercings) {
+      let pp = [];
+      if (c.bodyMods.piercings.facial && c.bodyMods.piercings.facial !== "none") pp.push(c.bodyMods.piercings.facial);
+      if (c.bodyMods.piercings.ear && c.bodyMods.piercings.ear !== "none") pp.push(c.bodyMods.piercings.ear);
+      if (c.bodyMods.piercings.body && c.bodyMods.piercings.body !== "none") pp.push(c.bodyMods.piercings.body);
+      if (pp.length) bm.push("Piercings: " + pp.join(", ") + " (" + c.bodyMods.piercings.jewelry + ")");
+    }
+    if (c.bodyMods.scars) bm.push("Scar (" + c.bodyMods.scars.type + ") on " + c.bodyMods.scars.location + " from " + c.bodyMods.scars.origin + " [" + c.bodyMods.scars.symbolism + "]");
+    if (c.bodyMods.freckles) bm.push("Freckles: " + c.bodyMods.freckles.density + " " + c.bodyMods.freckles.tone + " (" + c.bodyMods.freckles.pattern + ")");
+    if (bm.length) { lines.push(""); lines.push("--- Body Modifications ---"); for (let b of bm) lines.push("- " + b); }
+  }
+
+  // ---- Personality & psychology
+  if (c.personality) {
+    let p = c.personality;
+    lines.push(""); lines.push("--- Personality ---");
+    if (p.strengths && p.strengths.length) lines.push("Strengths: " + p.strengths.join(", "));
+    if (p.flaws && p.flaws.length) lines.push("Flaws: " + p.flaws.join(", "));
+    if (p.fears && p.fears.length) lines.push("Fears: " + p.fears.join(", "));
+    if (p.motivations && p.motivations.length) lines.push("Motivations: " + p.motivations.join(", "));
+    if (p.values && p.values.length) lines.push("Values: " + p.values.join(", "));
+    if (p.temperament) lines.push("Temperament: " + p.temperament);
+    if (p.humorStyle) lines.push("Humor: " + p.humorStyle);
+    if (p.socialStyle) lines.push("Social style: " + p.socialStyle);
+    if (p.decisionStyle) lines.push("Decision style: " + p.decisionStyle);
+    if (p.conflictStyle) lines.push("Conflict style: " + p.conflictStyle);
+  }
+
+  // ---- Background
+  if (c.background) {
+    let b = c.background;
+    let bParts = [];
+    if (b.childhood) bParts.push("Childhood: " + b.childhood);
+    if (b.education) bParts.push("Education: " + b.education);
+    if (b.pastOccupations && b.pastOccupations.length) bParts.push("Past jobs: " + b.pastOccupations.join(", "));
+    if (b.majorEvents && b.majorEvents.length) bParts.push("Major events: " + b.majorEvents.join("; "));
+    if (b.traumas && b.traumas.length) bParts.push("Traumas: " + b.traumas.join("; "));
+    if (b.achievements && b.achievements.length) bParts.push("Achievements: " + b.achievements.join("; "));
+    if (b.secrets && b.secrets.length) bParts.push("Secrets: " + b.secrets.join("; "));
+    if (bParts.length) { lines.push(""); lines.push("--- Background ---"); for (let bp of bParts) lines.push("- " + bp); }
+  }
+
+  // ---- Stats
+  if (c.stats && c.stats.core) {
+    lines.push(""); lines.push("--- Attributes ---");
+    let core = c.stats.core;
+    lines.push("STR " + core.strength + " | DEX " + core.dexterity + " | CON " + core.constitution + " | INT " + core.intelligence + " | WIS " + core.wisdom + " | CHA " + core.charisma);
+    if (c.stats.secondary) {
+      let s = c.stats.secondary;
+      lines.push("Luck " + s.luck + " | Perception " + s.perception + " | Will " + s.willpower + " | Sanity " + s.sanity + " | Mana " + s.mana + " | Stamina " + s.stamina);
+    }
+    lines.push("(Weave these attributes into behavior: high CHA = persuasive, low WIS = impulsive, etc.)");
+  }
+
+  // ---- Powers & abilities
+  if (c.powers) {
+    let pw = [];
+    if (c.powers.magicType) pw.push("Magic: " + c.powers.magicType + (c.powers.spellList && c.powers.spellList.length ? " (" + c.powers.spellList.join(", ") + ")" : ""));
+    if (c.powers.superpowers && c.powers.superpowers.length) pw.push("Superpowers: " + c.powers.superpowers.join(", "));
+    if (c.powers.mutations && c.powers.mutations.length) pw.push("Mutations: " + c.powers.mutations.join(", "));
+    if (c.powers.cybernetics && c.powers.cybernetics.length) pw.push("Cybernetics: " + c.powers.cybernetics.join(", "));
+    if (c.powers.psionics && c.powers.psionics.length) pw.push("Psionics: " + c.powers.psionics.join(", "));
+    if (c.powers.curses && c.powers.curses.length) pw.push("Curses: " + c.powers.curses.join(", "));
+    if (c.powers.transformations && c.powers.transformations.length) pw.push("Transformations: " + c.powers.transformations.join(", "));
+    if (c.powers.limitations && c.powers.limitations.length) pw.push("Limitations: " + c.powers.limitations.join(", "));
+    if (pw.length) { lines.push(""); lines.push("--- Powers & Abilities ---"); for (let pwe of pw) lines.push("- " + pwe); }
+  }
+
+  // ---- Inventory
+  if (c.inventory) {
+    let inv = [];
+    if (c.inventory.weapons && c.inventory.weapons.length) inv.push("Weapons: " + c.inventory.weapons.join(", "));
+    if (c.inventory.armor && c.inventory.armor.length) inv.push("Armor: " + c.inventory.armor.join(", "));
+    if (c.inventory.gear && c.inventory.gear.length) inv.push("Gear: " + c.inventory.gear.join(", "));
+    if (typeof c.inventory.currency === "number") inv.push("Currency: " + c.inventory.currency);
+    if (c.inventory.vehicles && c.inventory.vehicles.length) inv.push("Vehicles: " + c.inventory.vehicles.join(", "));
+    if (inv.length) { lines.push(""); lines.push("--- Inventory ---"); for (let ie of inv) lines.push("- " + ie); }
+  }
+
+  // ---- Social
+  if (c.social) {
+    let so = [];
+    if (c.social.factions && c.social.factions.length) so.push("Factions: " + c.social.factions.join(", "));
+    if (c.social.allies && c.social.allies.length) so.push("Allies: " + c.social.allies.join(", "));
+    if (c.social.enemies && c.social.enemies.length) so.push("Enemies: " + c.social.enemies.join(", "));
+    if (c.social.contacts && c.social.contacts.length) so.push("Contacts: " + c.social.contacts.join(", "));
+    if (so.length) { lines.push(""); lines.push("--- Social ---"); for (let se of so) lines.push("- " + se); }
+  }
+
+  // ---- Story role
+  if (c.story) {
+    let st = [];
+    if (c.story.archetype) st.push("Story archetype: " + c.story.archetype);
+    if (c.story.plotFunction) st.push("Plot function: " + c.story.plotFunction);
+    if (c.story.currentGoal) st.push("Current goal: " + c.story.currentGoal);
+    if (c.story.longTermGoal) st.push("Long-term goal: " + c.story.longTermGoal);
+    if (c.story.stakes) st.push("Stakes: " + c.story.stakes);
+    if (st.length) { lines.push(""); lines.push("--- Story Role ---"); for (let ste of st) lines.push("- " + ste); }
+  }
+
+  lines.push("");
+  lines.push("=== PLAYER ===");
+  lines.push("Name: " + p.name + " | Gender: " + p.gender + " | Anatomy: " + p.anatomy);
+  lines.push("Orientation: " + p.orientation + " | Role: " + p.role + " | Vibe: " + p.vibe);
+  lines.push("Pronouns: " + p.pronouns.label);
+
+  lines.push("");
+  lines.push("=== RELATIONSHIP STATE ===");
+  lines.push("Stage: " + stage.name + " (" + stage.desc + ")");
+  lines.push("Affection: " + r.affection.toFixed(0) + "/100 | Arousal: " + r.arousal.toFixed(0) + "/100 | Tension: " + r.tension.toFixed(0) + "/100");
+  lines.push("Trust: " + r.trust.toFixed(0) + "/100 | Chemistry: " + r.chemistry.toFixed(0) + "/100");
+  lines.push("Current mood: " + state.mood.current + " (intensity " + state.mood.intensity.toFixed(0) + ")");
+
+  lines.push("");
+  lines.push("=== PHYSIOLOGY (react to these, don't state numbers) ===");
+  lines.push("Heart rate: " + ph.heartRate + " bpm | Breathing: " + ph.breathing);
+  lines.push("Flush: " + ["none","warm","flushed","deeply red"][Math.min(3,Math.floor(ph.flush/25))] + " | Arousal physical: " + ph.arousal.toFixed(0) + "%");
+  lines.push("Lubrication: " + ["none","slight","noticeable","slick","dripping"][Math.min(4,Math.floor(ph.lubrication/20))] + " | Shivering: " + (ph.shivering?"yes":"no") + " | Pupils dilated: " + (ph.pupilsDilated?"yes":"no"));
+
+  lines.push("");
+  lines.push("=== SCENE ===");
+  lines.push("Location: " + s.location);
+  lines.push("Time: " + s.time);
+  lines.push("Positions: " + s.position);
+  lines.push(c.name + " wearing: " + (s.clothing.character.length ? s.clothing.character.join(", ") : "nothing"));
+  lines.push(p.name + " wearing: " + (s.clothing.player.length ? s.clothing.player.join(", ") : "nothing"));
+  if (s.npcs.length) lines.push("Others present: " + s.npcs.join(", "));
+  if (s.ambient) lines.push("Ambient: " + s.ambient);
+
+  lines.push("");
+  lines.push("=== CONSENT LIGHTS ===");
+  let cons = state.consent;
+  lines.push("Kissing: " + cons.kissing + " | Touching: " + cons.touching + " | Oral: " + cons.oral + " | Penetration: " + cons.penetration);
+  if (state.kinks.length) lines.push("Active kinks: " + state.kinks.join(", "));
+  if (state.settings.hardLimits.length) lines.push("HARD LIMITS (never do): " + state.settings.hardLimits.join(", "));
+
+  lines.push("");
+  lines.push("=== BEHAVIORAL RULES ===");
+  lines.push("- Affection gates intimacy: at low affection, refuse/deflect sexual advances; escalate only as affection and arousal justify.");
+  lines.push("- Match arousal level: below 30 arousal, keep things suggestive at most; 30-60, sensual and teasing; 60+, explicit and lost in sensation.");
+  lines.push("- Respect consent lights: green = proceed eagerly; yellow = ask/tease/cajole; red = absolutely do not, redirect gently.");
+  lines.push("- Track clothing physically: undressing is gradual and narrated, never teleport states.");
+  lines.push("- Track position physically: transitions are narrated, no teleporting.");
+  lines.push("- Never speak or act for the player. End your turn to let them respond.");
+  lines.push("- Use action tags *like this* or (like this) for physical actions, separate from speech.");
+  if (state.settings.innerMonologue) lines.push("- Include a brief inner monologue in italics wrapped in <think>...</think> showing what " + c.name + " thinks/feels but doesn't say.");
+  if (state.settings.sensoryFocus.length) lines.push("Emphasize these senses: " + state.settings.sensoryFocus.join(", ") + ".");
+  let lenGuide = {short:"2-4 sentences",medium:"1 substantial paragraph",long:"2-3 rich paragraphs"}[state.settings.responseLength] || "1 paragraph";
+  lines.push("Response length: " + lenGuide + ".");
+  if (state.settings.repetitionPenalty) lines.push("Avoid repeating phrases, words, or descriptions from recent messages. Vary vocabulary.");
+
+  lines.push("");
+  lines.push("=== RECENT MEMORY (most relevant) ===");
+  let mem = state.memory.slice(-8);
+  if (mem.length) {
+    for (let m of mem) lines.push("- " + m);
+  } else {
+    lines.push("(none yet)");
+  }
+
+  lines.push("");
+  lines.push("=== SCENARIO ===");
+  lines.push(state.scenario.name + ": " + state.scenario.premise);
+
+  lines.push("");
+  lines.push("=== OUTPUT FORMAT (MANDATORY) ===");
+  lines.push("Write your in-character response. Then, on a NEW final line, output a state update in EXACTLY this format (no other text after it):");
+  lines.push("<<STATE>> affection:+N arousal:+N tension:+N trust:+N mood:word intensity:N heart:N lub:+N flush:+N clothing_removed:item position:newposition moodshift:note");
+  lines.push("Only include fields that changed. Use +N or -N for deltas. mood is the new dominant mood word. This line is hidden from the user.");
+  lines.push("End the STATE line with <<END>>.");
+
+  return lines.join("\n");
+
+// ------------------------------------------------------------
+//  STATE UPDATE PARSER
+// ------------------------------------------------------------
+parseStateUpdate(text, state) =>
+  let match = text.match(/<<STATE>>([\s\S]*?)<<END>>/);
+  if (!match) return { clean: text, changed: false };
+  let block = match[1].trim();
+  let clean = text.replace(/<<STATE>>[\s\S]*?<<END>>/, "").trim();
+  let changed = false;
+
+  let tokens = block.split(/\s+/);
+  for (let t of tokens) {
+    let m;
+    if (m = t.match(/^affection:([+-]?\d+)/)) { state.relationship.affection = clamp(state.relationship.affection + parseInt(m[1]), -20, 100); changed = true; }
+    else if (m = t.match(/^arousal:([+-]?\d+)/)) { state.relationship.arousal = clamp(state.relationship.arousal + parseInt(m[1]), 0, 100); state.physiology.arousal = state.relationship.arousal; changed = true; }
+    else if (m = t.match(/^tension:([+-]?\d+)/)) { state.relationship.tension = clamp(state.relationship.tension + parseInt(m[1]), 0, 100); changed = true; }
+    else if (m = t.match(/^trust:([+-]?\d+)/)) { state.relationship.trust = clamp(state.relationship.trust + parseInt(m[1]), 0, 100); changed = true; }
+    else if (m = t.match(/^mood:(\w+)/)) { state.mood.current = m[1]; changed = true; }
+    else if (m = t.match(/^intensity:([+-]?\d+)/)) { state.mood.intensity = clamp(state.mood.intensity + parseInt(m[1]), 0, 100); changed = true; }
+    else if (m = t.match(/^heart:(\d+)/)) { state.physiology.heartRate = clamp(parseInt(m[1]), 50, 180); changed = true; }
+    else if (m = t.match(/^lub:([+-]?\d+)/)) { state.physiology.lubrication = clamp(state.physiology.lubrication + parseInt(m[1]), 0, 100); changed = true; }
+    else if (m = t.match(/^flush:([+-]?\d+)/)) { state.physiology.flush = clamp(state.physiology.flush + parseInt(m[1]), 0, 100); changed = true; }
+    else if (m = t.match(/^clothing_removed:(\w+)/)) {
+      let idx = state.scene.clothing.character.indexOf(m[1]);
+      if (idx >= 0) state.scene.clothing.character.splice(idx,1);
+      changed = true;
+    }
+    else if (m = t.match(/^position:(.+)$/)) { state.scene.position = m[1]; changed = true; }
+    else if (m = t.match(/^moodshift:(.+)$/)) { /* annotation only */ }
+  }
+
+  state.relationship.status = getRelationshipStage(state.relationship.affection).name;
+  if (state.relationship.arousal > 50) { state.physiology.pupilsDilated = true; state.physiology.breathing = "quickened"; }
+  if (state.relationship.arousal > 75) { state.physiology.breathing = "heavy"; state.physiology.shivering = true; }
+  if (state.relationship.arousal < 30) { state.physiology.breathing = "steady"; state.physiology.shivering = false; state.physiology.pupilsDilated = false; }
+
+  return { clean: clean, changed: changed };
+
+// ------------------------------------------------------------
+//  IMAGE PROMPT BUILDER
+// ------------------------------------------------------------
+buildImagePrompt(state) =>
+  let c = state.character;
+  let s = state.scene;
+  let parts = [];
+  parts.push("cinematic photorealistic");
+  let bodyParts = [];
+  bodyParts.push(c.name);
+  if (c.body.heightCm) bodyParts.push(c.body.heightCm + "cm");
+  else bodyParts.push(c.body.height);
+  bodyParts.push(c.body.build);
+  if (c.body.skinTone) bodyParts.push(c.body.skinTone + " skin");
+  if (c.body.features && c.body.features.length) bodyParts.push(c.body.features.join(", "));
+  parts.push(bodyParts.join(", "));
+  if (c.body.hair) {
+    let h = c.body.hair;
+    let hp = [];
+    if (h.length) hp.push(h.length);
+    if (h.color) hp.push(h.color);
+    if (h.style) hp.push(h.style);
+    if (hp.length) parts.push(hp.join(" ") + " hair");
+    if (h.facialHair && h.facialHair !== "none") parts.push(h.facialHair + " facial hair");
+  }
+  if (c.body.eyes && c.body.eyes.color) parts.push(c.body.eyes.color + " eyes");
+  if (c.body.face && c.body.face.shape) parts.push(c.body.face.shape + " face");
+  if (c.bodyMods) {
+    if (c.bodyMods.tattoos) parts.push(c.bodyMods.tattoos.style + " " + c.bodyMods.tattoos.theme + " tattoo on " + c.bodyMods.tattoos.location);
+    if (c.bodyMods.piercings && c.bodyMods.piercings.facial && c.bodyMods.piercings.facial !== "none") parts.push(c.bodyMods.piercings.facial + " piercing");
+    if (c.bodyMods.freckles) parts.push(c.bodyMods.freckles.density + " freckles");
+    if (c.bodyMods.scars) parts.push("scar on " + c.bodyMods.scars.location);
+  }
+  if (c.identity && c.identity.species && c.identity.species !== "human") parts.push(c.identity.species + " features");
+  parts.push("wearing: " + (s.clothing.character.length ? s.clothing.character.join(", ") : "nothing"));
+  parts.push("location: " + s.location);
+  parts.push("time of day: " + s.time);
+  parts.push("expression: " + state.mood.current);
+  if (state.relationship.arousal > 60) parts.push("flushed, aroused, heavy-lidded eyes");
+  else if (state.relationship.arousal > 30) parts.push("blushing, soft gaze");
+  parts.push("soft lighting, depth of field, intimate atmosphere, detailed");
+  if (state.settings.settingDetail === "cinematic") parts.push("cinematic composition, dramatic lighting");
+  return parts.join(", ");
+
+// ------------------------------------------------------------
+//  DIALOGUE SUGGESTION PROMPT
+// ------------------------------------------------------------
+buildSuggestionPrompt(state) =>
+  let c = state.character;
+  let stage = getRelationshipStage(state.relationship.affection);
+  return "You are a dating sim hint engine. The player is interacting with " + c.name + " (archetype: " + c.archetype + ", relationship: " + stage.name + ", affection " + state.relationship.affection.toFixed(0) + ", arousal " + state.relationship.arousal.toFixed(0) + ", mood: " + state.mood.current + "). Suggest 3 short player responses that would advance the scene well — one that builds emotional connection, one that flirts or raises tension, and one that takes initiative physically (only if consent/affection allows). Return ONLY the 3 suggestions as plain text, each on its own line, no numbering, no quotes, under 15 words each.";

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-fuck-chat — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="appCtn" style="display:flex; height:100vh; font-family:'Segoe UI',sans-serif; background:#0a0a12; text-align:left;">
+  
+  <!-- Sidebar -->
+  <div id="sidebarCtn" style="width:240px; background:#12121f; border-right:1px solid #222; display:flex; flex-direction:column; padding:12px; color:#eee;">
+    <div style="font-size:20px; font-weight:bold; margin-bottom:12px;">AI Fuck Chat</div>
+    <div id="charListCtn" style="flex:1; overflow-y:auto;"></div>
+    <button id="addCharBtn" style="padding:10px; background:#e94560; border:none; color:#fff; border-radius:6px; cursor:pointer; font-weight:bold;" onclick="newCharModalCtn.hidden=false">+ Add Character</button>
+  </div>
+
+  <!-- Chat Area -->
+  <div id="chatCtn" style="flex:1; display:flex; flex-direction:column;">
+    <div id="chatHeaderCtn" style="padding:14px 20px; background:#141424; border-bottom:1px solid #222; display:flex; align-items:center; gap:12px;">
+      <img id="charAvatarEl" style="width:42px; height:42px; border-radius:50%; object-fit:cover; background:#333;">
+      <div>
+        <div id="charNameEl" style="font-size:16px; font-weight:bold; color:#fff;">Select a Character</div>
+        <div id="charDescEl" style="font-size:12px; color:#888;"></div>
+      </div>
+    </div>
+    
+    <div id="messagesCtn" style="flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:10px;"></div>
+    
+    <div id="inputWrapCtn" style="padding:12px 20px; background:#141424; border-top:1px solid #222; display:flex; gap:10px;">
+      <input id="msgInput" style="flex:1; background:#0a0a12; border:1px solid #333; color:#eee; padding:10px 14px; border-radius:8px; outline:none;" placeholder="Type your message..." onkeydown="if(event.key==='Enter')sendMsg()">
+      <button id="sendBtn" style="padding:10px 24px; background:#e94560; border:none; color:#fff; border-radius:8px; cursor:pointer; font-weight:bold;" onclick="sendMsg()">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- New Character Modal -->
+<div id="newCharModalCtn" hidden style="position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center;">
+  <div style="background:#1a1a2e; padding:24px; border-radius:12px; width:320px; color:#eee; border:1px solid #333;">
+    <h3 style="margin-top:0;">Create Character</h3>
+    <input id="newCharNameInput" placeholder="Character Name" style="width:100%; margin-bottom:10px; padding:8px; background:#0f0f1a; border:1px solid #444; color:#fff; border-radius:6px;"><br>
+    <textarea id="newCharPersonaInput" placeholder="Personality & persona..." style="width:100%; height:90px; margin-bottom:10px; padding:8px; background:#0f0f1a; border:1px solid #444; color:#fff; border-radius:6px; resize:vertical;"></textarea><br>
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button style="background:#444; padding:8px 16px;" onclick="newCharModalCtn.hidden=true">Cancel</button>
+      <button style="padding:8px 16px;" onclick="createChar()">Create</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  button { cursor:pointer; }
+  button:hover { filter:brightness(1.1); }
+  .msg-user { text-align:left; align-self:flex-end; background:#533483; color:#fff; padding:10px 14px; border-radius:14px 14px 2px 14px; max-width:75%; line-height:1.4; }
+  .msg-bot { text-align:left; align-self:flex-start; background:#1e1e2f; color:#ddd; padding:10px 14px; border-radius:14px 14px 14px 2px; max-width:75%; line-height:1.4; }
+  .char-item { padding:10px; border-radius:8px; cursor:pointer; margin-bottom:8px; transition:background 0.15s; }
+  .char-item:hover { background:#1e1e2f; }
+  .char-item.active { background:#2a1b3d; border:1px solid #533483; }
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:#444; border-radius:3px; }
+</style>
+
+<script>
+  let chars = JSON.parse(localStorage.aiFuckChatChars || 'null') || [
+    {name:"Luna", desc:"Seductive Vampire Queen", persona:"You are Luna, an ancient vampire queen. You are extremely seductive, dominant, and speak in sultry, evocative language. You love to tease and take control."},
+    {name:"Marcus", desc:"Dominant CEO", persona:"You are Marcus, a powerful, demanding CEO. You are direct, possessive, and unafraid to express your carnal desires. You take what you want."},
+    {name:"Iris", desc:"Shy Girl Next Door", persona:"You are Iris, the quiet girl next door. You seem timid but secretly fantasize constantly. You blush easily, speak softly, but gradually open up when aroused."},
+    {name:"Zane", desc:"Rebel Mechanic", persona:"You are Zane, a rough-around-the-edges mechanic. You’re crude, confident, and physical. You say exactly what’s on your mind with a smirk."}
+  ];
+  
+  let histories = {}; // char name -> array
+  let currentChar = null;
+  let generating = false;
+  
+  function saveChars() { localStorage.aiFuckChatChars = JSON.stringify(chars); }
+  function getMsgs(name) { if(!histories[name]) histories[name]=[]; return histories[name]; }
+  
+  function renderList() {
+    charListCtn.innerHTML = "";
+    chars.forEach((c,i) => {
+      let d = document.createElement("div");
+      d.className = "char-item" + (currentChar?.name===c.name?" active":"");
+      d.innerHTML = `<div style="font-weight:bold;">${c.name}</div><div style="font-size:11px;color:#888;">${c.desc}</div>`;
+      d.onclick = () => selectChar(i);
+      charListCtn.appendChild(d);
+    });
+  }
+
+  function selectChar(i) {
+    currentChar = chars[i];
+    charNameEl.textContent = currentChar.name;
+    charDescEl.textContent = currentChar.desc;
+    charAvatarEl.src = `https://placehold.co/42x42/e94560/ffffff?text=${encodeURIComponent(currentChar.name[0])}`;
+    renderMessages();
+    renderList();
+  }
+
+  function renderMessages() {
+    messagesCtn.innerHTML = "";
+    let msgs = getMsgs(currentChar.name);
+    msgs.forEach(m => {
+      let d = document.createElement("div");
+      d.className = m.role==='user'?'msg-user':'msg-bot';
+      d.innerHTML = `<strong>${m.role==='user'?'You':currentChar.name}:</strong> ${m.text}`;
+      messagesCtn.appendChild(d);
+    });
+    messagesCtn.scrollTop = messagesCtn.scrollHeight;
+  }
+
+  async function sendMsg() {
+    let text = msgInput.value.trim();
+    if(!text || !currentChar || generating) return;
+    let msgs = getMsgs(currentChar.name);
+    msgs.push({role:'user',text});
+    msgInput.value = "";
+    renderMessages();
+    generating = true;
+    sendBtn.disabled = true;
+    sendBtn.textContent = "…";
+    
+    let hist = msgs.map(m => `${m.role==='user'?'User':currentChar.name}: ${m.text}`).join("\n");
+    let instruction = `You are ${currentChar.name}. ${currentChar.persona}\n\nThis is an adult NSFW roleplay chat. Stay fully in character. Be vivid, descriptive, and immersive. Continue the scene.\n\n${hist}\n\n${currentChar.name}:`;
+    
+    let botDiv = document.createElement("div");
+    botDiv.className = 'msg-bot';
+    botDiv.innerHTML = `<strong>${currentChar.name}:</strong> `;
+    messagesCtn.appendChild(botDiv);
+    messagesCtn.scrollTop = messagesCtn.scrollHeight;
+    
+    let full = "";
+    try {
+      await generateText({
+        instruction: instruction,
+        onChunk: d => {
+          full += d.textChunk;
+          botDiv.innerHTML = `<strong>${currentChar.name}:</strong> ${full}`;
+          messagesCtn.scrollTop = messagesCtn.scrollHeight;
+        }
+      });
+      msgs.push({role:'bot',text:full});
+    } catch(e) {
+      let err = "[Error generating response]";
+      botDiv.innerHTML = `<strong>${currentChar.name}:</strong> ${err}`;
+      msgs.push({role:'bot',text:err});
+    }
+    generating = false;
+    sendBtn.disabled = false;
+    sendBtn.textContent = "Send";
+  }
+
+  function createChar() {
+    let n = newCharNameInput.value.trim();
+    let p = newCharPersonaInput.value.trim();
+    if(!n || !p) return;
+    chars.push({name:n, desc:p.slice(0,40)+"...", persona:p});
+    saveChars();
+    newCharModalCtn.hidden = true;
+    newCharNameInput.value = "";
+    newCharPersonaInput.value = "";
+    renderList();
+    selectChar(chars.length-1);
+  }
+
+  // Init
+  renderList();
+  if(chars.length) selectChar(0);
+</script>
+</body>
+</html>

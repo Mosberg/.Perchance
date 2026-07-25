@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>beyond-the-bobber-mod-generator-1 — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div style="max-width:1200px;margin:0 auto;padding:20px;">
+  <h1 style="color:#2c3e50;text-align:center;margin-bottom:30px;">🎣 Beyond the Bobber Mod Generator</h1>
+  
+  <div style="display:flex;gap:20px;margin-bottom:20px;">
+    <div style="flex:1;">
+      <h2 style="color:#3498db;">Mod Configuration</h2>
+      
+      <div style="margin-bottom:15px;">
+        <label style="display:block;margin-bottom:5px;font-weight:bold;">Mod ID:</label>
+        <input type="text" id="modIdInput" value="beyond_the_bobber" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
+      </div>
+      
+      <div style="margin-bottom:15px;">
+        <label style="display:block;margin-bottom:5px;font-weight:bold;">Mod Version:</label>
+        <input type="text" id="modVersionInput" value="1.0.0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
+      </div>
+      
+      <div style="margin-bottom:15px;">
+        <label style="display:block;margin-bottom:5px;font-weight:bold;">Schema Type:</label>
+        <select id="schemaTypeSelect" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
+          <option value="tools">Tools</option>
+          <option value="tools_recipes">Tools Recipes</option>
+          <option value="raw_fish">Raw Fish</option>
+          <option value="cooked_fish">Cooked Fish</option>
+          <option value="dishes">Dishes</option>
+        </select>
+      </div>
+      
+      <button id="generateBtn" onclick="generateModContent()" style="background:#27ae60;color:white;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-size:16px;transition:background 0.3s;">
+        Generate Mod Content
+      </button>
+    </div>
+    
+    <div style="flex:1;">
+      <h2 style="color:#3498db;">Generated JSON</h2>
+      <textarea id="outputJson" readonly style="width:100%;height:300px;padding:10px;border:1px solid #ddd;border-radius:4px;font-family:monospace;"></textarea>
+      <button id="downloadBtn" onclick="downloadJson()" style="background:#3498db;color:white;border:none;padding:8px 15px;border-radius:4px;cursor:pointer;margin-top:10px;transition:background 0.3s;">
+        Download JSON
+      </button>
+    </div>
+  </div>
+  
+  <div id="loadingIndicator" hidden style="text-align:center;padding:20px;">
+    <p style="font-size:18px;">⏳ Generating mod content...</p>
+  </div>
+  
+  <div style="margin-top:30px;">
+    <h2 style="color:#3498db;">Schema Reference</h2>
+    <div id="schemaReference" style="padding:15px;background:#f8f9fa;border-radius:4px;border-left:4px solid #3498db;">
+      <p>Select a schema type above to see its structure and fields.</p>
+    </div>
+  </div>
+  
+  <script>
+    // Import Perchance plugins
+    let generateImage = root.generateImage;
+    let generateText = root.generateText;
+    let kv = root.kv;
+    let tooltip = root.tooltip;
+    
+    // Schema definitions
+    const schemas = {
+      tools: {
+        title: "Tools Schema",
+        description: "Defines fishing equipment, durability, and catch modifiers.",
+        fields: [
+          { name: "id", type: "string", description: "Unique namespaced ID for the tool" },
+          { name: "type", type: "string", description: "Tool category (net, rod, harpoon, trap)" },
+          { name: "bonus_success", type: "float", description: "Extra chance to successfully catch fish" },
+          { name: "durability", type: "integer", description: "Maximum uses before breaking" }
+        ],
+        example: {
+          small_fishing_net: {
+            id: "beyond_the_bobber:small_fishing_net",
+            type: "net",
+            bonus_success: 0.02,
+            durability: 64
+          }
+        }
+      },
+      tools_recipes: {
+        title: "Tools Recipes Schema",
+        description: "Defines crafting recipes for fishing tools.",
+        fields: [
+          { name: "id", type: "string", description: "Unique namespaced ID for the recipe" },
+          { name: "pattern", type: "string[]", description: "Crafting grid rows (3x3). Spaces = empty slots" },
+          { name: "key", type: "object", description: "Maps pattern symbols to item IDs" },
+          { name: "result", type: "object", description: "Defines output item and count" }
+        ],
+        example: {
+          small_fishing_net: {
+            id: "beyond_the_bobber:small_fishing_net",
+            pattern: ["SSS", "S S", "SSS"],
+            key: { "S": "minecraft:string" },
+            result: {
+              item: "beyond_the_bobber:small_fishing_net",
+              count: 1
+            }
+          }
+        }
+      },
+      raw_fish: {
+        title: "Raw Fish Schema",
+        description: "Defines catchable species, their tool requirements, XP rewards, and food values.",
+        fields: [
+          { name: "id", type: "string", description: "Unique namespaced ID for the fish" },
+          { name: "required_tool", type: "string", description: "Tool ID required to catch this species" },
+          { name: "catch_xp", type: "integer", description: "XP gained when catching" },
+          { name: "rarity", type: "string", description: "Rarity tier (common, uncommon, rare, legendary)" },
+          { name: "food", type: "object", description: "Hunger points restored and saturation modifier" }
+        ],
+        example: {
+          raw_shrimp: {
+            id: "beyond_the_bobber:raw_shrimp",
+            required_tool: "beyond_the_bobber:small_fishing_net",
+            catch_xp: 10,
+            rarity: "common",
+            food: { "hunger": 3, "saturation": 0.2 }
+          }
+        }
+      },
+      cooked_fish: {
+        title: "Cooked Fish Schema",
+        description: "Defines how raw fish are transformed into cooked items.",
+        fields: [
+          { name: "id", type: "string", description: "Unique namespaced ID for the cooked item" },
+          { name: "source_fish", type: "string", description: "ID of the raw fish this recipe transforms" },
+          { name: "methods", type: "string[]", description: "Valid cooking methods (campfire, furnace, smoker)" },
+          { name: "cook_xp", type: "integer", description: "XP gained when cooking" },
+          { name: "food", type: "object", description: "Hunger points restored and saturation modifier" },
+          { name: "effects", type: "array", description: "Optional potion effects" }
+        ],
+        example: {
+          cooked_shrimp: {
+            id: "beyond_the_bobber:cooked_shrimp",
+            source_fish: "beyond_the_bobber:raw_shrimp",
+            methods: ["campfire", "furnace", "smoker"],
+            cook_xp: 30,
+            food: { "hunger": 5, "saturation": 0.4 },
+            effects: []
+          }
+        }
+      },
+      dishes: {
+        title: "Dishes Schema",
+        description: "Defines multi-ingredient dishes beyond single cooked fish.",
+        fields: [
+          { name: "id", type: "string", description: "Unique namespaced ID for the recipe" },
+          { name: "ingredients", type: "array", description: "List of required items (item ID + count)" },
+          { name: "cook_method", type: "string", description: "How the recipe is prepared" },
+          { name: "cook_time", type: "integer", description: "Time in ticks (200 = 10 seconds)" },
+          { name: "cook_xp", type: "integer", description: "XP gained when completing the recipe" },
+          { name: "food", type: "object", description: "Hunger points restored and saturation modifier" },
+          { name: "effects", type: "array", description: "Optional potion effects with duration and amplifier" },
+          { name: "rarity", type: "string", description: "Rarity tier" }
+        ],
+        example: {
+          fish_stew: {
+            id: "beyond_the_bobber:fish_stew",
+            ingredients: [
+              { "item": "beyond_the_bobber:cooked_cod", "count": 1 },
+              { "item": "minecraft:carrot", "count": 2 },
+              { "item": "minecraft:potato", "count": 1 },
+              { "item": "minecraft:bowl", "count": 1 }
+            ],
+            cook_method: "furnace",
+            cook_time: 200,
+            cook_xp: 150,
+            food: { "hunger": 12, "saturation": 0.9 },
+            effects: [{ "effect": "regeneration", "duration": 600, "amplifier": 1 }],
+            rarity: "rare"
+          }
+        }
+      }
+    };
+    
+    // Update schema reference when selection changes
+    schemaTypeSelect.addEventListener('change', function() {
+      updateSchemaReference();
+    });
+    
+    function updateSchemaReference() {
+      const schemaType = schemaTypeSelect.value;
+      const schema = schemas[schemaType];
+      
+      let fieldsHtml = schema.fields.map(field => 
+        `<div style="margin-bottom:10px;">
+          <strong>${field.name}</strong> <span style="color:#7f8c8d;">(${field.type})</span>
+          <p style="margin:0;margin-top:3px;">${field.description}</p>
+        </div>`
+      ).join('');
+      
+      schemaReference.innerHTML = `
+        <h3 style="margin-top:0;">${schema.title}</h3>
+        <p>${schema.description}</p>
+        <div style="margin-top:15px;">
+          <strong>Fields:</strong>
+          ${fieldsHtml}
+        </div>
+        <div style="margin-top:15px;">
+          <strong>Example:</strong>
+          <pre style="background:#ecf0f1;padding:10px;border-radius:4px;overflow-x:auto;">${JSON.stringify(schema.example, null, 2)}</pre>
+        </div>
+      `;
+    }
+    
+    async function generateModContent() {
+      const modId = modIdInput.value.trim();
+      const modVersion = modVersionInput.value.trim();
+      const schemaType = schemaTypeSelect.value;
+      
+      if (!modId || !modVersion) {
+        outputJson.value = "Error: Please fill in both Mod ID and Mod Version";
+        return;
+      }
+      
+      generateBtn.disabled = true;
+      downloadBtn.disabled = true;
+      loadingIndicator.hidden = false;
+      
+      try {
+        const schema = schemas[schemaType];
+        const prompt = `Generate a complete JSON schema for a Minecraft 1.20.1 Fabric mod called "${modId}" (version ${modVersion}) for the "${schema.title}".
+        
+        The JSON should follow this structure and include all required fields:
+        ${schema.description}
+        
+        Fields:
+        ${schema.fields.map(f => `- ${f.name} (${f.type}): ${f.description}`).join('\n')}
+        
+        Example:
+        ${JSON.stringify(schema.example, null, 2)}
+        
+        Please generate a comprehensive schema with multiple items following the same structure as the example. Ensure all IDs use the "${modId}:" namespace and that the JSON is valid and properly formatted.`;
+        
+        // Generate JSON using AI
+        const generatedJson = await generateText(prompt);
+        
+        // Display the result
+        outputJson.value = generatedJson;
+        downloadBtn.disabled = false;
+      } catch (error) {
+        outputJson.value = `Error: ${error.message}`;
+        console.error('Generation error:', error);
+      } finally {
+        generateBtn.disabled = false;
+        loadingIndicator.hidden = true;
+      }
+    }
+    
+    function downloadJson() {
+      const schemaType = schemaTypeSelect.value;
+      const modId = modIdInput.value.trim();
+      const filename = `${schemaType}.json`;
+      
+      const blob = new Blob([outputJson.value], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    
+    // Initialize with tools schema
+    updateSchemaReference();
+  </script>
+</div>
+</body>
+</html>

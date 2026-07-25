@@ -1,0 +1,223 @@
+$meta
+  title = Data Diff Kit
+  description = Object diffing, patch generation, and path-level data change utilities for deterministic updates.
+  image = https://user.uploads.dev/file/8c7563d0ece7c9ed36c8a83f8361a7a7.webp
+  tags = data diff, patching, object paths, state updates
+
+toObject(value) =>
+  if(value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return {};
+
+deepClone(value) =>
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch(error) {
+    return value;
+  }
+
+deepEqual(a, b) =>
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch(error) {
+    return a === b;
+  }
+
+isPlainObject(value) =>
+  return value && typeof value === "object" && !Array.isArray(value);
+
+flatten(obj, prefix, output) =>
+  const base = prefix === undefined ? "" : prefix;
+  const out = output || {};
+
+  if(!isPlainObject(obj)) {
+    if(base !== "") {
+      out[base] = obj;
+    }
+    return out;
+  }
+
+  const keys = Object.keys(obj);
+  if(keys.length === 0 && base !== "") {
+    out[base] = {};
+    return out;
+  }
+
+  for(let i = 0; i < keys.length; i += 1) {
+    const keyName = keys[i];
+    const path = base === "" ? keyName : `${base}.${keyName}`;
+    if(isPlainObject(obj[keyName])) {
+      flatten(obj[keyName], path, out);
+    } else {
+      out[path] = obj[keyName];
+    }
+  }
+
+  return out;
+
+pathParts(pathText) =>
+  return String(pathText || "").split(".").map(part => part.trim()).filter(Boolean);
+
+pathGet(data, pathText, fallback) =>
+  const path = pathParts(pathText);
+  if(path.length === 0) {
+    return fallback === undefined ? "" : fallback;
+  }
+
+  let current = data;
+  for(let i = 0; i < path.length; i += 1) {
+    const keyName = path[i];
+    if(current === undefined || current === null || typeof current !== "object" || !current.hasOwnProperty(keyName)) {
+      return fallback === undefined ? "" : fallback;
+    }
+    current = current[keyName];
+  }
+
+  return current;
+
+pathSet(data, pathText, value) =>
+  const path = pathParts(pathText);
+  if(path.length === 0) {
+    return data;
+  }
+
+  let current = data;
+  for(let i = 0; i < path.length - 1; i += 1) {
+    const keyName = path[i];
+    if(!isPlainObject(current[keyName])) {
+      current[keyName] = {};
+    }
+    current = current[keyName];
+  }
+
+  current[path[path.length - 1]] = value;
+  return data;
+
+pathDelete(data, pathText) =>
+  const path = pathParts(pathText);
+  if(path.length === 0) {
+    return false;
+  }
+
+  let current = data;
+  for(let i = 0; i < path.length - 1; i += 1) {
+    const keyName = path[i];
+    if(!isPlainObject(current[keyName])) {
+      return false;
+    }
+    current = current[keyName];
+  }
+
+  const leaf = path[path.length - 1];
+  if(!current.hasOwnProperty(leaf)) {
+    return false;
+  }
+
+  delete current[leaf];
+  return true;
+
+diff(oldValue, newValue) =>
+  const before = flatten(toObject(oldValue));
+  const after = flatten(toObject(newValue));
+
+  const added = {};
+  const removed = {};
+  const changed = {};
+  const unchanged = {};
+
+  for(const keyName of Object.keys(after)) {
+    if(!before.hasOwnProperty(keyName)) {
+      added[keyName] = after[keyName];
+      continue;
+    }
+
+    if(deepEqual(before[keyName], after[keyName])) {
+      unchanged[keyName] = after[keyName];
+    } else {
+      changed[keyName] = {
+        from: before[keyName],
+        to: after[keyName]
+      };
+    }
+  }
+
+  for(const keyName of Object.keys(before)) {
+    if(!after.hasOwnProperty(keyName)) {
+      removed[keyName] = before[keyName];
+    }
+  }
+
+  return {
+    added: added,
+    removed: removed,
+    changed: changed,
+    unchanged: unchanged
+  };
+
+changedKeys(oldValue, newValue, separator) =>
+  const report = diff(oldValue, newValue);
+  const keys = Object.keys(report.changed).concat(Object.keys(report.added)).concat(Object.keys(report.removed));
+  if(separator === undefined) {
+    return keys;
+  }
+  return keys.join(String(separator));
+
+patch(baseValue, patchData, mode) =>
+  const base = deepClone(toObject(baseValue));
+  const patchObj = toObject(patchData);
+
+  for(const keyName of Object.keys(patchObj)) {
+    const patchValue = patchObj[keyName];
+    if(mode === "delete-null" && patchValue === null) {
+      pathDelete(base, keyName);
+      continue;
+    }
+
+    if(isPlainObject(patchValue) && patchValue.__delete__ === true) {
+      pathDelete(base, keyName);
+      continue;
+    }
+
+    pathSet(base, keyName, patchValue);
+  }
+
+  return base;
+
+patchFromDiff(baseValue, diffReport) =>
+  const report = toObject(diffReport);
+  const output = deepClone(toObject(baseValue));
+
+  const removed = toObject(report.removed);
+  const added = toObject(report.added);
+  const changed = toObject(report.changed);
+
+  for(const keyName of Object.keys(removed)) {
+    pathDelete(output, keyName);
+  }
+
+  for(const keyName of Object.keys(added)) {
+    pathSet(output, keyName, added[keyName]);
+  }
+
+  for(const keyName of Object.keys(changed)) {
+    const pair = toObject(changed[keyName]);
+    pathSet(output, keyName, pair.to);
+  }
+
+  return output;
+
+summary(oldValue, newValue) =>
+  const report = diff(oldValue, newValue);
+  return {
+    added: Object.keys(report.added).length,
+    removed: Object.keys(report.removed).length,
+    changed: Object.keys(report.changed).length,
+    unchanged: Object.keys(report.unchanged).length
+  };
+
+diffJson(oldValue, newValue) =>
+  return JSON.stringify(diff(oldValue, newValue));
+
+equal(valueA, valueB) =>
+  return deepEqual(valueA, valueB);

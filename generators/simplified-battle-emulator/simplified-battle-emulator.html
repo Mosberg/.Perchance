@@ -1,0 +1,2371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>simplified-battle-emulator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    text-align: left;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+    color: #e0e0e0;
+    min-height: 100vh;
+    margin: 0;
+    padding: 16px;
+  }
+  #starfield {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: -1;
+    pointer-events: none;
+  }
+  h1 {
+    text-align: center;
+    font-size: 1.8em;
+    margin: 8px 0 4px;
+    background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  #fullResetBtn {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    z-index: 9999;
+    background: rgba(220,53,69,0.85);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 0 8px 0 0;
+    color: #fff;
+    padding: 6px 12px;
+    font-size: 0.8em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    transform: translateX(calc(-100% + 20px));
+    opacity: 0.35;
+  }
+  #fullResetBtn:hover {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  #fullResetHover {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 80px;
+    height: 80px;
+    z-index: 9998;
+  }
+
+  .subtitle { text-align: center; color: #888; font-size: 0.85em; margin-bottom: 16px; }
+
+  .arena {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    align-items: stretch;
+    max-width: 860px;
+    margin: 0 auto 16px;
+  }
+  .fighter-card {
+    flex: 1 1 280px;
+    max-width: 380px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 16px;
+    position: relative;
+    transition: box-shadow 0.3s, transform 0.2s;
+  }
+  .fighter-card.f1 { border-top: 3px solid #ff6b6b; }
+  .fighter-card.f2 { border-top: 3px solid #4d96ff; }
+  .fighter-card.flash { animation: flashHit 0.4s; }
+  .fighter-card.ko { opacity: 0.5; filter: grayscale(0.7); }
+
+  .copy-stats-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #aaa;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.75em;
+    cursor: pointer;
+    transition: all 0.2s;
+    z-index: 5;
+  }
+  .copy-stats-btn:hover { background: rgba(255,255,255,0.18); color: #fff; }
+
+  .roster-section {
+    max-width: 860px;
+    margin: 16px auto 0;
+  }
+  .roster-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .roster-header h3 {
+    margin: 0;
+    font-size: 1em;
+    color: #ccc;
+  }
+  .roster-header button {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #e0e0e0;
+    padding: 5px 12px;
+    border-radius: 7px;
+    font-size: 0.8em;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+  }
+  .roster-header button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); }
+  .roster-grid {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .roster-card {
+    flex: 1 1 160px;
+    min-width: 150px;
+    max-width: 200px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 10px;
+    position: relative;
+    transition: border-color 0.2s;
+  }
+  .roster-card.empty {
+    border-style: dashed;
+    border-color: rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #555;
+    font-size: 0.8em;
+    min-height: 80px;
+  }
+  .roster-card .rc-name {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 0.95em;
+    font-weight: 600;
+    padding: 2px 0;
+    margin-bottom: 6px;
+    outline: none;
+  }
+  .roster-card .rc-name:focus { border-bottom-color: #ffd93d; }
+  .roster-card .rc-types {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .roster-card .rc-types input {
+    flex: 1;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 5px;
+    color: #fff;
+    padding: 2px 5px;
+    font-size: 0.78em;
+    outline: none;
+    text-transform: capitalize;
+  }
+  .roster-card .rc-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 8px;
+    font-size: 0.75em;
+    color: #aaa;
+    margin-bottom: 8px;
+  }
+  .roster-card .rc-stats input {
+    width: 40px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 4px;
+    color: #fff;
+    padding: 1px 4px;
+    font-size: 0.85em;
+    outline: none;
+    text-align: right;
+  }
+  .roster-card .rc-stats label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .roster-card .rc-actions {
+    display: flex;
+    gap: 4px;
+  }
+  .roster-card .rc-actions button {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #ccc;
+    padding: 3px 6px;
+    border-radius: 5px;
+    font-size: 0.72em;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .roster-card .rc-actions button:hover { background: rgba(255,255,255,0.15); }
+
+  .storage-section {
+    max-width: 860px;
+    margin: 16px auto 0;
+  }
+  .storage-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .storage-header h3 {
+    margin: 0;
+    font-size: 1em;
+    color: #ccc;
+  }
+  .storage-header .toggle {
+    font-size: 0.8em;
+    color: #888;
+  }
+  .storage-header #copyStorageBtn {
+    margin-left: auto;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #e0e0e0;
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 0.95em;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+  }
+  .storage-header #copyStorageBtn:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); }
+  #storageToggleBtn {
+    position: sticky;
+    bottom: 8px;
+    margin: 8px 0 0 0;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #e0e0e0;
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 0.95em;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+    z-index: 10;
+    transform: translateX(calc(-100% - 8px));
+  }
+  #storageToggleBtn:hover { background: rgba(255,255,255,0.15); transform: translateX(calc(-100% - 8px)) translateY(-1px); }
+  .storage-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82em;
+    display: none;
+  }
+  .storage-table.visible { display: table; }
+  .storage-table th, .storage-table td {
+    padding: 5px 8px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .storage-table th {
+    color: #888;
+    font-weight: 600;
+    font-size: 0.9em;
+    cursor: pointer;
+    user-select: none;
+  }
+  .storage-table th:hover {
+    color: #ffd93d;
+  }
+  .storage-table th .sort-arrow {
+    font-size: 0.75em;
+    margin-left: 2px;
+  }
+  .storage-table td {
+    color: #ccc;
+  }
+  .storage-table tr.ko td { color: #ff6b6b; }
+  .storage-table .st-actions button {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #ccc;
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-size: 0.85em;
+    cursor: pointer;
+    margin-right: 4px;
+    transition: all 0.2s;
+  }
+  .storage-table .st-actions button:hover { background: rgba(255,255,255,0.15); }
+  .storage-empty {
+    color: #555;
+    font-size: 0.85em;
+    padding: 12px;
+    text-align: center;
+    display: none;
+  }
+  .storage-empty.visible { display: block; }
+  @keyframes flashHit {
+    0%,100% { background: rgba(255,255,255,0.04); }
+    30% { background: rgba(255,80,80,0.18); }
+  }
+
+  .fighter-name {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    color: #fff;
+    font-size: 1.15em;
+    font-weight: 600;
+    padding: 4px 0;
+    margin-bottom: 10px;
+    outline: none;
+  }
+  .fighter-name:focus { border-bottom-color: #ffd93d; }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 10px;
+    margin-bottom: 10px;
+  }
+  .stat-grid label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    font-size: 0.8em;
+    color: #aaa;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 3px 4px 3px 8px;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  }
+  .stat-grid label:hover {
+    border-color: rgba(255,217,61,0.4);
+    background: rgba(0,0,0,0.35);
+  }
+  .stat-grid label:focus-within {
+    border-color: #ffd93d;
+    box-shadow: 0 0 0 2px rgba(255,217,61,0.15), 0 0 12px rgba(255,217,61,0.15);
+    background: rgba(0,0,0,0.4);
+  }
+  .stat-grid label .stat-label-text {
+    flex: 1;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-size: 0.85em;
+  }
+  .stat-grid .stat-btn {
+    display: none;
+  }
+  .stat-grid input {
+    width: 48px;
+    background: transparent;
+    border: none;
+    color: #fff;
+    padding: 2px 4px;
+    font-size: 0.95em;
+    font-weight: 700;
+    outline: none;
+    text-align: center;
+    -moz-appearance: textfield;
+  }
+  .stat-grid input::-webkit-outer-spin-button,
+  .stat-grid input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .stat-grid input:focus { color: #ffd93d; }
+
+  .type-row {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .type-row input {
+    flex: 1;
+    max-width: 45%;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: #fff;
+    font-size: 0.85em;
+    outline: none;
+    text-transform: capitalize;
+    text-align: center;
+  }
+  .type-row input:focus { border-color: #ffd93d; }
+  .type-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.75em;
+    font-weight: 600;
+    color: #fff;
+    text-transform: capitalize;
+  }
+
+  .hp-bar-container {
+    position: relative;
+    background: rgba(0,0,0,0.4);
+    border-radius: 8px;
+    height: 24px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .hp-bar {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #6bcb77, #4dd07b);
+    border-radius: 7px;
+    transition: width 0.5s ease, background 0.5s;
+  }
+  .hp-bar.mid { background: linear-gradient(90deg, #ffd93d, #ffcc4d); }
+  .hp-bar.low { background: linear-gradient(90deg, #ff6b6b, #ee5a5a); }
+  .hp-text {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    font-size: 0.8em;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+  }
+
+  .ko-overlay {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%) scale(0);
+    font-size: 2.5em;
+    font-weight: 900;
+    color: #ff4444;
+    text-shadow: 0 0 20px rgba(255,68,68,0.6);
+    pointer-events: none;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    z-index: 10;
+  }
+  .ko-overlay.show { transform: translate(-50%,-50%) scale(1); }
+
+  .vs-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5em;
+    font-weight: 900;
+    color: #ffd93d;
+    padding: 0 8px;
+  }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .controls button {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #e0e0e0;
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 0.95em;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+  }
+  .controls button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); }
+  .controls button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .controls button.primary {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a5a);
+    border-color: transparent;
+    color: #fff;
+  }
+  .controls button.primary:hover { box-shadow: 0 4px 16px rgba(255,107,107,0.35); }
+
+  .speed-indicator {
+    text-align: center;
+    font-size: 0.8em;
+    color: #888;
+    margin-bottom: 10px;
+    min-height: 1.2em;
+  }
+
+  .battle-log {
+    max-width: 860px;
+    margin: 0 auto;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 12px 16px;
+    height: 280px;
+    overflow-y: auto;
+    font-size: 0.88em;
+    line-height: 1.6;
+  }
+  .battle-log::-webkit-scrollbar { width: 6px; }
+  .battle-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+  .log-entry { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .log-entry.round-header { color: #ffd93d; font-weight: 700; margin-top: 6px; }
+  .log-entry .eff { font-weight: 700; }
+  .log-entry .eff.super { color: #ff6b6b; }
+  .log-entry .eff.weak { color: #6bcb77; }
+  .log-entry .eff.immune { color: #888; }
+  .log-entry.win { color: #ffd93d; font-weight: 700; font-size: 1.1em; text-align: center; margin-top: 8px; }
+  .log-entry.draw { color: #aaa; font-weight: 700; text-align: center; margin-top: 8px; }
+
+  .type-matchup {
+    text-align: center;
+    font-size: 0.8em;
+    margin-bottom: 8px;
+    color: #aaa;
+  }
+  .type-matchup .mult { font-weight: 700; }
+  .type-matchup .mult.high { color: #ff6b6b; }
+  .type-matchup .mult.low { color: #6bcb77; }
+  .type-matchup .mult.normal { color: #ccc; }
+
+  .paste-bar {
+    max-width: 860px;
+    margin: 0 auto 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .paste-bar input {
+    flex: 1;
+    min-width: 200px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #fff;
+    font-size: 0.85em;
+    outline: none;
+  }
+  .paste-bar input:focus { border-color: #ffd93d; }
+  .paste-bar input::placeholder { color: #666; }
+  .paste-help {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #aaa;
+    font-size: 0.75em;
+    font-weight: 700;
+    cursor: help;
+    flex-shrink: 0;
+  }
+  .paste-help:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .paste-help .tooltip {
+    display: none;
+    position: absolute;
+    bottom: 30px;
+    right: 0;
+    width: 320px;
+    background: rgba(15,15,26,0.98);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 0.8em;
+    font-weight: 400;
+    color: #ccc;
+    line-height: 1.5;
+    z-index: 100;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+  .paste-help:hover .tooltip { display: block; }
+  .paste-help.flash {
+    animation: pasteFlash 0.4s ease-in-out 4;
+  }
+  @keyframes pasteFlash {
+    0%, 100% { background: rgba(255,255,255,0.08); color: #aaa; }
+    50% { background: rgba(255,107,107,0.6); color: #fff; border-color: #ff6b6b; }
+  }
+  .paste-bar button {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #e0e0e0;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .paste-bar button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); }
+
+  @media (max-width: 620px) {
+    .vs-badge { padding: 4px 0; width: 100%; }
+    .stat-grid { grid-template-columns: 1fr 1fr; }
+  }
+  #adminPanel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 9999;
+    display: flex;
+    align-items: flex-start;
+    transition: transform 0.3s ease;
+    transform: translateX(calc(-100% + 28px));
+  }
+  #adminPanel.open {
+    transform: translateX(0);
+  }
+  #adminHoverZone {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 60px;
+    height: 60px;
+    z-index: 9998;
+  }
+  #adminTab {
+    background: rgba(255,255,255,0.1);
+    border-right: 1px solid rgba(255,255,255,0.15);
+    border-radius: 0 8px 8px 0;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    padding: 4px 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    cursor: pointer;
+    user-select: none;
+    flex-shrink: 0;
+    line-height: 1;
+    align-self: flex-start;
+    margin-top: 20px;
+  }
+  #adminBody {
+    background: rgba(15,15,26,0.95);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-left: none;
+    padding: 20px;
+    width: 280px;
+    height: 100vh;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  #adminBody h3 {
+    margin: 0 0 16px 0;
+    font-size: 1em;
+    color: #ccc;
+  }
+  #adminBody button {
+    display: block;
+    width: 100%;
+    margin-bottom: 8px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #e0e0e0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.9em;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+  }
+  #adminBody button:hover {
+    background: rgba(255,255,255,0.15);
+    transform: translateY(-1px);
+  }
+  #loadSaveOverlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7);
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  #loadSaveOverlay.visible { display: flex; }
+  #loadSaveModal {
+    background: rgba(15,15,26,0.98);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 20px;
+    width: 500px;
+    max-width: 90vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+  #loadSaveModalHeader {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  #loadSaveModalHeader h3 {
+    margin: 0;
+    font-size: 1.1em;
+    color: #ccc;
+    flex: 1;
+    text-align: left;
+  }
+  #loadSaveCloseBtn {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #e0e0e0;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  #loadSaveCloseBtn:hover { background: rgba(255,255,255,0.15); }
+  #loadSaveTextarea {
+    flex: 1;
+    width: 100%;
+    min-height: 300px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #e0e0e0;
+    padding: 12px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 0.85em;
+    resize: none;
+    outline: none;
+  }
+  #loadSaveTextarea:focus { border-color: #ffd93d; }
+  #loadSaveModalFooter {
+    display: flex;
+    justify-content: center;
+    margin-top: 16px;
+  }
+  #loadSaveSubmitBtn {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a5a);
+    border: none;
+    color: #fff;
+    padding: 10px 28px;
+    border-radius: 8px;
+    font-size: 0.95em;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  #loadSaveSubmitBtn:hover { box-shadow: 0 4px 16px rgba(255,107,107,0.35); transform: translateY(-1px); }
+</style>
+
+<canvas id="starfield"></canvas>
+
+<div id="adminHoverZone"></div>
+<div id="adminPanel">
+  <div id="adminBody">
+    <h3>⚙️ Admin Panel</h3>
+    <button id="randomBtn" onclick="randomize()">🎲 Randomize</button>
+    <button id="resetBtn" onclick="resetBattle()">Force Quit Battle</button>
+    <button id="exportSaveBtn" onclick="exportSave()">💾 Export Save</button>
+    <button id="loadSaveBtn" onclick="openLoadSave()">📥 Load Save</button>
+  </div>
+  <div id="adminTab">Admin</div>
+</div>
+
+<div id="loadSaveOverlay">
+  <div id="loadSaveModal">
+    <div id="loadSaveModalHeader">
+      <h3>Paste Save Data</h3>
+      <button id="loadSaveCloseBtn" onclick="closeLoadSave()">✕</button>
+    </div>
+    <textarea id="loadSaveTextarea" placeholder="Paste exported save data here..."></textarea>
+    <div id="loadSaveModalFooter">
+      <button id="loadSaveSubmitBtn" onclick="loadSave()">Load Save</button>
+    </div>
+  </div>
+</div>
+
+<h1>⚔️ Battle Simulator</h1>
+<p class="subtitle">Set stats &amp; types, then battle!</p>
+
+<datalist id="typeOptions">
+  <option value="Fire">
+  <option value="Water">
+  <option value="Grass">
+  <option value="Electric">
+  <option value="Ice">
+  <option value="Rock">
+  <option value="Ground">
+  <option value="Flying">
+  <option value="Steel">
+  <option value="Psychic">
+  <option value="Dark">
+  <option value="Normal">
+  <option value="Ghost">
+  <option value="Fighting">
+  <option value="Poison">
+  <option value="Bug">
+  <option value="Dragon">
+  <option value="Fairy">
+</datalist>
+
+<div class="type-matchup" id="matchupEl"></div>
+
+<div class="paste-bar">
+  <input type="text" id="pasteInput" placeholder='Paste Stats: Name  Type1  Type2  HP  Atk  Def  Spd  CatchRate'>
+  <button onclick="pasteToRosterOrStorage()">→ Roster</button>
+  <button onclick="applyPaste(2)">→ Wild</button>
+  <div class="paste-help">?<div class="tooltip"><b>Paste Format:</b><br>Name → Type1 → Type2 → HP → Atk → Def → Speed → (optional) Catch Rate → (optional) Current HP<br><br><b>Important:</b> Values must be separated by <b>Tabs</b>, not spaces. You can copy stats directly from a spreadsheet or from the Copy buttons.<br><br><b>→ Roster:</b> Adds the fighter to your roster (or storage if roster is full).<br><b>→ Wild:</b> Loads the fighter as the wild opponent.<br><br><b>HP format:</b> You can paste either max HP (e.g. 78) or current/max (e.g. 45/78) for the HP field.</div></div>
+</div>
+
+<div class="arena">
+  <div class="fighter-card f1" id="card1">
+    <button class="copy-stats-btn" onclick="copyStats(1)">📋</button>
+    <input class="fighter-name" id="name1Input" value="Fighter 1" maxlength="20">
+    <div class="stat-grid">
+      <label><span class="stat-label-text">HP</span><button class="stat-btn" onclick="stepStat('hp1Input',-1,1,null)">−</button><input type="number" id="hp1Input" value="100" min="1"><button class="stat-btn" onclick="stepStat('hp1Input',1,1,null)">+</button></label>
+      <label><span class="stat-label-text">Atk</span><button class="stat-btn" onclick="stepStat('atk1Input',-1,0,null)">−</button><input type="number" id="atk1Input" value="10" min="0"><button class="stat-btn" onclick="stepStat('atk1Input',1,0,null)">+</button></label>
+      <label><span class="stat-label-text">Def</span><button class="stat-btn" onclick="stepStat('def1Input',-1,1,null)">−</button><input type="number" id="def1Input" value="10" min="1"><button class="stat-btn" onclick="stepStat('def1Input',1,1,null)">+</button></label>
+      <label><span class="stat-label-text">Spd</span><button class="stat-btn" onclick="stepStat('spd1Input',-1,0,null)">−</button><input type="number" id="spd1Input" value="20" min="0"><button class="stat-btn" onclick="stepStat('spd1Input',1,0,null)">+</button></label>
+      <label style="visibility:hidden;"><span class="stat-label-text">Catch</span><button class="stat-btn">−</button><input type="number"><button class="stat-btn">+</button></label>
+    </div>
+    <div class="type-row">
+      <input list="typeOptions" id="t1aInput" value="Fire" placeholder="Type 1">
+      <input list="typeOptions" id="t1bInput" value="" placeholder="Type 2">
+    </div>
+    <div class="hp-bar-container">
+      <div class="hp-bar" id="hp1BarEl"></div>
+      <span class="hp-text" id="hp1TextEl">100 / 100</span>
+    </div>
+    <div class="ko-overlay" id="ko1El">K.O.</div>
+  </div>
+
+  <div class="vs-badge">⚔️</div>
+
+  <div class="fighter-card f2" id="card2">
+    <button class="copy-stats-btn" onclick="copyStats(2)">📋</button>
+    <input class="fighter-name" id="name2Input" value="Fighter 2" maxlength="20">
+    <div class="stat-grid">
+      <label><span class="stat-label-text">HP</span><button class="stat-btn" onclick="stepStat('hp2Input',-1,1,null)">−</button><input type="number" id="hp2Input" value="100" min="1"><button class="stat-btn" onclick="stepStat('hp2Input',1,1,null)">+</button></label>
+      <label><span class="stat-label-text">Atk</span><button class="stat-btn" onclick="stepStat('atk2Input',-1,0,null)">−</button><input type="number" id="atk2Input" value="10" min="0"><button class="stat-btn" onclick="stepStat('atk2Input',1,0,null)">+</button></label>
+      <label><span class="stat-label-text">Def</span><button class="stat-btn" onclick="stepStat('def2Input',-1,1,null)">−</button><input type="number" id="def2Input" value="10" min="1"><button class="stat-btn" onclick="stepStat('def2Input',1,1,null)">+</button></label>
+      <label><span class="stat-label-text">Spd</span><button class="stat-btn" onclick="stepStat('spd2Input',-1,0,null)">−</button><input type="number" id="spd2Input" value="20" min="0"><button class="stat-btn" onclick="stepStat('spd2Input',1,0,null)">+</button></label>
+      <label><span class="stat-label-text">Catch</span><button class="stat-btn" onclick="stepStat('catch2Input',-1,0,255)">−</button><input type="number" id="catch2Input" value="255" min="0" max="255"><button class="stat-btn" onclick="stepStat('catch2Input',1,0,255)">+</button></label>
+    </div>
+    <div class="type-row">
+      <input list="typeOptions" id="t2aInput" value="Water" placeholder="Type 1">
+      <input list="typeOptions" id="t2bInput" value="" placeholder="Type 2">
+    </div>
+    <div class="hp-bar-container">
+      <div class="hp-bar" id="hp2BarEl"></div>
+      <span class="hp-text" id="hp2TextEl">100 / 100</span>
+    </div>
+    <div class="ko-overlay" id="ko2El">K.O.</div>
+  </div>
+</div>
+
+<div class="speed-indicator" id="speedEl"></div>
+
+<div class="controls">
+  <button class="primary" id="battleBtn" onclick="battleAction()">⚔️ Battle!</button>
+  <button id="autoBtn" onclick="toggleAuto()" disabled>▶ Auto</button>
+  <button id="catchBtn" onclick="attemptCatch()" disabled>🎯 Catch</button>
+  <button id="fleeBtn" onclick="attemptFlee()" disabled>🏃 Flee</button>
+  <label style="display:flex;align-items:center;gap:6px;font-size:0.85em;color:#aaa;">🟠 Balls <input type="number" id="ballCountInput" value="10" min="0" style="width:48px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:#fff;padding:4px 6px;text-align:right;font-size:0.9em;outline:none;"></label>
+  <button id="copyBtn" onclick="copyState()">📋 Copy Commands</button>
+</div>
+
+<div class="battle-log" id="logEl">
+  <div class="log-entry">Configure your fighters and press <b>Battle!</b> to begin.</div>
+</div>
+
+<div class="roster-section">
+  <div class="roster-header">
+    <h3>🎒 Roster</h3>
+    <button onclick="healAll()">🏥 Heal All</button>
+    <button id="copyRosterBtn" onclick="copyRoster()" style="margin-left:auto;">🎒 Copy Roster</button>
+  </div>
+  <div class="roster-grid" id="rosterGrid"></div>
+</div>
+
+<div class="storage-section">
+  <div class="storage-header" onclick="toggleStorage()">
+    <h3>📦 Storage</h3>
+    <button id="copyStorageBtn" onclick="event.stopPropagation(); copyStorage()">📦 Copy Storage</button>
+  </div>
+  <table class="storage-table" id="storageTable">
+    <thead>
+      <tr>
+        <th onclick="sortStorage('name')">Name<span class="sort-arrow" id="sortName"></span></th>
+        <th onclick="sortStorage('type')">Type<span class="sort-arrow" id="sortType"></span></th>
+        <th onclick="sortStorage('hp')">HP<span class="sort-arrow" id="sortHp"></span></th>
+        <th onclick="sortStorage('atk')">Atk<span class="sort-arrow" id="sortAtk"></span></th>
+        <th onclick="sortStorage('def')">Def<span class="sort-arrow" id="sortDef"></span></th>
+        <th onclick="sortStorage('spd')">Spd<span class="sort-arrow" id="sortSpd"></span></th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="storageBody"></tbody>
+  </table>
+  <div class="storage-empty" id="storageEmpty">Storage is empty. Send roster fighters here for safekeeping.</div>
+  <button id="storageToggleBtn" onclick="toggleStorage()">▾ collapse 📦</button>
+</div>
+
+<script>
+// ---- Type Effectiveness Chart ----
+var TYPE_CHART = {
+  Normal:   { Rock: 0.5, Steel: 0.5, Ghost: 0 },
+  Fighting: { Normal: 2, Rock: 2, Steel: 2, Ice: 2, Dark: 2, Flying: 0.5, Poison: 0.5, Bug: 0.5, Psychic: 0.5, Fairy: 0.5, Ghost: 0 },
+  Flying:   { Fighting: 2, Bug: 2, Grass: 2, Rock: 0.5, Steel: 0.5, Electric: 0.5 },
+  Poison:   { Grass: 2, Fairy: 2, Poison: 0.5, Ground: 0.5, Rock: 0.5, Ghost: 0.5, Steel: 0 },
+  Ground:   { Poison: 2, Rock: 2, Steel: 2, Fire: 2, Electric: 2, Bug: 0.5, Grass: 0.5, Flying: 0 },
+  Rock:     { Flying: 2, Bug: 2, Fire: 2, Ice: 2, Fighting: 0.5, Ground: 0.5, Steel: 0.5 },
+  Bug:      { Grass: 2, Psychic: 2, Dark: 2, Fighting: 0.5, Flying: 0.5, Poison: 0.5, Ghost: 0.5, Steel: 0.5, Fire: 0.5, Fairy: 0.5 },
+  Ghost:    { Ghost: 2, Psychic: 2, Dark: 0.5, Normal: 0 },
+  Steel:    { Rock: 2, Ice: 2, Fairy: 2, Steel: 0.5, Fire: 0.5, Water: 0.5, Electric: 0.5 },
+  Fire:     { Bug: 2, Steel: 2, Grass: 2, Ice: 2, Rock: 0.5, Fire: 0.5, Water: 0.5, Dragon: 0.5 },
+  Water:    { Ground: 2, Rock: 2, Fire: 2, Water: 0.5, Grass: 0.5, Dragon: 0.5 },
+  Grass:    { Ground: 2, Rock: 2, Water: 2, Flying: 0.5, Poison: 0.5, Bug: 0.5, Steel: 0.5, Fire: 0.5, Grass: 0.5, Dragon: 0.5 },
+  Electric: { Flying: 2, Water: 2, Grass: 0.5, Electric: 0.5, Dragon: 0.5, Ground: 0 },
+  Psychic:  { Fighting: 2, Poison: 2, Steel: 0.5, Psychic: 0.5, Dark: 0 },
+  Ice:      { Flying: 2, Ground: 2, Grass: 2, Dragon: 2, Steel: 0.5, Fire: 0.5, Water: 0.5, Ice: 0.5 },
+  Dragon:   { Dragon: 2, Steel: 0.5, Fairy: 0 },
+  Dark:     { Ghost: 2, Psychic: 2, Fighting: 0.5, Dark: 0.5, Fairy: 0.5 },
+  Fairy:    { Fighting: 2, Dragon: 2, Dark: 2, Poison: 0.5, Steel: 0.5, Fire: 0.5 }
+};
+
+var TYPE_COLORS = {
+  Normal: '#aaaa99', Fire: '#ee5522', Water: '#3399ff', Grass: '#44aa44',
+  Electric: '#ffcc22', Ice: '#66ccff', Rock: '#aa8855', Ground: '#ddbb66',
+  Flying: '#8899ff', Steel: '#aabbcc', Psychic: '#ff4488', Dark: '#665577',
+  Ghost: '#8866bb', Dragon: '#9966cc', Fighting: '#cc4422', Poison: '#aa44aa',
+  Bug: '#aabb22', Fairy: '#ee99cc'
+};
+
+var BASE_POWER = 12;
+var MAX_ROUNDS = 200;
+var battleState = null;
+var autoRunning = false;
+var stopAuto = false;
+var ballCount = 10;
+var fighter1CurHp = null;
+
+function getBallCount() { return Math.max(0, parseInt(document.getElementById('ballCountInput').value) || 0); }
+
+function updateControls() {
+  var inBattle = battleState && !battleState.over;
+  var fainted = inBattle && battleState.fainted;
+  var busy = autoRunning || (battleState && battleState.busy);
+  ballCount = getBallCount();
+  document.getElementById('ballCountInput').disabled = inBattle;
+  var battleBtn = document.getElementById('battleBtn');
+  battleBtn.disabled = busy || (inBattle && fainted);
+  battleBtn.textContent = inBattle ? '⚔️ Attack!' : '⚔️ Battle!';
+  battleBtn.classList.add('primary');
+  document.getElementById('autoBtn').disabled = (!inBattle || busy || fainted) && !autoRunning;
+  document.getElementById('autoBtn').textContent = autoRunning ? '⏹ Stop' : '▶ Auto';
+  var catchRate = battleState && battleState.f2 ? battleState.f2.catchRate : 255;
+  document.getElementById('catchBtn').disabled = !inBattle || busy || fainted || ballCount <= 0 || catchRate <= 0;
+  document.getElementById('fleeBtn').disabled = !inBattle || busy || (fainted && battleState.fleeFailed);
+  document.getElementById('randomBtn').disabled = inBattle || busy;
+  document.getElementById('resetBtn').disabled = false;
+}
+
+// ---- Helpers ----
+function sleep(ms) { return new Promise(function(r){ setTimeout(r, ms); }); }
+
+function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : ''; }
+
+function stepStat(id, delta, minVal, maxVal) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var v = parseInt(el.value) || 0;
+  v += delta;
+  if (minVal !== null && minVal !== undefined && v < minVal) v = minVal;
+  if (maxVal !== null && maxVal !== undefined && v > maxVal) v = maxVal;
+  el.value = v;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function flashPasteHelp() {
+  var help = document.querySelector('.paste-help');
+  help.classList.add('flash');
+  setTimeout(function() { help.classList.remove('flash'); }, 2000);
+}
+
+function applyPaste(side) {
+  if (battleState && !battleState.over) return;
+  var raw = document.getElementById('pasteInput').value.trim();
+  if (!raw) return;
+  var tabParts = raw.split(/\t/).map(function(s){ return s.trim(); });
+  var parts;
+  if (tabParts.length >= 7) {
+    parts = tabParts;
+  } else {
+    parts = tabParts.filter(function(s){ return s; });
+    if (parts.length >= 7 && tabParts.length >= 3 && tabParts[2] === '') {
+      parts.splice(2, 0, '');
+    }
+  }
+  if (parts.length < 7) { flashPasteHelp(); return; }
+  var name, t1, t2, hp, atk, def, spd, catchRate;
+  catchRate = null;
+  name = parts[0]; t1 = cap(parts[1]); t2 = cap(parts[2]);
+  hp = parts[3]; atk = parts[4]; def = parts[5]; spd = parts[6];
+  if (parts.length >= 8) catchRate = parts[7];
+  var hpSlash = hp.split('/');
+  var maxHp = parseInt(hpSlash[hpSlash.length - 1]) || 1;
+  var curHp = hpSlash.length > 1 ? (parseInt(hpSlash[0]) || 0) : maxHp;
+  document.getElementById('name' + side + 'Input').value = name;
+  document.getElementById('t' + side + 'aInput').value = t1;
+  document.getElementById('t' + side + 'bInput').value = t2;
+  document.getElementById('hp' + side + 'Input').value = maxHp;
+  document.getElementById('atk' + side + 'Input').value = atk;
+  document.getElementById('def' + side + 'Input').value = def;
+  document.getElementById('spd' + side + 'Input').value = spd;
+  if (side === 2 && catchRate !== null) document.getElementById('catch2Input').value = catchRate;
+  if (side === 1) fighter1CurHp = Math.min(curHp, maxHp);
+  document.getElementById('pasteInput').value = '';
+  resetBars();
+  saveState();
+}
+
+function pasteToRosterOrStorage() {
+  if (battleState && !battleState.over) return;
+  var raw = document.getElementById('pasteInput').value.trim();
+  if (!raw) return;
+  var tabParts = raw.split(/\t/).map(function(s){ return s.trim(); });
+  var parts;
+  if (tabParts.length >= 7) {
+    parts = tabParts;
+  } else {
+    parts = tabParts.filter(function(s){ return s; });
+    if (parts.length >= 7 && tabParts.length >= 3 && tabParts[2] === '') {
+      parts.splice(2, 0, '');
+    }
+  }
+  if (parts.length < 7) { flashPasteHelp(); return; }
+  var name, t1, t2, hp, atk, def, spd, catchRate;
+  catchRate = null;
+  name = parts[0]; t1 = cap(parts[1]); t2 = cap(parts[2]);
+  hp = parts[3]; atk = parts[4]; def = parts[5]; spd = parts[6];
+  if (parts.length >= 8) catchRate = parts[7];
+  var hpSlash = hp.split('/');
+  var maxHp = parseInt(hpSlash[hpSlash.length - 1]) || 1;
+  var curHp = hpSlash.length > 1 ? (parseInt(hpSlash[0]) || 0) : maxHp;
+  var fighter = {
+    name: name, t1: t1, t2: t2 || '', hp: maxHp,
+    curHp: Math.min(curHp, maxHp),
+    atk: parseInt(atk) || 0, def: Math.max(1, parseInt(def) || 1),
+    spd: parseInt(spd) || 0,
+    catchRate: catchRate !== null ? (parseInt(catchRate) || 0) : null
+  };
+  var slot = -1;
+  for (var i = 0; i < MAX_ROSTER; i++) {
+    if (!roster[i]) { slot = i; break; }
+  }
+  if (slot >= 0) {
+    roster[slot] = fighter;
+    saveRoster();
+    renderRoster();
+  } else {
+    delete fighter.catchRate;
+    storage.push(fighter);
+    saveStorage();
+    renderStorage();
+  }
+  document.getElementById('pasteInput').value = '';
+}
+
+function getTypes(side) {
+  var a = cap(document.getElementById('t' + side + 'aInput').value.trim());
+  var b = cap(document.getElementById('t' + side + 'bInput').value.trim());
+  return [a, b].filter(function(t){ return t; });
+}
+
+function getTypeMultiplier(atkTypes, defTypes) {
+  if (!atkTypes.length) return 1;
+  var best = 0;
+  for (var i = 0; i < atkTypes.length; i++) {
+    var mult = 1;
+    for (var j = 0; j < defTypes.length; j++) {
+      var m = TYPE_CHART[atkTypes[i]] && TYPE_CHART[atkTypes[i]][defTypes[j]];
+      if (m !== undefined) mult *= m;
+    }
+    if (mult > best) best = mult;
+  }
+  return best;
+}
+
+function getFighter(side) {
+  return {
+    side: side,
+    name: document.getElementById('name' + side + 'Input').value.trim() || ('Fighter ' + side),
+    hp: parseInt(document.getElementById('hp' + side + 'Input').value) || 1,
+    maxHp: parseInt(document.getElementById('hp' + side + 'Input').value) || 1,
+    atk: Math.max(0, parseInt(document.getElementById('atk' + side + 'Input').value) || 0),
+    def: Math.max(1, parseInt(document.getElementById('def' + side + 'Input').value) || 1),
+    spd: Math.max(0, parseInt(document.getElementById('spd' + side + 'Input').value) || 0),
+    types: getTypes(side),
+    catchRate: side === 2 ? Math.max(0, Math.min(255, parseInt(document.getElementById('catch2Input').value) || 0)) : 0
+  };
+}
+
+function calcDamage(attacker, defender) {
+  if (!attacker.types.length) return { dmg: 0, typeMult: 0, usedType: '' };
+  var best = { mult: 0, type: attacker.types[0] };
+  for (var i = 0; i < attacker.types.length; i++) {
+    var mult = 1;
+    for (var j = 0; j < defender.types.length; j++) {
+      var m = TYPE_CHART[attacker.types[i]] && TYPE_CHART[attacker.types[i]][defender.types[j]];
+      if (m !== undefined) mult *= m;
+    }
+    if (mult > best.mult) best = { mult: mult, type: attacker.types[i] };
+  }
+  if (best.mult === 0) return { dmg: 0, typeMult: 0, usedType: best.type };
+  var rand = 0.85 + Math.random() * 0.15;
+  var dmg = Math.max(1, Math.floor((attacker.atk * BASE_POWER / defender.def) * best.mult * rand));
+  return { dmg: dmg, typeMult: best.mult, usedType: best.type };
+}
+
+function effLabel(mult) {
+  if (mult === 0) return { text: 'It had no effect!', cls: 'immune' };
+  if (mult >= 4) return { text: 'It\'s outrageously effective!', cls: 'super' };
+  if (mult >= 2) return { text: 'It\'s super effective!', cls: 'super' };
+  if (mult <= 0.25) return { text: 'It\'s barely effective...', cls: 'weak' };
+  if (mult <= 0.5) return { text: 'It\'s not very effective...', cls: 'weak' };
+  return { text: '', cls: '' };
+}
+
+function updateHpBar(side, hp, maxHp) {
+  var bar = document.getElementById('hp' + side + 'BarEl');
+  var txt = document.getElementById('hp' + side + 'TextEl');
+  var pct = Math.max(0, (hp / maxHp) * 100);
+  bar.style.width = pct + '%';
+  txt.textContent = Math.max(0, Math.ceil(hp)) + ' / ' + maxHp;
+  bar.classList.remove('mid', 'low');
+  if (pct <= 25) bar.classList.add('low');
+  else if (pct <= 50) bar.classList.add('mid');
+}
+
+function flashCard(side) {
+  var card = document.getElementById('card' + side);
+  card.classList.remove('flash');
+  void card.offsetWidth;
+  card.classList.add('flash');
+}
+
+function showKo(side) {
+  document.getElementById('ko' + side + 'El').classList.add('show');
+  document.getElementById('card' + side).classList.add('ko');
+}
+
+function clearKo() {
+  document.getElementById('ko1El').classList.remove('show');
+  document.getElementById('ko2El').classList.remove('show');
+  document.getElementById('card1').classList.remove('ko');
+  document.getElementById('card2').classList.remove('ko');
+}
+
+function log(html, cls) {
+  var div = document.createElement('div');
+  div.className = 'log-entry' + (cls ? ' ' + cls : '');
+  div.innerHTML = html;
+  var el = document.getElementById('logEl');
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('logEl').innerHTML = '';
+}
+
+
+
+function updateMatchup() {
+  var f1 = getFighter(1);
+  var f2 = getFighter(2);
+  var m1 = getTypeMultiplier(f1.types, f2.types);
+  var m2 = getTypeMultiplier(f2.types, f1.types);
+  var el = document.getElementById('matchupEl');
+  function multClass(m) { return m > 1 ? 'high' : (m < 1 ? 'low' : 'normal'); }
+  function multText(m) {
+    if (m === 0) return '0×';
+    if (m === 0.25) return '0.25×';
+    if (m === 0.5) return '0.5×';
+    if (m === 1) return '1×';
+    if (m === 2) return '2×';
+    if (m === 4) return '4×';
+    return m + '×';
+  }
+  el.innerHTML = '<b>' + f1.name + '</b> → <span class="mult ' + multClass(m1) + '">' + multText(m1) + '</span>' +
+    ' &nbsp;|&nbsp; <b>' + f2.name + '</b> → <span class="mult ' + multClass(m2) + '">' + multText(m2) + '</span>';
+}
+
+function updateSpeedDisplay(f1, f2) {
+  var el = document.getElementById('speedEl');
+  if (f1.spd > f2.spd) el.textContent = '⚡ ' + f1.name + ' attacks first (Speed ' + f1.spd + ' vs ' + f2.spd + ')';
+  else if (f2.spd > f1.spd) el.textContent = '⚡ ' + f2.name + ' attacks first (Speed ' + f2.spd + ' vs ' + f1.spd + ')';
+  else el.textContent = '⚡ Equal speed — coin flip each round!';
+}
+
+// ---- Battle Logic ----
+function battleAction() {
+  if (battleState && !battleState.over) {
+    nextTurn();
+  } else {
+    startBattle();
+  }
+}
+
+function startBattle() {
+  if (battleState) return;
+  clearLog();
+  clearKo();
+
+  var f1 = getFighter(1);
+  var f2 = getFighter(2);
+  f1.hp = fighter1CurHp !== null ? Math.min(fighter1CurHp, f1.maxHp) : f1.maxHp;
+  f2.hp = f2.maxHp;
+  updateHpBar(1, f1.hp, f1.maxHp);
+  updateHpBar(2, f2.hp, f2.maxHp);
+  updateSpeedDisplay(f1, f2);
+
+  log('🔥 <b>' + f1.name + '</b> (' + f1.types.join('/') + ', ' + f1.maxHp + ' HP) vs <b>' + f2.name + '</b> (' + f2.types.join('/') + ', ' + f2.maxHp + ' HP) — FIGHT!');
+
+  var m1 = getTypeMultiplier(f1.types, f2.types);
+  var m2 = getTypeMultiplier(f2.types, f1.types);
+  if (m1 === 0 && m2 === 0) {
+    log('🛡️ Neither fighter can hurt the other — it\'s a stalemate!', 'draw');
+    battleState = { f1: f1, f2: f2, round: 0, over: true, busy: false };
+    updateControls();
+    return;
+  }
+
+  battleState = { f1: f1, f2: f2, round: 0, over: false, busy: false, fleeAttempts: 0 };
+  log('Press <b>Next Turn</b> to advance, or <b>Auto</b> to simulate the rest.', '');
+  updateControls();
+}
+
+async function executeTurn() {
+  if (!battleState || battleState.over) return;
+  battleState.busy = true;
+  updateControls();
+
+  var f1 = battleState.f1, f2 = battleState.f2;
+  battleState.round++;
+  var round = battleState.round;
+
+  var f1First;
+  if (f1.spd > f2.spd) f1First = true;
+  else if (f2.spd > f1.spd) f1First = false;
+  else f1First = Math.random() < 0.5;
+
+  log('— Round ' + round + ' —', 'round-header');
+  await sleep(400);
+
+  var order = f1First ? [[f1, f2, 2], [f2, f1, 1]] : [[f2, f1, 1], [f1, f2, 2]];
+
+  for (var i = 0; i < 2; i++) {
+    var attacker = order[i][0];
+    var defender = order[i][1];
+    var defSide = order[i][2];
+
+    if (defender.hp <= 0) break;
+    if (attacker.hp <= 0) break;
+
+    var res = calcDamage(attacker, defender);
+    defender.hp -= res.dmg;
+    var eff = effLabel(res.typeMult);
+
+    var msg = attacker.name + ' uses <b>' + res.usedType + '</b> for <b>' + res.dmg + '</b> damage';
+    if (eff.text) msg += ' <span class="eff ' + eff.cls + '">(' + eff.text + ')</span>';
+    log(msg);
+
+    flashCard(defSide);
+    updateHpBar(defSide, defender.hp, defender.maxHp);
+    await sleep(450);
+
+    if (defender.hp <= 0) {
+      defender.hp = 0;
+      updateHpBar(defSide, 0, defender.maxHp);
+      showKo(defSide);
+      log('💥 <b>' + defender.name + '</b> has been knocked out!', '');
+      break;
+    }
+  }
+
+  if (f1.hp <= 0 || f2.hp <= 0) {
+    if (f1.hp <= 0 && f2.hp <= 0) {
+      battleState.over = true;
+      log('🤝 Double KO — It\'s a draw!', 'draw');
+    } else if (f1.hp <= 0) {
+      battleState.fainted = true;
+      battleState.faintedSpeed = f1.spd;
+      battleState.fleeFailed = false;
+      log('💀 <b>' + f1.name + '</b> has fainted! Send out another fighter or flee.', '');
+    } else {
+      battleState.over = true;
+      log('🏆 <b>' + f1.name + '</b> wins after ' + round + ' rounds!', 'win');
+    }
+  } else if (round >= MAX_ROUNDS) {
+    battleState.over = true;
+    log('⏱️ After ' + MAX_ROUNDS + ' rounds, it\'s a draw!', 'draw');
+  }
+
+  battleState.busy = false;
+  if (battleState.f1) fighter1CurHp = battleState.f1.hp;
+  saveState();
+  updateControls();
+}
+
+async function nextTurn() {
+  if (!battleState || battleState.over || autoRunning) return;
+  await executeTurn();
+}
+
+function toggleAuto() {
+  if (autoRunning) {
+    stopAuto = true;
+  } else {
+    autoBattle();
+  }
+}
+
+async function autoBattle() {
+  if (!battleState || battleState.over || autoRunning) return;
+  autoRunning = true;
+  stopAuto = false;
+  updateControls();
+  while (!battleState.over && !stopAuto) {
+    await executeTurn();
+    if (battleState.fainted && !battleState.over) {
+      var nextSlot = -1;
+      for (var i = 0; i < MAX_ROSTER; i++) {
+        if (roster[i]) {
+          var hp = roster[i].curHp !== undefined ? roster[i].curHp : roster[i].hp;
+          if (hp > 0) { nextSlot = i; break; }
+        }
+      }
+      if (nextSlot < 0) {
+        battleState.over = true;
+        log('🏳️ <b>' + battleState.f1.name + '</b> has fainted and no roster fighters remain. You lose!', 'draw');
+        break;
+      }
+      battleState.busy = true;
+      battleState._wasFainted = true;
+      battleState._autoSwap = true;
+      autoRunning = false;
+      await loadFromRoster(nextSlot);
+      autoRunning = true;
+      battleState._autoSwap = false;
+      if (battleState.over) break;
+    }
+  }
+  autoRunning = false;
+  updateControls();
+}
+
+async function attemptCatch() {
+  if (!battleState || battleState.over || autoRunning || battleState.busy) return;
+  if (ballCount <= 0) return;
+  ballCount--;
+  document.getElementById('ballCountInput').value = ballCount;
+  battleState.busy = true;
+  updateControls();
+
+  var f1 = battleState.f1, f2 = battleState.f2;
+  var hpMax = f2.maxHp;
+  var hpCur = Math.max(0, f2.hp);
+  var rate = f2.catchRate;
+  var threshold = ((3 * hpMax - 2 * hpCur) / (3 * hpMax)) * rate;
+  var roll = Math.floor(Math.random() * 255) + 1;
+
+  log('🎯 <b>' + f1.name + '</b> throws a catch at <b>' + f2.name + '</b>! (Threshold: ' + threshold.toFixed(1) + ', Roll: ' + roll + ')');
+
+  await sleep(600);
+
+  if (roll < threshold) {
+    showKo(2);
+    log('✨ <b>' + f2.name + '</b> was caught!', 'win');
+    var slot = -1;
+    for (var i = 0; i < MAX_ROSTER; i++) {
+      if (!roster[i]) { slot = i; break; }
+    }
+    if (slot >= 0) {
+      roster[slot] = { name: f2.name, t1: f2.types[0] || '', t2: f2.types[1] || '', hp: f2.maxHp, curHp: Math.max(0, Math.ceil(f2.hp)), atk: f2.atk, def: f2.def, spd: f2.spd, catchRate: f2.catchRate };
+      saveRoster();
+      renderRoster();
+      log('🎒 <b>' + f2.name + '</b> was added to your roster (Slot ' + (slot + 1) + ')!', '');
+    } else {
+      storage.push({ name: f2.name, t1: f2.types[0] || '', t2: f2.types[1] || '', hp: f2.maxHp, curHp: Math.max(0, Math.ceil(f2.hp)), atk: f2.atk, def: f2.def, spd: f2.spd, catchRate: f2.catchRate });
+      saveStorage();
+      renderStorage();
+      log('📦 <b>' + f2.name + '</b> was added to storage (roster is full)!', '');
+    }
+    battleState.over = true;
+  } else {
+    log('💨 <b>' + f2.name + '</b> broke free!', '');
+    await sleep(400);
+    if (f1.hp > 0 && f2.hp > 0) {
+      var res = calcDamage(f2, f1);
+      f1.hp -= res.dmg;
+      var eff = effLabel(res.typeMult);
+      var msg = f2.name + ' uses <b>' + res.usedType + '</b> for <b>' + res.dmg + '</b> damage';
+      if (eff.text) msg += ' <span class="eff ' + eff.cls + '">(' + eff.text + ')</span>';
+      log(msg);
+      flashCard(1);
+      updateHpBar(1, f1.hp, f1.maxHp);
+      await sleep(450);
+      if (f1.hp <= 0) {
+        f1.hp = 0;
+        updateHpBar(1, 0, f1.maxHp);
+        showKo(1);
+        log('💥 <b>' + f1.name + '</b> has been knocked out!', '');
+        battleState.fainted = true;
+        battleState.faintedSpeed = f1.spd;
+        battleState.fleeFailed = false;
+        log('💀 <b>' + f1.name + '</b> has fainted! Send out another fighter or flee.', '');
+      }
+    }
+  }
+
+  battleState.busy = false;
+  if (battleState.f1) fighter1CurHp = battleState.f1.hp;
+  saveState();
+  updateControls();
+}
+
+async function attemptFlee() {
+  if (!battleState || battleState.over || autoRunning || battleState.busy) return;
+  battleState.busy = true;
+  updateControls();
+
+  var f1 = battleState.f1, f2 = battleState.f2;
+  var fainted = battleState.fainted;
+  var fleeSpd = fainted ? battleState.faintedSpeed : f1.spd;
+  battleState.fleeAttempts++;
+  var attempt = battleState.fleeAttempts;
+
+  if (fleeSpd >= f2.spd) {
+    log('🏃 <b>' + f1.name + '</b> is faster and flees the battle!', 'draw');
+    battleState.over = true;
+    battleState.busy = false;
+    updateControls();
+    return;
+  }
+
+  var spdWild = f2.spd / 4;
+  var oddsEscape = spdWild > 0 ? (fleeSpd * 32) / spdWild + 30 * attempt : 256;
+  var roll = Math.floor(Math.random() * 256);
+
+  log('🏃 <b>' + f1.name + '</b> tries to flee! (Odds: ' + oddsEscape.toFixed(1) + ', Roll: ' + roll + ')');
+  await sleep(600);
+
+  if (roll < oddsEscape) {
+    log('💨 <b>' + f1.name + '</b> fled the battle!', 'draw');
+    battleState.over = true;
+  } else {
+    log('🚫 <b>' + f1.name + '</b> couldn\'t escape!', '');
+    if (fainted) {
+      battleState.fleeFailed = true;
+      log('💀 <b>' + f1.name + '</b> must send out another fighter!', '');
+    } else {
+      await sleep(400);
+      if (f1.hp > 0 && f2.hp > 0) {
+        var res = calcDamage(f2, f1);
+        f1.hp -= res.dmg;
+        var eff = effLabel(res.typeMult);
+        var msg = f2.name + ' uses <b>' + res.usedType + '</b> for <b>' + res.dmg + '</b> damage';
+        if (eff.text) msg += ' <span class="eff ' + eff.cls + '">(' + eff.text + ')</span>';
+        log(msg);
+        flashCard(1);
+        updateHpBar(1, f1.hp, f1.maxHp);
+        await sleep(450);
+        if (f1.hp <= 0) {
+          f1.hp = 0;
+          updateHpBar(1, 0, f1.maxHp);
+          showKo(1);
+          log('💥 <b>' + f1.name + '</b> has been knocked out!', '');
+          battleState.fainted = true;
+          battleState.faintedSpeed = f1.spd;
+          battleState.fleeFailed = false;
+          log('💀 <b>' + f1.name + '</b> has fainted! Send out another fighter or flee.', '');
+        }
+      }
+    }
+  }
+
+  battleState.busy = false;
+  if (battleState.f1) fighter1CurHp = battleState.f1.hp;
+  saveState();
+  updateControls();
+}
+
+function copyStats(side) {
+  var name = document.getElementById('name' + side + 'Input').value;
+  var t1 = document.getElementById('t' + side + 'aInput').value;
+  var t2 = document.getElementById('t' + side + 'bInput').value;
+  var maxHp = document.getElementById('hp' + side + 'Input').value;
+  var atk = document.getElementById('atk' + side + 'Input').value;
+  var def = document.getElementById('def' + side + 'Input').value;
+  var spd = document.getElementById('spd' + side + 'Input').value;
+  var curHp;
+  if (side === 1) {
+    curHp = fighter1CurHp !== null ? fighter1CurHp : parseInt(maxHp) || 1;
+  } else {
+    curHp = battleState && battleState.f2 ? Math.max(0, Math.ceil(battleState.f2.hp)) : parseInt(maxHp) || 1;
+  }
+  var hpField = curHp + '/' + maxHp;
+  var text = name + '\t' + t1 + '\t' + t2 + '\t' + hpField + '\t' + atk + '\t' + def + '\t' + spd;
+  if (side === 2) text += '\t' + document.getElementById('catch2Input').value;
+  navigator.clipboard.writeText(text).then(function() {
+    var btns = document.querySelectorAll('.copy-stats-btn');
+    var btn = btns[side - 1];
+    var orig = btn.textContent;
+    btn.textContent = '✅';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  }).catch(function() {});
+}
+
+function copyState() {
+  if (!battleState || !battleState.f1 || !battleState.f2) return;
+  var f1 = battleState.f1, f2 = battleState.f2;
+  var logEntries = [...document.getElementById('logEl').children];
+  var roundIdx = -1;
+  for (var i = logEntries.length - 1; i >= 0; i--) {
+    if (logEntries[i].classList.contains('round-header')) { roundIdx = i; break; }
+  }
+  var roundLogs = [];
+  if (roundIdx >= 0) {
+    for (var j = roundIdx; j < logEntries.length; j++) {
+      var text = logEntries[j].textContent.trim();
+      if (text) roundLogs.push(text);
+    }
+  }
+
+  var balls = getBallCount();
+  var lines = roundLogs.length ? roundLogs : ['(No rounds yet)'];
+  lines.push('');
+  lines.push('Player: ' + f1.name + ' ' + Math.round(Math.max(0, f1.hp) / f1.maxHp * 100) + '% HP');
+  lines.push('Enemy: ' + f2.name + ' ' + Math.round(Math.max(0, f2.hp) / f2.maxHp * 100) + '% HP');
+  lines.push('');
+  lines.push('Options:');
+  lines.push('- Attack');
+  if (f2.catchRate <= 0) {
+    lines.push('- Catch (You cannot catch this Pokemon)');
+  } else {
+    lines.push('- Catch (You have ' + balls + ' Balls)');
+  }
+  var aliveRoster = roster.filter(function(s) { return s && (s.curHp !== undefined ? s.curHp : s.hp) > 0; }).length;
+  lines.push('- Switch (' + aliveRoster + ' fighters available)');
+  lines.push('- Flee');
+
+  var text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = document.getElementById('copyBtn');
+    var orig = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  }).catch(function() {});
+}
+
+function copyRoster() {
+  function typeStr(t1, t2) {
+    return [t1, t2].filter(function(t){ return t; }).join('/') || '???';
+  }
+  function hpStr(curHp, maxHp) {
+    if (curHp <= 0) return 'Fainted';
+    return curHp + '/' + maxHp + ' HP';
+  }
+  var lines = [];
+  var f1 = getFighter(1);
+  var f1Cur = fighter1CurHp !== null ? fighter1CurHp : f1.maxHp;
+  lines.push('Currently Out: ' + f1.name + ' ' + typeStr(f1.types[0], f1.types[1]) + ' ' + hpStr(f1Cur, f1.maxHp));
+  if (battleState && battleState.f2) {
+    var f2 = battleState.f2;
+    lines.push('Enemy: ' + f2.name + ' ' + typeStr(f2.types[0], f2.types[1]) + ' ' + hpStr(Math.max(0, Math.ceil(f2.hp)), f2.maxHp));
+  } else {
+    lines.push('Enemy: (Not in battle)');
+  }
+  lines.push('Roster:');
+  for (var i = 0; i < MAX_ROSTER; i++) {
+    var s = roster[i];
+    if (!s) {
+      lines.push('- Empty');
+    } else {
+      var curHp = s.curHp !== undefined ? s.curHp : s.hp;
+      lines.push('- ' + s.name + ' ' + typeStr(s.t1, s.t2) + ' ' + hpStr(curHp, s.hp));
+    }
+  }
+  lines.push('- Cancel Swap');
+  var text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = document.getElementById('copyRosterBtn');
+    var orig = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  }).catch(function() {});
+}
+
+function copyStorage() {
+  var lines = ['Storage:'];
+  for (var i = 0; i < storage.length; i++) {
+    var s = storage[i];
+    if (!s) continue;
+    var curHp = s.curHp !== undefined ? s.curHp : s.hp;
+    if (curHp <= 0) {
+      lines.push('- ' + s.name + ' (Fainted)');
+    } else {
+      lines.push('- ' + s.name + ' ' + curHp + ' HP');
+    }
+  }
+  var text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = document.getElementById('copyStorageBtn');
+    var orig = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  }).catch(function() {});
+}
+
+function randomize() {
+  if (battleState && !battleState.over) return;
+  var types = typeList.selectAll.map(function(t){ return t.evaluateItem; });
+  var names = nameList.selectAll.map(function(n){ return n.evaluateItem; });
+  function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function randInt(lo, hi) { return Math.floor(Math.random() * (hi - lo + 1)) + lo; }
+  function randTypes() {
+    var a = rand(types);
+    var b = Math.random() < 0.5 ? '' : (function(){ var t; do { t = rand(types); } while(t === a); return t; })();
+    return [a, b];
+  }
+
+  for (var side = 1; side <= 2; side++) {
+    document.getElementById('name' + side + 'Input').value = rand(names);
+    document.getElementById('hp' + side + 'Input').value = randInt(60, 200);
+    document.getElementById('atk' + side + 'Input').value = randInt(20, 100);
+    document.getElementById('def' + side + 'Input').value = randInt(20, 100);
+    document.getElementById('spd' + side + 'Input').value = randInt(10, 80);
+    if (side === 2) document.getElementById('catch2Input').value = randInt(30, 255);
+    if (side === 1) fighter1CurHp = parseInt(document.getElementById('hp1Input').value);
+    var t = randTypes();
+    document.getElementById('t' + side + 'aInput').value = t[0];
+    document.getElementById('t' + side + 'bInput').value = t[1];
+  }
+  resetBars();
+  saveState();
+}
+
+function resetBars() {
+  var f1 = getFighter(1);
+  var f2 = getFighter(2);
+  f1.hp = fighter1CurHp !== null ? Math.min(fighter1CurHp, f1.maxHp) : f1.maxHp;
+  f2.hp = f2.maxHp;
+  updateHpBar(1, f1.hp, f1.maxHp);
+  updateHpBar(2, f2.hp, f2.maxHp);
+  clearKo();
+  updateMatchup();
+  document.getElementById('speedEl').textContent = '';
+}
+
+function openLoadSave() {
+  document.getElementById('loadSaveOverlay').classList.add('visible');
+  document.getElementById('loadSaveTextarea').value = '';
+}
+function closeLoadSave() {
+  document.getElementById('loadSaveOverlay').classList.remove('visible');
+}
+
+function loadSave() {
+  var raw = document.getElementById('loadSaveTextarea').value.trim();
+  if (!raw) return;
+  var lines = raw.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l; });
+  if (lines.length < 1) return;
+
+  function parseHp(hpField, fallback) {
+    var slash = hpField.split('/');
+    var maxHp = parseInt(slash[slash.length - 1]) || fallback;
+    var curHp = slash.length > 1 ? (parseInt(slash[0]) || 0) : maxHp;
+    return { maxHp: maxHp, curHp: curHp };
+  }
+
+  var idx = 0;
+
+  // Line 1: Fighter 1
+  if (idx < lines.length) {
+    var parts = lines[idx].split('\t').map(function(s) { return s.trim(); });
+    if (parts.length >= 7) {
+      var hp1 = parseHp(parts[3], 1);
+      document.getElementById('name1Input').value = parts[0];
+      document.getElementById('t1aInput').value = parts[1] || '';
+      document.getElementById('t1bInput').value = parts[2] || '';
+      document.getElementById('hp1Input').value = hp1.maxHp;
+      document.getElementById('atk1Input').value = parts[4];
+      document.getElementById('def1Input').value = parts[5];
+      document.getElementById('spd1Input').value = parts[6];
+      fighter1CurHp = hp1.curHp;
+    }
+    idx++;
+  }
+
+  // Lines 2-6: Roster 1-5
+  roster = [null, null, null, null, null];
+  for (var i = 0; i < MAX_ROSTER; i++) {
+    if (idx >= lines.length) break;
+    var line = lines[idx];
+    if (line.toLowerCase() === 'empty') {
+      idx++;
+      continue;
+    }
+    var rparts = line.split('\t').map(function(s) { return s.trim(); });
+    if (rparts.length >= 7) {
+      var rhp = parseHp(rparts[3], 1);
+      roster[i] = {
+        name: rparts[0],
+        t1: rparts[1] || '',
+        t2: rparts[2] || '',
+        hp: rhp.maxHp,
+        curHp: rhp.curHp,
+        atk: parseInt(rparts[4]) || 0,
+        def: parseInt(rparts[5]) || 1,
+        spd: parseInt(rparts[6]) || 0
+      };
+    }
+    idx++;
+  }
+
+  // Remaining lines: Storage
+  storage = [];
+  while (idx < lines.length) {
+    var sparts = lines[idx].split('\t').map(function(s) { return s.trim(); });
+    if (sparts.length >= 7) {
+      var shp = parseHp(sparts[3], 1);
+      storage.push({
+        name: sparts[0],
+        t1: sparts[1] || '',
+        t2: sparts[2] || '',
+        hp: shp.maxHp,
+        curHp: shp.curHp,
+        atk: parseInt(sparts[4]) || 0,
+        def: parseInt(sparts[5]) || 1,
+        spd: parseInt(sparts[6]) || 0
+      });
+    }
+    idx++;
+  }
+
+  document.querySelectorAll('input').forEach(function(el) { el.dispatchEvent(new Event('input')); });
+  saveRoster();
+  saveStorage();
+  saveState();
+  renderRoster();
+  renderStorage();
+  resetBars();
+  updateControls();
+  closeLoadSave();
+  clearLog();
+  clearKo();
+  log('✅ Save data loaded successfully!');
+}
+
+function exportSave() {
+  var lines = [];
+  var f1 = getFighter(1);
+  var f1Cur = fighter1CurHp !== null ? fighter1CurHp : f1.maxHp;
+  lines.push([f1.name, f1.types[0] || '', f1.types[1] || '', f1Cur + '/' + f1.maxHp, f1.atk, f1.def, f1.spd].join('\t'));
+  for (var i = 0; i < MAX_ROSTER; i++) {
+    var s = roster[i];
+    if (!s) {
+      lines.push('Empty');
+    } else {
+      var curHp = s.curHp !== undefined ? s.curHp : s.hp;
+      lines.push([s.name, s.t1 || '', s.t2 || '', curHp + '/' + s.hp, s.atk, s.def, s.spd].join('\t'));
+    }
+  }
+  for (var j = 0; j < storage.length; j++) {
+    var st = storage[j];
+    var stCurHp = st.curHp !== undefined ? st.curHp : st.hp;
+    lines.push([st.name, st.t1 || '', st.t2 || '', stCurHp + '/' + st.hp, st.atk, st.def, st.spd].join('\t'));
+  }
+  var text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = document.getElementById('exportSaveBtn');
+    var orig = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  }).catch(function() {});
+}
+
+function resetBattle() {
+  stopAuto = true;
+  autoRunning = false;
+  battleState = null;
+  clearLog();
+  clearKo();
+  log('Configure your fighters and press <b>Battle!</b> to begin.');
+  resetBars();
+  updateControls();
+}
+
+// ---- Roster ----
+var MAX_ROSTER = 5;
+var roster = [null, null, null, null, null];
+var ROSTER_KEY = 'battleSimRoster';
+
+function loadRoster() {
+  try {
+    var data = JSON.parse(localStorage.getItem(ROSTER_KEY));
+    if (Array.isArray(data)) {
+      for (var i = 0; i < MAX_ROSTER; i++) {
+        roster[i] = data[i] || null;
+      }
+    }
+  } catch(e) {}
+}
+
+function saveRoster() {
+  try { localStorage.setItem(ROSTER_KEY, JSON.stringify(roster)); } catch(e) {}
+}
+
+function renderRoster() {
+  var grid = document.getElementById('rosterGrid');
+  grid.innerHTML = '';
+  for (var i = 0; i < MAX_ROSTER; i++) {
+    var slot = roster[i];
+    if (slot) {
+      var curHp = slot.curHp !== undefined ? slot.curHp : slot.hp;
+      var ko = curHp <= 0;
+      grid.insertAdjacentHTML('beforeend',
+        '<div class="roster-card' + (ko ? ' ko' : '') + '" data-slot="' + i + '">' +
+          '<input class="rc-name" value="' + escAttr(slot.name) + '" onchange="updateRosterField(' + i + ',\'name\',this.value)" placeholder="Name">' +
+          '<div class="rc-types">' +
+            '<input list="typeOptions" value="' + escAttr(slot.t1) + '" onchange="updateRosterField(' + i + ',\'t1\',this.value)" placeholder="Type 1">' +
+            '<input list="typeOptions" value="' + escAttr(slot.t2 || '') + '" onchange="updateRosterField(' + i + ',\'t2\',this.value)" placeholder="Type 2">' +
+          '</div>' +
+          '<div class="rc-stats">' +
+            '<label>HP <input type="number" value="' + slot.hp + '" min="1" onchange="updateRosterField(' + i + ',\'hp\',this.value); updateRosterField(' + i + ',\'curHp\',this.value)"></label>' +
+            '<label>Atk <input type="number" value="' + slot.atk + '" min="0" onchange="updateRosterField(' + i + ',\'atk\',this.value)"></label>' +
+            '<label>Def <input type="number" value="' + slot.def + '" min="1" onchange="updateRosterField(' + i + ',\'def\',this.value)"></label>' +
+            '<label>Spd <input type="number" value="' + slot.spd + '" min="0" onchange="updateRosterField(' + i + ',\'spd\',this.value)"></label>' +
+          '</div>' +
+          '<div class="rc-hp-display" style="font-size:0.75em;color:' + (ko ? '#ff6b6b' : '#aaa') + ';margin-bottom:6px;">HP: ' + Math.max(0, curHp) + '/' + slot.hp + '</div>' +
+          '<div class="rc-actions">' +
+            '<button onclick="loadFromRoster(' + i + ')"' + (ko ? ' disabled' : '') + '>🔄<br>Swap</button>' +
+            '<button onclick="sendToStorage(' + i + ')">📦<br>Deposit</button>' +
+          '</div>' +
+        '</div>'
+      );
+    } else {
+      grid.insertAdjacentHTML('beforeend',
+        '<div class="roster-card empty">Slot ' + (i + 1) + ' — Empty</div>'
+      );
+    }
+  }
+}
+
+function escAttr(s) {
+  return String(s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function saveToRoster() {
+  if (battleState && !battleState.over) return;
+  var f = getFighter(1);
+  var slot = -1;
+  for (var i = 0; i < MAX_ROSTER; i++) {
+    if (!roster[i]) { slot = i; break; }
+  }
+  if (slot === -1) {
+    for (var i = 0; i < MAX_ROSTER; i++) {
+      if (roster[i] && roster[i].name === f.name) { slot = i; break; }
+    }
+  }
+  if (slot === -1) slot = 0;
+  roster[slot] = { name: f.name, t1: f.types[0] || '', t2: f.types[1] || '', hp: f.maxHp, curHp: f.maxHp, atk: f.atk, def: f.def, spd: f.spd };
+  saveRoster();
+  renderRoster();
+}
+
+async function loadFromRoster(i) {
+  var s = roster[i];
+  if (!s) return;
+  var sCurHp = s.curHp !== undefined ? s.curHp : s.hp;
+  if (sCurHp <= 0) return;
+  var inBattle = battleState && !battleState.over;
+  if (inBattle && (autoRunning || battleState.busy) && !battleState._autoSwap) return;
+  if (inBattle && battleState.fainted) battleState._wasFainted = true;
+
+  var temp = { name: s.name, t1: s.t1, t2: s.t2 || '', hp: s.hp, curHp: sCurHp, atk: s.atk, def: s.def, spd: s.spd };
+  var f = getFighter(1);
+  var fCurHp = inBattle ? Math.max(0, battleState.f1.hp) : f.maxHp;
+  roster[i] = { name: f.name, t1: f.types[0] || '', t2: f.types[1] || '', hp: f.maxHp, curHp: fCurHp, atk: f.atk, def: f.def, spd: f.spd };
+  document.getElementById('name1Input').value = temp.name;
+  document.getElementById('t1aInput').value = temp.t1;
+  document.getElementById('t1bInput').value = temp.t2;
+  document.getElementById('hp1Input').value = temp.hp;
+  document.getElementById('atk1Input').value = temp.atk;
+  document.getElementById('def1Input').value = temp.def;
+  document.getElementById('spd1Input').value = temp.spd;
+  saveRoster();
+  renderRoster();
+  saveState();
+
+  if (inBattle) {
+    battleState.busy = true;
+    updateControls();
+    var newF1 = getFighter(1);
+    newF1.hp = temp.curHp;
+    battleState.f1 = newF1;
+    battleState.fainted = false;
+    battleState.fleeFailed = false;
+    clearKo();
+    updateHpBar(1, newF1.hp, newF1.maxHp);
+    updateSpeedDisplay(newF1, battleState.f2);
+    updateMatchup();
+    if (battleState._wasFainted) {
+      battleState._wasFainted = false;
+      log('🔄 <b>' + newF1.name + '</b> was sent out!', '');
+      await sleep(500);
+    } else {
+      log('🔄 <b>' + f.name + '</b> was swapped out for <b>' + newF1.name + '</b>!', '');
+      await sleep(500);
+
+      var f2 = battleState.f2;
+      if (f2.hp > 0 && newF1.hp > 0) {
+        var res = calcDamage(f2, newF1);
+        newF1.hp -= res.dmg;
+        var eff = effLabel(res.typeMult);
+        var msg = f2.name + ' uses <b>' + res.usedType + '</b> for <b>' + res.dmg + '</b> damage';
+        if (eff.text) msg += ' <span class="eff ' + eff.cls + '">(' + eff.text + ')</span>';
+        log(msg);
+        flashCard(1);
+        updateHpBar(1, newF1.hp, newF1.maxHp);
+        await sleep(450);
+        if (newF1.hp <= 0) {
+          newF1.hp = 0;
+          updateHpBar(1, 0, newF1.maxHp);
+          showKo(1);
+          log('💥 <b>' + newF1.name + '</b> has been knocked out!', '');
+          battleState.fainted = true;
+          battleState.faintedSpeed = newF1.spd;
+          battleState.fleeFailed = false;
+          log('💀 <b>' + newF1.name + '</b> has fainted! Send out another fighter or flee.', '');
+        }
+      }
+    }
+    battleState.busy = false;
+    if (battleState.f1) fighter1CurHp = battleState.f1.hp;
+    saveState();
+    updateControls();
+  } else {
+    fighter1CurHp = temp.curHp;
+    resetBars();
+    saveState();
+  }
+}
+
+function clearRosterSlot(i) {
+  roster[i] = null;
+  saveRoster();
+  renderRoster();
+}
+
+function updateRosterField(i, field, value) {
+  if (!roster[i]) return;
+  roster[i][field] = value;
+  saveRoster();
+}
+
+function healAll() {
+  if (battleState && !battleState.over) return;
+  var f1 = getFighter(1);
+  fighter1CurHp = f1.maxHp;
+  for (var i = 0; i < MAX_ROSTER; i++) {
+    if (roster[i]) roster[i].curHp = roster[i].hp;
+  }
+  saveRoster();
+  renderRoster();
+  resetBars();
+  saveState();
+}
+
+// ---- Storage ----
+var storage = [];
+var STORAGE_KEY = 'battleSimStorage';
+var storageExpanded = true;
+var storageSortKey = null;
+var storageSortDir = 'asc';
+
+function loadStorage() {
+  try {
+    var data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (Array.isArray(data)) storage = data;
+  } catch(e) {}
+}
+
+function saveStorage() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(storage)); } catch(e) {}
+}
+
+function toggleStorage() {
+  storageExpanded = !storageExpanded;
+  document.getElementById('storageTable').classList.toggle('visible', storageExpanded);
+  document.getElementById('storageEmpty').classList.toggle('visible', storageExpanded && storage.length === 0);
+  document.getElementById('storageToggleBtn').textContent = storageExpanded ? '▾ collapse 📦' : '▸ expand 📦';
+}
+
+function renderStorage() {
+  var tbody = document.getElementById('storageBody');
+  tbody.innerHTML = '';
+  for (var i = 0; i < storage.length; i++) {
+    var s = storage[i];
+    var curHp = s.curHp !== undefined ? s.curHp : s.hp;
+    var ko = curHp <= 0;
+    var types = [s.t1, s.t2].filter(function(t){ return t; }).join('/');
+    tbody.insertAdjacentHTML('beforeend',
+      '<tr class="' + (ko ? 'ko' : '') + '">' +
+        '<td>' + escAttr(s.name) + '</td>' +
+        '<td>' + types + '</td>' +
+        '<td>' + Math.max(0, curHp) + '/' + s.hp + '</td>' +
+        '<td>' + s.atk + '</td>' +
+        '<td>' + s.def + '</td>' +
+        '<td>' + s.spd + '</td>' +
+        '<td class="st-actions">' +
+          '<button onclick="loadFromStorage(' + i + ')">🔄 Withdraw</button>' +
+          '<button onclick="deleteFromStorage(' + i + ')">Release</button>' +
+        '</td>' +
+      '</tr>'
+    );
+  }
+  if (storageExpanded) {
+    document.getElementById('storageEmpty').classList.toggle('visible', storage.length === 0);
+  }
+}
+
+function sortStorage(key) {
+  if (storageSortKey === key) {
+    storageSortDir = storageSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    storageSortKey = key;
+    storageSortDir = 'asc';
+  }
+  document.querySelectorAll('.storage-table th .sort-arrow').forEach(function(el) { el.textContent = ''; });
+  var arrow = document.getElementById('sort' + key.charAt(0).toUpperCase() + key.slice(1));
+  if (arrow) arrow.textContent = storageSortDir === 'asc' ? '▲' : '▼';
+  storage.sort(function(a, b) {
+    var av, bv;
+    if (key === 'name') { av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
+    else if (key === 'type') { av = (a.t1 + '/' + (a.t2||'')).toLowerCase(); bv = (b.t1 + '/' + (b.t2||'')).toLowerCase(); }
+    else { av = a[key]; bv = b[key]; }
+    if (av < bv) return storageSortDir === 'asc' ? -1 : 1;
+    if (av > bv) return storageSortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+  saveStorage();
+  renderStorage();
+}
+
+function sendToStorage(rosterIdx) {
+  var s = roster[rosterIdx];
+  if (!s) return;
+  storage.push({
+    name: s.name, t1: s.t1, t2: s.t2 || '', hp: s.hp,
+    curHp: s.curHp !== undefined ? s.curHp : s.hp,
+    atk: s.atk, def: s.def, spd: s.spd
+  });
+  roster[rosterIdx] = null;
+  saveStorage();
+  saveRoster();
+  renderRoster();
+  renderStorage();
+}
+
+function loadFromStorage(storageIdx) {
+  var s = storage[storageIdx];
+  if (!s) return;
+  var slot = -1;
+  for (var i = 0; i < MAX_ROSTER; i++) {
+    if (!roster[i]) { slot = i; break; }
+  }
+  if (slot === -1) return;
+  roster[slot] = {
+    name: s.name, t1: s.t1, t2: s.t2 || '', hp: s.hp,
+    curHp: s.curHp !== undefined ? s.curHp : s.hp,
+    atk: s.atk, def: s.def, spd: s.spd
+  };
+  storage.splice(storageIdx, 1);
+  saveStorage();
+  saveRoster();
+  renderRoster();
+  renderStorage();
+}
+
+function deleteFromStorage(storageIdx) {
+  storage.splice(storageIdx, 1);
+  saveStorage();
+  renderStorage();
+}
+
+// ---- Persistence ----
+var SAVE_KEY = 'battleSimState';
+var SAVE_IDS = [
+  'name1Input','hp1Input','atk1Input','def1Input','spd1Input','t1aInput','t1bInput',
+  'name2Input','hp2Input','atk2Input','def2Input','spd2Input','t2aInput','t2bInput','catch2Input',
+  'ballCountInput'
+];
+
+function saveState() {
+  var data = {};
+  SAVE_IDS.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) data[id] = el.value;
+  });
+  data.fighter1CurHp = fighter1CurHp;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
+function loadState() {
+  try {
+    var data = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (!data) return;
+    SAVE_IDS.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el && data[id] !== undefined) el.value = data[id];
+    });
+    if (data.fighter1CurHp !== undefined && data.fighter1CurHp !== null) fighter1CurHp = data.fighter1CurHp;
+  } catch(e) {}
+}
+
+// Update matchup display when inputs change; persist to localStorage
+document.querySelectorAll('input').forEach(function(el) {
+  el.addEventListener('input', function() {
+    if (!battleState) {
+      if (el.id === 'hp1Input' && fighter1CurHp !== null) {
+        var newMax = parseInt(el.value) || 1;
+        fighter1CurHp = Math.min(fighter1CurHp, newMax);
+      }
+      resetBars();
+    }
+    saveState();
+  });
+});
+
+// Init
+loadState();
+loadRoster();
+loadStorage();
+renderRoster();
+renderStorage();
+document.getElementById('storageTable').classList.add('visible');
+if (storage.length === 0) document.getElementById('storageEmpty').classList.add('visible');
+resetBars();
+
+var resetStages = ['Reset', 'Are you sure?', 'Really?', 'Last Chance!'];
+var resetStage = 0;
+var fullResetBtn = document.createElement('button');
+fullResetBtn.id = 'fullResetBtn';
+fullResetBtn.textContent = 'Reset';
+document.body.appendChild(fullResetBtn);
+
+var fullResetHover = document.createElement('div');
+fullResetHover.id = 'fullResetHover';
+document.body.appendChild(fullResetHover);
+
+function resetResetStage() {
+  resetStage = 0;
+  fullResetBtn.textContent = 'Reset';
+}
+
+fullResetBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  resetStage++;
+  if (resetStage >= resetStages.length) {
+    fullResetWipe();
+    resetStage = 0;
+    fullResetBtn.textContent = 'Reset';
+    return;
+  }
+  fullResetBtn.textContent = resetStages[resetStage];
+});
+
+fullResetHover.addEventListener('mouseenter', function() {});
+fullResetBtn.addEventListener('mouseleave', resetResetStage);
+
+function fullResetWipe() {
+  stopAuto = true;
+  autoRunning = false;
+  battleState = null;
+  roster = [null, null, null, null, null];
+  storage = [];
+  fighter1CurHp = null;
+  localStorage.removeItem(ROSTER_KEY);
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(SAVE_KEY);
+  var defaults = {
+    name1Input: 'Fighter 1', hp1Input: 100, atk1Input: 10, def1Input: 10, spd1Input: 20, t1aInput: 'Fire', t1bInput: '',
+    name2Input: 'Fighter 2', hp2Input: 100, atk2Input: 10, def2Input: 10, spd2Input: 20, t2aInput: 'Water', t2bInput: '', catch2Input: 255,
+    ballCountInput: 10
+  };
+  SAVE_IDS.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = defaults[id] !== undefined ? defaults[id] : '';
+  });
+  saveRoster();
+  saveStorage();
+  saveState();
+  renderRoster();
+  renderStorage();
+  clearLog();
+  clearKo();
+  resetBars();
+  updateControls();
+  log('All data has been wiped. Fresh start!');
+}
+
+// ---- Starfield / Nebula ----
+(function() {
+  var cv = document.getElementById('starfield');
+  var ctx = cv.getContext('2d');
+  var stars = [];
+  var nebula = [];
+  var NUM_STARS = 120;
+  var NUM_NEBULA = 18;
+
+  function resize() {
+    cv.width = window.innerWidth;
+    cv.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  var palette = ['#4d96ff', '#ff6b6b', '#ffd93d', '#6bcb77', '#b388ff', '#4dd0e1'];
+  for (var i = 0; i < NUM_STARS; i++) {
+    stars.push({
+      x: Math.random() * cv.width,
+      y: Math.random() * cv.height,
+      r: Math.random() * 1.4 + 0.3,
+      tw: Math.random() * Math.PI * 2,
+      tws: Math.random() * 0.04 + 0.01,
+      alpha: Math.random() * 0.5 + 0.2,
+      vy: Math.random() * 0.3 + 0.05
+    });
+  }
+  for (var j = 0; j < NUM_NEBULA; j++) {
+    nebula.push({
+      x: Math.random() * cv.width,
+      y: Math.random() * cv.height,
+      r: Math.random() * 140 + 60,
+      color: palette[Math.floor(Math.random() * palette.length)],
+      angle: Math.random() * Math.PI * 2,
+      spd: (Math.random() * 0.3 + 0.1) * (Math.random() < 0.5 ? -1 : 1),
+      drift: Math.random() * 0.15 + 0.05,
+      alpha: Math.random() * 0.06 + 0.02,
+      pulse: Math.random() * Math.PI * 2,
+      pulseSpd: Math.random() * 0.02 + 0.005
+    });
+  }
+
+  function frame() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+
+    for (var n = 0; n < nebula.length; n++) {
+      var nb = nebula[n];
+      nb.angle += nb.spd * 0.01;
+      nb.pulse += nb.pulseSpd;
+      nb.x += Math.cos(nb.angle) * nb.drift;
+      nb.y += Math.sin(nb.angle) * nb.drift;
+      if (nb.x < -nb.r) nb.x = cv.width + nb.r;
+      if (nb.x > cv.width + nb.r) nb.x = -nb.r;
+      if (nb.y < -nb.r) nb.y = cv.height + nb.r;
+      if (nb.y > cv.height + nb.r) nb.y = -nb.r;
+      var pulseA = nb.alpha * (0.6 + 0.4 * Math.sin(nb.pulse));
+      var grad = ctx.createRadialGradient(nb.x, nb.y, 0, nb.x, nb.y, nb.r);
+      grad.addColorStop(0, nb.color + Math.floor(pulseA * 255).toString(16).padStart(2, '0'));
+      grad.addColorStop(1, nb.color + '00');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(nb.x, nb.y, nb.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (var s = 0; s < stars.length; s++) {
+      var st = stars[s];
+      st.tw += st.tws;
+      st.y -= st.vy;
+      if (st.y < -2) { st.y = cv.height + 2; st.x = Math.random() * cv.width; }
+      var a = st.alpha * (0.4 + 0.6 * Math.abs(Math.sin(st.tw)));
+      ctx.fillStyle = 'rgba(255,255,255,' + a.toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.arc(st.x, st.y, st.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+// ---- Admin Panel ----
+(function() {
+  var panel = document.getElementById('adminPanel');
+  var zone = document.getElementById('adminHoverZone');
+  var closeTimer = null;
+
+  zone.addEventListener('mouseenter', function() {
+    clearTimeout(closeTimer);
+    panel.classList.add('open');
+  });
+  panel.addEventListener('mouseenter', function() {
+    clearTimeout(closeTimer);
+  });
+  zone.addEventListener('mouseleave', function() {
+    closeTimer = setTimeout(function() {
+      panel.classList.remove('open');
+    }, 200);
+  });
+  panel.addEventListener('mouseleave', function() {
+    closeTimer = setTimeout(function() {
+      panel.classList.remove('open');
+    }, 200);
+  });
+})();
+</script>
+
+</body>
+</html>

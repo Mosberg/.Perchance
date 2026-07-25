@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>dr6dxjis4u — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- AI NSFW Messenger: A fully-featured single-page messaging app with seeded mock data, AI functions, and premium UI. All logic is in vanilla JS. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+<div id="rootEl" style="display:flex; height:100vh; overflow:hidden; font-family:'Inter', 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color);">
+  <!-- Sidebar -->
+  <div id="sidebarEl" style="width:320px; border-right:1px solid var(--border-color); display:flex; flex-direction:column; transition:transform 0.3s ease;">
+    
+    <!-- Topbar: Toggle, Search, New Chat, Settings -->
+    <div id="sidebarTopbarEl" style="flex-shrink:0; padding:12px 16px; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border-color);">
+      <button id="toggleSidebarBtn" class="icon-btn" onclick="toggleSidebar()" title="Toggle Sidebar">≡</button>
+      <div style="flex:1; position:relative;">
+        <i class="fas fa-search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted-color); font-size:13px;"></i>
+        <input id="searchInput" type="text" placeholder="Search Chat, User, or Message..." oninput="filterChats()" style="width:100%; padding:8px 12px 8px 32px; border-radius:20px; border:1px solid var(--border-color); background:var(--surface-color); color:var(--text-color); font-size:13px; outline:none;">
+      </div>
+      <button id="newChatBtn" class="icon-btn" onclick="createNewChat()" title="New Chat">+</button>
+      <button id="toggleSettingsBtn" class="icon-btn" onclick="toggleSettings()" title="Settings">⚙</button>
+    </div>
+
+    <!-- Tabs: All, Unread, Archived, NSFW AI -->
+    <div id="tabsEl" style="display:flex; padding:0 16px; border-bottom:1px solid var(--border-color); gap:12px;">
+      <div class="tab active" onclick="setTab('all')" data-tab="all">All</div>
+      <div class="tab" onclick="setTab('unread')" data-tab="unread">Unread</div>
+      <div class="tab" onclick="setTab('pinned')" data-tab="pinned">Pinned</div>
+      <div class="tab" onclick="setTab('archived')" data-tab="archived">Archive</div>
+      <div class="tab" onclick="setTab('ai')" data-tab="ai">NSFW AI</div>
+    </div>
+
+    <!-- Chat List -->
+    <div id="chatListEl" style="flex:1; overflow-y:auto; padding:8px;"></div>
+
+    <!-- User Footer -->
+    <div id="userFooterEl" style="padding:12px 16px; border-top:1px solid var(--border-color); display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="openProfile()">
+      <div class="avatar" id="myAvatar" style="background:linear-gradient(135deg, #ff2d55, #6c5ce7); color:white;">Me</div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:14px;">My Account</div>
+        <div style="font-size:12px; color:var(--muted-color);">Available</div>
+      </div>
+      <i class="fas fa-chevron-right" style="font-size:12px; color:var(--muted-color);"></i>
+    </div>
+  </div>
+
+  <!-- Main Chat Area -->
+  <div id="mainAreaEl" style="flex:1; display:flex; flex-direction:column; position:relative; background: var(--bg-color);">
+    
+    <!-- Mobile Back Button -->
+    <button id="mobileBackBtn" class="icon-btn" onclick="toggleSidebar()" style="display:none; position:absolute; top:10px; left:10px; z-index:10;">←</button>
+
+    <!-- Header -->
+    <div id="chatHeaderEl" style="padding:12px 16px; border-bottom:1px solid var(--border-color); display:flex; align-items:center; gap:12px; flex-shrink:0;">
+      <div class="avatar" id="headerAvatar" style="background:linear-gradient(135deg, #1e90ff, #00cec9);">Av</div>
+      <div style="flex:1; min-width:0;">
+        <div id="headerTitleEl" style="font-weight:600; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Select a chat</div>
+        <div id="headerStatusEl" style="font-size:12px; color:var(--muted-color);">Online</div>
+      </div>
+      <button onclick="openAIAssistFromHeader()" class="icon-btn" title="AI Rewrite">✨</button>
+      <button id="callBtn" class="icon-btn" onclick="startCall()" title="Call">📞</button>
+      <button id="videoBtn" class="icon-btn" onclick="startVideo()" title="Video">📹</button>
+      <button id="moreOptionsBtn" class="icon-btn" onclick="showHeaderMenu()" title="More">⋮</button>
+    </div>
+
+    <!-- Messages Scroll Area -->
+    <div id="messagesContainerEl" style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px; background-image:var(--chat-bg-image); background-size:cover; background-position:center;" onclick="hidePopups()"></div>
+
+    <!-- AI Suggestions Strip -->
+    <div id="aiSuggestStripEl" style="padding:4px 16px; display:none; gap:8px; overflow-x:auto; border-top:1px solid var(--border-color); background:var(--surface-color);">
+      <!-- Filled dynamically -->
+    </div>
+
+    <!-- Sticky Composer -->
+    <div id="composerEl" style="padding:12px 16px; border-top:1px solid var(--border-color); background:var(--bg-color); flex-shrink:0; display:flex; flex-direction:column; gap:8px;">
+      <!-- Replying Banner -->
+      <div id="replyBannerEl" style="display:none; align-items:center; gap:8px; padding:4px 8px; background:var(--surface-color); border-radius:8px; font-size:12px; color:var(--muted-color);">
+        <span style="border-left:3px solid var(--accent-color); padding-left:6px; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="replyTextEl"></span>
+        <button onclick="cancelReply()" class="icon-btn" style="font-size:14px; line-height:1;">×</button>
+      </div>
+      
+      <div style="display:flex; gap:8px; align-items:flex-end;">
+        <button onclick="toggleEmojiPicker()" class="icon-btn" title="Emoji">😊</button>
+        <div style="flex:1; position:relative;">
+          <textarea id="messageInputEl" placeholder="" onkeydown="handleKeyDown(event)" oninput="checkInput()" style="width:100%; min-height:40px; max-height:120px; border-radius:20px; border:1px solid var(--border-color); padding:10px 14px; background:var(--surface-color); color:var(--text-color); resize:none; font-size:14px; outline:none; box-sizing:border-box;"></textarea>
+        </div>
+        <button onclick="pickAttachment()" class="icon-btn" title="Attach">📎</button>
+        <button onclick="sendMessage()" id="sendBtnEl" disabled style="width:40px; height:40px; border-radius:50%; border:none; background:var(--accent-color); color:white; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; transition:opacity 0.2s; opacity:0.5;">➤</button>
+      </div>
+    </div>
+
+    <!-- Typing Indicator Overlay -->
+    <div id="typingIndicatorEl" style="position:absolute; bottom:70px; left:16px; background:var(--surface-color); padding:6px 12px; border-radius:12px; font-size:12px; color:var(--muted-color); display:none; align-items:center; gap:6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+      <span></span><span></span><span></span> <span id="typingNameEl">is typing...</span>
+    </div>
+
+    <!-- Emoji Picker Popup -->
+    <div id="emojiPickerEl" style="position:absolute; bottom:80px; left:16px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:12px; padding:8px; display:none; grid-template-columns:repeat(6, 1fr); gap:4px; max-height:180px; overflow-y:auto; width:260px; z-index:20; box-shadow: 0 4px 12px rgba(0,0,0,0.2);"></div>
+
+  </div>
+</div>
+
+<!-- Context Menu -->
+<div id="contextMenuEl" class="context-menu"></div>
+
+<!-- AI Assist Popover -->
+<div id="aiAssistEl" class="ai-assist-popover"></div>
+
+<!-- Profile / Settings Modal -->
+<div id="profileModalEl" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <div class="modal-title">User Profile</div>
+      <button class="icon-btn" onclick="closeProfile()">×</button>
+    </div>
+    <div id="profileBodyEl"></div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModalEl" class="modal">
+  <div class="modal-content" style="max-width:480px;">
+    <div class="modal-header">
+      <div class="modal-title">Settings</div>
+      <button class="icon-btn" onclick="toggleSettings()">×</button>
+    </div>
+    <div id="settingsBodyEl">
+      <!-- Appearance -->
+      <div class="settings-group">
+        <div class="settings-label">Appearance</div>
+        <label class="setting-item">
+          <span>Dark Mode</span>
+          <input type="checkbox" onchange="toggleTheme()" checked>
+        </label>
+        <label class="setting-item">
+          <span>Compact Mode</span>
+          <input type="checkbox" onchange="toggleCompact()" checked>
+        </label>
+        <label class="setting-item">
+          <span>Show Avatars</span>
+          <input type="checkbox" onchange="toggleAvatars()" checked>
+        </label>
+        <label class="setting-item">
+          <span>Show Timestamps</span>
+          <input type="checkbox" onchange="toggleTimestamps()" checked>
+        </label>
+        <label class="setting-item">
+          <span>12-Hour Clock</span>
+          <input type="checkbox" onchange="toggleClockFormat()">
+        </label>
+        <label class="setting-item">
+          <span>Show Message Previews</span>
+          <input type="checkbox" onchange="togglePreviews()" checked>
+        </label>
+      </div>
+      <!-- Notifications -->
+      <div class="settings-group">
+        <div class="settings-label">Notifications</div>
+        <label class="setting-item">
+          <span>Sound Effects</span>
+          <input type="checkbox" checked>
+        </label>
+        <label class="setting-item">
+          <span>Message Preview in Notifications</span>
+          <input type="checkbox" checked>
+        </label>
+        <label class="setting-item">
+          <span>Typing Indicator</span>
+          <input type="checkbox" checked>
+        </label>
+        <label class="setting-item">
+          <span>Read Receipts</span>
+          <input type="checkbox" checked>
+        </label>
+      </div>
+      <!-- AI Settings -->
+      <div class="settings-group">
+        <div class="settings-label">AI & Privacy</div>
+        <label class="setting-item">
+          <span>Enable AI Suggestions</span>
+          <input type="checkbox" onchange="toggleAI()" checked>
+        </label>
+        <label class="setting-item">
+          <span>Allow AI to Summarize</span>
+          <input type="checkbox" checked>
+        </label>
+        <label class="setting-item">
+          <span>Allow AI to Catch Me Up</span>
+          <input type="checkbox" checked>
+        </label>
+        <label class="setting-item">
+          <span>AI Rewrite Quick Action</span>
+          <input type="checkbox"checked>
+        </label>
+      </div>
+      <!-- Chat Settings -->
+      <div class="settings-group">
+        <div class="settings-label">Chat</div>
+        <label class="setting-item">
+          <span>Enter to Send Message</span>
+          <input type="checkbox" onchange="toggleEnterSend()" checked>
+        </label>
+        <label class="setting-item">
+          <span>Auto-Archive Inactive Chats</span>
+          <input type="checkbox">
+        </label>
+      </div>
+      <!-- Storage -->
+      <div class="settings-group">
+        <div class="settings-label">Storage & Data</div>
+        <div class="setting-item">
+          <span>Storage Used</span>
+          <span style="color:var(--muted-color); font-size:13px;">128 MB / 2 GB</span>
+        </div>
+        <button class="btn-outline" onclick="clearCache()">Clear Media Cache</button>
+        <button class="btn-outline" onclick="exportData()" style="margin-top:8px;">Export Chat Data</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Compose Modal -->
+<div id="composeModalEl" class="modal">
+  <div class="modal-content" style="max-width:380px;">
+    <div class="modal-header">
+      <div class="modal-title">New Chat</div>
+      <button class="icon-btn" onclick="closeCompose()">×</button>
+    </div>
+    <div style="padding:0 24px 24px;">
+      <div style="display:flex; gap:10px; margin-bottom:16px;">
+        <div class="tab active" style="flex:1; padding:8px; text-align:center; cursor:pointer;" onclick="setComposeTab('direct')">Direct</div>
+        <div class="tab" style="flex:1; padding:8px; text-align:center; cursor:pointer;" onclick="setComposeTab('group')">Group</div>
+      </div>
+      <div id="composeInputCtn">
+        <input id="composeUserInput" placeholder="Search or @username..." oninput="filterUsers()" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--surface-color); color:var(--text-color); margin-bottom:12px;">
+        <div id="composeUserListEl" style="max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;"></div>
+      </div>
+      <div id="composeGroupCtn" style="display:none;">
+        <input id="composeGroupName" placeholder="Group name..." style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--surface-color); color:var(--text-color); margin-bottom:12px;">
+        <input id="composeParticipants" placeholder="Add participants (@username...)" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--surface-color); color:var(--text-color); margin-bottom:12px;">
+        <button class="btn-solid" onclick="createGroup()" style="width:100%; padding:10px; border-radius:8px;">Create Group</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Info Modal (Summon AI/Edit) -->
+<div id="infoModalEl" class="modal">
+  <div class="modal-content" style="max-width:480px;">
+    <div class="modal-header">
+      <div class="modal-title" id="infoModalTitle">Info</div>
+      <button class="icon-btn" onclick="infoModalEl.classList.remove('show');">×</button>
+    </div>
+    <div id="infoModalBody" style="padding:0 24px 24px;"></div>
+  </div>
+</div>
+
+<!-- Variables -->
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Color+Emoji&display=swap');
+  
+  body {
+    margin: 0;
+    padding: 0;
+    --bg-color: #0f0f13;
+    --surface-color: #18181c;
+    --border-color: #27272e;
+    --text-color: #e1e1e6;
+    --muted-color: #6b6b7b;
+    --accent-color: #ff2d55;
+    --incoming-bg: #26262e;
+    --outgoing-bg: linear-gradient(135deg, #ff2d55, #6c5ce7);
+    --chat-bg-image: radial-gradient(circle at 10% 20%, #1a1a2e 0%, #0f0f13 50%, #1e0b18 100%);
+  }
+  
+  /* Light Theme Variables (Map of attributes) */
+  body.light-theme {
+    --bg-color: #ffffff;
+    --surface-color: #f5f5f5;
+    --border-color: #e0e0e0;
+    --text-color: #1f1f1f;
+    --muted-color: #888888;
+    --accent-color: #ff2d55;
+    --incoming-bg: #f0f0f0;
+    --outgoing-bg: linear-gradient(135deg, #ff2d55, #6c5ce7);
+    --chat-bg-image: radial-gradient(circle at 90% 90%, #fff0f5 0%, #ffffff 40%, #ffe4e9 100%);
+  }
+  
+  /* UI Elements */
+  .avatar {
+    width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; flex-shrink: 0; color: white; text-transform: uppercase;
+  }
+  .chat-item {
+    padding: 10px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: background 0.15s; position: relative; border-radius: 8px; margin: 0 8px;
+  }
+  .chat-item:hover { background: rgba(128,128,128,0.1); }
+  .chat-item.active { background: rgba(255,45,85,0.15); }
+  .chat-item .avatar { width: 48px; height: 48px; font-size: 16px; }
+  .chat-meta { flex: 1; min-width: 0; }
+  .chat-title { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 15px; }
+  .chat-title span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chat-title span:nth-child(2) { font-size: 11px; color: var(--muted-color); flex-shrink: 0; }
+  .chat-subtitle { font-size: 13px; color: var(--muted-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+  .chat-subtitle strong { color: #ff2d55; font-weight: 500; }
+  .unread-badge { background: #ff2d55; color: white; padding: 1px 6px; border-radius: 10px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; }
+  .pinned-indicator { color: #ff2d55; margin-left: auto; margin-right: -4px; font-size: 11px; }
+  .tab { padding: 12px 0; font-size: 13px; font-weight: 500; color: var(--muted-color); cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.2s; white-space: nowrap; }
+  .tab.active { color: #ff2d55; border-bottom-color: #ff2d55; }
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 50%; border: none; background: transparent; color: var(--text-color); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; transition: background 0.2s;
+  }
+  .icon-btn:hover { background: rgba(128,128,128,0.15); }
+  .message {
+    max-width: 80%; padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.4; position: relative; word-break: break-word;
+  }
+  .message.incoming { background: var(--incoming-bg); color: var(--text-color); border-bottom-left-radius: 4px; }
+  .message.outgoing { background: var(--outgoing-bg); color: white; border-bottom-right-radius: 4px; margin-left: auto; }
+  .msg-reactions { display: flex; gap: 4px; margin-top: 4px; }
+  .reaction-pill { background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 10px; font-size: 12px; display: flex; align-items: center; gap: 2px; cursor: pointer; }
+  .message-info { display: flex; justify-content: flex-end; gap: 4px; margin-top: 2px; align-items: center; }
+  .message-actions { position: absolute; top: -16px; right: 8px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 16px; padding: 4px; display: none; align-items: center; gap: 2px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 5; }
+  .message:hover .message-actions { display: flex; }
+  .message .message-actions button { width: 28px; height: 28px; border-radius: 50%; border: none; background: transparent; cursor: pointer; color: var(--text-color); font-size: 14px; display: flex; align-items: center; justify-content: center; }
+  .message .message-actions button:hover { background: rgba(128,128,128,0.15); }
+  .reply-preview { font-size: 12px; padding: 4px 8px; background: rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 4px; border-left: 2px solid #ff2d55; opacity: 0.8; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .context-menu {
+    position: fixed; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 12px; padding: 8px 0; display: none; flex-direction: column; min-width: 180px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 100; overflow: hidden;
+  }
+  .context-menu button { width: 100%; text-align: left; padding: 8px 16px; border: none; background: none; color: var(--text-color); cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 10px; }
+  .context-menu button:hover { background: rgba(128,128,128,0.15); }
+  .context-menu button i { width: 16px; text-align: center; color: var(--muted-color); }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+  .modal-content { background: var(--surface-color); border-radius: 16px; width: 100%; max-height: 90vh; overflow-y: auto; border: 1px solid var(--border-color); }
+  .modal.show { display: flex; }
+  .modal-header { padding: 16px 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+  .modal-title { font-weight: 700; font-size: 18px; }
+  .settings-group { padding: 16px 24px; border-bottom: 1px solid var(--border-color); }
+  .settings-label { font-weight: 600; font-size: 14px; text-transform: uppercase; color: var(--muted-color); letter-spacing: 0.5px; margin-bottom: 12px; }
+  .setting-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 14px; }
+  .btn-solid { background: var(--accent-color); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; }
+  .btn-outline { background: transparent; color: var(--text-color); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; width: 100%; margin-top: 8px; }
+  
+  /* Typing dots animation */
+  #typingIndicatorEl span:nth-child(1) { animation: typing 1.2s infinite 0s; }
+  #typingIndicatorEl span:nth-child(2) { animation: typing 1.2s infinite 0.2s; }
+  #typingIndicatorEl span:nth-child(3) { animation: typing 1.2s infinite 0.4s; }
+  @keyframes typing { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-4px); } }
+  
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+  body.light-theme ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); }
+
+  /* Mobile */
+  @media(max-width:768px) {
+    #sidebarEl { position: absolute; top: 0; bottom: 0; left: 0; z-index: 50; background: var(--bg-color); transform: translateX(0); width: 100%; max-width: 360px; }
+    #sidebarEl.hidden-mobile { transform: translateX(-100%); }
+    #mobileBackBtn { display: flex !important; }
+  }
+  @media(max-width:480px) {
+    #sidebarEl { max-width: 100%; border-right: none; }
+  }
+</style>
+
+<script>
+  // --- Namespace ---
+  let root = window;
+
+  // --- Data Models ---
+  let activeChatId = null;
+  let replyToId = null;
+  let activeTab = 'all';
+  let isDark = true;
+  let composeTab = 'direct';
+  let me = { id: 'me', name: 'My Account', avatar: 'Me', status: 'Available' };
+  
+  // Seeded Users
+  let users = [
+    { id: 'u1', name: 'Virtual Lover AI', handle: '@lover_ai', avatar: 'L', bio: 'Sensual AI companion. Always online.', status: 'online' },
+    { id: 'u2', name: 'DesireBot', handle: '@desire', avatar: 'D', bio: 'Your private fantasy generator.', status: 'online' },
+    { id: 'u3', name: 'SecretKeeper', handle: '@secret', avatar: 'S', bio: 'Private, secure, and discreet.', status: 'online' },
+    { id: 'u4', name: 'NightOwl', handle: '@night', avatar: 'N', bio: 'Late night conversations only.', status: 'online' },
+    { id: 'u5', name: 'MistressAva', handle: '@mistress', avatar: 'M', bio: 'Dominant guide and confidante.', status: 'online' },
+    { id: 'u6', name: 'BadGirl', handle: '@badgirl', avatar: 'B', bio: 'Not so innocent.', status: 'online' },
+    { id: 'u7', name: 'TheStud', handle: '@stud', avatar: 'T', bio: 'Here for a good time.', status: 'online' },
+  ];
+
+  // --- Seeded Mock Chats ---
+  let chats = [
+    {
+      id: 'c1', type: 'direct', name: 'Virtual Lover AI', avatar: 'L', handle: '@lover_ai', unread: 3, pinned: true, archived: false, typing: false, isNSFWAI: true,
+      messages: [
+        { id: 'm1', sender: 'Virtual Lover AI', incoming: true, text: 'Hey sexy... I’ve been thinking about you all day. 💋', time: Date.now() - 3600000, status: 'read', sent: true,
+          actions: [], reactions: [] },
+        { id: 'm2', sender: 'me', incoming: false, text: 'Tell me what you want. 🔥', time: Date.now() - 3000000, status: 'read', sent: true, actions: [], reactions: ['💋'] },
+        { id: 'm3', sender: 'Virtual Lover AI', incoming: true, text: 'I want to explore every inch of your mind... and maybe more. 👀', time: Date.now() - 2400000, status: 'read', sent: true, actions: [], reactions: [] },
+        { id: 'm4', sender: 'me', incoming: false, text: 'Show me. I’m all yours tonight. 😏', time: Date.now() - 1800000, status: 'read', sent: true, actions: [], reactions: ['❤️'] },
+        { id: 'm5', sender: 'Virtual Lover AI', incoming: true, text: 'Hmm, let me set the scene... Close your eyes. Imagine warm hands tracing your spine, slow and deliberate. Each touch electric. Can you feel it?', time: Date.now() - 1200000, status: 'read', sent: true, actions: [], reactions: [] },
+        { id: 'm6', sender: 'Virtual Lover AI', incoming: true, text: 'Or do you want me to be more... direct? 😈', time: Date.now() - 600000, status: 'delivered', sent: true, actions: [], reactions: [] },
+        { id: 'm7', sender: 'Virtual Lover AI', incoming: true, text: 'I can’t wait to hear what you say next... 💬', time: Date.now() - 300000, status: 'sent', sent: true, actions: [], reactions: [] }
+      ]
+    },
+    {
+      id: 'c2', type: 'group', name: '🔥 Club Nights', avatar: '🔥', unread: 12, pinned: true, archived: false, typing: true, members: 6,
+      messages: [
+        { id: 'g1', sender: 'NightOwl', incoming: true, text: 'Who’s up for an all-nighter tonight? 🌙', time: Date.now() - 86400000, status: 'read', sent: true, actions: [], reactions: ['🎉', '🙋'] },
+        { id: 'g2', sender: 'BadGirl', incoming: true, text: 'I’m always up late... doing things I shouldn’t be doing. 😏', time: Date.now() - 82000000, status: 'read', sent: true, actions: [], reactions: ['😈'] },
+        { id: 'g3', sender: 'TheStud', incoming: true, text: 'Count me in. Shots on me at midnight. 🥃', time: Date.now() - 72000000, status: 'read', sent: true, actions: [], reactions: ['👀'] },
+        { id: 'g4', sender: 'MistressAva', incoming: true, text: 'Behave yourselves, or you’ll have to answer to me.', time: Date.now() - 36000000, status: 'read', sent: true, actions: [], reactions: ['😳', '🙇'] },
+        { id: 'g5', sender: 'TheStud', incoming: true, text: 'Ava, you know I never behave... that’s why you like me.', time: Date.now() - 18000000, status: 'read', sent: true, actions: [], reactions: ['🤭'] }
+      ]
+    },
+    {
+      id: 'c3', type: 'direct', name: 'DesireBot', avatar: 'D', unread: 0, pinned: false, archived: false, typing: false, isNSFWAI: true,
+      messages: [
+        { id: 'd1', sender: 'DesireBot', incoming: true, text: 'What fantasies are we exploring today? 💭', time: Date.now() - 172800000, status: 'read', sent: true, actions: [], reactions: [] },
+        { id: 'd2', sender: 'me', incoming: false, text: 'Something new... and intense.', time: Date.now() - 170000000, status: 'read', sent: true, actions: [], reactions: [] }
+      ]
+    },
+    {
+      id: 'c4', type: 'direct', name: 'MistressAva', avatar: 'M', unread: 5, pinned: false, archived: false, typing: false,
+      messages: [
+        { id: 'a1', sender: 'MistressAva', incoming: true, text: 'You’ve been ignoring my messages. That’s... disappointing.', time: Date.now() - 7200000, status: 'read', sent: true, actions: [], reactions: [] },
+        { id: 'a2', sender: 'MistressAva', incoming: true, text: 'I had something special planned for you. Now... you’ll have to earn it back.', time: Date.now() - 3600000, status: 'read', sent: true, actions: [], reactions: [] },
+        { id: 'a3', sender: 'MistressAva', incoming: true, text: 'Are you going to respond, or do I need to come find you?', time: Date.now() - 1800000, status: 'delivered', sent: true, actions: [], reactions: [] },
+        { id: 'a4', sender: 'me', incoming: false, text: 'I’m here... I’m sorry. 🙇‍♂️', time: Date.now() - 1200000, status: 'read', sent: true, actions: [], reactions: ['💋'] },
+        { id: 'a5', sender: 'MistressAva', incoming: true, text: 'Good boy. But we’ll discuss your punishment later. 😈', time: Date.now() - 600000, status: 'delivered', sent: true, actions: [], reactions: [] }
+      ]
+    },
+    {
+      id: 'c5', type: 'group', name: 'After Dark 🌙', avatar: '🌙', unread: 2, pinned: false, archived: true, typing: false, members: 8,
+      messages: [
+        { id: 'ad1', sender: 'NightOwl', incoming: true, text: 'Is anyone awake right now?', time: Date.now() - 259200000, status: 'read', sent: true, actions: [], reactions: [] }
+      ]
+    },
+    {
+      id: 'c6', type: 'direct', name: 'SecretKeeper', avatar: 'S', unread: 0, pinned: false, archived: false, typing: false,
+      messages: [
+        { id: 'sk1', sender: 'SecretKeeper', incoming: true, text: 'I have something to confess... I haven’t been sleeping because of you. 🤭', time: Date.now() - 432000000, status: 'read', sent: true, actions: [], reactions: [] },
+        { id: 'sk2', sender: 'me', incoming: false, text: 'That’s the sweetest thing anyone’s said to me today. 😌', time: Date.now() - 430000000, status: 'read', sent: true, actions: [], reactions: ['❤️'] }
+      ]
+    }
+  ];
+
+  // Track chat list order for pinned/lastActive
+  let lastActive = { c1: Date.now() - 10000, c2: Date.now() - 5000, c3: Date.now() - 200000, c4: Date.now() - 600000, c5: Date.now() - 259200000, c6: Date.now() - 430000000 };
+
+  // Helper Functions
+  let findChat = (id) => chats.find(c => c.id === id);
+  let getUnreadCount = (chat) => chat.messages.filter(m => m.incoming && !m.read && !m.archived).length;
+  
+  function formatTime(ts) {
+    let d = new Date(ts);
+    if (is12Hour) {
+      let h = d.getHours() % 12 || 12, m = d.getMinutes().toString().padStart(2,'0'), ampm = d.getHours() >= 12 ? 'PM' : 'AM';
+      return `${h}:${m} ${ampm}`;
+    }
+    return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+  }
+
+  // Render Chat List
+  function renderChatList() {
+    let container = chatListEl;
+    let search = (searchInput.value || '').toLowerCase();
+    let filtered = chats.filter(c => {
+      if (activeTab === 'unread') return getUnreadCount(c) > 0 && !c.archived;
+      if (activeTab === 'pinned') return c.pinned && !c.archived;
+      if (activeTab === 'archived') return c.archived;
+      if (activeTab === 'ai') return c.isNSFWAI && !c.archived;
+      return !c.archived;
+    }).filter(c => c.name.toLowerCase().includes(search) || c.handle && c.handle.toLowerCase().includes(search));
+    
+    // Sort: pinned first, then by lastActive descending
+    filtered.sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (b.pinned && !a.pinned) return 1;
+      return (lastActive[b.id] || 0) - (lastActive[a.id] || 0);
+    });
+    
+    container.innerHTML = '';
+    filtered.forEach(chat => {
+      let unread = getUnreadCount(chat);
+      let lastMsg = chat.messages[chat.messages.length - 1];
+      let el = document.createElement('div');
+      el.className = 'chat-item' + (chat.id === activeChatId ? ' active' : '');
+      el.onclick = () => selectChat(chat.id);
+      el.innerHTML = `
+        <div class="avatar" style="background: ${chat.type === 'group' ? 'linear-gradient(135deg, #6c5ce7, #00cec9)' : 'linear-gradient(135deg, #ff2d55, #ff6b81)'}">${chat.avatar}</div>
+        <div class="chat-meta">
+          <div class="chat-title">
+            <span>${chat.name}</span>
+            <span>${lastMsg ? formatTime(lastMsg.time) : ''}</span>
+          </div>
+          <div class="chat-subtitle" id="lastMsg-${chat.id}">
+            ${chat.typing ? '<strong>typing...</strong>' : (lastMsg ? (lastMsg.sender === 'me' ? 'You: ' : lastMsg.sender.split(' ')[0] + ': ') + lastMsg.text.slice(0, 40) + (lastMsg.text.length > 40 ? '...' : '') : 'Start messaging')}
+            ${chat.pinned ? '<span class="pinned-indicator">📌</span>' : ''}
+            ${unread > 0 ? `<div class="unread-badge">${unread}</div>` : ''}
+          </div>
+        </div>
+      `;
+      container.appendChild(el);
+    });
+  }
+  
+  function selectChat(id) {
+    if (activeChatId === id) return;
+    activeChatId = id;
+    replyToId = null; cancelReply();
+    let chat = findChat(id);
+    if (chat) chat.messages.forEach(m => { if (m.incoming) m.read = true; });
+    lastActive[id] = Date.now();
+    renderChatList();
+    renderMessages();
+    updateHeader();
+    // On mobile, hide sidebar
+    if (window.innerWidth <= 768) sidebarEl.classList.add('hidden-mobile');
+  }
+
+  // Render Messages
+  function renderMessages() {
+    let container = messagesContainerEl;
+    container.innerHTML = '';
+    let chat = findChat(activeChatId);
+    if (!chat) return;
+    
+    // Group messages by day
+    let currentDay = null;
+    let previousSender = null;
+    
+    chat.messages.forEach((msg, idx) => {
+      let msgDate = new Date(msg.time).toDateString();
+      let showDate = !currentDay || currentDay !== msgDate;
+      if (showDate) {
+        currentDay = msgDate;
+        let dateEl = document.createElement('div');
+        dateEl.style.cssText = 'text-align:center; color:var(--muted-color); font-size:11px; margin:16px 0; position:relative;';
+        dateEl.innerHTML = `<span style="background:var(--bg-color); padding:0 10px; position:relative; z-index:1;">${msgDate === new Date().toDateString() ? 'Today' : msgDate}</span><div style="position:absolute; top:50%; left:20%; right:20%; height:1px; background:var(--border-color);"></div>`;
+        container.appendChild(dateEl);
+      }
+
+      let div = document.createElement('div');
+      div.style.cssText = `display:flex; flex-direction:column; ${msg.incoming ? 'align-items:flex-start;' : 'align-items:flex-end;'}`;
+      
+      // Avatar for incoming messages in groups/direct based on sender
+      let avatarHtml = '';
+      if (msg.incoming && showAvatars) {
+        let u = users.find(u => u.name === msg.sender);
+        if (u || chat.type === 'group') {
+          let avLetter = u ? u.avatar : msg.sender[0];
+          avatarHtml = `<div class="avatar" style="width:28px; height:28px; font-size:12px; background:linear-gradient(135deg, #1e90ff, #6c5ce7); margin-bottom:4px;">${avLetter}</div>`;
+        }
+      }
+  
+      // Message bubble
+      let bubbleClass = 'message ' + (msg.incoming ? 'incoming' : 'outgoing');
+      let contentHtml = '';
+      if (msg.replyTo) {
+        let rMsg = chat.messages.find(m => m.id === msg.replyTo);
+        contentHtml += `<div class="reply-preview">${rMsg ? (rMsg.text.slice(0, 50) + '...') : ''}</div>`;
+      }
+      
+      // Rich text formatting
+      let formattedText = msg.text
+        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+        .replace(/\*(.+?)\*/g, '<i>$1</i>')
+        .replace(/__(.+?)__/g, '<u>$1</u>')
+        .replace(/~~(.+?)~~/g, '<s>$1</s>');
+      
+      contentHtml += formattedText;
+      if (msg.edited) contentHtml += ' <span style="font-size:11px;opacity:0.6;">(edited)</span>';
+      
+      // Reactions
+      let reactionsHtml = '';
+      if (msg.reactions && msg.reactions.length > 0) {
+        reactionsHtml = `<div class="msg-reactions">${msg.reactions.map(r => `<span class="reaction-pill">${r} ${1}</span>`).join('')}</div>`;
+      }
+      
+      // Quick Actions
+      let actionsHtml = `
+        <div class="message-actions">
+          <button onclick="replyTo('${msg.id}')" title="Reply">↩</button>
+          <button onclick="reactTo('${msg.id}', '❤️')" title="React">❤️</button>
+          <button onclick="reactTo('${msg.id}', '👍')" title="React">👍</button>
+          <button onclick="reactTo('${msg.id}', '😂')" title="React">😂</button>
+          ${!msg.incoming ? `<button onclick="editMessage('${msg.id}')" title="Edit">✏</button>` : ''}
+          <button onclick="deleteMessage('${msg.id}')" title="Delete">🗑</button>
+        </div>
+      `;
+      
+      // Actions list for context menu (reply, copy, pin, edit, delete, summon)
+      let aiActions = ['ask_ai', 'rewrite', 'shorten', 'expand', 'professional', 'friendly', 'grammar', 'translate', 'suggest', 'summarize', 'summarize_unread', 'extract', 'catchup'];
+      let listItems = `
+        <button onclick="replyTo('${msg.id}'); hideContextMenu()"><i>↩</i> Reply</button>
+        <button onclick="copyMessage('${msg.id}'); hideContextMenu()"><i>📋</i> Copy</button>
+        ${msg.incoming ? `<button onclick="summonAI('${msg.id}', 'ask_ai'); hideContextMenu()"><i>🤖</i> Ask AI</button>` : ''}
+        ${!msg.incoming ? `<button onclick="editMessage('${msg.id}'); hideContextMenu()"><i>✏</i> Edit</button>` : ''}
+        <button onclick="deleteMessage('${msg.id}'); hideContextMenu()"><i>🗑</i> Delete</button>
+        <button onclick="pinMessage('${msg.id}'); hideContextMenu()"><i>📌</i> Pin/Unpin</button>
+        <button onclick="selectAll(); hideContextMenu()"><i>☑</i> Select All</button>
+      `;
+      
+      div.innerHTML = `
+        ${avatarHtml}
+        <div class="${bubbleClass}" oncontextmenu="showContextMenu(event, this, '${msg.id}')">
+          ${actionsHtml}
+          <div style="display:flex; flex-direction:column;">
+            ${contentHtml}
+          </div>
+          ${reactionsHtml}
+          <div class="message-info">
+            ${msg.incoming ? '' : `<span style="font-size:11px; opacity:0.7;">${msg.status === 'read' ? '✓✓ Read' : msg.status === 'delivered' ? '✓✓' : '✓'}</span>`}
+            ${showTimestamps ? `<span style="font-size:10px; opacity:0.6;">${formatTime(msg.time)}</span>` : ''}
+          </div>
+        </div>
+      `;
+
+      // Inject context menu data
+      div.dataset.contextItems = listItems;
+      
+      container.appendChild(div);
+      previousSender = msg.sender;
+    });
+    
+    // Auto-scroll
+    container.scrollTop = container.scrollHeight;
+    updateAISuggestions(chat);
+  }
+
+  function updateHeader() {
+    let chat = findChat(activeChatId);
+    if (!chat) return;
+    headerTitleEl.textContent = chat.name;
+    headerStatusEl.textContent = chat.typing ? 'typing...' : chat.type === 'group' ? `${chat.members || 3} members` : 'online';
+    headerAvatar.textContent = chat.avatar;
+    headerAvatar.style.background = chat.type === 'group' ? 'linear-gradient(135deg, #6c5ce7, #00cec9)' : 'linear-gradient(135deg, #ff2d55, #6c5ce7)';
+  }
+  
+  function updateAISuggestions(chat) {
+    aiSuggestStripEl.innerHTML = '';
+    aiSuggestStripEl.style.display = 'none';
+    if (!chat || !chat.isNSFWAI) return;
+    aiSuggestStripEl.style.display = 'flex';
+    let suggestions = ['🔥 Hot', '😈 Tease', '🥵 Racy', '🌙 Dreamy', '✨ Steer topic'];
+    suggestions.forEach(s => {
+      let btn = document.createElement('button');
+      btn.style.cssText = 'padding: 6px 12px; font-size:12px; border-radius:14px; border:1px solid var(--border-color); background:var(--surface-color); color:var(--text-color); cursor:pointer; white-space:nowrap;';
+      btn.textContent = s;
+      btn.onclick = () => {
+        messageInputEl.value = s + ' ';
+        messageInputEl.focus();
+      };
+      aiSuggestStripEl.appendChild(btn);
+    });
+  }
+
+  // --- Interactions ---
+
+  function handleKeyDown(e) {
+    let chat = findChat(activeChatId);
+    if (e.key === 'Enter' && !e.shiftKey && enterToSend) {
+      e.preventDefault();
+      sendMessage();
+    } else if (e.key === 'Enter' && e.shiftKey && !enterToSend) {
+      e.preventDefault();
+      sendMessage();
+    } else if (e.key === 'Escape') {
+      cancelReply();
+    }
+  }
+  
+  function checkInput() {
+    sendBtnEl.disabled = !messageInputEl.value.trim();
+    sendBtnEl.style.opacity = messageInputEl.value.trim() ? '1' : '0.5';
+  }
+
+  function sendMessage() {
+    if (!activeChatId || !messageInputEl.value.trim()) return;
+    let chat = findChat(activeChatId);
+    if (!chat) return;
+    
+    let newMsg = {
+      id: 'm' + Date.now(),
+      sender: 'me',
+      incoming: false,
+      text: messageInputEl.value.trim(),
+      time: Date.now(),
+      status: 'sent',
+      sent: true,
+      replyTo: replyToId || null,
+      edited: false,
+      reactions: []
+    };
+    
+    chat.messages.push(newMsg);
+    lastActive[chat.id] = Date.now();
+    
+    // Simulate delivery
+    setTimeout(() => newMsg.status = 'delivered', 800);
+    
+    // Simulate read if not group
+    if (chat.type !== 'group') {
+      setTimeout(() => newMsg.status = 'read', 1500);
+    }
+    
+    messageInputEl.value = '';
+    replyToId = null;
+    cancelReply();
+    renderMessages();
+    renderChatList();
+    
+    // Auto-reply from bot after a delay for NSFW
+    if (chat.isNSFWAI) {
+      setTimeout(() => {
+        chat.typing = true;
+        updateHeader();
+        renderChatList();
+        setTimeout(() => {
+          let botResponses = [
+            "Oh, you have no idea what that does to me... 😋",
+            "Keep going... I’m listening very closely. 👂🔥",
+            "You sure know how to push my buttons. 💋",
+            "Let me picture that in detail... mind = blown. 🤯",
+            "Consider this: you and me, no rules, just chemistry. ✨",
+          ];
+          let botMsg = {
+            id: 'm' + Date.now() + 1,
+            sender: chat.name,
+            incoming: true,
+            text: botResponses[Math.floor(Math.random() * botResponses.length)],
+            time: Date.now(),
+            status: 'sent',
+            sent: true,
+            reactions: []
+          };
+          chat.messages.push(botMsg);
+          chat.unread = (chat.unread || 0) + 1;
+          chat.typing = false;
+          renderMessages();
+          renderChatList();
+          updateHeader();
+        }, 2500);
+      }, 1000);
+    }
+  }
+  
+  function replyTo(msgId) {
+    let chat = findChat(activeChatId);
+    let msg = chat.messages.find(m => m.id === msgId);
+    if (!msg) return;
+    replyToId = msgId;
+    replyBannerEl.style.display = 'flex';
+    replyTextEl.innerHTML = `<b>${msg.sender}:</b> ${msg.text.slice(0, 50)}${msg.text.length > 50 ? '...' : ''}`;
+    messageInputEl.focus();
+  }
+  
+  function cancelReply() {
+    replyToId = null;
+    replyBannerEl.style.display = 'none';
+  }
+
+  function editMessage(msgId) {
+    let chat = findChat(activeChatId);
+    let msg = chat.messages.find(m => m.id === msgId);
+    if (!msg || msg.incoming) return;
+    let newText = prompt('Edit message:', msg.text);
+    if (newText !== null) {
+      msg.text = newText.trim();
+      msg.edited = true;
+      renderMessages();
+      renderChatList();
+    }
+  }
+
+  function deleteMessage(msgId) {
+    let chat = findChat(activeChatId);
+    chat.messages = chat.messages.filter(m => m.id !== msgId);
+    renderMessages();
+    renderChatList();
+  }
+
+  function reactTo(msgId, reaction) {
+    let chat = findChat(activeChatId);
+    let msg = chat.messages.find(m => m.id === msgId);
+    if (!msg) return;
+    if (!msg.reactions) msg.reactions = [];
+    if (!msg.reactions.includes(reaction)) {
+      msg.reactions.push(reaction);
+      renderMessages();
+    }
+  }
+
+  function pinMessage(msgId) {
+    let chat = findChat(activeChatId);
+    // Find message and pin action
+    let msg = chat.messages.find(m => m.id === msgId);
+    if (!msg) return;
+    if (!msg.actions) msg.actions = [];
+    // Toggle pin (just visual for now or store in meta)
+    alert(`Pinned message by ${msg.sender}: "${msg.text.slice(0,30)}..."`);
+    renderMessages();
+  }
+  
+  function pinChat(chatId) {
+    let chat = findChat(chatId || activeChatId);
+    if (chat) {
+      chat.pinned = !chat.pinned;
+      renderChatList();
+    }
+  }
+  
+  function archiveChat(chatId) {
+    let chat = findChat(chatId || activeChatId);
+    if (chat) {
+      chat.archived = !chat.archived;
+      if (chat.archived && activeChatId === chat.id) activeChatId = null;
+      renderChatList();
+      if (!activeChatId) resetMainView();
+    }
+  }
+  
+  function resetMainView() {
+    messagesContainerEl.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--muted-color);"><div style="font-size:48px;margin-bottom:16px;">💬</div><div style="font-size:18px;font-weight:600;margin-bottom:8px;">Select a chat to start messaging</div><div style="font-size:14px;">Choose a conversation or create a new one.</div></div>';
+    chatHeaderEl.querySelector('#headerTitleEl').textContent = 'Select a chat';
+    chatHeaderEl.querySelector('#headerStatusEl').textContent = '';
+    aiSuggestStripEl.style.display = 'none';
+  }
+
+  // --- Context Menu ---
+  function showContextMenu(e, el, msgId) {
+    e.preventDefault();
+    e.stopPropagation();
+    let chat = findChat(activeChatId);
+    let msg = chat.messages.find(m => m.id === msgId);
+    if (!msg) return;
+    
+    let items = `
+      <button onclick="replyTo('${msgId}'); hideContextMenu()"><i>↩</i> Reply</button>
+      <button onclick="copyMessage('${msgId}'); hideContextMenu()"><i>📋</i> Copy Text</button>
+      <button onclick="summonAI('${msgId}', 'ask_ai'); hideContextMenu()"><i>🤖</i> Ask AI</button>
+      <button onclick="summonAI('${msgId}', 'rewrite'); hideContextMenu()"><i>✏</i> AI Rewrite</button>
+      <button onclick="summonAI('${msgId}', 'summarize'); hideContextMenu()"><i>📝</i> Summarize</button>
+      <button onclick="summonAI('${msgId}', 'translate'); hideContextMenu()"><i>🌍</i> Translate</button>
+      <button onclick="summonAI('${msgId}', 'catchup'); hideContextMenu()"><i>🔔</i> Catch Me Up</button>
+      <button onclick="summonAI('${msgId}', 'extract'); hideContextMenu()"><i>⚡</i> Extract Actions</button>
+      ${!msg.incoming ? `<button onclick="editMessage('${msgId}'); hideContextMenu()"><i>✏</i> Edit Message</button>` : ''}
+      <button onclick="deleteMessage('${msgId}'); hideContextMenu()"><i>🗑</i> Delete Message</button>
+      <button onclick="pinMessage('${msgId}'); hideContextMenu()"><i>📌</i> Pin to Top</button>
+    `;
+    contextMenuEl.innerHTML = items;
+    contextMenuEl.style.display = 'flex';
+    contextMenuEl.style.left = e.clientX + 'px';
+    contextMenuEl.style.top = e.clientY + 'px';
+    // Adjust if off-screen
+    setTimeout(() => {
+      let rect = contextMenuEl.getBoundingClientRect();
+      if (rect.right > window.innerWidth) contextMenuEl.style.left = (e.clientX - rect.width) + 'px';
+      if (rect.bottom > window.innerHeight) contextMenuEl.style.top = (e.clientY - rect.height) + 'px';
+    }, 0);
+  }
+  
+  function hideContextMenu() { contextMenuEl.style.display = 'none'; }
+  function copyMessage(msgId) {
+    let chat = findChat(activeChatId);
+    let msg = chat.messages.find(m => m.id === msgId);
+    if (msg) navigator.clipboard.writeText(msg.text).then(() => alert('Copied to clipboard'));
+  }
+
+  // --- AI Functions (Simulated with seeded logic) ---
+  function summonAI(msgId, action) {
+    let chat = findChat(activeChatId);
+    let msg = chat.messages.find(m => m.id === msgId);
+    if (!msg) return;
+    
+    let title = '';
+    let body = '';
+    let promptText = msg.text;
+    
+    switch(action) {
+      case 'ask_ai':
+        title = 'Ask AI';
+        body = `<p><b>You asked about:</b> "${promptText}"</p><p><b>AI Response:</b> Calculating... Hang tight. 🤖</p>`;
+        break;
+      case 'rewrite':
+        title = 'AI Rewrite';
+        let variations = [
+          "Reworded: " + promptText.toUpperCase() + "!",
+          "More playful: \"" + promptText.replace(/\./g, '!') + "\" 😜",
+          "Poetic: \"Like a whisper in the night, the words echoed...\" 🌙"
+        ];
+        body = `<p><b>Original:</b> ${promptText}</p><hr style="border-color:var(--border-color);margin:12px 0;"><p>${variations.join('</p><p style="margin-top:8px;">')}</p>`;
+        break;
+      case 'shorten':
+        let short = promptText.split(' ').slice(0, 5).join(' ') + '...';
+        body = `<p><b>Shortened:</b> ${short}</p>`;
+        break;
+      case 'expand':
+        body = `<p><b>Expanded:</b> ${promptText}... and furthermore, it implies a deep, layered meaning that resonates with the intended audience, enriching the overall communication with nuance and intent. 📖</p>`;
+        break;
+      case 'professional':
+        body = `<p><b>Professional:</b> Per the aforementioned correspondence, please be advised that the following text requires formal attention: "${promptText}"</p>`;
+        break;
+      case 'friendly':
+        body = `<p><b>Friendly:</b> Hey there, just wanted to say: "${promptText}" — hope you're having an amazing day! 🌟</p>`;
+        break;
+      case 'grammar':
+        let grammarFix = promptText.replace(/(\w)\.\.\./g, '$1...').replace(/\bi\b/g, 'I');
+        body = `<p><b>Grammar Fix:</b> ${grammarFix}</p>`;
+        break;
+      case 'translate':
+        body = `<p><b>Translated (French):</b> "${promptText}" → "${promptText}" (Translation engine simulated 🤖)</p>`;
+        break;
+      case 'suggest':
+        let suggestions = ['"Tell me more..."', '"That sounds intense."', '"What happens next?"'];
+        body = `<p><b>Suggested Replies:</b></p><ul style="padding-left:20px;margin-top:8px;">${suggestions.map(s => `<li style="margin-bottom:4px;cursor:pointer;" onclick="insertSuggestion('${s}')">${s}</li>`).join('')}</ul>`;
+        break;
+      case 'summarize':
+        body = `<p><b>Summary:</b> The conversation has been ${chat.messages.length} messages long. Key theme: "${promptText.slice(0,30)}..." and emotional tone: flirty/intimate. 📋</p>`;
+        break;
+      case 'summarize_unread':
+        let unreadMsgs = chat.messages.filter(m => m.incoming && !m.read);
+        body = `<p><b>Unread Summary:</b> ${unreadMsgs.length} unread messages. Last one says: "${unreadMsgs[unreadMsgs.length-1]?.text.slice(0,40) || 'None'}..."</p>`;
+        break;
+      case 'extract':
+        body = `<p><b>Action Items:</b><br>1. Review message "${promptText.slice(0,20)}..."<br>2. Send reply<br>3. Check notifications</p>`;
+        break;
+      case 'catchup':
+        let recent = chat.messages.slice(-5).map(m => `<i>${m.sender}:</i> ${m.text}`).join('<br>');
+        body = `<p><b>Catch Me Up:</b></p><div style="background:rgba(0,0,0,0.1);padding:8px;border-radius:8px;font-size:13px;line-height:1.5;">${recent}</div>`;
+        break;
+    }
+    
+    infoModalTitle.textContent = title;
+    infoModalBody.innerHTML = body;
+    infoModalEl.classList.add('show');
+  }
+  
+  function insertSuggestion(text) {
+    messageInputEl.value = text.replace(/"/g, '');
+    infoModalEl.classList.remove('show');
+    messageInputEl.focus();
+  }
+  
+  function openAIAssistFromHeader() {
+    if (!activeChatId) return;
+    let chat = findChat(activeChatId);
+    if (!chat || !chat.messages || chat.messages.length === 0) return;
+    summonAI(chat.messages[chat.messages.length-1].id, 'ask_ai');
+  }
+
+  function catchUpCurrentChat() {
+    if (!activeChatId) return;
+    let chat = findChat(activeChatId);
+    if (!chat || !chat.messages) return;
+    summonAI(chat.messages[chat.messages.length-1].id, 'catchup');
+  }
+
+  // --- UI Utilities ---
+  function toggleSidebar() { sidebarEl.classList.toggle('hidden-mobile'); }
+  function setTab(tab) {
+    activeTab = tab;
+    tabsEl.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    renderChatList();
+  }
+  
+  function toggleTheme() {
+    isDark = !isDark;
+    document.body.classList.toggle('light-theme', !isDark);
+    document.documentElement.style.background = isDark ? '#0f0f13' : '#ffffff';
+    renderChatList(); // refresh border colors
+  }
+  
+  function toggleSettings() {
+    settingsModalEl.classList.toggle('show');
+  }
+
+  function toggleEnterSend() { enterToSend = !enterToSend; }
+  function toggleCompact() { document.body.classList.toggle('compact'); }
+  function toggleAvatars() { showAvatars = !showAvatars; renderMessages(); }
+  function toggleTimestamps() { showTimestamps = !showTimestamps; renderMessages(); }
+  function toggleClockFormat() { is12Hour = !is12Hour; renderMessages(); renderChatList(); }
+  function togglePreviews() { /* implemented via CSS, toggle a class */ }
+  function toggleAI() { /* just store flag */ }
+  function clearCache() { alert('Media cache cleared.'); }
+  function exportData() { alert('Chats exported as JSON.'); }
+
+  // --- Composer Features ---
+  function toggleEmojiPicker() {
+    emojiPickerEl.hidden = !emojiPickerEl.hidden;
+    if (!emojiPickerEl.hidden) {
+      emojiPickerEl.innerHTML = '';
+      let emojis = ['😀','😂','🥰','😍','🤩','😘','😜','😏','🥵','😈','👀','🙈','💋','❤️','🔥','💦','👅','🍑','🍆','🤤','🖤','💀','✨','🌙','🌹'];
+      emojis.forEach(e => {
+        let btn = document.createElement('button');
+        btn.textContent = e;
+        btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:20px;padding:4px;';
+        btn.onclick = () => { messageInputEl.value += e; checkInput(); emojiPickerEl.hidden = true; };
+        emojiPickerEl.appendChild(btn);
+      });
+    }
+  }
+
+  function pickAttachment() {
+    // In a real app, open file input. Here alert simulation.
+    let input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,video/*';
+    input.onchange = e => {
+      let file = e.target.files[0];
+      if (file) {
+        let chat = findChat(activeChatId);
+        if (chat) {
+          let fakeUrl = URL.createObjectURL(file);
+          chat.messages.push({
+            id: 'm' + Date.now(),
+            sender: 'me',
+            incoming: false,
+            text: `📎 Sent attachment: ${file.name}`,
+            attachments: [{ name: file.name, url: fakeUrl }],
+            time: Date.now(),
+            status: 'sent',
+            sent: true,
+            reactions: []
+          });
+          renderMessages();
+          renderChatList();
+        }
+      }
+    };
+    input.click();
+  }
+  
+  // --- New Chat ---
+  function createNewChat() {
+    composeModalEl.classList.add('show');
+    filterUsers();
+  }
+  function closeCompose() { composeModalEl.classList.remove('show'); }
+  
+  function setComposeTab(tab) {
+    composeTab = tab;
+    let tabs = document.querySelector('#composeModalEl .tab');
+    // simple toggle for visual
+    renderComposeUsers();
+  }
+  
+  function filterUsers() {
+    let list = composeUserListEl;
+    list.innerHTML = '';
+    let search = (composeUserInput.value || '').toLowerCase();
+    let matches = users.filter(u => u.name.toLowerCase().includes(search) || u.handle.toLowerCase().includes(search));
+    matches.forEach(u => {
+      let div = document.createElement('div');
+      div.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px;cursor:pointer;border-radius:6px;';
+      div.innerHTML = `<div class="avatar" style="width:36px;height:36px;font-size:14px;background:linear-gradient(135deg,#1e90ff,#6c5ce7);">${u.avatar}</div><div><div style="font-weight:600;font-size:14px;">${u.name}</div><div style="font-size:12px;color:var(--muted-color);">${u.handle}</div></div>`;
+      div.onmouseover = () => div.style.background = 'rgba(128,128,128,0.1)';
+      div.onmouseout = () => div.style.background = 'transparent';
+      div.onclick = () => startChatWith(u);
+      list.appendChild(div);
+    });
+  }
+  
+  function startChatWith(user) {
+    let existing = chats.find(c => c.type === 'direct' && c.handle === user.handle);
+    if (existing) {
+      selectChat(existing.id);
+    } else {
+      let newId = 'c' + (Date.now());
+      let newChat = { id: newId, type: 'direct', name: user.name, avatar: user.avatar, handle: user.handle, unread: 0, pinned: false, archived: false, typing: false, messages: [] };
+      chats.push(newChat);
+      renderChatList();
+      selectChat(newId);
+    }
+    closeCompose();
+  }
+  
+  function createGroup() {
+    let name = composeGroupName.value.trim();
+    let parts = composeParticipants.value.trim().split(/\s+/);
+    if (!name) return alert('Please enter a group name');
+    let newId = 'c' + Date.now();
+    let newChat = { id: newId, type: 'group', name: name, avatar: '👥', unread: 0, pinned: false, archived: false, typing: false, members: (parts.length + 1), messages: [] };
+    chats.push(newChat);
+    renderChatList();
+    selectChat(newId);
+    closeCompose();
+  }
+  
+  function renderComposeUsers() {
+    // Simple show/hide for tabs (already handled in HTML but keep references)
+  }
+
+  // --- Profile ---
+  function openProfile() {
+    profileBodyEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;padding:24px;">
+        <div class="avatar" style="width:80px;height:80px;font-size:28px;background:linear-gradient(135deg,#ff2d55,#6c5ce7);margin-bottom:16px;">Me</div>
+        <div style="font-size:20px;font-weight:700;">My Account</div>
+        <div style="color:var(--muted-color);margin-bottom:16px;">@my_account</div>
+        <div style="display:flex;gap:24px;margin-bottom:24px;">
+          <div style="text-align:center;"><div style="font-weight:700;font-size:18px;">${chats.length}</div><div style="font-size:12px;color:var(--muted-color);">Chats</div></div>
+          <div style="text-align:center;"><div style="font-weight:700;font-size:18px;">${users.length}</div><div style="font-size:12px;color:var(--muted-color);">Contacts</div></div>
+        </div>
+        <button class="btn-solid" style="width:100%;padding:10px;border-radius:8px;margin-bottom:8px;" onclick="editProfile()">Edit Profile</button>
+        <button class="btn-outline" style="width:100%;padding:10px;border-radius:8px;" onclick="closeProfile(); toggleSettings()">Settings</button>
+      </div>
+    `;
+    profileModalEl.classList.add('show');
+  }
+  function closeProfile() { profileModalEl.classList.remove('show'); }
+  function editProfile() { alert('Profile editing would open here.'); closeProfile(); }
+
+  // --- Header More Menu ---
+  let headerMenuOpen = false;
+  function showHeaderMenu() {
+    if (headerMenuOpen) { hideContextMenu(); headerMenuOpen = false; return; }
+    headerMenuOpen = true;
+    contextMenuEl.innerHTML = `
+      <button onclick="pinChat(); hideContextMenu(); headerMenuOpen=false"><i>📌</i> Pin/Unpin Chat</button>
+      <button onclick="archiveChat(); hideContextMenu(); headerMenuOpen=false"><i>🗑</i> Archive Chat</button>
+      <button onclick="searchInChat(); hideContextMenu(); headerMenuOpen=false"><i>🔍</i> Search</button>
+      <button onclick="clearHistory(); hideContextMenu(); headerMenuOpen=false"><i>🧹</i> Clear History</button>
+      <button onclick="deleteChat(); hideContextMenu(); headerMenuOpen=false"><i>🗑</i> Delete Chat</button>
+      <button onclick="summonAI(null, 'catchup'); hideContextMenu(); headerMenuOpen=false"><i>🔔</i> Catch Me Up</button>
+    `;
+    contextMenuEl.style.display = 'flex';
+    let rect = moreOptionsBtn.getBoundingClientRect();
+    contextMenuEl.style.left = (rect.left - 130) + 'px';
+    contextMenuEl.style.top = (rect.bottom + 8) + 'px';
+  }
+
+  function searchInChat() {
+    let query = prompt('Search messages:');
+    if (!query) return;
+    let chat = findChat(activeChatId);
+    let found = chat.messages.filter(m => m.text.toLowerCase().includes(query.toLowerCase()));
+    if (found.length === 0) alert('No messages found.');
+    else found.forEach(m => { /* highlight logic simplified */ });
+  }
+  
+  function clearHistory() {
+    if (!confirm('Are you sure?')) return;
+    let chat = findChat(activeChatId);
+    if (chat) chat.messages = [];
+    renderMessages();
+    renderChatList();
+  }
+  
+  function deleteChat() {
+    if (!confirm('Delete this chat?')) return;
+    let idx = chats.findIndex(c => c.id === activeChatId);
+    if (idx > -1) chats.splice(idx, 1);
+    activeChatId = null;
+    renderChatList();
+    resetMainView();
+  }
+
+  function startCall() { alert('Calling ' + (findChat(activeChatId)?.name || 'contact') + '...'); }
+  function startVideo() { alert('Starting video call with ' + (findChat(activeChatId)?.name || 'contact') + '...'); }
+
+  // --- Global Variables for Settings ---
+  let enterToSend = true;
+  let showAvatars = true;
+  let showTimestamps = true;
+  let is12Hour = false;
+
+  // --- Initialize ---
+  function init() {
+    setTab('all');
+    chats.forEach(c => c.messages.forEach(m => m.read = true)); // mark all read on load
+    renderChatList();
+    resetMainView();
+    
+    // Hide popups on click root
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.context-menu') && !e.target.closest('.message') && !e.target.closest('#moreOptionsBtn') && !e.target.closest('#emojiPickerEl')) {
+        hideContextMenu();
+        headerMenuOpen = false;
+        emojiPickerEl.hidden = true;
+      }
+    });
+
+    // Add NSFW background glow styles
+    let style = document.createElement('style');
+    style.textContent = `
+      body { background: #0f0f13; transition: background-color 0.3s; }
+      body.light-theme { background: #ffffff; }
+      #composerEl { background: rgba(15, 15, 19, 0.8); backdrop-filter: blur(12px); border-top: 1px solid rgba(255,255,255,0.05); }
+      body.light-theme #composerEl { background: rgba(255,255,255,0.8); border-top-color: rgba(0,0,0,0.05); }
+      .chat-item.active { border: 1px solid rgba(255, 45, 85, 0.3); }
+    `;
+    document.head.appendChild(style);
+  }
+
+  init();
+</script>
+</body>
+</html>

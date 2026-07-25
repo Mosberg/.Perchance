@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>5jybeyu2qi — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ultra-Detailed Character Metadata Generator From URL</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 20px; color:#102; }
+    .row { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+    label { font-weight:600; margin-right:8px; }
+    select, input[type="text"], textarea { width:100%; padding:8px; border:1px solid #ccc; border-radius:6px; }
+    textarea { min-height:160px; font-family: monospace; font-size:13px; }
+    button { padding:8px 12px; border-radius:8px; border:0; background:#0d8b78; color:#fff; cursor:pointer; }
+    button:disabled { opacity:0.6; cursor:default; }
+    .controls { display:flex; gap:8px; }
+    .small { width:220px; }
+    .muted { color:#556; font-size:13px; }
+    .top { max-width:1100px; margin:0 auto; }
+    .two-col { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/ajv@8.12.0/dist/ajv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mozilla/readability@0.4.4/Readability.js"></script>
+</head>
+<body>
+  <div class="top">
+    <h1>Ultra-Detailed Character Metadata Generator From URL</h1>
+    <p class="muted">Paste one or more URLs, select a schema, and click Generate. Results are output as <code>\{ "character": \[...\] \}</code>.</p>
+
+    <div class="row">
+      <label for="schemaSelect">Schema Type</label>
+
+      <label for="enableInference" style="margin-left:18px">Enable AI Inference</label>
+      <input id="enableInference" type="checkbox" />
+
+      <label for="enableCrop" style="margin-left:18px">Enable Avatar Crop</label>
+      <input id="enableCrop" type="checkbox" />
+      <select id="schemaSelect">
+        <option value="ultra">Ultra‑Detailed Schema — ultra-detailed-character-metadata-v2.schema.json</option>
+        <option value="nsfw">Ultra‑Detailed NSFW Schema — ultra-detailed-character-metadata-nsfw-v2.schema.json</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom:8px">
+      <label for="urlInput">URL Input</label>
+      <input id="urlInput" type="text" placeholder="https://example.com/character or comma/newline separated list" />
+    </div>
+
+    <div style="margin-bottom:8px">
+      <label for="batchUrls">Or paste multiple URLs (one per line)</label>
+      <textarea id="batchUrls" placeholder="https://example.com/char-a\nhttps://example.com/char-b"></textarea>
+    </div>
+
+    <div class="row">
+      <label for="enableEditor">Enable JSON Editor</label>
+      <input id="enableEditor" type="checkbox" />
+
+      <label for="showValidation" style="margin-left:18px">Show Validation</label>
+      <input id="showValidation" type="checkbox" />
+
+      <label for="enableInference" style="margin-left:18px">Enable AI Inference</label>
+      <input id="enableInference" type="checkbox" />
+
+      <label for="enableAvatarCrop" style="margin-left:18px">Enable Avatar AutoCrop</label>
+      <input id="enableAvatarCrop" type="checkbox" />
+    </div>
+
+    <div class="row">
+      <label for="faceCropEndpoint">Face Crop Endpoint (optional)</label>
+      <input id="faceCropEndpoint" class="small" type="text" placeholder="https://api.example.com/face-crop" />
+    </div>
+
+    <div class="controls" style="margin-bottom:14px">
+      <button id="generateBtn">Generate</button>
+      <button id="downloadBtn" disabled>Download JSON</button>
+      <div class="muted" id="status">Idle</div>
+    </div>
+
+    <div class="two-col" style="margin-bottom:12px">
+      <div>
+        <label for="jsonOutput">JSON Output</label>
+        <textarea id="jsonOutput" readonly placeholder="Generated metadata will appear here"></textarea>
+      </div>
+      <div>
+        <label for="validationOutput">Validation Results</label>
+        <textarea id="validationOutput" readonly placeholder="Validation messages will appear here"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Root refs + UI elements
+    const rootRef = window.root || {};
+    const els = {
+      schemaSelect: document.getElementById('schemaSelect'),
+      urlInput: document.getElementById('urlInput'),
+      batchUrls: document.getElementById('batchUrls'),
+      enableEditor: document.getElementById('enableEditor'),
+      showValidation: document.getElementById('showValidation'),
+      enableInference: document.getElementById('enableInference'),
+      enableAvatarCrop: document.getElementById('enableAvatarCrop'),
+      faceCropEndpoint: document.getElementById('faceCropEndpoint'),
+      generateBtn: document.getElementById('generateBtn'),
+      downloadBtn: document.getElementById('downloadBtn'),
+      jsonOutput: document.getElementById('jsonOutput'),
+      validationOutput: document.getElementById('validationOutput'),
+      status: document.getElementById('status')
+    };
+
+    // Strict, hand-authored JSON Schema (draft-07) for the ultra schema
+    const ULTRA_JSON_SCHEMA = {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "identity": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "aliases": { "type": "array", "items": { "type": "string" } },
+                  "universe": { "type": "string" },
+                  "origin": { "type": "string" },
+                  "type": { "type": "string" },
+                  "pronouns": { "type": "array", "items": { "type": "string" } },
+                  "title": { "type": "string" },
+                  "birth_date": { "type": "string" },
+                  "death_date": { "type": "string" },
+                  "languages": { "type": "array", "items": { "type": "string" } },
+                  "voice_actor": { "type": "string" },
+                  "concept_artist": { "type": "string" },
+                  "avatar": { "type": "string" }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              },
+              "appearance": {
+                "type": "object",
+                "properties": {
+                  "species": { "type": "string" },
+                  "subspecies": { "type": "string" },
+                  "gender": { "type": "string" },
+                  "sex": { "type": "string" },
+                  "age": { "type": "string" },
+                  "height": { "type": "string" },
+                  "weight": { "type": "string" },
+                  "build": { "type": "string" },
+                  "posture": { "type": "string" },
+                  "hair": { "type": "object", "properties": { "color": { "type": "string" }, "length": { "type": "string" }, "style": { "type": "string" }, "texture": { "type": "string" } }, "additionalProperties": false },
+                  "eyes": { "type": "object", "properties": { "color": { "type": "string" }, "shape": { "type": "string" }, "expression": { "type": "string" } }, "additionalProperties": false },
+                  "skin": { "type": "object", "properties": { "color": { "type": "string" }, "texture": { "type": "string" }, "temperature": { "type": "string" }, "scars": { "type": "array", "items": { "type": "string" } } }, "additionalProperties": false },
+                  "distinctive_features": { "type": "array", "items": { "type": "string" } },
+                  "markings": { "type": "array", "items": { "type": "string" } },
+                  "body_modifications": { "type": "array", "items": { "type": "string" } },
+                  "clothing_style": { "type": "array", "items": { "type": "string" } },
+                  "scent": { "type": "string" },
+                  "voice": { "type": "string" }
+                },
+                "required": ["species"],
+                "additionalProperties": false
+              },
+              "personality": { "type": "object", "additionalProperties": true },
+              "background": { "type": "object", "additionalProperties": true },
+              "skills": { "type": "object", "additionalProperties": true },
+              "relationships": { "type": "object", "additionalProperties": true },
+              "equipment": { "type": "object", "additionalProperties": true },
+              "meta": { "type": "object", "additionalProperties": true },
+              "physiology": { "type": "object", "additionalProperties": true },
+              "psychology": { "type": "object", "additionalProperties": true },
+              "game_stats": { "type": "object", "additionalProperties": true },
+              "misc": { "type": "object", "additionalProperties": true }
+            },
+            "required": ["identity","appearance"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["character"],
+      "additionalProperties": false
+    };
+
+    const NSFW_JSON_SCHEMA = JSON.parse(JSON.stringify(ULTRA_JSON_SCHEMA));
+    if (NSFW_JSON_SCHEMA.properties && NSFW_JSON_SCHEMA.properties.character && NSFW_JSON_SCHEMA.properties.character.items && NSFW_JSON_SCHEMA.properties.character.items.properties) {
+      NSFW_JSON_SCHEMA.properties.character.items.properties.nsfw = {
+        "type": "array",
+        "items": { "type": "object", "additionalProperties": true }
+      };
+    }
+
+    // Compile Ajv validators
+    let ajvValidatorsCompiled = {};
+    try {
+      const AjvCtor = window.Ajv || window.ajv || null;
+      if (AjvCtor) {
+        const ajv = new AjvCtor({ allErrors: true, strict: false });
+        ajvValidatorsCompiled.ultra = ajv.compile(ULTRA_JSON_SCHEMA);
+        ajvValidatorsCompiled.nsfw = ajv.compile(NSFW_JSON_SCHEMA);
+      }
+    } catch (e) { console.warn('Ajv compile error', e); }
+
+    function setStatus(s){ els.status.textContent = s; }
+
+    function parseUrlTextToList(single,batch){ const parts=[]; if(single&&single.trim()) parts.push(...single.split(/\s*,\s*|\s+/).filter(Boolean)); if(batch&&batch.trim()) parts.push(...batch.split(/\r?\n|,|;/).map(s=>s.trim()).filter(Boolean)); return Array.from(new Set(parts.filter(u=>/^https?:\/\//i.test(u)))); }
+
+    async function fetchTextFromUrl(url){ try{ const res = await (rootRef.superFetch ? rootRef.superFetch(url) : fetch(url)); const ct = res.headers?.get ? res.headers.get('content-type') : (res.type || 'text/html'); if(/pdf/i.test(ct)) return '[PDF content omitted]'; return await res.text(); } catch(e){ console.error('fetch',e); return ''; } }
+
+    function parseDocument(html){ const parser = new DOMParser(); const doc = parser.parseFromString(html,'text/html'); let readable=''; try{ if(window.Readability){ const a=new Readability(doc).parse(); if(a) readable = a.textContent || a.content || ''; } }catch(e){} if(!readable){ readable = Array.from(doc.querySelectorAll('p')).map(p=>p.textContent.trim()).filter(Boolean).slice(0,5).join('\n\n'); } return { doc, readable }; }
+
+    function detectSite(url){ try{ const h=new URL(url).hostname.toLowerCase(); if(h.includes('fandom.com')||h.includes('wikia.com')) return 'fandom'; if(h.includes('wikipedia.org')) return 'wikipedia'; if(h.includes('archiveofourown.org')||h.includes('ao3.org')) return 'ao3'; return 'generic'; }catch(e){ return 'generic'; } }
+
+    function scrapeFandom(doc){ const t = (doc.querySelector('.pi-title')||doc.querySelector('.page-header__title')||doc.querySelector('#firstHeading')||{}).textContent||''; const inf = doc.querySelector('.portable-infobox')||doc.querySelector('.infobox'); const avatar = (inf && inf.querySelector('img')) ? inf.querySelector('img').src : (doc.querySelector('img')||{}).src||''; const paragraphs = Array.from(doc.querySelectorAll('.mw-parser-output > p, p')).map(p=>p.textContent.trim()).filter(Boolean); return { name: (t||'').trim(), background: (paragraphs.slice(0,3).join('\n\n')||''), avatar }; }
+
+    function scrapeWikipedia(doc){ const name=(doc.querySelector('#firstHeading')||{}).textContent||''; const inf=doc.querySelector('table.infobox'); const avatar = inf ? (inf.querySelector('img')||{}).src||'' : ''; const p = doc.querySelector('.mw-parser-output > p'); return { name:(name||'').trim(), background: p? p.innerText.trim().slice(0,2000):'', avatar }; }
+
+    function scrapeAO3(doc){ const title = (doc.querySelector('.work .heading')||doc.querySelector('h2.heading')||{}).textContent||''; const summary = (doc.querySelector('.summary')||{}).innerText||''; return { name: (title||'').trim(), background: (summary||'').trim().slice(0,2000), avatar: '' }; }
+
+    function scrapeGeneric(doc, readable){ const title = doc.querySelector('h1')?.textContent || doc.title || ''; const avatar = doc.querySelector('img')?.src || ''; const p = doc.querySelector('p')?.textContent || readable || ''; return { name: (title||'').trim(), background: (p||'').trim().slice(0,2000), avatar }; }
+
+    function mapToNormalSchema(p){ const identity = { name: p.name||p.title||'', aliases: p.aliases||[], universe: p.universe||p.series||'', origin: p.origin||'', type: p.type||'', pronouns: p.pronouns||[], title: p.title||'', birth_date: p.birth_date||'', death_date: p.death_date||'', languages: p.languages||[], voice_actor: p.voice_actor||'', concept_artist: p.concept_artist||'', avatar: p.avatar||'' }; const appearance = { species: p.species||p.species_text||'', subspecies: p.subspecies||'', gender: p.gender||'', sex: p.sex||'', age: p.age||'', height: p.height||'', weight: p.weight||'', build: p.build||'', posture: p.posture||'', hair: p.hair||{color:'',length:'',style:'',texture:''}, eyes: p.eyes||{color:'',shape:'',expression:''}, skin: p.skin||{color:'',texture:'',temperature:'',scars:[]}, distinctive_features: p.distinctive_features||[], markings: p.markings||[], body_modifications: p.body_modifications||[], clothing_style: p.clothing_style||[], scent: p.scent||'', voice: p.voice||'' }; const personality = { traits_positive: p.traits_positive||[], traits_negative: p.traits_negative||[], traits_neutral: p.traits_neutral||[], archetype: p.archetype||'', temperament: p.temperament||'', moral_alignment: p.moral_alignment||'', motivations: p.motivations||[], fears: p.fears||[], values: p.values||[], quirks: p.quirks||[], cognitive_biases: p.cognitive_biases||[], emotional_triggers: p.emotional_triggers||[], mental_illnesses: p.mental_illnesses||[], coping_mechanisms: p.coping_mechanisms||[] }; const background = { role: p.role||'', alignment: p.alignment||'', occupation: p.occupation||'', previous_occupations: p.previous_occupations||[], education: p.education||'', faction: p.faction||'', homeworld: p.homeworld||'', current_residence: p.current_residence||'', economic_status: p.economic_status||'', notable_events: p.notable_events||[], backstory_summary: p.backstory_summary||p.background||'', secrets: p.secrets||[] }; const skills = { combat_style: p.combat_style||[], abilities: p.abilities||[], magic_type: p.magic_type||'', power_level: p.power_level||'', specializations: p.specializations||[], weaknesses: p.weaknesses||[], training: p.training||[], learning_style: p.learning_style||'', iq: p.iq||'', eq: p.eq||'', adaptability: p.adaptability||'' }; const relationships = { allies: p.allies||[], rivals: p.rivals||[], enemies: p.enemies||[], family: p.family||[], romantic_history: p.romantic_history||[], current_partners: p.current_partners||[], friends: p.friends||[], acquaintances: p.acquaintances||[], mentors: p.mentors||[], students: p.students||[], favor_status: p.favor_status||'', trust_level: p.trust_level||'' }; const equipment = { weapons: p.weapons||[], items: p.items||[], armor: p.armor||[], signature_item: p.signature_item||'', inventory: p.inventory||[], wealth: p.wealth||'', technology_access: p.technology_access||'' }; const meta = { genre: p.genre||[], tags: p.tags||[], inspiration: p.inspiration||[], tropes: p.tropes||[], archetypes: p.archetypes||[], symbolism: p.symbolism||[], leith_motif: p.leith_motif||'', themes: p.themes||[] }; const physiology = { metabolism: p.metabolism||'', sleep_patterns: p.sleep_patterns||'', eating_habits: p.eating_habits||'', immune_system: p.immune_system||'', healing_factor: p.healing_factor||'', pain_tolerance: p.pain_tolerance||'', drug_resistance: p.drug_resistance||'', poison_resistance: p.poison_resistance||'', disease_resistance: p.disease_resistance||'', temperature_tolerance: p.temperature_tolerance||'', radiation_resistance: p.radiation_resistance||'', biological_rhythms: p.biological_rhythms||[] }; const psychology = { intelligence_type: p.intelligence_type||'', memory_capacity: p.memory_capacity||'', attention_span: p.attention_span||'', learning_rate: p.learning_rate||'', decision_making_style: p.decision_making_style||'', problem_solving_approach: p.problem_solving_approach||'', creativity_level: p.creativity_level||'', empathy_level: p.empathy_level||'', psychic_defenses: p.psychic_defenses||[] }; const game_stats = { charisma: p.charisma||'', strength: p.strength||'', intelligence: p.intelligence||'', dexterity: p.dexterity||'', constitution: p.constitution||'', wisdom: p.wisdom||'', luck: p.luck||'', perception: p.perception||'', willpower: p.willpower||'' }; const misc = { theme_song: p.theme_song||'', catchphrase: p.catchphrase||'', signature_move: p.signature_move||'', hobbies: p.hobbies||[], pet_peeves: p.pet_peeves||[], guilty_pleasures: p.guilty_pleasures||[], bucket_list: p.bucket_list||[], unusual_habits: p.unusual_habits||[], collection: p.collection||[] }; return { identity, appearance, personality, background, skills, relationships, equipment, meta, physiology, psychology, game_stats, misc } }
+
+    function mapToNSFWSchema(p){ const base = mapToNormalSchema(p); base.nsfw = p.nsfw || []; return base; }
+
+    async function callAiForExtraction(content, schemaChoice, extraContext=''){
+      if (!rootRef.aiTextPlugin) return null;
+      const schemaText = JSON.stringify(schemaChoice==='nsfw'?NSFW_JSON_SCHEMA:ULTRA_JSON_SCHEMA);
+      const instruction = `Extract character metadata from the content and return ONLY valid JSON that matches the provided schema (either {\"character\": [...] } or an array of character objects).\n\nSCHEMA:\n${schemaText}\n\nCONTENT:\n${content}\n\nCONTEXT:\n${extraContext}`;
+      try{ const resp = await rootRef.aiTextPlugin({ instruction, startWith: '{' }); let raw = (resp||'').trim(); raw = raw.replace(/```json\s*([\s\S]*?)```/, '$1').trim(); try { return JSON.parse(raw); } catch(e){ const f = raw.indexOf('{'); const l = raw.lastIndexOf('}'); if(f!==-1&&l!==-1){ try{ return JSON.parse(raw.slice(f,l+1)); }catch(_){} } const af=raw.indexOf('['); const al=raw.lastIndexOf(']'); if(af!==-1&&al!==-1){ try{return JSON.parse(raw.slice(af,al+1)); }catch(_){} } }
+      }catch(e){ console.warn('ai extraction failed', e); } return null; }
+
+    async function inferMissingFields(candidate, contextText='', schemaChoice='ultra'){
+      if (!els.enableInference || !els.enableInference.checked) return candidate;
+      if (!rootRef.aiTextPlugin) return candidate;
+      const sample = JSON.stringify(schemaChoice==='nsfw'?NSFW_JSON_SCHEMA:ULTRA_JSON_SCHEMA);
+      const instruction = `Fill missing fields in this character object to better match the schema. Return ONLY a JSON object with updated fields (no commentary).\n\nSCHEMA:\n${sample}\n\nOBJECT:\n${JSON.stringify(candidate,null,2)}\n\nCONTEXT:\n${contextText}`;
+      try{ const resp = await rootRef.aiTextPlugin({ instruction, startWith: '{' }); let raw = (resp||'').trim(); raw = raw.replace(/```json\s*([\s\S]*?)```/, '$1').trim(); try{ const patch=JSON.parse(raw); deepMerge(candidate, patch); return candidate; }catch(e){ const f=raw.indexOf('{'); const l=raw.lastIndexOf('}'); if(f!==-1&&l!==-1){ try{ const patch=JSON.parse(raw.slice(f,l+1)); deepMerge(candidate, patch); return candidate; }catch(_){} } } }catch(e){ console.warn('inference failed', e); } return candidate; }
+
+    function deepMerge(target, patch){ if(!patch||typeof patch!=='object') return; for(const k of Object.keys(patch)){ const v = patch[k]; if(v===null||v===undefined) continue; if(Array.isArray(v)){ if(v.length>0) target[k]=v; } else if(typeof v==='object'){ target[k]=target[k]||{}; deepMerge(target[k], v); } else if(typeof v==='string'){ if(v!=='') target[k]=v; } else { target[k]=v; } } }
+
+    async function processAvatar(candidate){ if(!els.enableAvatarCrop || !els.enableAvatarCrop.checked) return candidate; const endpoint = (els.faceCropEndpoint && els.faceCropEndpoint.value) ? els.faceCropEndpoint.value.trim() : null; if(!endpoint) return candidate; const avatar = (candidate.identity && (candidate.identity.avatar || candidate.avatar)) || candidate.avatar; if(!avatar) return candidate; try{ const res = await fetch(endpoint, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ image: avatar }) }); if(!res.ok) return candidate; const j = await res.json(); const cropped = j.cropped_url || j.cropped || j.url || j.result; if(cropped){ if(!candidate.identity) candidate.identity={}; candidate.identity.avatar = cropped; } }catch(e){ console.warn('avatar crop failed', e); } return candidate; }
+
+    function normalizeToCharacterArray(parsed){ if(!parsed) return []; if(Array.isArray(parsed)) return parsed; if(parsed.character && Array.isArray(parsed.character)) return parsed.character; const keys = Object.keys(parsed||{}); if(keys.includes('identity')||keys.includes('appearance')||keys.includes('personality')) return [parsed]; return []; }
+
+    function validateCharacter(c, schemaChoice){ try{ const v = schemaChoice==='nsfw'?ajvValidatorsCompiled.nsfw:ajvValidatorsCompiled.ultra; if(v){ const ok = v({ character: [c] }); if(ok) return { valid:true, errors:[] }; return { valid:false, errors: (v.errors||[]).map(e=>`${e.instancePath||'/'} ${e.message||''}`) }; } }catch(e){ console.warn('validate err', e); } const errors = []; if(!c||typeof c!=='object'){ errors.push('Not an object'); return { valid:false, errors }; } if(!c.identity || !c.identity.name) errors.push('identity.name is required'); return { valid: errors.length===0, errors }; }
+
+    async function generateMetadataForUrl(url, schemaChoice, extraContext=''){
+      setStatus(`Fetching ${url}...`);
+      const html = await fetchTextFromUrl(url);
+      const { doc, readable } = parseDocument(html);
+      const site = detectSite(url);
+      let scraped = {};
+      try{ if(site==='fandom') scraped = scrapeFandom(doc); else if(site==='wikipedia') scraped = scrapeWikipedia(doc); else if(site==='ao3') scraped = scrapeAO3(doc); else scraped = scrapeGeneric(doc, readable); }catch(e){ scraped = { background: readable||'' }; }
+      let mapped = schemaChoice==='nsfw' ? mapToNSFWSchema(scraped) : mapToNormalSchema(scraped);
+      if((!mapped.identity || !mapped.identity.name || mapped.identity.name==='') && rootRef.aiTextPlugin){ setStatus(`AI-extracting from ${url}...`); const ai = await callAiForExtraction(readable||html, schemaChoice, url); if(ai){ const chars = normalizeToCharacterArray(ai); if(chars.length>0) mapped = schemaChoice==='nsfw'? mapToNSFWSchema(chars[0]) : mapToNormalSchema(chars[0]); } }
+      mapped = await inferMissingFields(mapped, (readable||html), schemaChoice);
+      mapped = await processAvatar(mapped);
+      return mapped;
+    }
+
+    async function generateHandler(){ const urls = parseUrlTextToList(els.urlInput.value, els.batchUrls.value); if(urls.length===0){ alert('Please provide at least one http(s) URL.'); return; } els.generateBtn.disabled=true; els.downloadBtn.disabled=true; setStatus('Starting generation...'); const schemaChoice = els.schemaSelect.value; const all=[]; const validationResults=[]; for(let i=0;i<urls.length;i++){ const url=urls[i]; setStatus(`Processing ${i+1}/${urls.length}: ${url}`); try{ const mapped = await generateMetadataForUrl(url, schemaChoice); const vr = validateCharacter(mapped, schemaChoice); mapped._isValid = vr.valid; if(!vr.valid) mapped._validationErrors = vr.errors; all.push(mapped); validationResults.push({ index:i, valid: vr.valid, errors: vr.errors }); }catch(e){ all.push({ _sourceUrl: url, _error: String(e) }); validationResults.push({ index:i, valid:false, errors:[String(e)] }); } await new Promise(r=>setTimeout(r,250)); } const finalOutput = { character: all }; els.jsonOutput.value = JSON.stringify(finalOutput, null, 2); els.jsonOutput.readOnly = !els.enableEditor.checked; if(els.showValidation.checked){ const lines = validationResults.map(r=>`URL #${r.index+1}: ` + (r.valid? '✔ Valid' : `✖ Invalid\n  - ${r.errors.join('\n  - ')}`)); els.validationOutput.value = lines.join('\n\n'); } else els.validationOutput.value=''; els.downloadBtn.disabled=false; setStatus(`Generated ${all.length} character(s).`); els.generateBtn.disabled=false; try{ if(rootRef.generatorStats) rootRef.generatorStats(null,'views'); }catch(e){} }
+
+    function downloadJson(){ const text = els.jsonOutput.value || JSON.stringify({ character: []}, null,2); const blob = new Blob([text], { type:'application/json' }); const name = `ultra-characters-${new Date().toISOString().slice(0,10)}.json`; const a=document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setStatus(`Downloaded ${name}`); }
+
+    els.generateBtn.addEventListener('click', generateHandler);
+    els.downloadBtn.addEventListener('click', downloadJson);
+    els.enableEditor.addEventListener('change', ()=> { els.jsonOutput.readOnly = !els.enableEditor.checked; });
+    try{ if(rootRef.aiTextPlugin) rootRef.aiTextPlugin({ preload: true }); }catch(e){}
+  </script>
+
+</body>
+</html>
+
+</body>
+</html>

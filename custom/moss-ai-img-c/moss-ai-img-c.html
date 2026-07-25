@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>moss-ai-img-c — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="appCtn" style="max-width:1200px;margin:0 auto;text-align:left;">
+  <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+    <h1 style="margin:0;font-size:26px;">AI Image Generator</h1>
+    <button id="themeToggleBtn" onclick="switchTheme()" style="background:transparent;border:1px solid var(--border);color:var(--fg);padding:8px 14px;border-radius:8px;cursor:pointer;">🌙 Theme</button>
+  </header>
+
+  <div id="promptBuilderCtn" class="section active">
+    <div class="section-header" onclick="toggleSection(this)">
+      <span>Prompt Builder</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <textarea id="promptInput" placeholder="Describe your image..." rows="3" oninput="saveSettings()"></textarea>
+      <div class="row">
+        <button onclick="randomizePrompt()" title="Randomize prompt">🎲 Randomize</button>
+        <button onclick="copyPrompt()" title="Copy current prompt">📋 Copy Prompt</button>
+      </div>
+      <div class="row" style="margin-top:4px;">
+        <button onclick="applyRecipe('portrait')">Portrait</button>
+        <button onclick="applyRecipe('cinematic')">Cinematic</button>
+        <button onclick="applyRecipe('macro')">Macro</button>
+        <button onclick="applyRecipe('anime')">Anime</button>
+        <button onclick="applyRecipe('product')">Product</button>
+      </div>
+      <div style="margin-top:12px;font-weight:600;font-size:13px;">Negative Prompt</div>
+      <textarea id="negativePromptInput" placeholder="Things to avoid..." rows="2" oninput="saveSettings()"></textarea>
+      <div class="row">
+        <button onclick="randomizeNegative()" title="Random negative terms">🎲 Random Negative</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="enhancerCtn" class="section active">
+    <div class="section-header" onclick="toggleSection(this)">
+      <span>Prompt Enhancer</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="row">
+        <select id="enhancerModeSelect" onchange="saveSettings()">
+          <option value="enhance">Enhance</option>
+          <option value="rewrite">Rewrite</option>
+          <option value="detail-boost">Detail Boost</option>
+          <option value="cinematic">Cinematic</option>
+          <option value="photographic">Photographic</option>
+        </select>
+        <select id="enhancerLengthSelect" onchange="saveSettings()">
+          <option value="short">Short</option>
+          <option value="medium">Medium</option>
+          <option value="long">Long</option>
+          <option value="ultra">Ultra</option>
+        </select>
+        <button onclick="enhancePrompt()">✨ Enhance</button>
+      </div>
+      <div id="enhancerPreviewCtn" hidden style="margin-top:12px;background:var(--bg);padding:12px;border-radius:8px;border:1px solid var(--border);">
+        <div id="enhancerPreviewTextEl" style="white-space:pre-wrap;margin-bottom:10px;"></div>
+        <button id="enhancerApplyBtn" hidden onclick="applyEnhancedPrompt()">Apply Enhanced</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="engineCtn" class="section active">
+    <div class="section-header" onclick="toggleSection(this)">
+      <span>Text-to-Image Engine</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">
+        <div>
+          <label>Model</label>
+          <select id="modelSelect" onchange="saveSettings()"><option>SDXL</option><option>Flux</option><option>SD1.5</option><option>Anime</option></select>
+        </div>
+        <div>
+          <label>Aspect Ratio</label>
+          <select id="resolutionSelect" onchange="saveSettings()"><option value="1:1">1:1</option><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="4:5">4:5</option></select>
+        </div>
+        <div>
+          <label>Steps</label>
+          <input id="stepsInput" type="number" value="25" min="1" max="50" onchange="saveSettings()">
+        </div>
+        <div>
+          <label>CFG Scale</label>
+          <input id="cfgInput" type="number" value="7" step="0.5" min="1" max="15" onchange="saveSettings()">
+        </div>
+        <div>
+          <label>Sampler</label>
+          <select id="samplerSelect" onchange="saveSettings()"><option>Euler a</option><option>DPM++ 2M Karras</option><option>DDIM</option><option>UniPC</option><option>DPM++ SDE Karras</option><option>LMS</option></select>
+        </div>
+        <div>
+          <label>Seed</label>
+          <input id="seedInput" type="text" placeholder="random" onchange="saveSettings()">
+        </div>
+        <div>
+          <label>Batch</label>
+          <input id="batchInput" type="number" value="1" min="1" max="4" onchange="saveSettings()">
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;align-items:center;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;"><input type="checkbox" id="faceFixToggle" checked onchange="saveSettings()"> Face Fix</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;"><input type="checkbox" id="upscaleToggle" onchange="saveSettings()"> Upscale</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;"><input type="checkbox" id="safetyToggle" checked onchange="saveSettings()"> Safety Filter</label>
+      </div>
+    </div>
+  </div>
+
+  <div id="galleryCtn" class="section active">
+    <div class="section-header" onclick="toggleSection(this)">
+      <span>Gallery</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <div id="galleryGridCtn"></div>
+      <div id="sentinelEl" style="height:20px;"></div>
+    </div>
+  </div>
+
+  <button id="generateBtn" onclick="generateImages()" class="sticky-generate">🎨 Generate</button>
+
+  <div id="galleryModalCtn" hidden style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.88);z-index:150;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">
+    <img id="galleryModalImg" style="max-width:90%;max-height:60vh;border-radius:10px;">
+    <div id="galleryModalMeta" style="color:#fff;margin:14px 0;max-width:90%;text-align:center;font-size:13px;line-height:1.5;"></div>
+    <div class="row" style="justify-content:center;">
+      <button onclick="downloadGalleryImage()">⬇️ Download</button>
+      <button onclick="copyGalleryPrompt()">📋 Copy Prompt</button>
+      <button onclick="uploadGalleryImage()">☁️ Upload</button>
+      <button onclick="deleteGalleryImage()">🗑️ Delete</button>
+      <button onclick="closeGalleryModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<style>
+:root { --bg:#0b0b10; --fg:#e2e2e8; --card:#14141b; --accent:#8b5cf6; --border:#282835; }
+.light { --bg:#f7f7fb; --fg:#0f0f12; --card:#ffffff; --accent:#7c3aed; --border:#dddde5; }
+body { background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif; margin:0; padding:16px; text-align:left; transition:background .2s,color .2s; }
+#appCtn { max-width:1200px; margin:0 auto; }
+.section { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:16px; overflow:hidden; }
+.section-header { padding:14px 18px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; font-weight:600; user-select:none; background:rgba(120,120,255,0.03); }
+.section .section-body { display:none; padding:16px; }
+.section.active .section-body { display:block; }
+.chevron { transition:transform .2s; display:inline-block; }
+.section.active .chevron { transform:rotate(180deg); }
+label { display:block; font-size:12px; margin-bottom:4px; opacity:.8; }
+textarea, input, select { background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:8px; padding:10px; font-size:14px; width:100%; box-sizing:border-box; outline:none; }
+button { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:10px 14px; cursor:pointer; font-size:13px; margin:0 8px 8px 0; transition:opacity .15s; min-height:36px; }
+button:hover { opacity:.9; }
+.row { display:flex; flex-wrap:wrap; align-items:center; }
+.sticky-generate { position:fixed; bottom:20px; right:20px; z-index:100; padding:14px 28px; font-size:16px; font-weight:600; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.35); }
+#galleryGridCtn { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; margin-top:4px; }
+.gallery-card { background:var(--bg); border-radius:10px; overflow:hidden; border:1px solid var(--border); }
+.gallery-card img { width:100%; display:block; }
+#galleryModalMeta span { display:inline-block; margin:2px 4px; opacity:.85; }
+@media (max-width:640px) {
+  #galleryGridCtn { grid-template-columns:repeat(2,1fr); }
+  .sticky-generate { bottom:10px; right:10px; padding:12px 20px; font-size:15px; }
+  h1 { font-size:20px; }
+}
+</style>
+
+<script type="module">
+  let state = { theme:localStorage.theme||'dark', prompt:'', enhancedPrompt:'', negativePrompt:'', settings:{model:'SDXL',resolution:'1:1',steps:25,cfg:7,sampler:'Euler a',seed:'',batch:1,faceFix:true,upscale:false,safety:true}, gallery:[], enhancerMode:'enhance', enhancerLength:'medium', perPage:12, modalIdx:-1, isGenerating:false, renderedCount:0 };
+
+  let promptData = {
+    subjects:[{w:2,t:'ethereal forest spirit'},{w:1,t:'cyberpunk street samurai'},{w:1,t:'vintage steam locomotive'},{w:1,t:'floating crystal castle'},{w:1,t:'ocean depths explorer'},{w:1,t:'steampunk inventor'},{w:1,t:'galactic nebula traveler'},{w:1,t:'ancient warrior'},{w:1,t:'floral fairy queen'},{w:1,t:'dystopian hacker'}],
+    styles:[{w:1,t:'digital painting'},{w:2,t:'oil on canvas'},{w:1,t:'watercolor illustration'},{w:1,t:'3D rendered art'},{w:1,t:'pencil sketch'},{w:1,t:'vector art'},{w:1,t:'impasto painting'},{w:1,t:'concept art'},{w:1,t:'pixel art'},{w:1,t:'pastel drawing'}],
+    lighting:[{w:2,t:'golden hour sunlight'},{w:1,t:'neon ambient glow'},{w:1,t:'softbox studio lighting'},{w:1,t:'moonlit night'},{w:1,t:'volumetric fog rays'},{w:1,t:'dramatic chiaroscuro'},{w:1,t:'bioluminescent glow'},{w:1,t:'overcast diffused light'},{w:1,t:'candlelight warmth'},{w:1,t:'laser show lighting'}],
+    camera:[{w:1,t:'85mm f/1.4 lens'},{w:1,t:'14mm ultra wide angle'},{w:1,t:'50mm vintage lens'},{w:1,t:'macro 100mm'},{w:1,t:'35mm street lens'},{w:1,t:'fisheye lens'},{w:1,t:'telephoto 200mm'},{w:1,t:'tilt-shift lens'},{w:1,t:'GoPro action cam'},{w:1,t:'anamorphic lens'}],
+    composition:[{w:1,t:'rule of thirds'},{w:1,t:'symmetrical centering'},{w:1,t:'leading lines'},{w:1,t:'framing within frame'},{w:1,t:'extreme low angle'},{w:1,t:'bird eye view'},{w:1,t:'diagonal dynamism'},{w:1,t:'negative space'},{w:1,t:'macro close up'},{w:1,t:'epic wide establishing shot'}],
+    mood:[{w:1,t:'melancholic'},{w:1,t:'ominous'},{w:1,t:'whimsical'},{w:2,t:'serene'},{w:1,t:'epic grandiose'},{w:1,t:'lonely'},{w:1,t:'romantic'},{w:1,t:'mysterious'},{w:1,t:'chaotic'},{w:1,t:'nostalgic'}]
+  };
+  let recipes = {
+    portrait:'Professional portrait of {subject}, {lighting}, shot on {camera}, {style}, flawless skin texture, sharp focus on eyes, 8k uhd',
+    cinematic:'Cinematic movie still of {subject}, dramatic {lighting}, {composition}, film grain, anamorphic lens flare, color graded',
+    macro:'Macro photography of {subject}, extreme close-up, {lighting}, intricate details, shallow depth of field, bokeh background, photorealistic',
+    anime:'Anime art of {subject}, vibrant colors, {style}, cel shaded, detailed line art, fantastical background',
+    product:'Clean product photography of {subject}, white background, studio {lighting}, soft shadows, minimalistic, commercial style'
+  };
+  let negativeTerms = ['blur','lowres','bad anatomy','worst quality','jpeg artifacts','deformed','extra limbs','disfigured','poorly drawn face','mutation','watermark','signature','text','error','cropped','normal quality','ugly','duplicate','out of frame'];
+
+  function wPick(arr){ let t=arr.reduce((s,i)=>s+i.w,0); let r=Math.random()*t; for(let i of arr){ r-=i.w; if(r<=0) return i.t; } return arr[0].t; }
+  function memGet(k,d){ let s=localStorage[k]; if(s===undefined) return d; try{ return JSON.parse(s); }catch(e){ return s; } }
+  function memSet(k,v){ let raw=typeof v==='string'?v:JSON.stringify(v); localStorage[k]=raw; }
+
+  function init(){
+    state.prompt = memGet('aiPrompt','');
+    state.enhancedPrompt = memGet('aiEnhanced','');
+    state.negativePrompt = memGet('aiNegative','');
+    let ss = memGet('aiSettings',null);
+    if(ss && typeof ss==='object') Object.assign(state.settings, ss);
+    state.enhancerMode = memGet('aiEnhMode','enhance');
+    state.enhancerLength = memGet('aiEnhLen','medium');
+    promptInput.value = state.prompt;
+    negativePromptInput.value = state.negativePrompt;
+    enhancerModeSelect.value = state.enhancerMode;
+    enhancerLengthSelect.value = state.enhancerLength;
+    modelSelect.value = state.settings.model;
+    resolutionSelect.value = state.settings.resolution;
+    stepsInput.value = state.settings.steps;
+    cfgInput.value = state.settings.cfg;
+    samplerSelect.value = state.settings.sampler;
+    seedInput.value = state.settings.seed;
+    batchInput.value = state.settings.batch;
+    faceFixToggle.checked = state.settings.faceFix;
+    upscaleToggle.checked = state.settings.upscale;
+    safetyToggle.checked = state.settings.safety;
+    if(state.enhancedPrompt){ enhancerPreviewTextEl.textContent=state.enhancedPrompt; enhancerPreviewCtn.hidden=false; enhancerApplyBtn.hidden=false; }
+    if(state.theme==='light') document.documentElement.classList.add('light');
+    let params = new URLSearchParams(location.search);
+    let qp = params.get('prompt'); if(qp){ state.prompt=qp; promptInput.value=qp; }
+    let qm = params.get('model'); if(qm){ state.settings.model=qm; modelSelect.value=qm; }
+    loadGalleryFromKv();
+  }
+
+  async function loadGalleryFromKv(){
+    try{ let items = await root.kv.aiGen.get('gallery'); if(Array.isArray(items)) state.gallery=items; }catch(e){}
+    state.renderedCount=0; galleryGridCtn.innerHTML=''; renderGalleryPage();
+  }
+  async function persistGallery(){
+    try{ await root.kv.aiGen.set('gallery', state.gallery); }catch(e){}
+  }
+
+  window.toggleSection = function(h){ h.parentElement.classList.toggle('active'); };
+  window.switchTheme = function(){
+    document.documentElement.classList.toggle('light');
+    state.theme = document.documentElement.classList.contains('light')?'light':'dark';
+    localStorage.theme = state.theme;
+  };
+
+  window.randomizePrompt = function(){
+    let p = [wPick(promptData.subjects), wPick(promptData.styles), wPick(promptData.lighting), wPick(promptData.camera), wPick(promptData.composition), wPick(promptData.mood)].join(', ');
+    promptInput.value = p; state.prompt=p; saveSettings();
+  };
+  window.applyRecipe = function(type){
+    let tpl = recipes[type]||recipes.portrait;
+    let p = tpl.replace(/{subject}/g,wPick(promptData.subjects)).replace(/{style}/g,wPick(promptData.styles)).replace(/{lighting}/g,wPick(promptData.lighting)).replace(/{camera}/g,wPick(promptData.camera)).replace(/{composition}/g,wPick(promptData.composition)).replace(/{mood}/g,wPick(promptData.mood));
+    promptInput.value = p; state.prompt=p; saveSettings();
+  };
+  window.randomizeNegative = function(){
+    let pool=[...negativeTerms], picks=[];
+    for(let i=0;i<6;i++) if(pool.length){ let idx=Math.floor(Math.random()*pool.length); picks.push(pool.splice(idx,1)[0]); }
+    negativePromptInput.value = picks.join(', '); saveSettings();
+  };
+  window.copyPrompt = async function(){
+    let txt = promptInput.value;
+    try{ await navigator.clipboard.writeText(txt); }catch(e){}
+  };
+
+  window.enhancePrompt = async function(){
+    let mode = enhancerModeSelect.value, length = enhancerLengthSelect.value;
+    let current = promptInput.value; if(!current.trim()) return;
+    let modeInst = {enhance:'Enhance to be more descriptive and vivid',rewrite:'Rewrite to be more effective for AI image generation','detail-boost':'Add intricate details while keeping core subject',cinematic:'Transform into a cinematic dramatic scene',photographic:'Optimize for maximum photorealism'}[mode]||'Enhance';
+    let lenInst = {short:'Keep concise, under 20 words',medium:'Moderate length, 30-50 words',long:'Detailed, 60-100 words',ultra:'Extremely detailed, over 100 words'}[length]||'Medium';
+    let instruction = `As an expert prompt engineer for AI image generation:\nTask: ${modeInst}\nLength: ${lenInst}\n\nPrompt: "${current}"\n\nOutput ONLY the enhanced prompt.`;
+    enhancerPreviewCtn.hidden = false; enhancerPreviewTextEl.textContent='Enhancing...'; enhancerApplyBtn.hidden=true;
+    try{
+      let result = await root.generateText({instruction});
+      let cleaned = result.replace(/^["']|["']$/g,'').trim();
+      state.enhancedPrompt = cleaned; enhancerPreviewTextEl.textContent=cleaned; enhancerApplyBtn.hidden=false;
+      memSet('aiEnhanced',cleaned);
+    }catch(err){ enhancerPreviewTextEl.textContent='Error: '+err.message; }
+  };
+  window.applyEnhancedPrompt = function(){
+    promptInput.value = state.enhancedPrompt; state.prompt=state.enhancedPrompt; saveSettings();
+  };
+
+  let resMap = {'1:1':'768x768','16:9':'768x512','9:16':'512x768','4:5':'768x768'};
+  async function runGen(prom,opts){
+    let final = prom + (negativePromptInput.value?', negative prompt: '+negativePromptInput.value:'');
+    let url = await root.generateImage(final, {resolution:opts.resolution});
+    return {url, prompt:prom, settings:opts, timestamp:Date.now(), id:Math.random().toString(36).slice(2)};
+  }
+  window.generateImages = async function(){
+    if(state.isGenerating) return;
+    state.isGenerating=true; generateBtn.textContent='⏳ Generating...'; generateBtn.disabled=true; saveSettings();
+    let res = resMap[state.settings.resolution]||'768x768';
+    for(let i=0;i<state.settings.batch;i++){
+      try{
+        let seed = state.settings.seed||String(Math.floor(Math.random()*1e9));
+        let opts = {...state.settings, resolution:res, seed};
+        let item = await runGen(promptInput.value, opts);
+        state.gallery.unshift(item); persistGallery();
+        let card = document.createElement('div'); card.className='gallery-card';
+        card.innerHTML = `<img src="${item.url}" style="width:100%;aspect-ratio:1/1;object-fit:cover;cursor:pointer;" onclick="openGalleryModal('${item.id}')">`;
+        galleryGridCtn.insertBefore(card, galleryGridCtn.firstChild); state.renderedCount++;
+      }catch(err){ alert('Generation failed: '+err.message); break; }
+    }
+    state.isGenerating=false; generateBtn.textContent='🎨 Generate'; generateBtn.disabled=false;
+  };
+
+  function renderGalleryPage(){
+    let start = state.renderedCount;
+    let end = Math.min(start+state.perPage, state.gallery.length);
+    for(let i=start;i<end;i++){
+      let item=state.gallery[i];
+      let card=document.createElement('div'); card.className='gallery-card';
+      card.innerHTML = `<img src="${item.url}" style="width:100%;aspect-ratio:1/1;object-fit:cover;cursor:pointer;" onclick="openGalleryModal('${item.id}')">`;
+      galleryGridCtn.appendChild(card);
+    }
+    state.renderedCount=end; sentinelEl.hidden = state.renderedCount>=state.gallery.length;
+  }
+  window.loadMoreGallery = function(){ if(!state.isGenerating) renderGalleryPage(); };
+
+  window.openGalleryModal = function(id){
+    let idx = state.gallery.findIndex(x=>x.id===id); if(idx<0) return;
+    state.modalIdx=idx; let item=state.gallery[idx];
+    galleryModalImg.src=item.url;
+    galleryModalMeta.innerHTML = `<div style="max-width:800px;word-break:break-word;">Prompt: ${item.prompt}</div><div>Model: ${item.settings.model} | Res: ${item.settings.resolution} | Seed: ${item.settings.seed} | Steps: ${item.settings.steps} | CFG: ${item.settings.cfg} | Sampler: ${item.settings.sampler}</div>`;
+    galleryModalCtn.hidden=false;
+  };
+  window.closeGalleryModal = function(){ galleryModalCtn.hidden=true; state.modalIdx=-1; };
+  window.downloadGalleryImage = function(){
+    let item=state.gallery[state.modalIdx]; if(!item) return;
+    let a=document.createElement('a'); a.href=item.url; a.download='ai-gen-'+item.id+'.png'; a.click();
+  };
+  window.copyGalleryPrompt = async function(){
+    let item=state.gallery[state.modalIdx]; if(!item) return;
+    try{ await navigator.clipboard.writeText(item.prompt); }catch(e){}
+  };
+  window.uploadGalleryImage = async function(){
+    let item=state.gallery[state.modalIdx]; if(!item) return;
+    try{
+      let blob = await (await fetch(item.url)).blob();
+      let res = await root.uploadPlugin(blob, {expires:Date.now()+1000*60*60*24*7});
+      if(res.url){ await navigator.clipboard.writeText(res.url); alert('Uploaded! URL copied to clipboard.'); }
+      else { alert('Upload failed: '+(res.error||'unknown')); }
+    }catch(e){ alert('Upload error: '+e.message); }
+  };
+  window.deleteGalleryImage = async function(){
+    if(state.modalIdx<0) return;
+    state.gallery.splice(state.modalIdx,1); state.modalIdx=-1; closeGalleryModal();
+    state.renderedCount=0; galleryGridCtn.innerHTML=''; renderGalleryPage(); persistGallery();
+  };
+
+  window.saveSettings = function(){
+    state.prompt = promptInput.value;
+    state.negativePrompt = negativePromptInput.value;
+    state.enhancerMode = enhancerModeSelect.value;
+    state.enhancerLength = enhancerLengthSelect.value;
+    state.settings.model = modelSelect.value;
+    state.settings.resolution = resolutionSelect.value;
+    state.settings.steps = parseInt(stepsInput.value)||25;
+    state.settings.cfg = parseFloat(cfgInput.value)||7;
+    state.settings.sampler = samplerSelect.value;
+    state.settings.seed = seedInput.value;
+    state.settings.batch = parseInt(batchInput.value)||1;
+    state.settings.faceFix = faceFixToggle.checked;
+    state.settings.upscale = upscaleToggle.checked;
+    state.settings.safety = safetyToggle.checked;
+    memSet('aiPrompt', state.prompt);
+    memSet('aiNegative', state.negativePrompt);
+    memSet('aiEnhMode', state.enhancerMode);
+    memSet('aiEnhLen', state.enhancerLength);
+    memSet('aiSettings', state.settings);
+  };
+
+  let observer = new IntersectionObserver((entries)=>{ entries.forEach(e=>{ if(e.isIntersecting) loadMoreGallery(); }); },{rootMargin:'100px'});
+  init();
+  observer.observe(sentinelEl);
+</script>
+</body>
+</html>

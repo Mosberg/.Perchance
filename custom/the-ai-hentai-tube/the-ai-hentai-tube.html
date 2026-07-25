@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>the-ai-hentai-tube — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Completed:
+  [x] Main Homepage Layout with Dark Theme
+  [x] Navigation between Gallery, Text Gen, Enhancer, Text-to-Image, Upload
+  [x] AI Text-to-Text Prompt Generator
+  [x] AI Text-to-Text Prompt Enhancer
+  [x] AI Text-to-Image Generator (with loading states)
+  [x] Persistent Image Gallery using 'kv' storage
+  [x] Image Metadata handling (Title, Prompt, Date)
+  [x] Download functionality for generated images
+  [x] Upload functionality (converting local files to gallery items)
+Possible Next Steps:
+  [ ] Add search/filter functionality to the gallery
+  [ ] Implement user accounts/specific galleries via 'kv' namespaces
+  [ ] Add "Edit Prompt" feature for existing gallery items to regenerate variations
+-->
+<style>
+  body { background:#111; color:#eee; font-family:system-ui, sans-serif; margin:0; text-align:left; }
+  header { background:#000; padding:1rem; border-bottom:2px solid #f0f; display:flex; justify-content:space-between; align-items:center; }
+  h1 { margin:0; font-size:1.5rem; color:#f0f; }
+  nav button { background:transparent; border:none; color:#888; cursor:pointer; font-size:1rem; margin-left:1rem; padding:0.5rem; }
+  nav button.active { color:#f0f; border-bottom:2px solid #f0f; }
+  main { padding:1rem; max-width:1200px; margin:0 auto; }
+  .section { display:none; }
+  .section.active { display:block; }
+  
+  /* Form Elements */
+  input, textarea, select { width:100%; padding:0.8rem; margin-bottom:1rem; background:#222; border:1px solid #444; color:#fff; box-sizing:border-box; }
+  button.action-btn { background:#f0f; color:#fff; border:none; padding:0.8rem 1.5rem; font-size:1rem; cursor:pointer; border-radius:4px; width:100%; }
+  button.action-btn:hover { background:#d0d; }
+  button.action-btn:disabled { background:#555; cursor:not-allowed; }
+  
+  /* Gallery Grid */
+  .gallery-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:1rem; }
+  .img-card { background:#222; border:1px solid #333; border-radius:8px; overflow:hidden; position:relative; }
+  .img-card img { width:100%; height:200px; object-fit:cover; display:block; cursor:pointer; transition:opacity 0.2s; }
+  .img-card img:hover { opacity:0.8; }
+  .img-meta { padding:0.5rem; font-size:0.8rem; }
+  .img-title { font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#f0f; }
+  .img-actions { margin-top:0.5rem; display:flex; gap:0.5rem; }
+  .small-btn { background:#444; border:none; color:#fff; padding:0.2rem 0.5rem; font-size:0.7rem; cursor:pointer; border-radius:3px; }
+  .small-btn:hover { background:#666; }
+
+  /* Generator Preview */
+  .preview-box { margin-top:1rem; min-height:200px; background:#222; border:1px dashed #444; display:flex; align-items:center; justify-content:center; }
+  .preview-box img { max-width:100%; max-height:500px; }
+  
+  /* Modal */
+  .modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:1000; display:flex; justify-content:center; align-items:center; opacity:0; pointer-events:none; transition:opacity 0.3s; }
+  .modal-overlay.open { opacity:1; pointer-events:auto; }
+  .modal-content { background:#111; padding:2rem; max-width:90%; max-height:90%; overflow:auto; border:1px solid #333; border-radius:8px; text-align:center; }
+  .modal-img { max-width:100%; max-height:70vh; border-radius:4px; margin-bottom:1rem; }
+  .modal-details { text-align:left; font-size:0.9rem; color:#ccc; margin-bottom:1rem; max-height:100px; overflow-y:auto; }
+</style>
+
+<header>
+  <h1>The AI Hentai Tube</h1>
+  <nav>
+    <button id="navGalleryBtn" class="active" onclick="switchTab('gallery')">Gallery</button>
+    <button id="navT2tBtn" onclick="switchTab('t2t')">Prompt Gen</button>
+    <button id="navEnhancerBtn" onclick="switchTab('enhancer')">Enhancer</button>
+    <button id="navT2iBtn" onclick="switchTab('t2i')">Image Gen</button>
+    <button id="navUploadBtn" onclick="switchTab('upload')">Upload</button>
+  </nav>
+</header>
+
+<main>
+  <!-- GALLERY SECTION -->
+  <div id="gallerySection" class="section active">
+    <div class="gallery-grid" id="galleryGrid">
+      <!-- Images injected here -->
+    </div>
+    <div id="emptyGalleryMsg" style="padding:2rem; color:#666; text-align:center;">No images yet. Generate or upload some!</div>
+  </div>
+
+  <!-- TEXT TO TEXT GENERATOR -->
+  <div id="t2tSection" class="section">
+    <h2>AI Hentai Prompt Generator</h2>
+    <p>Enter a topic or concept to get a detailed AI prompt.</p>
+    <input id="t2tInput" placeholder="e.g. nurse, cat girl, cyberpunk...">
+    <button id="t2tBtn" class="action-btn" onclick="generatePrompt()">Generate Prompt</button>
+    <textarea id="t2tOutput" rows="6" placeholder="Generated prompt will appear here..."></textarea>
+  </div>
+
+  <!-- PROMPT ENHANCER -->
+  <div id="enhancerSection" class="section">
+    <h2>AI Prompt Enhancer</h2>
+    <p>Make your existing prompt more detailed and explicit.</p>
+    <textarea id="enhancerInput" rows="4" placeholder="Paste your basic prompt here..."></textarea>
+    <button id="enhancerBtn" class="action-btn" onclick="enhancePrompt()">Enhance Prompt</button>
+    <textarea id="enhancerOutput" rows="6" placeholder="Enhanced prompt will appear here..."></textarea>
+  </div>
+
+  <!-- TEXT TO IMAGE GENERATOR -->
+  <div id="t2iSection" class="section">
+    <h2>AI Image Generator</h2>
+    <p>Create hentai images from text prompts.</p>
+    <input id="t2iPromptInput" placeholder="Describe the image you want...">
+    <div style="display:flex; gap:1rem;">
+        <input id="t2iTitleInput" placeholder="Image Title (for gallery)" style="flex:1;">
+        <select id="t2iResInput" style="width:150px;">
+            <option value="512x512">Square</option>
+            <option value="512x768">Portrait</option>
+            <option value="768x512">Landscape</option>
+        </select>
+    </div>
+    
+    <button id="t2iBtn" class="action-btn" onclick="generateImageBtn()">Generate Image</button>
+    
+    <div id="t2iPreview" class="preview-box">
+        <span style="color:#666;">Image preview will appear here</span>
+    </div>
+    <button id="saveToGalleryBtn" class="action-btn" style="margin-top:1rem; background:#4caf50;" onclick="saveCurrentImage()" hidden>Save to Gallery</button>
+  </div>
+
+  <!-- UPLOAD SECTION -->
+  <div id="uploadSection" class="section">
+    <h2>Upload Image</h2>
+    <p>Add your own images to the gallery.</p>
+    <input type="file" id="fileInput" accept="image/*">
+    <input id="uploadTitleInput" placeholder="Image Title">
+    <textarea id="uploadDescInput" placeholder="Description / Prompt used..."></textarea>
+    <button id="uploadBtn" class="action-btn" onclick="handleUpload()">Upload & Add to Gallery</button>
+  </div>
+</main>
+
+<!-- IMAGE MODAL -->
+<div id="imageModal" class="modal-overlay" onclick="if(event.target===this) closeModal()">
+  <div class="modal-content">
+    <img id="modalImg" class="modal-img" src="">
+    <h3 id="modalTitle" style="color:#f0f; margin-top:0;"></h3>
+    <div id="modalMeta" class="modal-details"></div>
+    <a id="modalDownloadBtn" class="action-btn" style="display:inline-block; width:auto; text-decoration:none;" download="image.png">Download</a>
+    <button class="action-btn" style="background:#d32f2f; width:auto;" onclick="deleteCurrentImage()">Delete</button>
+    <button class="small-btn" style="margin-top:1rem;" onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<script type="module">
+  // Access globals via root for module scope
+  const generateText = window.root.generateText;
+  const generateImage = window.root.generateImage;
+  const kv = window.root.kv;
+
+  let currentGeneratedUrl = null; // Store temp generated image URL
+  let currentModalImageId = null;
+
+  // --- Navigation ---
+  window.switchTab = (tabName) => {
+    document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('nav button').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById(`${tabName}Section`).classList.add('active');
+    document.getElementById(`nav${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Btn`).classList.add('active');
+    
+    if(tabName === 'gallery') loadGallery();
+  };
+
+  // --- Text Generation ---
+  window.generatePrompt = async () => {
+    const btn = t2tBtn;
+    const input = t2tInput.value;
+    if(!input) return;
+    
+    btn.disabled = true;
+    btn.textContent = "⏳ Generating...";
+    
+    try {
+      const prompt = await generateText(`Generate a detailed, explicit, and high-quality text-to-image prompt for AI Hentai art based on this topic: ${input}. Focus on visual descriptions, style, and composition.`);
+      t2tOutput.value = prompt;
+    } catch(e) { console.error(e); }
+    
+    btn.disabled = false;
+    btn.textContent = "Generate Prompt";
+  };
+
+  window.enhancePrompt = async () => {
+    const btn = enhancerBtn;
+    const input = enhancerInput.value;
+    if(!input) return;
+    
+    btn.disabled = true;
+    btn.textContent = "⏳ Enhancing...";
+    
+    try {
+      const enhanced = await generateText(`Enhance and expand this AI image generation prompt to be more detailed and higher quality: ${input}. Add specific tags for anime style, lighting, and camera angle.`);
+      enhancerOutput.value = enhanced;
+    } catch(e) { console.error(e); }
+    
+    btn.disabled = false;
+    btn.textContent = "Enhance Prompt";
+  };
+
+  // --- Image Generation ---
+  window.generateImageBtn = async () => {
+    const btn = t2iBtn;
+    const prompt = t2iPromptInput.value;
+    const res = t2iResInput.value;
+    
+    if(!prompt) return;
+    
+    btn.disabled = true;
+    btn.textContent = "⏳ Generating (may take 30s+)...";
+    saveToGalleryBtn.hidden = true;
+    t2iPreview.innerHTML = '<span style="color:#f0f;">Generating...</span>';
+    
+    try {
+      const dataUrl = await generateImage(prompt, {resolution: res});
+      currentGeneratedUrl = dataUrl;
+      
+      t2iPreview.innerHTML = `<img src="${dataUrl}">`;
+      saveToGalleryBtn.hidden = false;
+    } catch(e) {
+      t2iPreview.innerHTML = '<span style="color:red;">Generation failed. Try again.</span>';
+      console.error(e);
+    }
+    
+    btn.disabled = false;
+    btn.textContent = "Generate Image";
+  };
+
+  window.saveCurrentImage = async () => {
+    if(!currentGeneratedUrl) return;
+    
+    const title = t2iTitleInput.value || "Untitled AI Hentai";
+    const prompt = t2iPromptInput.value;
+    
+    const imgData = {
+      id: Date.now(),
+      url: currentGeneratedUrl,
+      title: title,
+      prompt: prompt,
+      date: new Date().toLocaleDateString()
+    };
+    
+    await saveToKv(imgData);
+    alert("Saved to gallery!");
+    currentGeneratedUrl = null; // clear so we don't double save
+    saveToGalleryBtn.hidden = true;
+    t2iPreview.innerHTML = '<span style="color:#666;">Image saved. Generate another?</span>';
+    t2iPromptInput.value = "";
+  };
+
+  // --- Upload Logic ---
+  window.handleUpload = async () => {
+    const file = fileInput.files[0];
+    if(!file) return alert("Please select a file");
+    
+    const title = uploadTitleInput.value || file.name;
+    const desc = uploadDescInput.value;
+    
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = "Processing...";
+    
+    // Simple file reader for local demo (uploads to kv as base64)
+    // Ideally we'd use uploadPlugin but base64 is simpler for pure local persistence in this constrained env
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target.result;
+      const imgData = {
+        id: Date.now(),
+        url: dataUrl,
+        title: title,
+        prompt: desc || "User Upload",
+        date: new Date().toLocaleDateString()
+      };
+      
+      await saveToKv(imgData);
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = "Upload & Add to Gallery";
+      alert("Upload complete!");
+      fileInput.value = "";
+      switchTab('gallery');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // --- Storage & Gallery ---
+  async function saveToKv(imgObj) {
+    let currentImages = await kv.gallery.get('images') || [];
+    currentImages.unshift(imgObj); // Add to top
+    await kv.gallery.set('images', currentImages);
+  }
+
+  async function loadGallery() {
+    const grid = galleryGrid;
+    const images = await kv.gallery.get('images') || [];
+    
+    if(images.length === 0) {
+      emptyGalleryMsg.hidden = false;
+      grid.innerHTML = "";
+      return;
+    }
+    
+    emptyGalleryMsg.hidden = true;
+    grid.innerHTML = images.map(img => `
+      <div class="img-card">
+        <img src="${img.url}" onclick="openModal(${img.id})">
+        <div class="img-meta">
+          <div class="img-title">${img.title}</div>
+          <div style="font-size:0.7rem; color:#888;">${img.date}</div>
+          <div class="img-actions">
+            <button class="small-btn" onclick="openModal(${img.id})">View</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // --- Modal Logic ---
+  window.openModal = async (id) => {
+    const images = await kv.gallery.get('images') || [];
+    const img = images.find(i => i.id === id);
+    if(!img) return;
+    
+    currentModalImageId = id;
+    modalImg.src = img.url;
+    modalTitle.textContent = img.title;
+    modalMeta.innerHTML = `<strong>Date:</strong> ${img.date}<br><br><strong>Prompt/Description:</strong><br>${img.prompt.replace(/\n/g, '<br>')}`;
+    modalDownloadBtn.href = img.url;
+    
+    imageModal.classList.add('open');
+  };
+
+  window.closeModal = () => {
+    imageModal.classList.remove('open');
+    setTimeout(() => { modalImg.src = ""; }, 300); // Clear src after fade out
+  };
+
+  window.deleteCurrentImage = async () => {
+    if(!confirm("Are you sure you want to delete this image?")) return;
+    
+    let images = await kv.gallery.get('images') || [];
+    images = images.filter(i => i.id !== currentModalImageId);
+    await kv.gallery.set('images', images);
+    
+    closeModal();
+    loadGallery(); // Refresh if on gallery tab
+  };
+
+  // Init
+  loadGallery();
+
+</script>
+</body>
+</html>

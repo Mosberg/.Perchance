@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-code-generator-plus-1 — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AI Generator</title>
+<style>
+  :root { --box: #f6f6f6; --accent:#0366d6; --muted:#666; }
+  [data-theme="dark"] { --box:#222; --accent:#58a6ff; --muted:#bbb; color:#ddd; background:#0b0b0b; }
+  body{font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Arial; margin:0;padding:1rem;}
+  .container{max-width:980px;margin:0 auto;display:grid;gap:0.75rem;}
+  .panel{background:var(--box);padding:0.75rem;border-radius:8px;}
+  .row{display:flex;gap:0.5rem;align-items:center;}
+  select, textarea, input, button{font:inherit;}
+  textarea{min-height:5rem;padding:0.5rem;border-radius:6px;border:1px solid rgba(0,0,0,0.06);width:100%;background:inherit;}
+  .small{font-size:0.9rem;padding:0.35rem 0.6rem;border-radius:6px;}
+  .iconbtn{background:transparent;border:1px solid rgba(0,0,0,0.06);cursor:pointer;border-radius:6px;padding:0.35rem;}
+  .flex-right{margin-left:auto;display:flex;gap:0.5rem;}
+  .hidden{display:none !important;}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;z-index:999;}
+  .modal{background:var(--box);padding:1rem;border-radius:8px;width:min(900px,95%);max-height:80vh;overflow:auto;}
+  .notebook-pages{display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem;}
+  .page-card{padding:0.5rem;border-radius:6px;background:rgba(0,0,0,0.03);min-width:180px;display:flex;justify-content:space-between;gap:0.5rem;}
+</style>
+</head>
+<body data-theme="">
+<div class="container">
+  <h1 class="panel">AI Code Generator ➕ <span class="muted" id="modeMeta"></span></h1>
+
+  <div class="panel row">
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <div class="muted">Mode</div>
+      <select id="modeSelect" aria-label="Mode"></select>
+    </div>
+
+    <div class="muted" style="margin-left:0.25rem">Template</div>
+    <select id="templateSelect" class="template-select" aria-label="Template"></select>
+
+    <div class="flex-right">
+      <button id="enhanceBtn" class="small iconbtn" title="Enhance prompt">✨ Improve</button>
+      <button id="notebookBtn" class="small iconbtn" title="Scratchpad">🗒️ Scratchpad</button>
+      <button id="toggleThemeBtn" class="small iconbtn" title="Toggle theme">🌙</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="muted">Instruction</div>
+    <textarea id="instructionEl" placeholder="Type an instruction here."></textarea>
+    <div class="row" style="margin-top:0.5rem">
+      <div style="display:flex;gap:0.5rem;">
+        <button id="generateBtn" class="small">✨ generate</button>
+        <button id="continueBtn" class="small" disabled>▶ continue</button>
+        <button id="retryBtn" class="small" disabled>🔁 retry</button>
+        <button id="stopBtn" class="small hidden">🛑 stop</button>
+      </div>
+      <div class="flex-right" id="loaderEl" style="color:var(--muted)"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="muted">Output</div>
+    <textarea id="responseEl" placeholder="AI output appears here."></textarea>
+    <div class="row" style="margin-top:0.5rem;">
+      <div style="display:flex;gap:0.5rem;">
+        <button id="copyBtn" class="small">📋 copy</button>
+        <button id="downloadBtn" class="small">⬇️ download</button>
+        <button id="clearBtn" class="small">🗑️ clear</button>
+      </div>
+      <div class="flex-right muted" id="outputMeta"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="renderedOutputEl"></div>
+  <div class="panel" id="commentsCtn"></div>
+</div>
+
+<!-- Notebook modal -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Scratchpad">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2>Scratchpad</h2>
+      <div><button id="modalClose" class="small">✖ close</button></div>
+    </div>
+
+    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+      <input id="newPageTitle" placeholder="New page title" style="flex:1;padding:0.4rem;border-radius:6px;">
+      <button id="addPageBtn" class="small">➕ add page</button>
+      <button id="exportPagesBtn" class="small">⬇️ export</button>
+      <button id="importPagesBtn" class="small">⬆️ import</button>
+    </div>
+
+    <div class="notebook-pages" id="pagesList"></div>
+    <div id="pageEditorCtn" style="margin-top:0.75rem"></div>
+  </div>
+</div>
+
+<script>
+/* Helpers */
+const UI = (function(){
+  const q = id => document.getElementById(id);
+  return { q, setTheme, getTheme, setRunningState, setIdleState };
+
+  function setTheme(t){
+    document.body.setAttribute('data-theme', t === 'dark' ? 'dark' : '');
+    localStorage.setItem('forceColorScheme', t);
+    q('toggleThemeBtn').textContent = t==='dark' ? '🌞' : '🌙';
+  }
+  function getTheme(){
+    const forced = localStorage.getItem('forceColorScheme');
+    if(forced) return forced;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function setRunningState(){
+    q('generateBtn').disabled = true;
+    q('stopBtn').classList.remove('hidden');
+    q('loaderEl').textContent = 'Running…';
+  }
+  function setIdleState(){
+    q('generateBtn').disabled = false;
+    q('stopBtn').classList.add('hidden');
+    q('loaderEl').textContent = '';
+  }
+})();
+
+/* Elements */
+const modeSelect = UI.q('modeSelect');
+const templateSelect = UI.q('templateSelect');
+const instructionEl = UI.q('instructionEl');
+const generateBtn = UI.q('generateBtn');
+const responseEl = UI.q('responseEl');
+const copyBtn = UI.q('copyBtn');
+const downloadBtn = UI.q('downloadBtn');
+const clearBtn = UI.q('clearBtn');
+const enhanceBtn = UI.q('enhanceBtn');
+const notebookBtn = UI.q('notebookBtn');
+const toggleThemeBtn = UI.q('toggleThemeBtn');
+const modalBackdrop = UI.q('modalBackdrop');
+const pagesListEl = UI.q('pagesList');
+
+let currentMode = null;
+let lastModeUsed = null;
+
+/* dynamic initialization using modes.selectAll */
+function buildFromModes(){
+  if(!modes || !modes.selectAll) {
+    const fallback = [{ getName: 'general', label: 'Code' }];
+    populateModeOptions(fallback);
+    return;
+  }
+  const list = modes.selectAll.map(m => {
+    const key = m.getName || m.name || (typeof m === 'string' ? m : null);
+    const label = m.label || (m.getLabel ? m.getLabel : (m.name || key));
+    const templates = m.templates || [];
+    const ext = m.ext || (templates[0] && templates[0].ext) || (m.fileExt) || null;
+    return { key, label, templates, ext, original: m };
+  }).filter(x => x.key);
+  populateModeOptions(list);
+}
+
+function populateModeOptions(list){
+  modeSelect.innerHTML = list.map(item => {
+    const sel = (localStorage.getItem('currentMode') === item.key) ? 'selected' : '';
+    return `<option value="${item.key}" ${sel}>${item.label || item.key}</option>`;
+  }).join('');
+  modeSelect._items = Object.fromEntries(list.map(i => [i.key, i]));
+  const initial = localStorage.getItem('currentMode') || (list[0] && list[0].key);
+  if(initial) {
+    modeSelect.value = initial;
+    onModeChanged(initial);
+  }
+}
+
+function onModeChanged(key){
+  const item = modeSelect._items && modeSelect._items[key];
+  if(!item) {
+    templateSelect.innerHTML = '<option value="">(no templates)</option>';
+    templateSelect.disabled = true;
+    currentMode = key;
+    return;
+  }
+  currentMode = key;
+  localStorage.setItem('currentMode', key);
+  const t = item.templates || [];
+  if(t.length === 0) {
+    templateSelect.innerHTML = '<option value="">(no templates)</option>';
+    templateSelect.disabled = true;
+  } else {
+    templateSelect.disabled = false;
+    templateSelect.innerHTML = t.map(tt => `<option value="${tt.id}">${tt.label}</option>`).join('');
+    const sel = localStorage.getItem('selectedTemplate:'+key);
+    if(sel) templateSelect.value = sel;
+  }
+  document.getElementById('modeMeta').textContent = item.label || key;
+}
+
+templateSelect.addEventListener('change', () => {
+  const sel = templateSelect.value;
+  if(!sel) return;
+  const item = modeSelect._items[currentMode];
+  const tpl = item.templates.find(x => x.id === sel);
+  if(!tpl) return;
+  const targetInstruction = confirm('Insert template into Instruction? (Cancel to insert into Output)');
+  if(targetInstruction) {
+    instructionEl.value = (instructionEl.value ? instructionEl.value + '\n\n' : '') + tpl.content;
+    localStorage.setItem('instruction', instructionEl.value);
+  } else {
+    responseEl.value = (responseEl.value ? responseEl.value + '\n\n' : '') + tpl.content;
+    localStorage.setItem('response', responseEl.value);
+  }
+  localStorage.setItem('selectedTemplate:'+currentMode, sel);
+});
+
+enhanceBtn.addEventListener('click', () => {
+  const preset = prompt('Preset: clarity, testable, detailed, compact, smart','clarity');
+  if(preset === null) return;
+  instructionEl.value = enhancePrompt(instructionEl.value || instructionEl.placeholder, preset || 'clarity');
+  localStorage.setItem('instruction', instructionEl.value);
+});
+function enhancePrompt(orig, preset){
+  let s = orig.trim();
+  if(!s) return s;
+  if(preset === 'clarity'){ if(!/please/i.test(s)) s = 'Please ' + s; if(!/[.!?]$/.test(s)) s += '.'; }
+  else if(preset === 'testable'){ s += ' Include a short test case and example input/output.'; }
+  else if(preset === 'detailed'){ s += ' Provide detailed code, comments, and usage.'; }
+  else if(preset === 'compact'){ s += ' Provide concise solution.'; }
+  else if(preset === 'smart'){ if(/optimi[sz]e/i.test(s)) s += ' Optimize for readability and performance.'; }
+  return s;
+}
+
+generateBtn.addEventListener('click', async () => {
+  const settings = {
+    instruction: () => { lastModeUsed = currentMode; return instructionEl.value || ''; },
+    outputTo: [responseEl],
+    onStart: () => UI.setRunningState(),
+    onChunk: (c) => { if(responseEl.scrollTop + responseEl.offsetHeight > responseEl.scrollHeight - 60) responseEl.scrollTop = responseEl.scrollHeight; if(modes[lastModeUsed] && modes[lastModeUsed].onChunk) modes[lastModeUsed].onChunk(c); },
+    onFinish: () => { UI.setIdleState(); localStorage.setItem('response', responseEl.value || ''); }
+  };
+  const pending = ai(settings);
+  UI.setRunningState();
+  document.getElementById('stopBtn').classList.remove('hidden');
+  document.getElementById('stopBtn').onclick = () => { pending.stop(); UI.setIdleState(); };
+  try { await pending.onFinishPromise; } catch(e){ console.error(e); } finally { UI.setIdleState(); document.getElementById('stopBtn').classList.add('hidden'); }
+});
+
+copyBtn.addEventListener('click', async () => {
+  await navigator.clipboard.writeText(responseEl.value || '');
+  copyBtn.textContent = '✅ copied';
+  setTimeout(()=>copyBtn.textContent='📋 copy',2000);
+});
+downloadBtn.addEventListener('click', () => {
+  const item = modeSelect._items[currentMode] || {};
+  const tplId = templateSelect.value;
+  let ext = (item.ext || (item.templates && item.templates[0] && item.templates[0].ext) || 'txt');
+  const filenameBase = (templateSelect.value ? templateSelect.options[templateSelect.selectedIndex].text : currentMode);
+  const a = document.createElement('a');
+  const blob = new Blob([responseEl.value || ''], { type:'text/plain;charset=utf-8' });
+  a.href = URL.createObjectURL(blob);
+  a.download = filenameBase + '.' + ext;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+});
+clearBtn.addEventListener('click', () => { if(confirm('Clear output?')) { responseEl.value = ''; localStorage.setItem('response',''); } });
+
+(function restore(){
+  const ins = localStorage.getItem('instruction');
+  const res = localStorage.getItem('response');
+  if(ins) instructionEl.value = ins;
+  if(res) responseEl.value = res;
+})();
+
+(function initComments(){
+  if(typeof comments === 'function') {
+    const html = comments({ width:'min(750px,100%)', height:'min(60vh,500px)', forceColorScheme: localStorage.getItem('forceColorScheme') || null });
+    if(html) document.getElementById('commentsCtn').innerHTML = html;
+  }
+})();
+
+toggleThemeBtn.addEventListener('click', () => {
+  const cur = UI.getTheme();
+  const next = cur === 'dark' ? 'light' : 'dark';
+  UI.setTheme(next);
+});
+UI.setTheme(UI.getTheme());
+
+/* Notebook (kv fallback localStorage) */
+const Notebook = (function(){
+  const KEY = (typeof kvStorageKey !== 'undefined') ? kvStorageKey : 'acg_notebook_pages_v1';
+  function load(){ try { const raw = (kv && kv.get) ? kv.get(KEY) : localStorage.getItem(KEY); return raw ? JSON.parse(raw) : [{ id:genId(), title:'Ideas', content:'', created:Date.now() }]; } catch(e){ return [{ id:genId(), title:'Ideas', content:'', created:Date.now() }]; } }
+  function save(p){ try { const s=JSON.stringify(p); if(kv && kv.set) kv.set(KEY,s); else localStorage.setItem(KEY,s); } catch(e){ console.error(e); } }
+  function genId(){ return 'p_'+Math.random().toString(36).slice(2,9); }
+  let pages = load(); let active = pages[0] ? pages[0].id : null;
+  function renderList(){ pagesListEl.innerHTML=''; for(const p of pages){ const d=document.createElement('div'); d.className='page-card'; d.innerHTML = `<div style="flex:1"><strong>${escapeHtml(p.title)}</strong><div class="muted" style="font-size:0.85rem">${new Date(p.created).toLocaleString()}</div></div>
+        <div style="display:flex;gap:0.25rem"><button class="small" data-action="open" data-id="${p.id}">open</button><button class="small" data-action="rename" data-id="${p.id}">✏️</button><button class="small" data-action="delete" data-id="${p.id}">🗑️</button></div>`; pagesListEl.appendChild(d); } }
+  function open(id){ const p=pages.find(x=>x.id===id); if(!p) return; active=id; renderEditor(p); }
+  function renderEditor(p){ const c=UI.q('pageEditorCtn'); c.innerHTML=''; const title=document.createElement('div'); title.innerHTML=`<div style="display:flex;gap:0.5rem;"><input id="pageTitleInput" value="${escapeHtml(p.title)}" style="flex:1;padding:0.4rem;border-radius:6px;"><button id="savePageBtn" class="small">💾 save</button></div>`; c.appendChild(title); const ta=document.createElement('textarea'); ta.style.minHeight='30vh'; ta.value=p.content||''; c.appendChild(ta); document.getElementById('savePageBtn').addEventListener('click', ()=>{ p.title = document.getElementById('pageTitleInput').value || p.title; p.content = ta.value; p.modified = Date.now(); save(pages); renderList(); alert('Saved'); }); }
+  function add(title){ const p={ id:genId(), title:title||'Untitled', content:'', created:Date.now() }; pages.unshift(p); save(pages); renderList(); open(p.id); }
+  function remove(id){ if(!confirm('Delete page?')) return; pages = pages.filter(x=>x.id!==id); save(pages); renderList(); if(pages.length) open(pages[0].id); else UI.q('pageEditorCtn').innerHTML=''; }
+  function rename(id){ const p=pages.find(x=>x.id===id); if(!p) return; const nm=prompt('New title', p.title); if(nm){ p.title=nm; save(pages); renderList(); } }
+  function exportPages(){ const b=new Blob([JSON.stringify(pages,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='notebook.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); }
+  function importPages(){ const inp=document.createElement('input'); inp.type='file'; inp.accept='application/json'; inp.onchange=(e)=>{ const f=e.target.files[0]; const r=new FileReader(); r.onload=()=>{ try{ const parsed=JSON.parse(r.result); if(Array.isArray(parsed)){ pages = parsed.map(x=>({ id:x.id||genId(), title:x.title||'Imported', content:x.content||'', created:x.created||Date.now() })); save(pages); renderList(); open(pages[0].id); } else alert('Invalid format'); }catch(er){ alert('Invalid JSON'); } }; r.readAsText(f);} ; inp.click(); }
+  pagesListEl.addEventListener('click', (ev)=>{ const btn = ev.target.closest('button'); if(!btn) return; const act=btn.dataset.action; const id=btn.dataset.id; if(act==='open') open(id); if(act==='delete') remove(id); if(act==='rename') rename(id); });
+  return { init: ()=>{ renderList(); if(pages.length) open(pages[0].id); }, add, exportPages, importPages };
+})();
+
+UI.q('modalClose').addEventListener('click', ()=>{ modalBackdrop.style.display='none'; });
+UI.q('addPageBtn').addEventListener('click', ()=>{ Notebook.add(UI.q('newPageTitle').value || 'Untitled'); UI.q('newPageTitle').value=''; });
+UI.q('exportPagesBtn').addEventListener('click', ()=>Notebook.exportPages());
+UI.q('importPagesBtn').addEventListener('click', ()=>Notebook.importPages());
+UI.q('notebookBtn').addEventListener('click', ()=>{ modalBackdrop.style.display='flex'; Notebook.init(); });
+
+function escapeHtml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function genId(){ return 'id_'+Math.random().toString(36).slice(2,9); }
+
+buildFromModes();
+modeSelect.addEventListener('change', ()=> onModeChanged(modeSelect.value));
+
+(function restore(){
+  const ins = localStorage.getItem('instruction');
+  const res = localStorage.getItem('response');
+  if(ins) instructionEl.value = ins;
+  if(res) responseEl.value = res;
+})();
+
+(function initComments(){
+  if(typeof comments === 'function') {
+    const html = comments({ width:'min(750px,100%)', height:'min(60vh,500px)', forceColorScheme: localStorage.getItem('forceColorScheme') || null });
+    if(html) document.getElementById('commentsCtn').innerHTML = html;
+  }
+})();
+
+window.addEventListener('keydown', (e)=>{ if((e.ctrlKey||e.metaKey) && e.key === 'Enter'){ generateBtn.click(); }});
+</script>
+</body>
+</html>
+</body>
+</html>

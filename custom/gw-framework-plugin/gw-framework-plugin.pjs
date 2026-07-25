@@ -1,0 +1,390 @@
+// GW Framework Plugin — Comprehensive T2I framework
+// Merges features from t2i-framework-plugin-v2 and t2i-framework-plugin-moss
+
+textToImagePlugin = {import:text-to-image-plugin}
+commentsPlugin = {import:comments-plugin}
+selectLeaf = {import:select-leaf-plugin}
+fullscreenButton = {import:fullscreen-button-plugin}
+aiText = {import:ai-text-plugin}
+upload = {import:upload-plugin}
+prompt2 = {import:prompt2-plugin}
+prompt2moss = {import:prompt2-plugin-moss}
+t2iStyles = {import:t2i-styles}
+t2iStylesMossDefault = {import:t2i-styles-mosberg-default}
+t2iStylesNsfw = {import:t2i-styles-mosberg-nsfw}
+tabbedCommentsPlugin = {import:tabbed-comments-plugin-v1}
+createMediaGalleryPlugin = {import:create-media-gallery-plugin}
+kv = {import:kv-plugin}
+superFetch = {import:super-fetch-plugin}
+dynamicImport = {import:dynamic-import-plugin}
+remember = {import:remember-plugin}
+seeder = {import:seeder-plugin}
+
+$output(settings) =>
+  // Namespace and compatibility
+  if(!window.input) window.input = {};
+  if(!window.___gw) window.___gw = {};
+
+  // Expose core plugin refs
+  window.___gw.textToImage = textToImagePlugin;
+  window.___gw.comments = commentsPlugin;
+  window.___gw.kv = kv;
+  window.___gw.upload = upload;
+  window.___gw.aiText = aiText;
+  window.___gw.superFetch = superFetch;
+  window.___gw.createMediaGallery = createMediaGalleryPlugin;
+
+  // Default framework config (can be overridden with settings.frameworkConfig)
+  window.___gw.config = Object.assign({
+    lazyLoadIframes: true,
+    autoCompressShareLinks: true,
+    scrubShareData: true,
+    enableProxiedFetch: false,
+    maxConcurrentGenerations: 3,
+    defaultNumImages: 6,
+    gallery: true,
+    galleryCols: 3,
+    socialFeatures: 'enabled',
+    rememberInputsPrefix: 'gw_remembered',
+    allowClipboardShare: true,
+  }, settings.frameworkConfig || {});
+
+  // registry & event bus
+  window.___gw.registry = window.___gw.registry || {};
+  window.___gw.register = function(name, obj) { this.registry[name] = obj; };
+  window.___gw._events = window.___gw._events || {};
+  window.___gw.on = function(name, cb) { if(!this._events[name]) this._events[name] = []; this._events[name].push(cb); return () => { this._events[name] = this._events[name].filter(f=>f!==cb); }; };
+  window.___gw.emit = function(name, ...args) { (this._events[name]||[]).forEach(f=>{ try{ f(...args);}catch(e){console.error(e)} }); };
+
+  // helpers: image grid
+  window.___gw.helpers = window.___gw.helpers || {};
+  window.___gw.helpers.makeImageGridHtml = function(items = [], opts = {}) {
+    const cols = opts.cols || window.___gw.config.galleryCols || 3;
+    let html = `<div class="gw-v2-image-grid" style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:0.6rem;">`;
+    for(let it of items) html += `<div class="gw-v2-image-cell" style="position:relative;">${it.html||it}</div>`;
+    html += `</div>`;
+    return html;
+  };
+
+  // PII scrubber
+  window.___gw.scrubPII = function(text) {
+    if(!text) return text;
+    text = String(text).replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig, '[redacted_email]');
+    text = text.replace(/\+?\d[\d\-() ]{6,}\d/g, '[redacted_phone]');
+    return text;
+  };
+
+  // Compression helpers
+  async function compressBlobWithGzip(blob) {
+    if(!window.CompressionStream) return blob;
+    try {
+      const cs = new CompressionStream('gzip');
+      const compressed = blob.stream().pipeThrough(cs);
+      return await new Response(compressed).blob();
+    } catch(e) { console.warn('gzip failed', e); return blob; }
+  }
+
+  async function decompressBlobWithGzip(blob) {
+    if(!window.DecompressionStream) return blob;
+    try {
+      const ds = new DecompressionStream('gzip');
+      const decompressed = blob.stream().pipeThrough(ds);
+      return await new Response(decompressed).blob();
+    } catch(e) { console.warn('gunzip failed', e); return blob; }
+  }
+
+  // collect user inputs (excludes `excludeFromShareLink`)
+  window.___gw.getAllUserInputValues = function() {
+    const out = {};
+    const userInputs = settings.userInputs || {};
+    try {
+      for(const name of userInputs.getChildNames || Object.keys(userInputs)) {
+        const spec = userInputs[name];
+        if(spec && spec.excludeFromShareLink) continue;
+        const el = spec && spec._element;
+        if(el && el.value !== undefined) out[name] = el.value;
+        else if(spec && spec.value !== undefined) out[name] = spec.value;
+      }
+    } catch(e){}
+    out.___format = 'gw-framework-v2';
+    return out;
+  };
+
+  // import user input values (object shape from getAllUserInputValues)
+  window.___gw.importUserInputValues = function(data) {
+    if(!data) return;
+    try {
+      const userInputs = settings.userInputs || {};
+      for(const k of Object.keys(data)) {
+        if(k === '___format') continue;
+        if(userInputs[k]) {
+          userInputs[k].value = data[k];
+          if(userInputs[k]._element) userInputs[k]._element.value = data[k];
+        } else {
+          window.input[k] = data[k];
+        }
+      }
+      window.___gw.emit('imported', data);
+    } catch(e) { console.error(e); }
+  };
+
+  // share link flow: compress + upload
+  window.___gw.generateShareLink = async function(opts) {
+    opts = opts || {};
+    let data = window.___gw.getAllUserInputValues();
+    let json = JSON.stringify(data);
+    if(window.___gw.config.scrubShareData || opts.scrub) json = window.___gw.scrubPII(json);
+    let blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    blob = await compressBlobWithGzip(blob);
+    // if upload plugin exists, use it, otherwise return data URL
+    if(window.___gw.upload) return await window.___gw.upload(blob);
+    // fallback: data url (base64)
+    const arrayBuf = await blob.arrayBuffer();
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuf)));
+    return `data:application/gzip;base64,${b64}`;
+  };
+
+  // load from url hash (gzip or plain json)
+  async function loadDataFromUrlHash() {
+    try {
+      const hash = (location.hash || '').replace(/^#/, '');
+      if(!hash) return null;
+      // support gzip base64 blobs (data:application/gzip;base64,...) or raw JSON in hash
+      if(hash.startsWith('data:')) {
+        // treat as data url
+        const parts = hash.split(',');
+        const b64 = parts[1] || '';
+        const bin = atob(b64);
+        const arr = new Uint8Array(bin.length);
+        for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+        const blob = new Blob([arr]);
+        const maybeDecompressed = await decompressBlobWithGzip(blob);
+        const text = await new Response(maybeDecompressed).text();
+        return JSON.parse(text);
+      }
+      try { return JSON.parse(decodeURIComponent(hash)); } catch(e) { return null; }
+    } catch(e) { console.warn(e); return null; }
+  }
+
+  // modal helpers
+  window.___gw.showModal = async function(html) {
+    if(!html) html = '<p>?</p>';
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);z-index:99999;';
+      const modal = document.createElement('div');
+      modal.style.cssText = 'background:var(--box-color);padding:1rem;border-radius:8px;max-width:90%;max-height:90%;overflow:auto;';
+      modal.innerHTML = html;
+      overlay.appendChild(modal);
+      overlay.onclick = e => { if(e.target === overlay) { overlay.remove(); resolve(null); } };
+      document.body.appendChild(overlay);
+    });
+  };
+
+  window.___gw.confirmAsync = async function(message, opts) {
+    opts = opts || {};
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);z-index:99999;';
+      const modal = document.createElement('div');
+      modal.style.cssText = 'background:var(--box-color);padding:1rem;border-radius:8px;min-width:260px;';
+      modal.innerHTML = `<div style="min-width:220px;">${String(message).replace(/</g,'&lt;')}</div><div style="margin-top:0.5rem;text-align:right;"><button id=gw_cancel>Cancel</button> <button id=gw_ok>${opts.okText||'OK'}</button></div>`;
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      modal.querySelector('#gw_ok').onclick = () => { overlay.remove(); resolve(true); };
+      modal.querySelector('#gw_cancel').onclick = () => { overlay.remove(); resolve(false); };
+    });
+  };
+
+  // getUserInput: modal form generator (simple)
+  window.___gw.getUserInput = async function(fields, opts) {
+    fields = fields || {}; opts = opts || {};
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);z-index:99999;';
+      const modal = document.createElement('div');
+      modal.style.cssText = 'background:var(--box-color);padding:1rem;border-radius:8px;min-width:320px;max-height:90%;overflow:auto;';
+      let html = '<div style="display:flex;flex-direction:column;gap:0.5rem;">';
+      for(const k of Object.keys(fields)) {
+        const f = fields[k];
+        html += `<label style="font-size:90%;">${(f.label||k)}</label>`;
+        if(f.type === 'paragraph') html += `<textarea name="${k}" style="width:100%;height:7rem;">${(f.default||'')}</textarea>`;
+        else if(f.type === 'select') {
+          html += `<select name="${k}">`;
+          for(const opt of (f.options||[])) html += `<option value="${opt.value||opt}">${opt.label||opt}</option>`;
+          html += `</select>`;
+        } else html += `<input name="${k}" value="${(f.default||'')}" style="width:100%"/>`;
+      }
+      html += `<div style="text-align:right;margin-top:0.5rem;"><button id=gw_cancel_2>Cancel</button> <button id=gw_ok_2>${opts.okText||'OK'}</button></div></div>`;
+      modal.innerHTML = html;
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      modal.querySelector('#gw_ok_2').onclick = () => {
+        const res = {};
+        const inputs = modal.querySelectorAll('[name]');
+        inputs.forEach(i => res[i.name] = i.value);
+        overlay.remove(); resolve(res);
+      };
+      modal.querySelector('#gw_cancel_2').onclick = () => { overlay.remove(); resolve(null); };
+    });
+  };
+
+  // simple variable parser for textarea inputs that set parseVariables=true
+  window.___gw.variables = window.___gw.variables || {};
+  function parseVariablesFromTextArea(text) {
+    const variables = {};
+    if(!text) return variables;
+    const lines = String(text).split(/\r?\n/);
+    for(const line of lines) {
+      const m = line.match(/^\s*([A-Za-z0-9_\-]+)\s*=\s*\[(.*)\]\s*$/) || line.match(/^\s*([A-Za-z0-9_\-]+)\s*=\s*\{(.*)\}\s*$/);
+      if(m) {
+        const key = m[1]; const rest = m[2];
+        const items = rest.split(/\|/).map(s=>s.trim()).filter(Boolean);
+        if(items.length) variables[key] = items;
+      }
+    }
+    return variables;
+  }
+
+  window.___gw.expandVariables = function(text) {
+    if(!text) return text;
+    return text.replace(/\[([A-Za-z0-9_\-]+)\]/g, (m,k) => {
+      const list = window.___gw.variables[k];
+      if(Array.isArray(list) && list.length) return list[Math.floor(Math.random()*list.length)];
+      return m;
+    });
+  };
+
+  // parse all variables from inputs marked parseVariables
+  function parseAllVariables() {
+    try {
+      const userInputs = settings.userInputs || {};
+      for(const name of userInputs.getChildNames || Object.keys(userInputs)) {
+        const spec = userInputs[name];
+        if(spec && spec.parseVariables && spec._element && spec._element.value) {
+          const parsed = parseVariablesFromTextArea(spec._element.value);
+          Object.assign(window.___gw.variables, parsed);
+        }
+      }
+    } catch(e) { console.warn(e); }
+  }
+
+  // generate pipeline (concurrency-safe)
+  window.___gw._pending = window.___gw._pending || 0;
+  window.___gw.generate = async function(opts) {
+    opts = opts || {};
+    while(window.___gw._pending >= window.___gw.config.maxConcurrentGenerations) await new Promise(r=>setTimeout(r,200));
+    window.___gw._pending++;
+    try {
+      // refresh variables first
+      parseAllVariables();
+      // compute image options
+      let imageOptions = typeof settings.imageOptions === 'function' ? settings.imageOptions() : (settings.imageOptions || {});
+      // merge user input values
+      try { Object.keys(window.input).forEach(k=>{ if(k in imageOptions === false) imageOptions[k]=window.input[k]; }); }catch(e){}
+      if(opts.override) Object.assign(imageOptions, opts.override);
+      if(localStorage.forceColorScheme) imageOptions.forceColorScheme = localStorage.forceColorScheme;
+      // expand variables in prompt if present
+      if(imageOptions.prompt) imageOptions.prompt = window.___gw.expandVariables(imageOptions.prompt);
+      const out = await window.___gw.textToImage(imageOptions);
+      window.___gw.emit('generated', out);
+      // optionally push into gallery
+      try {
+        if(window.___gw.config.gallery && window.___gw.createMediaGallery && out && out.items) {
+          window.___gw.createMediaGallery.add(out.items);
+        }
+      } catch(e) {}
+      return out;
+    } catch(e) { console.error(e); throw e; }
+    finally { window.___gw._pending--; }
+  };
+
+  // AI prompt helper: ask aiText plugin for completions if available
+  window.___gw.aiSuggest = async function(prompt, opts) {
+    opts = opts || {};
+    if(!window.___gw.aiText) throw new Error('aiText plugin not available');
+    // try common integration points: aiText({prompt, onChunk, onFinish}) or aiText.generate
+    return new Promise(async (resolve, reject) => {
+      try {
+        let got = '';
+        const onChunk = (c) => { got += c; if(opts.onChunk) opts.onChunk(c); };
+        const onFinish = (final) => { if(opts.onFinish) opts.onFinish(final); resolve(final || got); };
+        const api = window.___gw.aiText;
+        if(typeof api === 'function') {
+          // might return a streaming object
+          const ret = api({ prompt, onChunk, onFinish });
+          if(ret && ret.onFinishPromise) {
+            ret.onFinishPromise.then(() => resolve(ret.generatedText || got)).catch(reject);
+          }
+        } else if(api && typeof api.generate === 'function') {
+          const res = await api.generate({ prompt });
+          resolve(res && res.text ? res.text : res);
+        } else resolve(null);
+      } catch(e) { reject(e); }
+    });
+  };
+
+  // default UI renderer (creates basic controls and output area). Generators may override.
+  function createDefaultUI() {
+    const pageTitle = settings.pageTitle || 'GW Framework v2 Generator';
+    const generateButtonId = 'gw_generate_btn';
+    const shareButtonId = 'gw_share_btn';
+    const outputId = 'gw_output_ctn';
+    const controls = `<div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.6rem;">` +
+      `<button id="${generateButtonId}">Generate (${window.___gw.config.defaultNumImages})</button>` +
+      `<button id="${shareButtonId}">Share</button>` +
+      `<span style="margin-left:1rem;color:#888;">${pageTitle}</span></div>`;
+    const html = `<div class="gw-v2-framework-ctn">${controls}<div id="${outputId}"></div><div id="gw_gallery_ctn"></div><div id="gw_comments_ctn"></div></div>`;
+    return { html, ids: { generateButtonId, shareButtonId, outputId } };
+  }
+
+  // Render the default UI and attach button handlers
+  const ui = createDefaultUI();
+  // attach a small placeholder container with escaped braces for Perchance
+  const escaped = ui.html.replaceAll('{','\\{').replaceAll('}','\\}');
+  setTimeout(() => {
+    try {
+      const genBtn = document.getElementById(ui.ids.generateButtonId);
+      const shareBtn = document.getElementById(ui.ids.shareButtonId);
+      const output = document.getElementById(ui.ids.outputId);
+      if(genBtn) {
+        genBtn.onclick = async () => {
+          genBtn.disabled = true; genBtn.textContent = 'Generating...';
+          try {
+            const out = await window.___gw.generate({ override: {} });
+            if(typeof out === 'string') output.innerHTML = out;
+            else if(out && out.items) output.innerHTML = window.___gw.helpers.makeImageGridHtml(out.items, { cols: window.___gw.config.galleryCols });
+            else output.innerHTML = '<div>Generated (no renderable output)</div>';
+          } catch(e) { output.innerHTML = `<div style="color:crimson">Generation failed: ${String(e).replace(/</g,'&lt;')}</div>`; }
+          genBtn.disabled = false; genBtn.textContent = `Generate (${window.___gw.config.defaultNumImages})`;
+        };
+      }
+      if(shareBtn) {
+        shareBtn.onclick = async () => {
+          shareBtn.disabled = true; shareBtn.textContent = 'Preparing share...';
+          try {
+            const url = await window.___gw.generateShareLink();
+            if(url && window.___gw.config.allowClipboardShare && navigator.clipboard) await navigator.clipboard.writeText(url).catch(()=>{});
+            alert('Share link prepared' + (url?': copied to clipboard':'') );
+          } catch(e) { console.error(e); alert('Share failed'); }
+          shareBtn.disabled = false; shareBtn.textContent = 'Share';
+        };
+      }
+    } catch(e) { console.error(e); }
+  }, 300);
+
+  // expose API to global
+  window.___gw.parseAllVariables = parseAllVariables;
+  window.___gw.compressBlobWithGzip = compressBlobWithGzip;
+  window.___gw.decompressBlobWithGzip = decompressBlobWithGzip;
+  window.___gw.loadDataFromUrlHash = loadDataFromUrlHash;
+
+  // attempt to load from url hash on first run
+  (async function() { const d = await loadDataFromUrlHash(); if(d) window.___gw.importUserInputValues(d); })();
+
+  // simple registry metadata registration: mark this plugin available
+  window.___gw.register('gw-framework-plugin', { title: 'GW Framework Plugin', version: '2.0' });
+
+  // minimal HTML returned (escaped curly braces to avoid Perchance parser issues)
+  const outputHtml = ui.html;
+  return outputHtml.replaceAll('{','\\{').replaceAll('}','\\}');

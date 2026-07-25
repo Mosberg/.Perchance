@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>4bdn-re-imagine — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<h1>[title]</h1>
+<p class="subtitle">Upload an image, pick a style, and the AI reimagines it — with inpainting, batch styles, palettes, and more.</p>
+
+<div id="app">
+
+  <!-- ===== Upload zone ===== -->
+  <div id="dropZone" class="dropzone">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <div class="dz-text">Drop an image here</div>
+    <div class="dz-sub">or <label for="fileInput" class="link">browse</label> · or paste from clipboard (Ctrl+V)</div>
+    <input type="file" id="fileInput" accept="image/*" hidden>
+  </div>
+
+  <!-- ===== Workspace ===== -->
+  <div id="workspace" hidden>
+
+    <div class="panel source-panel">
+      <div class="panel-label">SOURCE <span id="paletteLabel" class="dim"></span></div>
+      <div class="source-img-wrap" id="sourceImgWrap">
+        <img id="sourceImg">
+        <canvas id="maskCanvas" class="mask-canvas"></canvas>
+      </div>
+      <div id="paletteStrip" class="palette-strip"></div>
+      <button id="newImgBtn" class="btn-sub">↻ new image</button>
+    </div>
+
+    <div class="panel controls-panel">
+      <!-- Mode tabs -->
+      <div class="tab-row">
+        <button class="tab-btn active" data-mode="reimagine">✨ Reimagine</button>
+        <button class="tab-btn" data-mode="edit">🖌️ Edit Region</button>
+      </div>
+
+      <!-- Edit-mode brush controls (hidden in reimagine mode) -->
+      <div id="brushControls" class="control-row" hidden>
+        <label class="slider-label">
+          <span>Brush size <b id="brushVal">40</b>px</span>
+          <input type="range" id="brushSlider" min="8" max="120" value="40">
+        </label>
+        <button id="clearMaskBtn" class="btn-sub">clear mask</button>
+        <span class="hint-text">Paint over the area you want to change</span>
+      </div>
+
+      <div class="control-row">
+        <label>Style
+          <select id="styleSelect"></select>
+        </label>
+        <label class="checkbox-label"><input type="checkbox" id="batchCheck"> Batch (all styles)</label>
+        <label>Variations
+          <select id="varCountSelect">
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </label>
+        <label>Resolution
+          <select id="resSelect">
+            <option value="512x512">512²</option>
+            <option value="768x768" selected>768²</option>
+            <option value="768x512">768×512</option>
+            <option value="512x768">512×768</option>
+          </select>
+        </label>
+        <label class="checkbox-label"><input type="checkbox" id="autoResCheck" checked> auto-fit</label>
+      </div>
+
+      <div class="control-row">
+        <label class="slider-label">
+          <span>Faithfulness <b id="faithVal">60</b>%</span>
+          <input type="range" id="faithSlider" min="0" max="100" value="60">
+          <span class="slider-hint">0 = loose inspiration · 100 = faithful recreation</span>
+        </label>
+        <label class="slider-label">
+          <span>Guidance <b id="guideVal">7</b></span>
+          <input type="range" id="guideSlider" min="1" max="20" value="7" step="0.5">
+          <span class="slider-hint">higher = more prompt-adherent</span>
+        </label>
+      </div>
+
+      <div class="control-row">
+        <label class="full">Extra modifiers
+          <input type="text" id="extraInput" placeholder="e.g. golden hour, foggy, dramatic sky">
+        </label>
+        <label class="checkbox-label"><input type="checkbox" id="lockSeedCheck"> Lock seed</label>
+        <label class="checkbox-label"><input type="checkbox" id="editPromptCheck"> Edit prompt</label>
+      </div>
+
+      <details class="neg-details">
+        <summary>Negative prompt</summary>
+        <textarea id="negPromptArea" rows="2"></textarea>
+      </details>
+
+      <div class="action-row">
+        <button id="goBtn" class="btn-primary">✨ Reimagine</button>
+        <kbd class="kbd-hint">Space = run · R = reroll last</kbd>
+      </div>
+    </div>
+
+    <!-- Prompt editor -->
+    <div class="panel prompt-panel" id="promptPanel" hidden>
+      <div class="panel-label">PROMPT <span id="promptStage" class="stage-tag">analyzing…</span></div>
+      <textarea id="promptArea" placeholder="The AI-generated description will appear here. Edit it freely."></textarea>
+      <div class="prompt-actions">
+        <button id="generateBtn" class="btn-primary" disabled>Generate →</button>
+        <button id="reanalyzeBtn" class="btn-sub">↻ re-analyze</button>
+        <button id="enhanceBtn" class="btn-sub">✦ enhance</button>
+      </div>
+    </div>
+
+    <!-- Results grid -->
+    <div id="resultsCtn" class="results-grid"></div>
+  </div>
+
+  <div id="statusEl" class="status"></div>
+
+  <!-- ===== History ===== -->
+  <div id="historySection" hidden>
+    <div class="history-header">
+      <h2>History</h2>
+      <button id="clearHistoryBtn" class="btn-sub">clear</button>
+    </div>
+    <div id="historyStrip" class="history-strip"></div>
+  </div>
+</div>
+
+<style>
+:root {
+  --bg: #0a0610;
+  --bg-grad: radial-gradient(ellipse at 20% 0%, #2a0a2a 0%, transparent 50%),
+             radial-gradient(ellipse at 80% 100%, #1a0a2e 0%, transparent 50%),
+             #0a0610;
+  --panel: #14091c; --panel2: #1c0e28; --border: #2e1538;
+  --text: #f4e9f4; --muted: #8a6e8e;
+  --accent: #ff2d95; --accent2: #b14dff; --gold: #f5d77f;
+  --neon-glow: 0 0 8px rgba(255,45,149,0.55), 0 0 22px rgba(177,77,255,0.35);
+  --pink-glow: 0 0 6px rgba(255,45,149,0.65), 0 0 18px rgba(255,45,149,0.25);
+  --purple-glow: 0 0 6px rgba(177,77,255,0.6), 0 0 18px rgba(177,77,255,0.3);
+  --gold-glow: 0 0 4px rgba(245,215,127,0.5);
+}
+html { color-scheme: dark; }
+* { scrollbar-color: var(--accent) var(--panel2); box-sizing: border-box; }
+body {
+  text-align: left; background: var(--bg-grad); background-attachment: fixed;
+  color: var(--text); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  margin: 0; padding: 0 1em 3em; min-height: 100vh;
+}
+h1 {
+  text-align: center; font-size: 1.7em; margin: 0.7em 0 0.1em; font-weight: 800; letter-spacing: 0.03em;
+  background: linear-gradient(95deg, var(--accent) 0%, var(--accent2) 45%, var(--gold) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 10px rgba(255,45,149,0.35));
+}
+.subtitle { text-align: center; color: var(--muted); font-size: 0.85em; margin: 0 auto 1.5em; max-width: 560px; letter-spacing: 0.04em; }
+#app { max-width: 1100px; margin: 0 auto; }
+.dim { color: var(--muted); font-weight: 400; }
+
+.dropzone {
+  border: 1.5px dashed var(--accent2); border-radius: 14px; padding: 3em 1em; text-align: center;
+  color: var(--muted); transition: all 0.25s; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 0.4em;
+  background: linear-gradient(180deg, rgba(255,45,149,0.03), rgba(177,77,255,0.05));
+  box-shadow: inset 0 0 30px rgba(177,77,255,0.06);
+}
+.dropzone svg { color: var(--accent); filter: drop-shadow(0 0 8px rgba(255,45,149,0.5)); }
+.dropzone.drag { border-color: var(--accent); border-style: solid; background: linear-gradient(180deg, rgba(255,45,149,0.12), rgba(177,77,255,0.14)); box-shadow: var(--neon-glow); color: var(--text); }
+.dropzone .dz-text { font-size: 1.1em; color: var(--text); font-weight: 600; }
+.dropzone .dz-sub { font-size: 0.84em; }
+.dropzone .link { color: var(--gold); text-decoration: underline; cursor: pointer; text-shadow: var(--gold-glow); }
+
+#workspace { display: grid; grid-template-columns: 260px 1fr; gap: 1em; align-items: start; }
+@media (max-width: 760px) { #workspace { grid-template-columns: 1fr; } }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 0.9em; box-shadow: 0 2px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02); }
+.panel-label { font-size: 0.7em; letter-spacing: 0.16em; color: var(--gold); margin-bottom: 0.6em; font-weight: 700; text-transform: uppercase; text-shadow: var(--gold-glow); display: flex; justify-content: space-between; align-items: center; }
+
+.source-panel { position: sticky; top: 1em; }
+.source-img-wrap { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--purple-glow); line-height: 0; }
+.source-img-wrap img { width: 100%; display: block; }
+.mask-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; display: none; touch-action: none; }
+.mask-canvas.active { display: block; }
+
+.palette-strip { display: flex; gap: 3px; margin-top: 0.5em; height: 18px; border-radius: 4px; overflow: hidden; }
+.palette-swatch { flex: 1; cursor: pointer; transition: transform 0.1s; }
+.palette-swatch:hover { transform: scaleY(1.3); }
+
+.controls-panel { display: flex; flex-direction: column; gap: 0.85em; }
+.tab-row { display: flex; gap: 0.4em; border-bottom: 1px solid var(--border); padding-bottom: 0.6em; }
+.tab-btn {
+  flex: 1; background: var(--panel2); color: var(--muted); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.5em; font-size: 0.88em; cursor: pointer; transition: all 0.15s; font-weight: 600;
+}
+.tab-btn:hover { color: var(--text); border-color: var(--accent2); }
+.tab-btn.active { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border-color: transparent; box-shadow: var(--neon-glow); }
+
+.control-row { display: flex; flex-wrap: wrap; gap: 0.8em; align-items: flex-end; }
+.control-row label { display: flex; flex-direction: column; gap: 0.3em; font-size: 0.78em; color: var(--muted); letter-spacing: 0.03em; }
+.control-row label.full { flex: 1; min-width: 180px; }
+.control-row select, .control-row input[type=text] {
+  background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+  padding: 0.45em 0.55em; border-radius: 7px; font-size: 0.9em; min-width: 110px; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.control-row select:focus, .control-row input[type=text]:focus { outline: none; border-color: var(--accent); box-shadow: var(--pink-glow); }
+.control-row input[type=text] { width: 100%; }
+.slider-label { flex: 1; min-width: 200px; }
+.slider-label span { display: flex; justify-content: space-between; align-items: baseline; }
+.slider-label .slider-hint { color: var(--muted); font-size: 0.72em; font-style: italic; }
+.slider-label b { color: var(--gold); text-shadow: var(--gold-glow); }
+input[type=range] { width: 100%; accent-color: var(--accent); height: 4px; }
+input[type=range]::-webkit-slider-thumb { box-shadow: var(--pink-glow); }
+.checkbox-label { flex-direction: row !important; align-items: center; gap: 0.4em !important; font-size: 0.82em !important; color: var(--text) !important; }
+.checkbox-label input { accent-color: var(--accent); width: 15px; height: 15px; }
+.hint-text { color: var(--muted); font-size: 0.78em; font-style: italic; align-self: center; }
+
+.neg-details { margin-top: 0.3em; }
+.neg-details summary { cursor: pointer; color: var(--muted); font-size: 0.8em; letter-spacing: 0.03em; }
+.neg-details summary:hover { color: var(--gold); }
+.neg-details textarea { width: 100%; margin-top: 0.4em; background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 7px; padding: 0.5em; font-size: 0.82em; resize: vertical; font-family: inherit; }
+
+.action-row { display: flex; align-items: center; gap: 1em; }
+.kbd-hint { color: var(--muted); font-size: 0.72em; }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+  color: #fff; border: none; border-radius: 9px; padding: 0.72em 1.7em; font-size: 1em; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.04em; transition: transform 0.12s, box-shadow 0.2s; box-shadow: var(--neon-glow);
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 12px rgba(255,45,149,0.8), 0 0 30px rgba(177,77,255,0.5); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.4; cursor: default; transform: none; box-shadow: none; }
+.btn-sub { background: var(--panel2); color: var(--gold); border: 1px solid var(--border); border-radius: 7px; padding: 0.4em 0.95em; font-size: 0.8em; cursor: pointer; letter-spacing: 0.03em; transition: all 0.15s; }
+.btn-sub:hover { border-color: var(--gold); box-shadow: var(--gold-glow); }
+.btn-sub:disabled { opacity: 0.4; cursor: default; }
+
+.prompt-panel { grid-column: 1 / -1; }
+.prompt-panel textarea { width: 100%; min-height: 90px; box-sizing: border-box; background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 0.7em; font-size: 0.88em; resize: vertical; font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s; }
+.prompt-panel textarea:focus { outline: none; border-color: var(--accent2); box-shadow: var(--purple-glow); }
+.prompt-actions { display: flex; gap: 0.6em; margin-top: 0.6em; align-items: center; flex-wrap: wrap; }
+.stage-tag { color: var(--accent); font-weight: 500; letter-spacing: 0; font-size: 0.82em; text-shadow: var(--pink-glow); }
+
+.results-grid { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1em; margin-top: 0.5em; }
+.result-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s, box-shadow 0.15s; }
+.result-card:hover { border-color: var(--accent); box-shadow: var(--neon-glow); }
+.result-card .img-wrap { position: relative; aspect-ratio: 1; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.result-card img { width: 100%; height: 100%; object-fit: contain; }
+.result-card .spinner { width: 34px; height: 34px; border: 3px solid var(--panel2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; filter: drop-shadow(0 0 6px rgba(255,45,149,0.6)); }
+.result-card .overlay { position: absolute; inset: 0; background: rgba(10,6,16,0.82); display: flex; gap: 0.35em; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; flex-wrap: wrap; padding: 0.5em; }
+.result-card:hover .overlay { opacity: 1; }
+.result-card .overlay button { background: var(--panel2); color: var(--gold); border: 1px solid var(--border); border-radius: 6px; padding: 0.35em 0.6em; font-size: 0.74em; cursor: pointer; transition: all 0.12s; }
+.result-card .overlay button:hover { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: var(--pink-glow); }
+.result-card .meta { padding: 0.4em 0.6em; font-size: 0.66em; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+.result-card .meta .seed-tag { color: var(--gold); }
+.result-card .meta .style-tag { color: var(--accent2); }
+
+/* Before/after comparison slider */
+.compare-wrap { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.compare-wrap img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
+.compare-wrap .compare-after { clip-path: inset(0 0 0 50%); }
+.compare-handle { position: absolute; top: 0; left: 50%; width: 3px; height: 100%; background: var(--accent); cursor: ew-resize; box-shadow: var(--pink-glow); z-index: 2; }
+.compare-handle::after { content: '⟷'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: var(--panel2); color: var(--accent); border: 1px solid var(--accent); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.compare-label { position: absolute; top: 6px; font-size: 0.65em; color: var(--gold); text-shadow: 0 1px 3px #000; letter-spacing: 0.1em; pointer-events: none; z-index: 3; }
+.compare-label.before { left: 8px; }
+.compare-label.after { right: 8px; }
+
+.status { text-align: center; margin-top: 1.2em; min-height: 1.4em; color: var(--muted); font-size: 0.86em; letter-spacing: 0.03em; }
+.status .timer { color: var(--gold); }
+
+#historySection { max-width: 1100px; margin: 2em auto 0; }
+.history-header { display: flex; justify-content: space-between; align-items: center; }
+.history-header h2 { font-size: 0.9em; margin: 0; color: var(--gold); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; text-shadow: var(--gold-glow); }
+.history-strip { display: flex; gap: 0.5em; overflow-x: auto; padding: 0.6em 0; }
+.history-thumb { flex: 0 0 auto; width: 72px; height: 72px; border-radius: 6px; border: 1px solid var(--border); object-fit: cover; cursor: pointer; transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s; }
+.history-thumb:hover { transform: scale(1.08); border-color: var(--accent); box-shadow: var(--pink-glow); }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+<script>
+let sourceBlob = null, sourceUrl = null, sourceImgEl = null;
+let lastPrompt = "", lockedSeed = null, isBusy = false;
+let currentMode = "reimagine";
+let maskData = null, isDrawing = false;
+let timerInterval = null, timerStart = 0;
+let lastResults = [];
+
+const $ = id => document.getElementById(id);
+const dropZone = $("dropZone"), fileInput = $("fileInput"), workspace = $("workspace");
+const sourceImg = $("sourceImg"), sourceImgWrap = $("sourceImgWrap"), maskCanvas = $("maskCanvas");
+const newImgBtn = $("newImgBtn");
+const styleSelect = $("styleSelect"), batchCheck = $("batchCheck"), varCountSelect = $("varCountSelect"), resSelect = $("resSelect"), autoResCheck = $("autoResCheck");
+const faithSlider = $("faithSlider"), faithVal = $("faithVal"), guideSlider = $("guideSlider"), guideVal = $("guideVal");
+const extraInput = $("extraInput"), lockSeedCheck = $("lockSeedCheck"), editPromptCheck = $("editPromptCheck");
+const goBtn = $("goBtn"), promptPanel = $("promptPanel"), promptArea = $("promptArea");
+const promptStage = $("promptStage"), generateBtn = $("generateBtn"), reanalyzeBtn = $("reanalyzeBtn"), enhanceBtn = $("enhanceBtn");
+const resultsCtn = $("resultsCtn"), statusEl = $("statusEl");
+const historySection = $("historySection"), historyStrip = $("historyStrip"), clearHistoryBtn = $("clearHistoryBtn");
+const brushControls = $("brushControls"), brushSlider = $("brushSlider"), brushVal = $("brushVal"), clearMaskBtn = $("clearMaskBtn");
+const negPromptArea = $("negPromptArea"), paletteStrip = $("paletteStrip"), paletteLabel = $("paletteLabel");
+
+// --- style dropdown ---
+(function() {
+  const items = root.stylePresets.selectAll.map(i => i.evaluateItem.trim());
+  for (const item of items) {
+    const idx = item.indexOf("|");
+    const label = idx >= 0 ? item.slice(0, idx).trim() : item;
+    const value = idx >= 0 ? item.slice(idx + 1).trim() : "";
+    const opt = document.createElement("option");
+    opt.value = value; opt.textContent = label || "— none —";
+    styleSelect.appendChild(opt);
+  }
+})();
+negPromptArea.value = root.negativePromptDefault;
+
+// --- sliders ---
+faithSlider.addEventListener("input", () => faithVal.textContent = faithSlider.value);
+guideSlider.addEventListener("input", () => guideVal.textContent = guideSlider.value);
+brushSlider.addEventListener("input", () => brushVal.textContent = brushSlider.value);
+
+// --- mode tabs ---
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentMode = btn.dataset.mode;
+    if (currentMode === "edit") {
+      maskCanvas.classList.add("active");
+      brushControls.hidden = false;
+      goBtn.textContent = "🖌️ Edit Region";
+      clearMask();
+    } else {
+      maskCanvas.classList.remove("active");
+      brushControls.hidden = true;
+      goBtn.textContent = "✨ Reimagine";
+    }
+  });
+});
+
+// --- file loading ---
+async function loadFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  sourceBlob = file;
+  if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+  sourceUrl = URL.createObjectURL(file);
+  // load image to get dimensions for mask canvas + auto-res
+  const img = new Image();
+  img.onload = () => {
+    sourceImgEl = img;
+    maskCanvas.width = img.naturalWidth;
+    maskCanvas.height = img.naturalHeight;
+    clearMask();
+    extractPalette(img);
+    if (autoResCheck.checked) autoFitResolution(img.naturalWidth, img.naturalHeight);
+  };
+  img.src = sourceUrl;
+  sourceImg.src = sourceUrl;
+  dropZone.hidden = true;
+  workspace.hidden = false;
+  goBtn.disabled = false;
+  promptPanel.hidden = true;
+  resultsCtn.innerHTML = "";
+  setStatus("");
+}
+
+function autoFitResolution(w, h) {
+  const ratio = w / h;
+  let res;
+  if (ratio > 1.3) res = "768x512";
+  else if (ratio < 0.77) res = "512x768";
+  else res = "768x768";
+  resSelect.value = res;
+}
+
+fileInput.addEventListener("change", () => loadFile(fileInput.files[0]));
+dropZone.addEventListener("click", () => fileInput.click());
+dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("drag"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag"));
+dropZone.addEventListener("drop", e => { e.preventDefault(); dropZone.classList.remove("drag"); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+window.addEventListener("paste", e => {
+  if (!workspace.hidden) return;
+  const items = e.clipboardData?.items; if (!items) return;
+  for (const it of items) if (it.type.startsWith("image/")) { loadFile(it.getAsFile()); break; }
+});
+newImgBtn.addEventListener("click", () => { dropZone.hidden = false; workspace.hidden = true; fileInput.value = ""; });
+
+// --- color palette extraction ---
+function extractPalette(img) {
+  const c = document.createElement("canvas");
+  const sz = 80;
+  const ratio = img.naturalWidth / img.naturalHeight;
+  c.width = ratio > 1 ? sz : Math.round(sz * ratio);
+  c.height = ratio > 1 ? Math.round(sz / ratio) : sz;
+  const ctx = c.getContext("2d");
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  const data = ctx.getImageData(0, 0, c.width, c.height).data;
+  // quantize to buckets
+  const buckets = {};
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i] & 0xe0, g = data[i+1] & 0xe0, b = data[i+2] & 0xe0;
+    const key = r + "," + g + "," + b;
+    buckets[key] = (buckets[key] || 0) + 1;
+  }
+  const sorted = Object.entries(buckets).sort((a,b) => b[1] - a[1]).slice(0, 7);
+  paletteStrip.innerHTML = "";
+  const colors = sorted.map(([k]) => {
+    const [r,g,b] = k.split(",").map(Number);
+    const hex = "#" + [r,g,b].map(n => n.toString(16).padStart(2,"0")).join("");
+    const sw = document.createElement("div");
+    sw.className = "palette-swatch"; sw.style.background = hex; sw.title = hex;
+    sw.onclick = () => { extraInput.value = (extraInput.value + " " + hex).trim(); };
+    paletteStrip.appendChild(sw);
+    return hex;
+  });
+  paletteLabel.textContent = colors.length ? colors.length + " colors" : "";
+  return colors;
+}
+
+// --- mask drawing ---
+const maskCtx = maskCanvas.getContext("2d");
+function clearMask() {
+  maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+  maskData = null;
+}
+clearMaskBtn.addEventListener("click", clearMask);
+
+function getMaskPos(e) {
+  const rect = maskCanvas.getBoundingClientRect();
+  const sx = maskCanvas.width / rect.width, sy = maskCanvas.height / rect.height;
+  const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+  const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+  return { x: cx * sx, y: cy * sy };
+}
+function startDraw(e) {
+  if (currentMode !== "edit") return;
+  e.preventDefault(); isDrawing = true;
+  const p = getMaskPos(e);
+  maskCtx.fillStyle = "rgba(255,45,149,0.4)";
+  maskCtx.strokeStyle = "rgba(255,45,149,0.5)";
+  maskCtx.lineWidth = brushSlider.value * (maskCanvas.width / maskCanvas.getBoundingClientRect().width);
+  maskCtx.lineCap = "round"; maskCtx.lineJoin = "round";
+  maskCtx.beginPath(); maskCtx.moveTo(p.x, p.y);
+}
+function draw(e) {
+  if (!isDrawing) return; e.preventDefault();
+  const p = getMaskPos(e);
+  maskCtx.lineTo(p.x, p.y); maskCtx.stroke();
+  // also fill a circle for thickness
+  maskCtx.fillStyle = "rgba(255,45,149,0.35)";
+  maskCtx.beginPath(); maskCtx.arc(p.x, p.y, maskCtx.lineWidth/2, 0, Math.PI*2); maskCtx.fill();
+}
+function endDraw() {
+  if (!isDrawing) return; isDrawing = false;
+  maskData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
+}
+maskCanvas.addEventListener("mousedown", startDraw);
+maskCanvas.addEventListener("mousemove", draw);
+maskCanvas.addEventListener("mouseup", endDraw);
+maskCanvas.addEventListener("mouseleave", endDraw);
+maskCanvas.addEventListener("touchstart", startDraw);
+maskCanvas.addEventListener("touchmove", draw);
+maskCanvas.addEventListener("touchend", endDraw);
+
+function hasMask() {
+  const d = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height).data;
+  for (let i = 3; i < d.length; i += 4) if (d[i] > 10) return true;
+  return false;
+}
+
+// --- status + timer ---
+function setStatus(msg) { statusEl.textContent = msg || ""; }
+function startTimer() {
+  timerStart = Date.now();
+  stopTimer();
+  timerInterval = setInterval(() => {
+    const s = ((Date.now() - timerStart) / 1000).toFixed(1);
+    statusEl.innerHTML = statusEl.textContent.replace(/ \(\d+\.\d+s\)/, "") + ` <span class="timer">(${s}s)</span>`;
+  }, 100);
+}
+function stopTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
+
+// --- image analysis ---
+async function describeImage() {
+  const style = styleSelect.value;
+  const extra = extraInput.value.trim();
+  const faith = parseInt(faithSlider.value);
+  const isEdit = currentMode === "edit";
+  const faithStr = faith >= 80
+    ? "Recreate the scene VERY faithfully — same subject, pose, composition, colors, and background. Only the art medium/style should change."
+    : faith >= 40
+    ? "Recreate the main subject and composition, but feel free to adjust background, palette, and mood to fit the new style."
+    : "Use the image as loose inspiration only. Reimagine the scene freely — you may change subject details, setting, and mood while keeping the general theme.";
+
+  let instructionText = "You are writing a prompt for an AI image generator. Describe the image so a NEW image can be generated inspired by it.\n" + faithStr + "\n\n"
+    + "Write a single rich paragraph (3-6 sentences) covering: subject(s), pose, expression, composition, colors, lighting, background, mood, and key details. "
+    + "Do NOT write 'the image shows' or 'I see' — describe the scene directly, as if depicting a painting. ";
+
+  if (isEdit) {
+    instructionText += "\n\nIMPORTANT: The user has MASKED a region of the image they want CHANGED. "
+      + "Describe the FULL scene, but make it clear what's in the masked area so it can be regenerated. "
+      + "The user's edit instruction is: \"" + (extra || "change it creatively") + "\". "
+      + "Incorporate that edit into your description of the masked region while keeping the rest of the scene intact. ";
+  } else {
+    if (style) instructionText += "Apply this art style: " + style + ". ";
+    if (extra) instructionText += "Incorporate this request: " + extra + ". ";
+  }
+  instructionText += "End with quality tags like 'highly detailed, masterpiece, sharp focus'.";
+
+  const instruction = [instructionText, sourceBlob];
+  promptStage.textContent = "analyzing…";
+  const res = await root.generateText({ instruction });
+  return res.trim();
+}
+
+// --- prompt enhancer ---
+async function enhancePrompt() {
+  const current = promptArea.value.trim();
+  if (!current) { setStatus("Nothing to enhance yet."); return; }
+  enhanceBtn.disabled = true; setStatus("Enhancing prompt…");
+  try {
+    const res = await root.generateText({
+      instruction: "Enhance and expand this AI image generation prompt. Add vivid descriptive details about "
+        + "lighting, atmosphere, texture, and composition while keeping the original intent. "
+        + "Keep it as a single paragraph, do not add commentary. Original prompt:\n\n" + current
+    });
+    promptArea.value = res.trim();
+    lastPrompt = res.trim();
+    setStatus("Prompt enhanced.");
+  } catch(e) { setStatus("Enhance error: " + (e?.message||e)); }
+  finally { enhanceBtn.disabled = false; }
+}
+
+// --- generation ---
+function makeResultCard(seed, label) {
+  const card = document.createElement("div");
+  card.className = "result-card";
+  card.innerHTML = `<div class="img-wrap"><div class="spinner"></div>
+    <div class="overlay">
+      <button data-act="download">⬇</button>
+      <button data-act="source">↻ source</button>
+      <button data-act="reroll">🎲 reroll</button>
+      <button data-act="upscale">⤢ upscale</button>
+      <button data-act="compare">⟷ compare</button>
+    </div></div>
+    <div class="meta"><span class="seed-tag">seed: ${seed}</span><span class="style-tag">${label||""}</span></div>`;
+  return card;
+}
+
+function wireCardButtons(card, dataUrl, seed, prompt, label) {
+  card.dataset.dataUrl = dataUrl; card.dataset.seed = seed; card.dataset.prompt = prompt;
+  card.querySelector('[data-act="download"]').onclick = () => {
+    const a = document.createElement("a"); a.href = dataUrl;
+    a.download = "4bdn-" + seed + ".png"; a.click();
+  };
+  card.querySelector('[data-act="source"]').onclick = () => useAsSource(dataUrl);
+  card.querySelector('[data-act="reroll"]').onclick = () => rerollCard(card, prompt, label);
+  card.querySelector('[data-act="upscale"]').onclick = () => upscaleCard(card, prompt, label);
+  card.querySelector('[data-act="compare"]').onclick = () => toggleCompare(card, dataUrl);
+}
+
+async function generateOne(prompt, seed, label) {
+  const card = makeResultCard(seed, label);
+  resultsCtn.appendChild(card);
+  const imgWrap = card.querySelector(".img-wrap");
+  try {
+    const res = await root.generateImage({
+      prompt, negativePrompt: negPromptArea.value.trim() || root.negativePromptDefault,
+      resolution: resSelect.value, guidanceScale: parseFloat(guideSlider.value), seed
+    });
+    let dataUrl = res.dataUrl;
+    const usedSeed = res.inputs.seed;
+    // if edit mode with mask, composite
+    if (currentMode === "edit" && hasMask()) {
+      dataUrl = await compositeMasked(dataUrl);
+    }
+    imgWrap.innerHTML = `<img src="${dataUrl}"><div class="overlay">
+      <button data-act="download">⬇</button>
+      <button data-act="source">↻ source</button>
+      <button data-act="reroll">🎲 reroll</button>
+      <button data-act="upscale">⤢ upscale</button>
+      <button data-act="compare">⟷ compare</button>
+    </div>`;
+    card.querySelector(".meta .seed-tag").textContent = "seed: " + usedSeed;
+    wireCardButtons(card, dataUrl, usedSeed, prompt, label);
+    lastResults.push({ dataUrl, seed: usedSeed, prompt, label });
+    await saveToHistory(dataUrl, prompt, usedSeed, label);
+  } catch(e) {
+    imgWrap.innerHTML = "<span style='color:#f88;font-size:0.8em'>error: " + (e?.message||e) + "</span>";
+  }
+  return card;
+}
+
+// composite generated result onto original using mask (feathered blend)
+async function compositeMasked(genDataUrl) {
+  const genImg = new Image();
+  genImg.src = genDataUrl;
+  await new Promise(r => genImg.onload = r);
+  const c = document.createElement("canvas");
+  c.width = sourceImgEl.naturalWidth; c.height = sourceImgEl.naturalHeight;
+  const ctx = c.getContext("2d");
+  // draw original
+  ctx.drawImage(sourceImgEl, 0, 0, c.width, c.height);
+  // draw generated scaled to fit, but only through mask
+  const genC = document.createElement("canvas");
+  genC.width = c.width; genC.height = c.height;
+  const genCtx = genC.getContext("2d");
+  // cover-fit the generated image
+  const gr = genImg.width / genImg.height, cr = c.width / c.height;
+  let dw, dh, dx, dy;
+  if (gr > cr) { dh = c.height; dw = dh * gr; dx = (c.width - dw)/2; dy = 0; }
+  else { dw = c.width; dh = dw / gr; dx = 0; dy = (c.height - dh)/2; }
+  genCtx.drawImage(genImg, dx, dy, dw, dh);
+  // use mask as clip: blur the mask, then use as alpha
+  const maskC = document.createElement("canvas");
+  maskC.width = c.width; maskC.height = c.height;
+  const maskCtx2 = maskC.getContext("2d");
+  maskCtx2.drawImage(maskCanvas, 0, 0, c.width, c.height);
+  // feather
+  maskCtx2.filter = "blur(" + Math.max(4, c.width * 0.015) + "px)";
+  maskCtx2.drawImage(maskC, 0, 0);
+  maskCtx2.filter = "none";
+  const maskImg = maskCtx2.getImageData(0, 0, c.width, c.height);
+  const genImg2 = genCtx.getImageData(0, 0, c.width, c.height);
+  for (let i = 0; i < genImg2.data.length; i += 4) {
+    genImg2.data[i+3] = maskImg.data[i+3];
+  }
+  genCtx.putImageData(genImg2, 0, 0);
+  ctx.drawImage(genC, 0, 0);
+  return c.toDataURL("image/png");
+}
+
+async function rerollCard(card, prompt, label) {
+  const imgWrap = card.querySelector(".img-wrap");
+  imgWrap.innerHTML = '<div class="spinner"></div>';
+  await generateOne_into(card, prompt, -1, label);
+}
+
+async function generateOne_into(card, prompt, seed, label) {
+  const imgWrap = card.querySelector(".img-wrap");
+  try {
+    const res = await root.generateImage({
+      prompt, negativePrompt: negPromptArea.value.trim() || root.negativePromptDefault,
+      resolution: resSelect.value, guidanceScale: parseFloat(guideSlider.value), seed
+    });
+    let dataUrl = res.dataUrl;
+    const usedSeed = res.inputs.seed;
+    if (currentMode === "edit" && hasMask()) dataUrl = await compositeMasked(dataUrl);
+    imgWrap.innerHTML = `<img src="${dataUrl}"><div class="overlay">
+      <button data-act="download">⬇</button><button data-act="source">↻</button>
+      <button data-act="reroll">🎲</button><button data-act="upscale">⤢</button>
+      <button data-act="compare">⟷</button></div>`;
+    card.querySelector(".meta .seed-tag").textContent = "seed: " + usedSeed;
+    wireCardButtons(card, dataUrl, usedSeed, prompt, label);
+    await saveToHistory(dataUrl, prompt, usedSeed, label);
+  } catch(e) { imgWrap.innerHTML = "<span style='color:#f88;font-size:0.8em'>err</span>"; }
+}
+
+async function upscaleCard(card, prompt, label) {
+  const imgWrap = card.querySelector(".img-wrap");
+  const old = imgWrap.innerHTML;
+  imgWrap.innerHTML = '<div class="spinner"></div>';
+  setStatus("Upscaling…");
+  try {
+    const res = await root.generateImage({
+      prompt: prompt + ", ultra high resolution, highly detailed, 8k upscale, sharp",
+      negativePrompt: negPromptArea.value.trim() || root.negativePromptDefault,
+      resolution: "768x768", guidanceScale: parseFloat(guideSlider.value), seed: -1
+    });
+    let dataUrl = res.dataUrl;
+    const usedSeed = res.inputs.seed;
+    imgWrap.innerHTML = `<img src="${dataUrl}"><div class="overlay">
+      <button data-act="download">⬇</button><button data-act="source">↻</button>
+      <button data-act="reroll">🎲</button><button data-act="upscale">⤢</button>
+      <button data-act="compare">⟷</button></div>`;
+    card.querySelector(".meta .seed-tag").textContent = "seed: " + usedSeed;
+    wireCardButtons(card, dataUrl, usedSeed, prompt, label);
+    await saveToHistory(dataUrl, prompt, usedSeed, label);
+    setStatus("Upscaled.");
+  } catch(e) { imgWrap.innerHTML = old; setStatus("Upscale error."); }
+}
+
+// --- before/after comparison ---
+function toggleCompare(card, resultUrl) {
+  const imgWrap = card.querySelector(".img-wrap");
+  if (card.dataset.comparing === "1") {
+    card.dataset.comparing = "0";
+    imgWrap.innerHTML = `<img src="${resultUrl}"><div class="overlay">
+      <button data-act="download">⬇</button><button data-act="source">↻</button>
+      <button data-act="reroll">🎲</button><button data-act="upscale">⤢</button>
+      <button data-act="compare">⟷</button></div>`;
+    wireCardButtons(card, resultUrl, card.dataset.seed, card.dataset.prompt, card.querySelector(".style-tag").textContent);
+    return;
+  }
+  card.dataset.comparing = "1";
+  imgWrap.innerHTML = `<div class="compare-wrap">
+    <img class="compare-before" src="${sourceUrl}">
+    <img class="compare-after" src="${resultUrl}">
+    <span class="compare-label before">BEFORE</span>
+    <span class="compare-label after">AFTER</span>
+    <div class="compare-handle"></div>
+  </div>`;
+  const wrap = imgWrap.querySelector(".compare-wrap");
+  const handle = imgWrap.querySelector(".compare-handle");
+  const after = imgWrap.querySelector(".compare-after");
+  let dragging = false;
+  const move = (e) => {
+    const rect = wrap.getBoundingClientRect();
+    const x = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / rect.width * 100;
+    const clamped = Math.max(0, Math.min(100, x));
+    handle.style.left = clamped + "%";
+    after.style.clipPath = `inset(0 0 0 ${clamped}%)`;
+  };
+  handle.addEventListener("mousedown", () => dragging = true);
+  window.addEventListener("mousemove", e => { if (dragging) move(e); });
+  window.addEventListener("mouseup", () => dragging = false);
+  handle.addEventListener("touchstart", () => dragging = true);
+  window.addEventListener("touchmove", e => { if (dragging) move(e); });
+  window.addEventListener("touchend", () => dragging = false);
+}
+
+// --- pipeline ---
+async function runPipeline() {
+  if (!sourceBlob || isBusy) return;
+  if (currentMode === "edit" && !hasMask()) { setStatus("Paint a mask over the area to edit first."); return; }
+  isBusy = true; goBtn.disabled = true; generateBtn.disabled = true;
+  resultsCtn.innerHTML = ""; lastResults = [];
+  startTimer();
+  try {
+    if (editPromptCheck.checked) {
+      promptPanel.hidden = false;
+      promptArea.value = ""; promptArea.placeholder = "Analyzing source image…";
+      const desc = await describeImage();
+      lastPrompt = desc; promptArea.value = desc;
+      promptStage.textContent = "edit then generate";
+      generateBtn.disabled = false;
+      setStatus("Prompt ready — edit if you like, then Generate.");
+      stopTimer();
+    } else {
+      promptPanel.hidden = false;
+      promptArea.value = ""; promptStage.textContent = "analyzing…";
+      const desc = await describeImage();
+      lastPrompt = desc; promptArea.value = desc;
+      promptStage.textContent = "done";
+      await generateVariations(desc);
+    }
+  } catch (e) { setStatus("Error: " + (e?.message || e)); stopTimer(); }
+  finally { isBusy = false; goBtn.disabled = false; stopTimer(); }
+}
+
+async function generateVariations(prompt) {
+  prompt = prompt || promptArea.value.trim() || lastPrompt;
+  lastPrompt = prompt;
+  generateBtn.disabled = true;
+  // batch mode: one per style
+  if (batchCheck.checked) {
+    const styles = [...styleSelect.options].filter(o => o.value).map(o => ({label: o.textContent, value: o.value}));
+    const count = Math.min(styles.length, 8);
+    setStatus(`Batch: generating ${count} styles…`);
+    const tasks = styles.slice(0, count).map(s => {
+      const p = prompt + " " + s.value;
+      return generateOne(p, -1, s.label);
+    });
+    await Promise.all(tasks);
+  } else {
+    const n = parseInt(varCountSelect.value);
+    setStatus(`Generating ${n} variation${n>1?"s":""}…`);
+    const baseSeed = lockSeedCheck.checked ? (lockedSeed ?? Math.floor(Math.random()*1e9)) : null;
+    if (lockSeedCheck.checked && lockedSeed == null) lockedSeed = baseSeed;
+    const tasks = [];
+    for (let i = 0; i < n; i++) tasks.push(generateOne(prompt, baseSeed != null ? baseSeed : -1, styleSelect.textContent));
+    await Promise.all(tasks);
+  }
+  setStatus("Done. Hover a result for options.");
+  generateBtn.disabled = false;
+}
+
+function useAsSource(dataUrl) {
+  fetch(dataUrl).then(r => r.blob()).then(blob => {
+    const file = new File([blob], "source.png", { type: blob.type });
+    loadFile(file);
+    setStatus("Result loaded as new source — iterate further!");
+  });
+}
+
+goBtn.addEventListener("click", runPipeline);
+generateBtn.addEventListener("click", () => { startTimer(); generateVariations().finally(stopTimer); });
+reanalyzeBtn.addEventListener("click", async () => {
+  if (isBusy) return; isBusy = true; reanalyzeBtn.disabled = true; startTimer();
+  try { promptStage.textContent = "analyzing…"; const desc = await describeImage(); lastPrompt = desc; promptArea.value = desc; promptStage.textContent = "edit then generate"; setStatus("Re-analyzed."); }
+  catch(e) { setStatus("Error: " + (e?.message||e)); }
+  finally { isBusy = false; reanalyzeBtn.disabled = false; stopTimer(); }
+});
+enhanceBtn.addEventListener("click", enhancePrompt);
+
+// --- keyboard shortcuts ---
+window.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
+  if (workspace.hidden) return;
+  if (e.code === "Space") { e.preventDefault(); if (!isBusy) runPipeline(); }
+  if (e.key.toLowerCase() === "r" && lastResults.length) { rerollCard(resultsCtn.lastChild, lastResults[lastResults.length-1].prompt, lastResults[lastResults.length-1].label); }
+});
+
+// --- history ---
+async function saveToHistory(dataUrl, prompt, seed, label) {
+  try {
+    const key = "img-" + Date.now() + "-" + Math.random().toString(36).slice(2,6);
+    await root.kv.history.set(key, { dataUrl, prompt, seed, label, ts: Date.now() });
+    await renderHistory();
+  } catch(e) {}
+}
+async function renderHistory() {
+  let entries;
+  try { entries = await root.kv.history.entries(); } catch(e) { return; }
+  if (!entries || entries.length === 0) { historySection.hidden = true; return; }
+  entries.sort((a,b) => b[1].ts - a[1].ts);
+  historyStrip.innerHTML = "";
+  for (const [key, e] of entries.slice(0, 30)) {
+    const img = document.createElement("img");
+    img.src = e.dataUrl; img.className = "history-thumb"; img.title = e.label || "result";
+    img.onclick = () => useAsSource(e.dataUrl);
+    historyStrip.appendChild(img);
+  }
+  historySection.hidden = false;
+}
+clearHistoryBtn.addEventListener("click", async () => {
+  try { let entries = await root.kv.history.entries(); for (const [k] of entries) await root.kv.history.delete(k); } catch(e){}
+  historyStrip.innerHTML = ""; historySection.hidden = true;
+});
+renderHistory();
+window.useAsSource = useAsSource;
+</script>
+
+</body>
+</html>

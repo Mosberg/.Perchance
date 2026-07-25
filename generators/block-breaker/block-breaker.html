@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>block-breaker — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="gameContainerEl" style="font-family:Arial; text-align:left; padding:20px; max-width:800px; margin:20px auto; position:relative; z-index:10; background:rgba(20, 20, 25, 0.65); border-radius:12px; backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.1);">
+  
+  <!-- Background Music -->
+  <audio id="bgMusicEl" src="https://user.uploads.dev/file/d3014fee98df554d3a784695c9e0cb1a.mp3" loop preload="auto" style="display:none;"></audio>
+
+  <!-- Block Click Sound -->
+  <audio id="clickSoundEl" src="https://user.uploads.dev/file/a06f3b8a0e035ce4c87abcd80f146ea3.mp3" preload="auto" style="display:none;"></audio>
+
+  <h1 style="color:#eee; text-shadow: 0 2px 4px black;">Block Breaker</h1>
+  <p style="color:#bbb; text-shadow: 0 1px 2px black;">Break blocks using tools and special items! (Version 1.8)</p>
+  
+  <div id="toolbarEl" style="margin:20px 0; padding:15px; background:rgba(240, 240, 240, 0.9); border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+    <h3 style="color:#333;">Tools & Items</h3>
+    <div id="toolButtonsEl" style="display:flex; gap:10px; flex-wrap:wrap;">
+      <!-- Tool buttons will be generated here -->
+    </div>
+    <div style="margin-top:15px; font-weight:bold; color:#333;">
+      Selected: <span id="selectedToolEl">⛏️ Worn Pickaxe</span>
+    </div>
+    <div id="itemToolbarEl" style="margin-top:15px; padding-top:10px; border-top:1px dashed #aaa;">
+      <div style="font-weight:bold; color:#333;">
+        Active Item: <span id="activeItemEl">None</span>
+        <span id="boostStatusEl" style="margin-left:10px; color:#c0392b;"></span>
+      </div>
+      <div id="itemButtonsEl" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;">
+        <!-- Item buttons will be generated here -->
+      </div>
+    </div>
+  </div>
+  
+  <div id="shopEl" style="margin:10px 0; padding:10px; background:rgba(249, 249, 249, 0.9); border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+    <h3 style="color:#333;">Tool Shop</h3>
+    <div style="color:#333;">Money: <span id="moneyEl">0</span></div>
+    <div id="shopItemsEl" style="margin-top:10px; max-height:130px; overflow-y:auto; color:#333;">
+      <!-- Shop items will be generated here -->
+    </div>
+  </div>
+  
+  <div id="itemShopEl" style="margin:10px 0; padding:10px; background:rgba(249, 249, 249, 0.9); border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+    <h3 style="color:#333;">Item Shop</h3>
+    <div style="color:#666; font-size:12px; margin-bottom:8px;">Consumable items help you break blocks faster. Prices scale with level.</div>
+    <div id="itemShopItemsEl" style="display:flex; flex-direction:column; gap:6px; color:#333;">
+      <!-- Item shop entries will be generated here -->
+    </div>
+  </div>
+  
+  <div id="gameInfoEl" style="margin:15px 0; display:flex; justify-content:space-between; font-weight:bold; color:#eee; text-shadow:0 2px 2px black;">
+    <div>Blocks Left: <span id="blocksLeftEl">0</span></div>
+    <div>Level: <span id="levelEl">1</span></div>
+  </div>
+  
+  <div id="gridEl" style="display:grid; grid-template-columns:repeat(8, 1fr); gap:8px; margin:20px 0;">
+    <!-- Blocks will be generated here -->
+  </div>
+  
+  <div id="messageEl" style="padding:15px; background:rgba(232, 244, 253, 0.9); border-radius:8px; margin-top:20px; text-align:center; font-weight:bold; color:#0d47a1; border:1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 6px rgba(0,0,0,0.3);"></div>
+  
+  <style>
+    body {
+      background-color: #0a0a0a;
+      margin: 0;
+      overflow-x: hidden;
+    }
+    #bgCanvasEl {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+    }
+    .block {
+      height:60px;
+      border-radius:6px;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:bold;
+      color:white;
+      transition: all 0.2s;
+      position:relative;
+      overflow:hidden;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    }
+    .block:hover {
+      transform: scale(1.05);
+      z-index: 2;
+      box-shadow: 0 0 15px rgba(255, 200, 100, 0.4);
+    }
+    .block.breaking {
+      animation: breakBlock 0.5s forwards;
+    }
+    @keyframes breakBlock {
+      0% { transform: scale(1); opacity:1; }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(0); opacity:0; }
+    }
+    .health-1 { background:#757575; }
+    .health-2 { background:#616161; }
+    .health-3 { background:#424242; }
+    .health-4 { background:#2e2e2e; }
+    .health-5 { background:#1a1a1a; }
+    .health-6 { background:#0d0d0d; }
+    .shop-btn {
+      padding:8px 12px;
+      border:none;
+      border-radius:5px;
+      cursor:pointer;
+      background:#4CAF50;
+      color:white;
+      font-weight:bold;
+      transition: background 0.2s;
+    }
+    .shop-btn:hover:not(:disabled) {
+      background:#45a049;
+    }
+    .shop-btn:disabled {
+      background:#cccccc;
+      cursor:not-allowed;
+    }
+    .tool-disabled {
+      opacity: 0.5 !important;
+      cursor: not-allowed !important;
+    }
+    .tier-header {
+      margin-top: 20px;
+      margin-bottom: 5px;
+      font-weight: bold;
+      color: #ddd; /* Lighter for dark bg */
+      text-shadow: 1px 1px 2px black;
+    }
+  </style>
+  
+  <script>
+    // Background music setup
+    const bgMusicEl = document.getElementById('bgMusicEl');
+    bgMusicEl.volume = 0.30;
+
+    // Try to play music immediately, fallback to click listener if blocked by browser autoplay policy
+    bgMusicEl.play().catch(() => {
+      document.body.addEventListener('click', () => {
+        if (bgMusicEl.paused) bgMusicEl.play();
+      }, { once: true });
+    });
+
+    // Block click sound setup
+    const clickSoundEl = document.getElementById('clickSoundEl');
+    clickSoundEl.volume = 0.30;
+
+    let grid = [];
+    let selectedTool = 'wornPickaxe';
+    let blocksLeft = 0;
+    let money = 0;
+    let level = 1; // Track current level
+    let selectedItem = null; // Currently selected consumable item (null = use tool)
+    let boostMultiplier = 1; // Active damage multiplier from strengtheners
+    let boostEndTime = 0; // When the current boost expires
+
+    // Consumable items — costs scale with level (same 7× growth as rewards)
+    const items = {
+      bomb:         { name: '💣 Bomb',          baseCost: 50,  count: 0, desc: 'Hits a 3×3 area for 10× tool damage' },
+      jackhammer:   { name: '🪓 Jackhammer',    baseCost: 80,  count: 0, desc: 'Hits one block for 10× tool damage' },
+      strengthener: { name: '💪 Power Boost',   baseCost: 100, count: 0, instant: true, desc: '2× tool damage for 15 seconds' },
+      tntRow:       { name: '🧨 TNT Row',       baseCost: 150, count: 0, desc: 'Hits an entire row for 5× tool damage' },
+      lightningCol: { name: '⚡ Lightning Rod', baseCost: 150, count: 0, desc: 'Hits an entire column for 5× tool damage' },
+      diamondDrill: { name: '💎 Diamond Drill', baseCost: 200, count: 0, desc: 'Instantly breaks one block regardless of health' },
+    };
+    
+    // Tool properties with all tiers
+    const tools = {
+      // ── Tier 1: Hand Tools (Damage 1–5 | Cost 0–100) ──
+      wornPickaxe: { damage: 1, name: '⛏️ Worn Pickaxe', purchased: true },
+      ironPickaxe: { damage: 5, name: '⛏️ Iron Pickaxe', cost: 100, purchased: false },
+      stoneHammer: { damage: 20, name: '🔨 Stone Hammer', cost: 250, purchased: false },
+      minersMallet: { damage: 45, name: "🔨 Miner's Mallet", cost: 1500, purchased: false },
+      reinforcedPickaxe: { damage: 75, name: '⛏️ Reinforced Pickaxe', cost: 5000, purchased: false },
+
+      // ── Tier 2: Heavy Quarry Tools (Damage 8–25 | Cost 250–1,000) ──
+      steelBreaker: { damage: 250, name: '⚒️ Steel Breaker', cost: 25000, purchased: false },
+      twinHammer: { damage: 500, name: '⚒️ Twin Hammer', special: 'doubleHit', cost: 350000, purchased: false },
+      quarryMaul: { damage: 1200, name: '🔨 Quarry Maul', cost: 5000000, purchased: false },
+      fracturePick: { damage: 15000, name: '⛏️ Fracture Pick', special: 'armorBreak', cost: 75000000, purchased: false },
+      stonebreaker: { damage: 200000, name: '⚒️ Stonebreaker', cost: 200000000, purchased: false },
+
+      // ── Tier 3: Element-Infused Tools (Damage 30–80 | Cost 2,000–10,000) ──
+      emberPickaxe: { damage: 3000000, name: '🔥 Ember Pickaxe', element: 'fire', special: 'burn', cost: 2000000000, purchased: false },
+      frostHammer: { damage: 35000000, name: '❄️ Frost Hammer', element: 'ice', special: 'freeze', cost: 30000000000, purchased: false },
+      thunderMaul: { damage: 400000000, name: '⚡ Thunder Maul', element: 'lightning', special: 'chain', cost: 450000000000, purchased: false },
+      acidDrill: { damage: 5000000000, name: '🧪 Acid Drill', element: 'acid', special: 'corrode', cost: 6500000000000, purchased: false },
+      magmaBreaker: { damage: 80000000000, name: '🌋 Magma Breaker', element: 'fire', special: 'areaCrack', cost: 10000000000000, purchased: false },
+
+      // ── Tier 4: Industrial Siege Tools (Damage 120–400 | Cost 25k–150k) ──
+      hydraulicHammer: { damage: 1200000000000, name: '🛠️ Hydraulic Hammer', cost: 250000000000000, purchased: false },
+      seismicDrill: { damage: 15000000000000, name: '🌍 Seismic Drill', special: 'wave', cost: 4000000000000000, purchased: false },
+      lightningBorer: { damage: 20000000000000, name: '⚡ Lightning Borer', element: 'lightning', special: 'pierce', cost: 60000000000000000, purchased: false },
+      cryoPulverizer: { damage: 250000000000000, name: '❄️ Cryo Pulverizer', element: 'ice', special: 'shatter', cost: 900000000000000000, purchased: false },
+      tectonicCrusher: { damage: 4000000000000000, name: '🌎 Tectonic Crusher', special: 'faultLine', cost: 1500000000000000000, purchased: false },
+
+      // ── Tier 5: Mythic Quarry Relics (Damage 600–2,000 | Cost 300k–2M) ──
+      obsidianReaver: { damage: 600000000000000000, name: '🖤 Obsidian Reaver', element: 'void', special: 'armorIgnore', cost: 30000000000000000000, purchased: false },
+      starforgedPick: { damage: 8000000000000000000, name: '🌟 Starforged Pick', element: 'cosmic', special: 'critBoost', cost: 500000000000000000000, purchased: false },
+      voidHammer: { damage: 120000000000000000000, name: '🕳️ Void Hammer', element: 'void', special: 'blockEraseChance', cost: 8000000000000000000000, purchased: false },
+      gravityMaul: { damage: 1600000000000000000000, name: '🌀 Gravity Maul', element: 'gravity', special: 'pullBreak', cost: 12000000000000000000000, purchased: false },
+      astralStonebreaker: { damage: 20000000000000000000000, name: '✨ Astral Stonebreaker', element: 'astral', special: 'areaCollapse', cost: 200000000000000000000000, purchased: false },
+
+      // ── Tier 6: Endgame Excavation Engines (Damage 5k–100k | Cost 5M–500M) ──
+      coreRipper: { damage: 50000000000000000000000000, name: '☢️ Core Ripper', element: 'nuclear', special: 'coreCrack', cost: 5000000000000000000000000, purchased: false },
+      mantleShredder: { damage: 1000000000000000000000000000, name: '🌋 Mantle Shredder', special: 'layerDestroy', cost: 10000000000000000000000000, purchased: false },
+      worldDrill: { damage: 25000000000000000000000000000, name: '🌍 World Drill', special: 'columnErase', cost: 500000000000000000000000000, purchased: false },
+      planetaryCrusher: { damage: 500000000000000000000000000000, name: '🪐 Planetary Crusher', special: 'screenFracture', cost: 1500000000000000000000000000, purchased: false },
+      realityExcavator: { damage: 1000000000000000000000000000000, name: '🧠 Reality Excavator', special: 'rerollStrata', cost: 50000000000000000000000000000, purchased: false }
+    };
+    
+    // Tool tiers for shop organization
+    const toolTiers = [
+      {
+        title: "Tier 1: Hand Tools",
+        tools: ['wornPickaxe', 'ironPickaxe', 'stoneHammer', 'minersMallet', 'reinforcedPickaxe']
+      },
+      {
+        title: "Tier 2: Heavy Quarry Tools",
+        tools: ['steelBreaker', 'twinHammer', 'quarryMaul', 'fracturePick', 'stonebreaker']
+      },
+      {
+        title: "Tier 3: Element-Infused Tools",
+        tools: ['emberPickaxe', 'frostHammer', 'thunderMaul', 'acidDrill', 'magmaBreaker']
+      },
+      {
+        title: "Tier 4: Industrial Siege Tools",
+        tools: ['hydraulicHammer', 'seismicDrill', 'lightningBorer', 'cryoPulverizer', 'tectonicCrusher']
+      },
+      {
+        title: "Tier 5: Mythic Quarry Relics",
+        tools: ['obsidianReaver', 'starforgedPick', 'voidHammer', 'gravityMaul', 'astralStonebreaker']
+      },
+      {
+        title: "Tier 6: Endgame Excavation Engines",
+        tools: ['coreRipper', 'mantleShredder', 'worldDrill', 'planetaryCrusher', 'realityExcavator']
+      }
+    ];
+    
+    // Format numbers with commas for readability
+    function formatNumber(num) {
+      return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+    
+    // Function to update money and refresh shop
+    function updateMoney(amount) {
+      money += amount;
+      moneyEl.textContent = formatNumber(money);
+      renderShop();
+      renderItemShop(); // refresh item shop button enabled/disabled states
+    }
+    
+    function initGame() {
+      level = 1;
+      money = 0;
+      selectedItem = null;
+      boostMultiplier = 1;
+      boostEndTime = 0;
+      // Reset all consumable items
+      for (const itemKey in items) {
+        items[itemKey].count = 0;
+      }
+      levelEl.textContent = level;
+      
+      // Reset tools to unpurchased state except wornPickaxe
+      for (const toolKey in tools) {
+        if (toolKey !== 'wornPickaxe') {
+          tools[toolKey].purchased = false;
+        }
+      }
+      
+      // Initialize money and shop
+      updateMoney(0);
+      renderToolbar();
+      updateItemUI();
+      
+      // Start level 1
+      startLevel(level);
+    }
+    
+    function startLevel(currentLevel) {
+      grid = [];
+      blocksLeft = 0;
+      gridEl.innerHTML = '';
+      blocksLeftEl.textContent = '0';
+      messageEl.textContent = `Level ${currentLevel} - Break all blocks!`;
+      
+      // Create 8x8 grid of blocks with exponentially increasing health based on level
+      for(let i = 0; i < 64; i++) {
+        // Exponential health growth: base health grows by 1.8x per level
+        const growthFactor = 10.2;
+        const base = 1;
+        const minHealth = Math.ceil(base * Math.pow(growthFactor, currentLevel-1));
+        const maxHealth = minHealth * 3;
+        const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
+        
+        const block = {
+          id: i,
+          health: health,
+          row: Math.floor(i / 8),
+          col: i % 8
+        };
+        grid.push(block);
+        createBlockElement(block);
+      }
+      
+      blocksLeft = grid.length;
+      blocksLeftEl.textContent = blocksLeft;
+      // Item costs scale with level, so refresh the item shop when a new level starts
+      renderItemShop();
+    }
+    
+    function createBlockElement(block) {
+      const blockEl = document.createElement('div');
+      // Add health classes up to 6 for higher levels
+      const healthClass = block.health <= 6 ? `health-${block.health}` : 'health-6';
+      blockEl.className = `block ${healthClass}`;
+      blockEl.id = `block-${block.id}`;
+      blockEl.textContent = block.health;
+      blockEl.dataset.health = block.health;
+      blockEl.dataset.row = block.row;
+      blockEl.dataset.col = block.col;
+      blockEl.onclick = () => breakBlock(block.id, true); // Pass true for direct click
+      gridEl.appendChild(blockEl);
+    }
+    
+    function selectTool(tool) {
+      selectedTool = tool;
+      selectedToolEl.textContent = tools[tool].name;
+      
+      // Update button styles
+      document.querySelectorAll('#toolButtonsEl button').forEach(btn => {
+        btn.style.opacity = '0.7';
+      });
+      document.getElementById(`${tool}Btn`).style.opacity = '1';
+    }
+    
+    // Helper function to check if a block can be broken (is topmost in its column)
+    function canBreakBlock(block) {
+      // Check all blocks above in the same column
+      for(let r = 0; r < block.row; r++) {
+        const blockAbove = grid.find(b => b.row === r && b.col === block.col);
+        if(blockAbove && blockAbove.health > 0) {
+          return false; // There's a block above that hasn't been broken
+        }
+      }
+      return true; // No blocks above or all above are broken
+    }
+    
+    function breakBlock(blockId, isDirectClick = false, checkTopmost = true) {
+      const block = grid.find(b => b.id === blockId);
+      if(!block || block.health <= 0) return;
+
+      // If a targeted consumable item is active, use it instead of the tool
+      if (selectedItem) {
+        useItem(blockId);
+        return;
+      }
+
+      // Play click sound effect
+      clickSoundEl.currentTime = 0;
+      clickSoundEl.play().catch(() => {});
+
+      // Check if block can be broken (must be topmost in its column) - unless checkTopmost is false
+      if(checkTopmost && !canBreakBlock(block)) {
+        if(isDirectClick) {
+          messageEl.textContent = "❌ Cannot break this block! There's a block above it.";
+          setTimeout(() => {
+            if(messageEl.textContent === "❌ Cannot break this block! There's a block above it.") {
+              messageEl.textContent = "";
+            }
+          }, 2000);
+        }
+        return;
+      }
+
+      const tool = tools[selectedTool];
+
+      // Expire boost if its time is up
+      if (Date.now() > boostEndTime) boostMultiplier = 1;
+      const effectiveDamage = tool.damage * boostMultiplier;
+
+      // Apply tool damage
+      applyDamage(block, effectiveDamage);
+
+      // Special tool effects (placeholder for now)
+      if(tool.special) {
+        applySpecialEffect(tool, block);
+      }
+    }
+
+    // Shared damage applier — used by both tools and items so money/blocksLeft/win all stay in sync
+    function applyDamage(block, amount) {
+      if (!block || block.health <= 0 || amount <= 0) return;
+      const blockEl = document.getElementById(`block-${block.id}`);
+      if (!blockEl) return;
+      block.health -= amount;
+
+      // Calculate exponential money rewards
+      const baseReward = 5 * Math.pow(7, level - 1); // Base reward for breaking a block
+      const damageReward = Math.floor(baseReward / 5); // Reward for damaging a block (1/5 of break reward)
+
+      if (block.health <= 0) {
+        blockEl.classList.add('breaking');
+        updateMoney(baseReward);
+        blocksLeft--;
+        setTimeout(() => { blockEl.style.visibility = 'hidden'; }, 500);
+      } else {
+        blockEl.textContent = block.health;
+        const healthClass = block.health <= 6 ? `health-${block.health}` : 'health-6';
+        blockEl.className = `block ${healthClass}`;
+        updateMoney(damageReward);
+      }
+
+      blocksLeftEl.textContent = blocksLeft;
+
+      // Check win condition - advance to next level
+      if (blocksLeft === 0) {
+        messageEl.textContent = `🎉 Level ${level} Complete! Get ready for Level ${level + 1}...`;
+        setTimeout(() => {
+          level++;
+          levelEl.textContent = level;
+          startLevel(level);
+        }, 2000);
+      }
+    }
+
+    // ---- Consumable item logic ----
+
+    // Cost of an item at the current level (scales with the 7× reward growth)
+    function itemCost(itemKey) {
+      return items[itemKey].baseCost * Math.pow(7, level - 1);
+    }
+
+    function buyItem(itemKey) {
+      const item = items[itemKey];
+      const cost = itemCost(itemKey);
+      if (money >= cost) {
+        updateMoney(-cost);
+        item.count++;
+        updateItemUI();
+        messageEl.textContent = `🛒 Bought ${item.name}! (Owned: ${item.count})`;
+      } else {
+        messageEl.textContent = `❌ Not enough money for ${item.name}!`;
+      }
+    }
+
+    // Click an item button in the toolbar: either activate instantly (strengthener)
+    // or toggle it as the active targeted item.
+    function activateItem(itemKey) {
+      const item = items[itemKey];
+      if (item.count <= 0) return;
+      if (item.instant) {
+        if (itemKey === 'strengthener') {
+          boostMultiplier = 2;
+          boostEndTime = Date.now() + 15000;
+          item.count--;
+          messageEl.textContent = '💪 Power Boost activated! 2× damage for 15 seconds.';
+          updateItemUI();
+          setTimeout(() => {
+            boostMultiplier = 1;
+            updateBoostStatus();
+          }, 15000);
+          updateBoostStatus();
+        }
+      } else {
+        // Toggle selection — clicking the same item again deselects it
+        selectedItem = (selectedItem === itemKey) ? null : itemKey;
+        updateItemUI();
+        if (selectedItem) {
+          messageEl.textContent = `${item.name} selected — click a block to use it.`;
+        }
+      }
+    }
+
+    // Use the currently selected targeted item on a block
+    function useItem(blockId) {
+      const block = grid.find(b => b.id === blockId);
+      if (!block || block.health <= 0) return;
+
+      clickSoundEl.currentTime = 0;
+      clickSoundEl.play().catch(() => {});
+
+      const tool = tools[selectedTool];
+      // Expire boost if its time is up
+      if (Date.now() > boostEndTime) boostMultiplier = 1;
+      const toolDmg = tool.damage * boostMultiplier;
+
+      switch (selectedItem) {
+        case 'bomb': {
+          // Damage a 3×3 area centered on the clicked block
+          for (let r = block.row - 1; r <= block.row + 1; r++) {
+            for (let c = block.col - 1; c <= block.col + 1; c++) {
+              const b = grid.find(x => x.row === r && x.col === c);
+              if (b && b.health > 0) applyDamage(b, toolDmg * 10);
+            }
+          }
+          messageEl.textContent = '💣 Bomb! Damaged a 3×3 area.';
+          break;
+        }
+        case 'jackhammer': {
+          applyDamage(block, toolDmg * 10);
+          messageEl.textContent = '🪓 Jackhammer! 10× damage to one block.';
+          break;
+        }
+        case 'tntRow': {
+          grid.filter(b => b.row === block.row && b.health > 0)
+              .forEach(b => applyDamage(b, toolDmg * 5));
+          messageEl.textContent = '🧨 TNT Row! Damaged the entire row.';
+          break;
+        }
+        case 'lightningCol': {
+          grid.filter(b => b.col === block.col && b.health > 0)
+              .forEach(b => applyDamage(b, toolDmg * 5));
+          messageEl.textContent = '⚡ Lightning Rod! Damaged the entire column.';
+          break;
+        }
+        case 'diamondDrill': {
+          // Instantly break regardless of health
+          applyDamage(block, block.health);
+          messageEl.textContent = '💎 Diamond Drill! Block shattered.';
+          break;
+        }
+      }
+
+      // Consume one charge
+      const item = items[selectedItem];
+      item.count--;
+      if (item.count <= 0) selectedItem = null;
+      updateItemUI();
+    }
+
+    function updateBoostStatus() {
+      const remaining = boostEndTime - Date.now();
+      if (boostMultiplier > 1 && remaining > 0) {
+        boostStatusEl.textContent = `💪 2× boost (${Math.ceil(remaining / 1000)}s)`;
+        setTimeout(updateBoostStatus, 500);
+      } else {
+        boostStatusEl.textContent = '';
+      }
+    }
+
+    function renderToolbar() {
+      toolButtonsEl.innerHTML = '';
+      
+      // Add buttons for all purchased tools
+      for (const toolKey in tools) {
+        if (tools[toolKey].purchased) {
+          const tool = tools[toolKey];
+          const btn = document.createElement('button');
+          btn.id = `${toolKey}Btn`;
+          btn.style.padding = '10px 15px';
+          btn.style.border = 'none';
+          btn.style.borderRadius = '5px';
+          btn.style.cursor = 'pointer';
+          btn.style.background = toolKey === selectedTool ? '#2196F3' : '#4CAF50';
+          btn.style.color = 'white';
+          btn.textContent = tool.name;
+          btn.onclick = () => selectTool(toolKey);
+          
+          toolButtonsEl.appendChild(btn);
+        }
+      }
+    }
+
+    function renderItemToolbar() {
+      itemButtonsEl.innerHTML = '';
+      let anyItems = false;
+      for (const itemKey in items) {
+        const item = items[itemKey];
+        if (item.count > 0) {
+          anyItems = true;
+          const btn = document.createElement('button');
+          btn.style.padding = '8px 12px';
+          btn.style.border = 'none';
+          btn.style.borderRadius = '5px';
+          btn.style.cursor = 'pointer';
+          const isActive = selectedItem === itemKey;
+          btn.style.background = isActive ? '#e67e22' : '#9b59b6';
+          btn.style.color = 'white';
+          btn.style.fontWeight = 'bold';
+          btn.textContent = `${item.name} ×${item.count}`;
+          btn.title = item.desc;
+          btn.onclick = () => activateItem(itemKey);
+          itemButtonsEl.appendChild(btn);
+        }
+      }
+      if (!anyItems) {
+        const empty = document.createElement('div');
+        empty.style.color = '#888';
+        empty.style.fontStyle = 'italic';
+        empty.style.fontSize = '12px';
+        empty.textContent = 'No items owned. Buy some in the Item Shop below!';
+        itemButtonsEl.appendChild(empty);
+      }
+      activeItemEl.textContent = selectedItem ? items[selectedItem].name : 'None';
+    }
+
+    function renderItemShop() {
+      itemShopItemsEl.innerHTML = '';
+      for (const itemKey in items) {
+        const item = items[itemKey];
+        const cost = itemCost(itemKey);
+
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.justifyContent = 'space-between';
+        row.style.gap = '8px';
+        row.style.padding = '6px 8px';
+        row.style.background = 'rgba(255,255,255,0.5)';
+        row.style.borderRadius = '5px';
+
+        const info = document.createElement('div');
+        info.style.flex = '1';
+        info.innerHTML = `<strong>${item.name}</strong> <span style="color:#666; font-size:11px;">— ${item.desc}</span> <span style="color:#2c3e50;">(Owned: ${item.count})</span>`;
+
+        const btn = document.createElement('button');
+        btn.className = 'shop-btn';
+        btn.textContent = `Buy (${formatNumber(cost)})`;
+        btn.disabled = money < cost;
+        btn.onclick = () => buyItem(itemKey);
+
+        row.appendChild(info);
+        row.appendChild(btn);
+        itemShopItemsEl.appendChild(row);
+      }
+    }
+
+    function updateItemUI() {
+      renderItemToolbar();
+      renderItemShop();
+    }
+    
+    // Apply special effects (placeholder implementation)
+    function applySpecialEffect(tool, block) {
+      console.log(`Special effect activated: ${tool.special} with ${tool.name}`);
+      
+      // Placeholder for special effects implementation
+      // This is where you would add logic for each special effect
+      switch(tool.special) {
+        case 'doubleHit':
+          // Example: Apply damage twice
+          break;
+        case 'armorBreak':
+          // Example: Ignore armor
+          break;
+        case 'burn':
+          // Example: Apply damage over time
+          break;
+        // Add other special effects as needed
+      }
+    }
+    
+    function purchaseTool(toolName) {
+      const tool = tools[toolName];
+      if(money >= tool.cost && !tool.purchased) {
+        tool.purchased = true; // Set purchased before updating money so shop refresh removes item
+        updateMoney(-tool.cost); // Deduct cost and update shop
+        
+        messageEl.textContent = `🎉 Purchased ${tool.name}!`;
+        renderToolbar(); // Update toolbar to show new tool
+      } else if(money < tool.cost) {
+        messageEl.textContent = `❌ Not enough money for ${tool.name}!`;
+      }
+    }
+    
+    function renderShop() {
+      shopItemsEl.innerHTML = '';
+      
+      // Render tools by tier
+      toolTiers.forEach(tier => {
+        // Filter out purchased tools
+        const unpurchasedTools = tier.tools.filter(toolKey => !tools[toolKey].purchased);
+        
+        // Skip this tier if all tools are purchased
+        if (unpurchasedTools.length === 0) return;
+        
+        // Create tier header
+        const tierHeader = document.createElement('div');
+        tierHeader.className = 'tier-header';
+        tierHeader.textContent = tier.title;
+        shopItemsEl.appendChild(tierHeader);
+        
+        // Create tools container for this tier
+        const toolsContainer = document.createElement('div');
+        toolsContainer.style.display = 'flex';
+        toolsContainer.style.flexWrap = 'wrap';
+        toolsContainer.style.gap = '10px';
+        toolsContainer.style.marginBottom = '15px';
+        
+        // Add unpurchased tools
+        unpurchasedTools.forEach(toolKey => {
+          const tool = tools[toolKey];
+          
+          const shopItem = document.createElement('div');
+          shopItem.style.marginBottom = '5px';
+          
+          const btn = document.createElement('button');
+          btn.className = 'shop-btn';
+          btn.textContent = `Buy ${tool.name} (${formatNumber(tool.cost)})`;
+          btn.disabled = money < tool.cost;
+          btn.onclick = () => purchaseTool(toolKey);
+          
+          shopItem.appendChild(btn);
+          toolsContainer.appendChild(shopItem);
+        });
+        
+        shopItemsEl.appendChild(toolsContainer);
+      });
+    }
+    // Initialize game on load
+    initGame();
+  </script>
+</div>
+
+<canvas id="bgCanvasEl"></canvas>
+
+<script type="module">
+  import { createNoise2D } from 'https://esm.sh/simplex-noise@4.0.3';
+
+  const canvas = document.getElementById('bgCanvasEl');
+  const ctx = canvas.getContext('2d');
+  const noise2D = createNoise2D();
+
+  let width, height;
+  let bgPatternCanvas = document.createElement('canvas');
+  let bgPatternCtx = bgPatternCanvas.getContext('2d');
+
+  // Candle setup
+  const candles = [
+    { x: 0.1, y: 0.9, radius: 300, speed: 0.002 }, // Bottom left
+    { x: 0.9, y: 0.9, radius: 300, speed: 0.003 }, // Bottom right
+    { x: 0.5, y: 0.8, radius: 200, speed: 0.0025 }  // Bottom center (further back)
+  ];
+
+  function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+
+    // Generate static rocky background texture
+    const patternSize = 512;
+    bgPatternCanvas.width = patternSize;
+    bgPatternCanvas.height = patternSize;
+    const imgData = bgPatternCtx.createImageData(patternSize, patternSize);
+    const data = imgData.data;
+
+    for (let y = 0; y < patternSize; y++) {
+      for (let x = 0; x < patternSize; x++) {
+        const nx = x / patternSize;
+        const ny = y / patternSize;
+        
+        // Layered noise for rock texture
+        let n = noise2D(nx * 4, ny * 4) * 0.5 + 0.5; // Base detail
+        n += noise2D(nx * 10, ny * 10) * 0.25;       // Fine detail
+        n += noise2D(nx * 20, ny * 20) * 0.125;      // Roughness
+        
+        // Dark slate/rock color palette
+        // Base dark: R20 G20 B25
+        // Highlight: R40 G40 B45
+        const val = Math.floor(20 + n * 30); 
+        
+        const index = (x + y * patternSize) * 4;
+        data[index] = val;     // R
+        data[index + 1] = val + 2; // G (slightly warmer)
+        data[index + 2] = val + 5; // B (slightly cooler)
+        data[index + 3] = 255; // Alpha
+      }
+    }
+    bgPatternCtx.putImageData(imgData, 0, 0);
+  }
+
+  function draw() {
+    // Draw rocky texture
+    ctx.fillStyle = ctx.createPattern(bgPatternCanvas, 'repeat');
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw candles
+    const time = Date.now();
+
+    candles.forEach((c, i) => {
+      // Flicker logic
+      const flicker = Math.sin(time * c.speed) * 0.2 + Math.random() * 0.1; 
+      const currentRadius = c.radius * (1 + flicker);
+      const x = c.x * width;
+      const y = c.y * height;
+
+      // Gradient for light
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, currentRadius);
+      // Warm candle light: Orange to Transparent
+      grad.addColorStop(0, 'rgba(255, 160, 60, 0.25)'); 
+      grad.addColorStop(0.4, 'rgba(255, 100, 20, 0.1)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+      // Additive blending makes it look like light
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, currentRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Reset composite operation
+      ctx.globalCompositeOperation = 'source-over';
+
+      // Draw simple candle stick (just a subtle dark shape)
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(x - 5, y, 10, 40); // Stick
+      // Flame
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(255, 200, 50, ${0.8 + Math.random()*0.2})`;
+      ctx.arc(x, y - 5 + Math.random()*4, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  draw();
+</script>
+</body>
+</html>

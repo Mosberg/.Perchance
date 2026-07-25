@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>radio-power-saver-100 — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="appCtn" style="font-family: sans-serif; background-color: #121212; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; overflow: hidden;">
+  
+  <!-- Top Bar -->
+  <div id="topBarEl" style="background-color: #1e1e1e; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #333; z-index: 100; flex-shrink: 0;">
+    
+    <div style="flex: 1;">
+      <div style="font-size: 14px; font-weight: bold; color: #00e676;">Screen Off Radio</div>
+      <div style="font-size: 10px; color: #888;">by @MusiclaMuse444</div>
+      <a href="https://youtube.com/@musicalmuse444?si=Btp6NiSw0j1Q_E_N" target="_blank" rel="noopener" style="font-size: 8px; color: #666; text-decoration: none; line-height: 1; display: inline-block;">↑ click here</a>
+    </div>
+
+    <!-- Restore Station Dropdown (New Feature) -->
+    <div id="restoreStationCtn" style="margin-right: 10px;">
+      <select id="restoreSelectEl" onchange="restoreStation()" style="background-color: #2a2a2a; color: #e0e0e0; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 12px; cursor: pointer; outline: none; max-width: 100px;">
+        <option value="" disabled selected>Restore Station...</option>
+        <!-- Options injected via JS -->
+      </select>
+    </div>
+
+    <!-- Status Indicator (Moved from center to right to make room for toolbar below) -->
+    <div id="statusEl" style="font-size: 12px; color: #00e676; text-align: right; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+      Status: Idle
+    </div>
+  </div>
+
+  <!-- Visualization Toolbar (Under Title) -->
+  <div id="vizToolbarEl" style="background-color: #181818; padding: 5px 20px; display: flex; align-items: center; justify-content: center; gap: 15px; border-bottom: 1px solid #333; z-index: 99; flex-shrink: 0; flex-wrap: wrap;">
+    
+    <!-- Volume -->
+    <div style="display: flex; align-items: center; gap: 5px; font-size: 12px;">
+      <span>🔈</span>
+      <input type="range" id="volumeInputEl" min="0" max="1" step="0.05" value="0.8" style="width: 60px; cursor: pointer;">
+    </div>
+
+    <!-- Pause/Play -->
+    <button id="pauseBtn" onclick="togglePlay()" style="background-color: #333; color: white; border: 1px solid #555; border-radius: 4px; padding: 4px 12px; cursor: pointer; font-size: 12px; font-weight: bold;">PAUSE</button>
+
+    <!-- Clock Bar (Replaced Visualization Controls) -->
+    <div style="display: flex; align-items: center; gap: 10px; border-left: 1px solid #333; padding-left: 10px; flex: 1; min-width: 0; overflow: hidden;">
+       <div id="clockTextEl" style="font-size: 12px; color: #00e676; white-space: nowrap; font-family: monospace;">
+         Loading Time...
+       </div>
+    </div>
+  </div>
+
+  <!-- Tab Navigation -->
+  <div id="tabNavEl" style="background-color: #181818; padding: 10px 20px; display: flex; align-items: center; justify-content: center; gap: 15px; border-bottom: 1px solid #333; z-index: 98; flex-shrink: 0;">
+    <button id="radioTabBtn" onclick="switchTab('radio')" style="background-color: #00e676; color: #000; border: none; border-radius: 4px; padding: 8px 16px; font-weight: bold; cursor: pointer;">Radio</button>
+    <button id="mp3TabBtn" onclick="switchTab('mp3')" style="background-color: #333; color: white; border: none; border-radius: 4px; padding: 8px 16px; font-weight: bold; cursor: pointer;">MP3 Player</button>
+    <button id="youtubeTabBtn" onclick="switchTab('youtube')" style="background-color: #333; color: white; border: none; border-radius: 4px; padding: 8px 16px; font-weight: bold; cursor: pointer;">YouTube</button>
+  </div>
+
+  <!-- Tab Container -->
+  <div id="tabsCtn" style="flex: 1; display: flex; overflow: hidden; position: relative;">
+    
+    <!-- Radio Tab -->
+    <div id="radioTabCtn" style="flex: 0 0 100%; overflow-y: auto; padding: 20px; transition: transform 0.3s ease;">
+      
+      <!-- Refresh Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; position: sticky; top: 0; background-color: #121212; padding-bottom: 10px; z-index: 10;">
+        <div style="font-size: 16px;">Stations</div>
+        <button id="refreshBtn" onclick="scanForStations()" style="background-color: #00e676; color: #000; border: none; border-radius: 4px; padding: 8px 16px; font-weight: bold; cursor: pointer;">
+          ↻ AI Refresh
+        </button>
+      </div>
+
+      <!-- Loading / AI Scanning Indicator -->
+      <div id="loadingEl" hidden style="text-align: center; padding: 20px; color: #888;">
+        <div id="loadingTextEl">AI initializing...</div>
+        <div style="font-size: 10px; margin-top: 5px;">(Scanning 120 frequencies)</div>
+      </div>
+
+      <!-- Station List -->
+      <div id="stationListEl" style="display: flex; flex-direction: column; gap: 8px;">
+        <!-- Stations injected here -->
+      </div>
+
+    </div>
+
+    <!-- MP3 Player Tab -->
+    <div id="mp3TabCtn" style="flex: 0 0 100%; overflow-y: auto; padding: 20px; transition: transform 0.3s ease; transform: translateX(100%); position: absolute; top: 0; left: 0; right: 0; bottom: 0;">
+      
+      <!-- Player Controls (Fixed at top) -->
+      <div id="mp3PlayerControlsEl" style="background-color: #1e1e1e; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+        
+        <!-- Video Display (shown only for video files) -->
+        <div id="videoDisplayCtn" hidden style="margin-bottom: 15px; background-color: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 9;">
+          <video id="videoPlayerEl" style="width: 100%; height: 100%; display: block;" playsinline></video>
+        </div>
+
+        <!-- Current Song Info -->
+        <div style="margin-bottom: 15px;">
+          <div id="currentSongTitleEl" style="font-size: 14px; font-weight: bold; color: #fff; text-align: center; margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            No song selected
+          </div>
+          <div id="currentArtistEl" style="font-size: 12px; color: #888; text-align: center;">
+            --:--
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div style="margin-bottom: 15px;">
+          <div id="progressBarEl" style="background-color: #333; height: 4px; border-radius: 2px; overflow: hidden; cursor: pointer;">
+            <div id="progressFillEl" style="background-color: #00e676; height: 100%; width: 0%; transition: width 0.1s linear;"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 11px; color: #888;">
+            <span id="currentTimeEl">0:00</span>
+            <span id="totalTimeEl">0:00</span>
+          </div>
+        </div>
+
+        <!-- Control Buttons -->
+        <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 15px;">
+          <!-- Shuffle Button -->
+          <button id="shuffleBtn" onclick="toggleShuffle()" style="background-color: #333; color: white; border: 1px solid #555; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px;">
+            🔀
+          </button>
+
+          <!-- Previous Button -->
+          <button id="prevBtn" onclick="playPrev()" style="background-color: #333; color: white; border: 1px solid #555; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px;">
+            ⏮
+          </button>
+
+          <!-- Play/Pause Button -->
+          <button id="playPauseBtn" onclick="togglePlayMP3()" style="background-color: #00e676; color: #000; border: none; border-radius: 50%; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 24px;">
+            ▶
+          </button>
+
+          <!-- Next Button -->
+          <button id="nextBtn" onclick="playNext()" style="background-color: #333; color: white; border: 1px solid #555; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px;">
+            ⏭
+          </button>
+
+          <!-- Volume Button with Slider -->
+          <div style="position: relative; display: flex; align-items: center;">
+            <button id="volumeBtn" onclick="toggleVolumeSlider()" style="background-color: #333; color: white; border: 1px solid #555; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px;">
+              🔈
+            </button>
+            <div id="volumeSliderContainerEl" style="position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); background-color: #333; padding: 10px; border-radius: 8px; border: 1px solid #555; display: none; z-index: 100;">
+              <input type="range" id="mp3VolumeInputEl" min="0" max="1" step="0.05" value="0.8" style="width: 100px; cursor: pointer;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Clear Playlist Button -->
+        <div style="text-align: center;">
+          <button id="clearPlaylistBtn" onclick="clearPlaylist()" style="background-color: #ff5252; color: white; border: none; border-radius: 4px; padding: 8px 16px; font-weight: bold; cursor: pointer; font-size: 12px;">
+            Clear Playlist
+          </button>
+        </div>
+      </div>
+
+      <!-- Upload Area -->
+      <div style="margin-bottom: 20px;">
+        <label for="fileInputEl" style="display: flex; align-items: center; justify-content: center; gap: 10px; background-color: #1e1e1e; border: 1px dashed #555; border-radius: 8px; padding: 20px; cursor: pointer;">
+          <span style="font-size: 20px;">📁</span>
+          <span style="font-size: 14px;">Tap to select audio/video files (MP3, WAV, FLAC, AAC, M4A, OGG, OPUS, MP4, WEBM, MOV, MKV, AVI...)</span>
+        </label>
+        <input type="file" id="fileInputEl" accept=".mp3,.wav,.flac,.aac,.m4a,.ogg,.oga,.opus,.weba,.wma,.aiff,.aif,.mp4,.m4v,.webm,.ogv,.mov,.mkv,.avi,.wmv,.flv,.3gp,.mpg,.mpeg,.ts,.mts,audio/*,video/*" multiple style="display: none;" onchange="handleFiles(this.files)">
+      </div>
+
+      <!-- Playlist -->
+      <div style="margin-bottom: 20px;">
+        <div style="font-size: 14px; font-weight: bold; color: #fff; margin-bottom: 10px;">
+          Playlist (<span id="playlistCountEl">0</span> songs)
+        </div>
+        <div id="playlistEl" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Playlist items injected here -->
+        </div>
+      </div>
+
+    </div>
+
+    <!-- YouTube Player Tab -->
+    <div id="youtubeTabCtn" style="flex: 0 0 100%; overflow-y: auto; padding: 20px; transition: transform 0.3s ease; transform: translateX(200%); position: absolute; top: 0; left: 0; right: 0; bottom: 0;">
+      
+      <!-- YouTube Input Controls -->
+      <div style="background-color: #1e1e1e; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+        <div style="margin-bottom: 10px; font-size: 14px; font-weight: bold; color: #fff;">Play YouTube Video</div>
+        <div style="display: flex; gap: 10px;">
+          <input type="text" id="youtubeUrlInputEl" value="https://youtu.be/sh4uHu_qUHo?si=vxcB2YmIZtkFMsyI" placeholder="Paste YouTube URL or Video ID" style="flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #333; background-color: #121212; color: white; font-size: 14px;">
+          <button id="loadYoutubeBtn" onclick="loadYoutubeVideo()" style="background-color: #ff0000; color: white; border: none; border-radius: 4px; padding: 0 20px; font-weight: bold; cursor: pointer; font-size: 14px;">▶</button>
+        </div>
+        <div style="font-size: 11px; color: #888; margin-top: 5px;">Supports full URLs (e.g., youtube.com/watch?v=...) or IDs.</div>
+      </div>
+
+      <!-- YouTube Player Container (Streamlined Aspect Ratio) -->
+      <div style="width: 100%; position: relative; padding-bottom: 56.25%; height: 0; background-color: #000; border-radius: 8px; overflow: hidden;">
+        <div id="player" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+      </div>
+
+      <!-- YouTube Player Note -->
+      <div style="margin-top: 15px; padding: 12px; background-color: #1e1e1e; border-radius: 8px; border-left: 3px solid #ff0000;">
+        <div style="font-size: 12px; color: #aaa; line-height: 1.5;">
+          <span style="color: #ff0000; font-weight: bold;">💡 Tip:</span> Look for the small rectangular button inside the video player at the bottom right, next to the YouTube logo. Click it to browse related videos, copy their links, and paste them above to play!
+          <br><br>
+          <span style="color: #ffd740; font-weight: bold;">⚠️ Important:</span> You need to provide the initial YouTube link or Video ID in the input field above before you can get the process started and access related video links!
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Hidden Audio Element -->
+  <audio id="audioPlayerEl"></audio>
+
+  <!-- Intro Audio (plays once on load) -->
+  <audio id="introAudioEl" src="https://user.uploads.dev/file/8f20e31f29e89f40955f05ea34da3fc0.mp3" preload="auto"></audio>
+
+</div>
+
+<style>
+  /* Scrolling Text Animation */
+  @keyframes scrollText {
+    0% { transform: translateX(100%); }
+    100% { transform: translateX(-100%); }
+  }
+  #clockTextEl {
+    display: inline-block;
+    animation: scrollText 20s linear infinite;
+  }
+  
+  /* Playlist Item Styles */
+  .playlist-item {
+    background-color: #1e1e1e;
+    padding: 12px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: border-color 0.2s;
+  }
+  
+  .playlist-item.active {
+    border-color: #00e676;
+    background-color: #2a2a2a;
+  }
+  
+  .playlist-item:hover {
+    border-color: #333;
+  }
+</style>
+
+<script>
+  // State
+  let isPlaying = false;
+  let currentUrl = "";
+  let stations = [];
+  let favorites = new Set(); // Set of favorited station URLs
+  let hiddenStations = new Set(); // Set of hidden station URLs
+  let removedStationsList = []; // Array of full station objects for restoring
+  
+  // MP3 Player State
+  // Changed to store objects: { name, size, blob }
+  let mp3Playlist = []; 
+  let currentMp3Index = -1;
+  let isMp3Playing = false;
+  let isShuffleOn = false;
+  let shuffledIndices = []; // For shuffle mode
+  let currentTab = "radio"; // 'radio', 'mp3', or 'youtube'
+
+  // YouTube Player State
+  let ytPlayer; // YouTube Player Instance
+  let ytVideoId = "";
+  
+  // Elements
+  let audioPlayer = audioPlayerEl;
+  let videoPlayer = videoPlayerEl;
+  let volumeInput = volumeInputEl;
+  let mp3VolumeInput = mp3VolumeInputEl;
+            
+  // Returns true if the currently-loaded MP3/playlist track is a video file
+  function isCurrentTrackVideo() {
+    if (currentMp3Index < 0 || currentMp3Index >= mp3Playlist.length) return false;
+    return isVideoFile(mp3Playlist[currentMp3Index]);
+  }
+
+  // Returns the active media element for the current MP3 track (video or audio)
+  function getMediaPlayer() {
+    return isCurrentTrackVideo() ? videoPlayer : audioPlayer;
+  }
+
+  function isVideoFile(track) {
+    if (!track) return false;
+    // Prefer the stored flag if present (set at load time)
+    if (track.isVideo === true) return true;
+    if (track.isVideo === false) return false;
+    // Otherwise infer from name/type
+    let name = (track.name || "").toLowerCase();
+    let type = (track.type || "").toLowerCase();
+    return type.startsWith("video/") || /\.(mp4|m4v|webm|ogv|ogg|mov|mkv|avi|wmv|flv|3gp|mpg|mpeg|ts|mts)$/i.test(name);
+  }
+
+  // Pause whichever player is not currently active, so audio & video never play simultaneously
+  function pauseInactivePlayer() {
+    if (isCurrentTrackVideo()) {
+      audioPlayer.pause();
+    } else {
+      videoPlayer.pause();
+    }
+  }
+
+  // Hide the video display unless the current track is a video
+  function syncVideoDisplay() {
+    videoDisplayCtn.hidden = !isCurrentTrackVideo();
+  }
+
+  // Init Volume (applies to both players)
+  audioPlayer.volume = volumeInput.value;
+  videoPlayer.volume = volumeInput.value;
+  volumeInput.oninput = (e) => {
+    audioPlayer.volume = e.target.value;
+    videoPlayer.volume = e.target.value;
+    mp3VolumeInput.value = e.target.value;
+    updateVolumeIcon(audioPlayer.volume);
+    updateStatus(`Volume set to ${Math.round(audioPlayer.volume * 100)}%`, "neutral");
+  };
+  
+  // MP3 Player Volume
+  mp3VolumeInput.oninput = (e) => {
+    audioPlayer.volume = e.target.value;
+    videoPlayer.volume = e.target.value;
+    volumeInput.value = e.target.value;
+    updateVolumeIcon(audioPlayer.volume);
+  };
+  
+  function updateVolumeIcon(volume) {
+    let icon = "🔈";
+    if (volume > 0.66) icon = "🔊";
+    else if (volume > 0.33) icon = "🔉";
+    volumeBtn.textContent = icon;
+  }
+  
+  function toggleVolumeSlider() {
+    volumeSliderContainerEl.style.display = volumeSliderContainerEl.style.display === "block" ? "none" : "block";
+  }
+
+  // Clock Function
+  function updateClock() {
+    const now = new Date();
+    // Format: Day, Month Date, Year | HH:MM:SS
+    const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
+    clockTextEl.textContent = `${dateStr} | ${timeStr}`;
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // Initialize Favorites from LocalStorage
+  function initFavorites() {
+    if(localStorage.favorites) {
+      try {
+        let favs = JSON.parse(localStorage.favorites);
+        favorites = new Set(favs);
+      } catch(e) {
+        console.error("Failed to load favorites", e);
+      }
+    }
+  }
+
+  // Initialize Hidden Stations from LocalStorage
+  function initHiddenStations() {
+    if(localStorage.hiddenStations) {
+      try {
+        let hidden = JSON.parse(localStorage.hiddenStations);
+        hiddenStations = new Set(hidden);
+      } catch(e) {
+        console.error("Failed to load hidden stations", e);
+      }
+    }
+  }
+
+  // Initialize Removed Stations List (For Restore Feature) from LocalStorage
+  function initRemovedStations() {
+    if(localStorage.removedStationsList) {
+      try {
+        let removed = JSON.parse(localStorage.removedStationsList);
+        if(Array.isArray(removed)) {
+          removedStationsList = removed;
+        }
+      } catch(e) {
+        console.error("Failed to load removed stations list", e);
+      }
+    }
+  }
+
+  // Hide Station (Suppress) Logic
+  function hideStation(url) {
+    if (!hiddenStations.has(url)) {
+      // Find the station object to store its details for restoration
+      let stationObj = stations.find(s => (s.url_resolved || s.url) === url);
+      
+      // Add to hidden set (for filtering during scan)
+      hiddenStations.add(url);
+      localStorage.hiddenStations = JSON.stringify([...hiddenStations]);
+      
+      // Add to removed list (for restoration UI)
+      if (stationObj) {
+        removedStationsList.push(stationObj);
+        localStorage.removedStationsList = JSON.stringify(removedStationsList);
+        renderRestoreDropdown();
+      }
+
+      updateStatus("Station hidden", "neutral");
+      
+      // Remove from current stations array immediately so it disappears from UI
+      stations = stations.filter(s => (s.url_resolved || s.url) !== url);
+      renderList(stations);
+    }
+  }
+
+  // Render the Restore Dropdown
+  function renderRestoreDropdown() {
+    // Keep the first placeholder option
+    restoreSelectEl.innerHTML = '<option value="" disabled selected>Restore Station...</option>';
+    
+    removedStationsList.forEach(station => {
+      let url = station.url_resolved || station.url;
+      let option = document.createElement("option");
+      option.value = url;
+      option.textContent = station.name;
+      option.style.color = "#000"; // Options are usually dark text
+      restoreSelectEl.appendChild(option);
+    });
+  }
+
+  // Restore Station Logic
+  function restoreStation() {
+    let url = restoreSelectEl.value;
+    if (!url) return;
+
+    // Find station in removed list
+    let index = removedStationsList.findIndex(s => (s.url_resolved || s.url) === url);
+    
+    if (index > -1) {
+      let stationObj = removedStationsList[index];
+      
+      // Remove from removed list
+      removedStationsList.splice(index, 1);
+      localStorage.removedStationsList = JSON.stringify(removedStationsList);
+      
+      // Remove from hidden stations set
+      hiddenStations.delete(url);
+      localStorage.hiddenStations = JSON.stringify([...hiddenStations]);
+      
+      // Add back to main stations array (at the top for visibility)
+      stations.unshift(stationObj);
+      
+      // Update UIs
+      renderList(stations);
+      renderRestoreDropdown();
+      updateStatus(`Restored: ${stationObj.name}`, "success");
+      
+      // Reset dropdown selection
+      restoreSelectEl.value = "";
+    }
+  }
+
+  // Sort stations: Favorites first, then others
+  function sortStations(list) {
+    return list.sort((a, b) => {
+      let urlA = a.url_resolved || a.url;
+      let urlB = b.url_resolved || b.url;
+      let isFavA = favorites.has(urlA);
+      let isFavB = favorites.has(urlB);
+
+      if (isFavA && !isFavB) return -1;
+      if (!isFavA && isFavB) return 1;
+      return 0;
+    });
+  }
+
+  // Toggle Favorite status
+  function toggleFavorite(url) {
+    if (favorites.has(url)) {
+      favorites.delete(url);
+      updateStatus("Removed from favorites", "neutral");
+    } else {
+      favorites.add(url);
+      updateStatus("Added to favorites", "success");
+    }
+    // Save to LocalStorage
+    localStorage.favorites = JSON.stringify([...favorites]);
+    // Re-sort and re-render list
+    stations = sortStations(stations);
+    renderList(stations);
+  }
+
+  // AI Scanning Logic - Modified to keep fetching until 120 stations are found after all filtering
+  async function scanForStations() {
+    if(loadingEl.hidden === false) return; // Prevent double clicks
+    
+    loadingEl.hidden = false;
+    stationListEl.innerHTML = "";
+    refreshBtn.disabled = true;
+    refreshBtn.style.opacity = "0.5";
+    stations = [];
+    updateStatus("AI Scanning network...", "neutral");
+
+    loadingTextEl.textContent = "AI Optimizing stream stability...";
+    
+    try {
+      // Filter out unwanted stations (religious, news, Jesus, talk, sports, etc.)
+      const forbiddenKeywords = [
+        'bbc', 'Greece', 'Dance Wave!', 'South Africa', 'Hungary', 'Switzerland', 'jesus', 'religious', 'christian', 'gospel', 'prayer', 
+        'church', 'bible', 'faith', 'worship', 'god', 'preach', 'sermon', 
+        'amen', 'blessing', 'spiritual', 'catholic', 'protestant', 'islam',
+        'muslim', 'buddhist', 'hindu', 'sikh', 'jewish', 'torah', 'quran',
+        'koran', 'hymn', 'choir', 'ministry', 'evangelical', 'bishop',
+        'cbc', 'lbc', 'new', 'talk', 'sports', 'sport', 'discussion', 'debate',
+        'uk', 'united kingdom', 'british', 'london', 'england', 'scotland', 'wales', 'northern ireland',
+        'absolute', 'capital', 'heart', 'smooth', 'classic fm', 'radio 1', 'radio 2', 'radio 3', 'radio 4',
+        'kiss', 'magic', 'bauer', 'global', 'times', 'guardian', 'independent'
+      ];
+
+      let allFilteredData = [];
+      let offset = 0;
+      let batchSize = 400;
+      let maxAttempts = 20; // Safety limit to prevent infinite loops
+      
+      // Keep fetching until we have 120 stations after ALL filtering (including forbidden keywords AND hidden stations)
+      while (allFilteredData.length < 120 && maxAttempts > 0) {
+        maxAttempts--;
+        loadingTextEl.textContent = `AI Scanning... Found ${allFilteredData.length} suitable stations...`;
+        
+        let response = await superFetch(`https://de1.api.radio-browser.info/json/stations/search?limit=${batchSize}&offset=${offset}&language=english&hidebroken=true&order=clickcount&reverse=true`);
+        let data = await response.json();
+        
+        if (data.length === 0) break; // No more data available
+        
+        // Filter out unwanted stations by keywords
+        let keywordFilteredData = data.filter(s => {
+          const nameLower = s.name.toLowerCase();
+          const tagsLower = (s.tags || '').toLowerCase();
+          const countryLower = (s.country || '').toLowerCase();
+          // Check if any forbidden keyword appears in name, tags, or country
+          return !forbiddenKeywords.some(keyword => 
+            nameLower.includes(keyword) || 
+            tagsLower.includes(keyword) ||
+            countryLower.includes(keyword)
+          );
+        });
+
+        // Also filter out hidden stations (user has explicitly hidden these)
+        let finalFilteredData = keywordFilteredData.filter(s => {
+          let url = s.url_resolved || s.url;
+          return !hiddenStations.has(url);
+        });
+
+        allFilteredData = allFilteredData.concat(finalFilteredData);
+        offset += batchSize;
+      }
+      
+      // Ensure we have exactly 120 stations
+      stations = allFilteredData.slice(0, 120);
+
+      // Apply favorites sorting immediately after fetching
+      stations = sortStations(stations);
+      renderList(stations);
+      
+      loadingEl.hidden = true;
+      updateStatus(`AI Found ${stations.length} stable stations`, "success");
+    } catch (err) {
+      loadingTextEl.textContent = "AI Connection failed. Retrying...";
+      console.error(err);
+      setTimeout(() => {
+        loadingEl.hidden = true;
+        updateStatus("Scan Failed. Check connection.", "error");
+      }, 1000);
+    } finally {
+      refreshBtn.disabled = false;
+      refreshBtn.style.opacity = "1";
+    }
+  }
+
+  // Render the list
+  function renderList(list) {
+    stationListEl.innerHTML = "";
+    list.forEach((station, index) => {
+      let url = station.url_resolved || station.url;
+      let isFav = favorites.has(url);
+      let starChar = isFav ? "★" : "☆";
+      let starColor = isFav ? "#ffd740" : "#555";
+      
+      let el = document.createElement("div");
+      // Visual styling for list items
+      el.style.cssText = `
+        background-color: #1e1e1e; 
+        padding: 12px; 
+        border-radius: 6px; 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: border-color 0.2s;
+      `;
+      el.onmouseenter = () => el.style.borderColor = "#00e676";
+      el.onmouseleave = () => el.style.borderColor = "transparent";
+      
+      // Layout: X (Hide) + Star (Fav) + Info (Left), Play Button (Right)
+      el.innerHTML = `
+        <div style="display:flex; align-items:center; flex:1; gap: 8px;">
+           <!-- Hide (X) Button - only shown for non-favorited stations -->
+           ${!isFav ? `<div onclick="event.stopPropagation(); hideStation(decodeURIComponent('${encodeURIComponent(url)}'))"
+                style="font-size: 16px; cursor: pointer; color: #ff5252; user-select: none; min-width: 20px; text-align: center; opacity: 0.6; transition: opacity 0.2s;" 
+                onmouseenter="this.style.opacity='1'" 
+                onmouseleave="this.style.opacity='0.6'">
+              ✕
+           </div>` : `<div style="min-width: 20px;"></div>`}
+
+           <!-- Star Button -->
+           <div onclick="event.stopPropagation(); toggleFavorite(decodeURIComponent('${encodeURIComponent(url)}'))" 
+                style="font-size: 20px; cursor: pointer; color: ${starColor}; user-select: none; min-width: 24px; text-align: center;">
+              ${starChar}
+           </div>
+
+           <!-- Station Info -->
+           <div style="flex:1;">
+             <div style="font-weight:bold; color:#fff;">${station.name}</div>
+             <div style="font-size:11px; color:#888;">${station.country || "Unknown"}</div>
+           </div>
+        </div>
+
+        <!-- Play Indicator -->
+        <div style="font-size:20px; color:#00e676;">▶</div>
+      `;
+
+      el.onclick = () => playStation(url, station.name);
+      stationListEl.appendChild(el);
+    });
+  }
+
+  // Play Logic
+  function playStation(url, name) {
+    currentUrl = url;
+    audioPlayer.src = currentUrl;
+    pauseYouTube(); // Pause YouTube if playing radio
+    videoPlayer.pause(); // Pause video if playing
+    audioPlayer.play()
+      .then(() => {
+        isPlaying = true;
+        isMp3Playing = false; // Ensure MP3 state is false
+        updateUIState();
+        updateStatus(`Playing: ${name}`, "success");
+      })
+      .catch((e) => {
+        console.error("Playback error", e);
+        updateStatus("checking availability", "neutral");
+      });
+  }
+
+  // Toggle Play/Pause (top toolbar — works for radio tab)
+  function togglePlay() {
+    // If we're on the MP3/video tab, defer to the MP3 play/pause logic
+    if (currentTab === "mp3") {
+      togglePlayMP3();
+      return;
+    }
+    if (!audioPlayer.src) {
+      updateStatus("No station selected", "neutral");
+      return;
+    }
+
+    if (audioPlayer.paused) {
+      audioPlayer.play();
+      isPlaying = true;
+      updateStatus("Resuming...", "neutral");
+    } else {
+      audioPlayer.pause();
+      isPlaying = false;
+      updateStatus("Paused", "neutral");
+    }
+    updateUIState();
+  }
+
+  // Update Button Text
+  function updateUIState() {
+    // For radio tab use audioPlayer; for mp3 tab use active media player
+    let player = currentTab === "mp3" ? getMediaPlayer() : audioPlayer;
+    pauseBtn.textContent = player.paused ? "▶ PLAY" : "⏸ PAUSE";
+  }
+
+  // Status Manager
+  function updateStatus(msg, type) {
+    statusEl.textContent = msg;
+    if (type === "success") statusEl.style.color = "#00e676";
+    else if (type === "error") statusEl.style.color = "#ff5252";
+    else statusEl.style.color = "#ffd740"; // yellow for neutral/loading
+  }
+
+  // AI Monitoring: Handle audio errors automatically
+  audioPlayer.onerror = () => {
+    // Only switch if playing radio, not MP3
+    if (currentTab === "radio") {
+      updateStatus("AI Monitoring: Signal Lost. Switching...", "error");
+      // Try to find the next station in the list and play it
+      let currentIndex = stations.findIndex(s => (s.url_resolved || s.url) === currentUrl);
+      if (currentIndex > -1 && currentIndex < stations.length - 1) {
+        setTimeout(() => {
+          playStation(stations[currentIndex + 1].url_resolved, stations[currentIndex + 1].name);
+        }, 1000);
+      } else {
+        updateStatus("AI Monitoring: Critical failure. End of list.", "error");
+      }
+    }
+  };
+
+  // Tab Switching
+  function switchTab(tab) {
+    currentTab = tab;
+    
+    // Reset all button styles
+    [radioTabBtn, mp3TabBtn, youtubeTabBtn].forEach(btn => {
+      btn.style.backgroundColor = "#333";
+      btn.style.color = "white";
+    });
+    
+    // Active button styles
+    if (tab === "radio") {
+      radioTabBtn.style.backgroundColor = "#00e676";
+      radioTabBtn.style.color = "#000";
+      
+      radioTabCtn.style.transform = "translateX(0)";
+      mp3TabCtn.style.transform = "translateX(100%)";
+      youtubeTabCtn.style.transform = "translateX(200%)";
+      
+    } else if (tab === "mp3") {
+      mp3TabBtn.style.backgroundColor = "#00e676";
+      mp3TabBtn.style.color = "#000";
+      
+      radioTabCtn.style.transform = "translateX(-100%)";
+      mp3TabCtn.style.transform = "translateX(0)";
+      youtubeTabCtn.style.transform = "translateX(100%)";
+      
+    } else if (tab === "youtube") {
+      youtubeTabBtn.style.backgroundColor = "#00e676";
+      youtubeTabBtn.style.color = "#000";
+      
+      radioTabCtn.style.transform = "translateX(-200%)";
+      mp3TabCtn.style.transform = "translateX(-100%)";
+      youtubeTabCtn.style.transform = "translateX(0)";
+      
+      // Pause audio and video players when switching to YouTube
+      audioPlayer.pause();
+      videoPlayer.pause();
+      isPlaying = false;
+      isMp3Playing = false;
+      updateUIState();
+    }
+  }
+
+  // --- YouTube Player Logic ---
+
+  // Load YouTube IFrame API
+  let tag = document.createElement('script');
+  tag.src = "https://www.youtube.com/iframe_api";
+  let firstScriptTag = document.getElementsByTagName('script')[0];
+  firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+  // Called by API
+  function onYouTubeIframeAPIReady() {
+    ytPlayer = new YT.Player('player', {
+      height: '100%',
+      width: '100%',
+      playerVars: {
+        'playsinline': 1,
+        'controls': 1,
+        'rel': 0
+      },
+      events: {
+        'onStateChange': onPlayerStateChange
+      }
+    });
+  }
+
+  function onPlayerStateChange(event) {
+    // If YouTube video starts playing, pause audio and local video
+    if (event.data == YT.PlayerState.PLAYING) {
+      audioPlayer.pause();
+      videoPlayer.pause();
+      isPlaying = false;
+      isMp3Playing = false;
+      updateUIState();
+      updateStatus("Playing YouTube Video", "success");
+    }
+  }
+
+  function loadYoutubeVideo() {
+    let input = youtubeUrlInputEl.value.trim();
+    if (!input) return;
+
+    let videoId = extractVideoID(input);
+    if (videoId) {
+      if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+        ytPlayer.loadVideoById(videoId);
+        updateStatus("Loading YouTube Video...", "neutral");
+      } else {
+        updateStatus("Player not ready yet", "error");
+      }
+    } else {
+      updateStatus("Invalid YouTube URL or ID", "error");
+    }
+  }
+
+  function extractVideoID(url) {
+    // Handle standard URLs
+    let regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+    let match = url.match(regExp);
+    if (match && match[7].length == 11) {
+      return match[7];
+    } else {
+      // Handle direct ID input (11 characters)
+      if (url.length === 11) return url;
+    }
+    return false;
+  }
+
+  function pauseYouTube() {
+    if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+      ytPlayer.pauseVideo();
+    }
+  }
+
+  // --- Persistent Storage Logic ---
+
+  // Helper to save playlist to KV storage
+  async function savePlaylistToStorage() {
+    try {
+      // Access global kv or root.kv (module compat)
+      let storage = (typeof root !== 'undefined' && root.kv) ? root.kv : kv;
+      if (storage) {
+        await storage.mp3Player.set("playlist", mp3Playlist);
+      }
+    } catch (e) {
+      console.error("Failed to save playlist", e);
+    }
+  }
+
+  // Helper to restore playlist from KV storage
+  async function restorePlaylistFromStorage() {
+    try {
+      let storage = (typeof root !== 'undefined' && root.kv) ? root.kv : kv;
+      if (storage) {
+        let savedPlaylist = await storage.mp3Player.get("playlist");
+        if (savedPlaylist && Array.isArray(savedPlaylist)) {
+          mp3Playlist = savedPlaylist;
+          renderPlaylist();
+          if (mp3Playlist.length > 0) {
+            updateStatus(`Restored ${mp3Playlist.length} songs`, "success");
+            // Reset index to start or keep it logic preference
+            // We set to -1 so user can choose, or load first if desired
+            if (currentMp3Index === -1 && mp3Playlist.length > 0) {
+               currentMp3Index = 0;
+               loadMp3(0); // Load first song but don't auto-play
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to restore playlist", e);
+    }
+  }
+
+  // MP3 Player Functions
+  async function handleFiles(files) {
+    if (files.length === 0) return;
+    
+    // Add files to playlist
+    // We wrap file data to ensure metadata persists in storage
+    for (let i = 0; i < files.length; i++) {
+      let file = files[i];
+      let isVideo = (file.type && file.type.startsWith("video/")) || /\.(mp4|m4v|webm|ogv|ogg|mov|mkv|avi|wmv|flv|3gp|mpg|mpeg|ts|mts)$/i.test(file.name);
+      mp3Playlist.push({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        isVideo: isVideo,
+        blob: file // Store the actual File/Blob object
+      });
+    }
+    
+    // Update playlist display
+    renderPlaylist();
+    
+    // Save to persistent storage
+    await savePlaylistToStorage();
+    
+    // If this is the first file, load it but don't play
+    if (currentMp3Index === -1) {
+      currentMp3Index = 0;
+      loadMp3(currentMp3Index);
+    }
+    
+    updateStatus(`Added ${files.length} song(s) to playlist`, "success");
+  }
+
+  function renderPlaylist() {
+    playlistCountEl.textContent = mp3Playlist.length;
+    playlistEl.innerHTML = "";
+    
+    mp3Playlist.forEach((track, index) => {
+      let isActive = index === currentMp3Index;
+      let el = document.createElement("div");
+      el.className = "playlist-item" + (isActive ? " active" : "");
+      
+      // Track object now has .name and .size properties directly
+      let displayName = track.name;
+      let mediaIcon = track.isVideo ? "🎬 " : "🎵 ";
+      
+      el.innerHTML = `
+        <div style="flex:1;">
+          <div style="font-weight:bold; color:${isActive ? "#00e676" : "#fff"};">${mediaIcon}${displayName}</div>
+          <div style="font-size:11px; color:#888;">${formatFileSize(track.size)}</div>
+        </div>
+        ${isActive ? '<div style="font-size:20px; color:#00e676;">▶</div>' : ''}
+      `;
+      
+      el.onclick = () => playMp3(index);
+      playlistEl.appendChild(el);
+    });
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + " KB";
+    else return (bytes / 1048576).toFixed(2) + " MB";
+  }
+
+  function loadMp3(index) {
+    if (index < 0 || index >= mp3Playlist.length) return;
+    
+    let track = mp3Playlist[index];
+    let url = URL.createObjectURL(track.blob);
+    
+    // Pick the right player based on file type
+    let isVideo = !!track.isVideo;
+    
+    // Reset & clear the other player so only one is loaded
+    if (isVideo) {
+      audioPlayer.pause();
+      audioPlayer.removeAttribute("src");
+      audioPlayer.load();
+      videoPlayer.src = url;
+    } else {
+      videoPlayer.pause();
+      videoPlayer.removeAttribute("src");
+      videoPlayer.load();
+      audioPlayer.src = url;
+    }
+    
+    // Show/hide video display
+    syncVideoDisplay();
+    
+    // Update display
+    currentSongTitleEl.textContent = track.name;
+    currentArtistEl.textContent = isVideo ? "Video File" : "Local File";
+    
+    // Update UI state
+    updatePlayPauseButton();
+    renderPlaylist();
+  }
+
+  function playMp3(index) {
+    if (index < 0 || index >= mp3Playlist.length) return;
+    
+    currentMp3Index = index;
+    isMp3Playing = true;
+    loadMp3(index);
+    pauseYouTube(); // Pause YouTube if playing MP3/video
+    
+    let player = getMediaPlayer();
+    player.play()
+      .then(() => {
+        updateStatus(`Playing: ${mp3Playlist[index].name}`, "success");
+      })
+      .catch((e) => {
+        console.error("Playback error", e);
+        updateStatus("Error playing file", "error");
+      });
+  }
+
+  function togglePlayMP3() {
+    if (mp3Playlist.length === 0) {
+      updateStatus("Playlist is empty. Add files first.", "neutral");
+      return;
+    }
+    
+    if (currentMp3Index === -1) {
+      currentMp3Index = 0;
+      loadMp3(0);
+    }
+    
+    let player = getMediaPlayer();
+    if (player.paused) {
+      player.play();
+      pauseYouTube();
+      isMp3Playing = true;
+      updateStatus("Playing...", "success");
+    } else {
+      player.pause();
+      isMp3Playing = false;
+      updateStatus("Paused", "neutral");
+    }
+    
+    updatePlayPauseButton();
+    renderPlaylist();
+  }
+
+  function playNext() {
+    if (mp3Playlist.length === 0) return;
+    
+    let nextIndex;
+    if (isShuffleOn) {
+      // If shuffle is on, get the next index from shuffledIndices
+      if (shuffledIndices.length === 0) {
+        // Generate shuffled indices if not already done
+        generateShuffledIndices();
+      }
+      
+      // Find current position in shuffled indices
+      let currentShufflePos = shuffledIndices.indexOf(currentMp3Index);
+      
+      // Move to next in shuffle
+      if (currentShufflePos < shuffledIndices.length - 1) {
+        nextIndex = shuffledIndices[currentShufflePos + 1];
+      } else {
+        // If at the end of shuffle list, start from the beginning
+        nextIndex = shuffledIndices[0];
+      }
+    } else {
+      // If shuffle is off, just go to the next track
+      nextIndex = (currentMp3Index + 1) % mp3Playlist.length;
+    }
+    
+    playMp3(nextIndex);
+  }
+
+  function playPrev() {
+    if (mp3Playlist.length === 0) return;
+    
+    let prevIndex;
+    if (isShuffleOn) {
+      // If shuffle is on, get the previous index from shuffledIndices
+      if (shuffledIndices.length === 0) {
+        generateShuffledIndices();
+      }
+      
+      // Find current position in shuffled indices
+      let currentShufflePos = shuffledIndices.indexOf(currentMp3Index);
+      
+      // Move to previous in shuffle
+      if (currentShufflePos > 0) {
+        prevIndex = shuffledIndices[currentShufflePos - 1];
+      } else {
+        // If at the beginning of shuffle list, go to the end
+        prevIndex = shuffledIndices[shuffledIndices.length - 1];
+      }
+    } else {
+      // If shuffle is off, just go to the previous track
+      prevIndex = (currentMp3Index - 1 + mp3Playlist.length) % mp3Playlist.length;
+    }
+    
+    playMp3(prevIndex);
+  }
+
+  function toggleShuffle() {
+    isShuffleOn = !isShuffleOn;
+    
+    if (isShuffleOn) {
+      shuffleBtn.style.backgroundColor = "#00e676";
+      shuffleBtn.style.color = "#000";
+      generateShuffledIndices();
+      updateStatus("Shuffle ON", "success");
+    } else {
+      shuffleBtn.style.backgroundColor = "#333";
+      shuffleBtn.style.color = "white";
+      updateStatus("Shuffle OFF", "neutral");
+    }
+  }
+
+  function generateShuffledIndices() {
+    shuffledIndices = [];
+    for (let i = 0; i < mp3Playlist.length; i++) {
+      shuffledIndices.push(i);
+    }
+    
+    // Fisher-Yates shuffle algorithm
+    for (let i = shuffledIndices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
+    }
+  }
+
+  async function clearPlaylist() {
+    if (mp3Playlist.length === 0) return;
+    
+    if (confirm("Are you sure you want to clear the playlist?")) {
+      // Stop playback on both players
+      audioPlayer.pause();
+      videoPlayer.pause();
+      audioPlayer.currentTime = 0;
+      videoPlayer.currentTime = 0;
+      audioPlayer.src = "";
+      videoPlayer.src = "";
+      
+      // Reset state
+      mp3Playlist = [];
+      currentMp3Index = -1;
+      isMp3Playing = false;
+      shuffledIndices = [];
+      
+      // Hide video display
+      syncVideoDisplay();
+      
+      // Clear from persistent storage
+      try {
+        let storage = (typeof root !== 'undefined' && root.kv) ? root.kv : kv;
+        if (storage) {
+          await storage.mp3Player.delete("playlist");
+        }
+      } catch (e) {
+        console.error("Failed to clear storage", e);
+      }
+      
+      // Update UI
+      renderPlaylist();
+      currentSongTitleEl.textContent = "No song selected";
+      currentArtistEl.textContent = "--:--";
+      currentTimeEl.textContent = "0:00";
+      totalTimeEl.textContent = "0:00";
+      progressFillEl.style.width = "0%";
+      updatePlayPauseButton();
+      
+      updateStatus("Playlist cleared", "neutral");
+    }
+  }
+
+  function updatePlayPauseButton() {
+    let player = getMediaPlayer();
+    playPauseBtn.textContent = player.paused ? "▶" : "⏸";
+  }
+
+  // Update progress bar — listen to both audio and video time updates
+  function onMediaTimeUpdate() {
+    let player = getMediaPlayer();
+    if (player.duration) {
+      let progress = (player.currentTime / player.duration) * 100;
+      progressFillEl.style.width = progress + "%";
+      
+      currentTimeEl.textContent = formatTime(player.currentTime);
+      totalTimeEl.textContent = formatTime(player.duration);
+    }
+  }
+  audioPlayer.addEventListener("timeupdate", onMediaTimeUpdate);
+  videoPlayer.addEventListener("timeupdate", onMediaTimeUpdate);
+
+  // Click on progress bar to seek
+  progressBarEl.addEventListener("click", function(e) {
+    let player = getMediaPlayer();
+    if (!player.duration) return;
+    
+    let rect = progressBarEl.getBoundingClientRect();
+    let pos = (e.clientX - rect.left) / rect.width;
+    
+    player.currentTime = pos * player.duration;
+  });
+
+  function formatTime(seconds) {
+    let mins = Math.floor(seconds / 60);
+    let secs = Math.floor(seconds % 60);
+    return mins + ":" + (secs < 10 ? "0" : "") + secs;
+  }
+
+  // Auto-play next track when current track ends — listen on both players
+  function onMediaEnded() {
+    if (isMp3Playing) {
+      playNext();
+    }
+  }
+  audioPlayer.addEventListener("ended", onMediaEnded);
+  videoPlayer.addEventListener("ended", onMediaEnded);
+
+  // Swipe gesture detection for tab switching
+  let touchStartX = 0;
+  let touchEndX = 0;
+  
+  tabsCtn.addEventListener("touchstart", function(e) {
+    touchStartX = e.changedTouches[0].screenX;
+  }, false);
+  
+  tabsCtn.addEventListener("touchend", function(e) {
+    touchEndX = e.changedTouches[0].screenX;
+    handleSwipe();
+  }, false);
+  
+  function handleSwipe() {
+    let swipeThreshold = 50; // Minimum distance for a swipe
+    
+    if (touchEndX < touchStartX - swipeThreshold) {
+      // Swipe left - Next tab
+      if (currentTab === "radio") {
+        switchTab("mp3");
+      } else if (currentTab === "mp3") {
+        switchTab("youtube");
+      }
+    }
+    
+    if (touchEndX > touchStartX + swipeThreshold) {
+      // Swipe right - Previous tab
+      if (currentTab === "youtube") {
+        switchTab("mp3");
+      } else if (currentTab === "mp3") {
+        switchTab("radio");
+      }
+    }
+  }
+
+  // Init
+  initFavorites();
+  initHiddenStations();
+  initRemovedStations(); // New Init
+  renderRestoreDropdown(); // Initial Render
+  scanForStations();
+  restorePlaylistFromStorage(); // Restore MP3 playlist on load
+
+  // --- Intro Audio: play once as soon as possible ---
+  (function playIntro() {
+    let intro = introAudioEl;
+    let played = false;
+    function play() {
+      if (played) return;
+      intro.volume = 1;
+      intro.play().then(() => {
+        played = true;
+        cleanup();
+      }).catch(() => {
+        // Autoplay was blocked — wait for the first user interaction, then play
+      });
+    }
+    function cleanup() {
+      document.removeEventListener("pointerdown", play, true);
+      document.removeEventListener("keydown", play, true);
+      document.removeEventListener("touchstart", play, true);
+    }
+    document.addEventListener("pointerdown", play, true);
+    document.addEventListener("keydown", play, true);
+    document.addEventListener("touchstart", play, true);
+    // Try immediately, and again once the metadata is ready
+    play();
+    intro.addEventListener("canplaythrough", play, { once: true });
+  })();
+
+</script>
+</body>
+</html>

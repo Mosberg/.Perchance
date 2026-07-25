@@ -1,0 +1,5837 @@
+
+iconsize = 40
+imagesize = [(layoutsize/iconsize)*20]
+pick1 = ???
+pick2 = ???
+pick3 = ???
+pick4 = ???
+pick5 = ???
+pick6 = ???
+pick7 = ???
+pick8 = ???
+pick9 = ???
+pick10 = ???
+layoutsize = 190 
+elementmax = 3
+completemonstercount = 0
+totalmonstercount = 0
+preset = ["None"]
+lockedElements = [""]
+islandtype = ["Island"]
+monsteramount = 10
+bpmin = 60
+bpmax = 200
+keymode = ["Any"]
+scalemode = ["Any"]
+genremode = ["Any"]
+cardcolumns = 0
+cardtheme = ["default"]
+cardgap = 8
+cardradius = 28
+showboss = true
+showislandinfo = true
+showelements = true
+hidefanmade = false
+timesigmode = ["Any"]
+namestyle = ["Synonyms"]
+randomelementcount = false
+bosssize = 140
+songdetails = false
+ 
+title
+  The Ultimate My Singing Monsters Island Generator
+
+pickOrderedElements(n) =>
+	let arr = elements.consumableList.selectAll;
+	let classPools = {};
+	let allPool = [];
+	for (let i = 0; i < arr.length; i++) {
+		let nm = arr[i].evaluateItem;
+		let el = elements[nm];
+		if (!el || !el.class) continue;
+		let cls = el.class.evaluateItem;
+		if (cls === 'legendary') continue;
+		if (cls === 'mythical') continue;
+		let cbId = cls === 'seasonal' ? 'seasonalcombos' : cls;
+		let cb = document.getElementById(cbId);
+		if (cb && cb.checked) {
+			if (!classPools[cls]) classPools[cls] = [];
+			classPools[cls].push([nm, elements[nm].id]);
+			allPool.push([nm, elements[nm].id, cls]);
+		}
+	}
+	let classes = Object.keys(classPools);
+	if (classes.length === 0) return [];
+	let equalClassesCb = document.getElementById('equalclasses');
+	let equalClassesOn = !equalClassesCb || equalClassesCb.checked;
+	allPool.sort(function(a, b) { return a[1] - b[1]; });
+	let result = [];
+	let usedClasses = {};
+	for (let i = 0; i < n; i++) {
+		let remaining = n - i;
+		let available = allPool.filter(function(e) { return result.indexOf(e[0]) === -1; });
+		if (available.length === 0) break;
+		let classCounts = {};
+		for (let c of classes) classCounts[c] = 0;
+		for (let r of result) {
+			let entry = allPool.find(function(e) { return e[0] === r; });
+			if (entry) classCounts[entry[2]]++;
+		}
+		let minClass = classes[0];
+		for (let c of classes) {
+			if (classCounts[c] < classCounts[minClass]) minClass = c;
+		}
+		let candidates;
+		if (equalClassesOn) {
+			candidates = available.filter(function(e) { return e[2] === minClass; });
+			if (candidates.length === 0) candidates = available;
+		} else {
+			candidates = available;
+		}
+		let remainingAfter = available.length - 1;
+		let maxIdx = candidates.length - 1;
+		if (remainingAfter < remaining - 1) maxIdx = Math.min(maxIdx, candidates.length - remaining);
+		if (maxIdx < 0) maxIdx = 0;
+		let pick = Math.floor(Math.random() * (maxIdx + 1));
+		result.push(candidates[pick][0]);
+	}
+	result.sort(function(a, b) {
+		let ea = allPool.find(function(e) { return e[0] === a; });
+		let eb = allPool.find(function(e) { return e[0] === b; });
+		return ea[1] - eb[1]; 
+	});
+	return result;
+
+elementpicker
+  [picks = pickOrderedElements(elementmax),''][e1 = picks[0],''][e2 = picks[1],''][e3 = picks[2],''][e4 = picks[3],''][e5 = picks[4],''][e6 = picks[5],''][e7 = picks[6],''][e8 = picks[7],''][e9 = picks[8],''][e10 = picks[9],''][e11 = picks[10],''][e12 = picks[11],''][e13 = picks[12],''][e14 = picks[13],''][e15 = picks[14],'']
+applyElements() =>
+	let locks = Array.isArray(lockedElements) ? lockedElements : [];
+	let n = elementmax;
+	let locked = locks.slice(0, n);
+	let need = n - locked.length;
+	let picks = need > 0 ? pickOrderedElements(n).filter(function(v){return locked.indexOf(v) === -1;}).slice(0, need) : [];
+	let all = locked.concat(picks);
+	all.sort(function(a, b) { return (elements[a] || elements.Null).id - (elements[b] || elements.Null).id; });
+	e1 = all[0] || ""; e2 = all[1] || ""; e3 = all[2] || ""; e4 = all[3] || "";
+	e5 = all[4] || ""; e6 = all[5] || ""; e7 = all[6] || ""; e8 = all[7] || "";
+	e9 = all[8] || ""; e10 = all[9] || ""; e11 = all[10] || ""; e12 = all[11] || "";
+	e13 = all[12] || ""; e14 = all[13] || ""; e15 = all[14] || "";
+	return "";
+
+elementIconsHtml() =>
+	let locks = Array.isArray(lockedElements) ? lockedElements : [];
+	let slots = [e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15];
+	let mainParts = [];
+	let otherParts = [];
+	for (let i = 0; i < elementmax; i++) {
+		let name = slots[i];
+		if (!name) continue;
+		let el = elements[name] || elements.Null;
+		let icon = el.icon.evaluateItem;
+		let isLocked = locks.indexOf(name) !== -1;
+		let badge = isLocked ? "&#128274;" : "";
+		let color = el.color.evaluateItem;
+		let slot = "<span class='elem-tip' data-elem='" + name + "' onclick='toggleElementLock(&#34;" + name + "&#34;)' style='cursor:pointer;position:relative;display:inline-block;margin:2px;'>" + icon + "<span style='position:absolute;top:-4px;right:-4px;font-size:13px;pointer-events:none;'>" + badge + "</span><span class='elem-tip-label' style='background:" + color + ";color:" + (isLightColor(color) ? "#1a0f2a" : "#fff") + ";border-color:" + color + ";'>" + name + "</span></span>";
+		let cls = el.class ? el.class.evaluateItem : "";
+		let seasonalCombosCb = document.getElementById('seasonalcombos');
+		let seasonalCombosOn = seasonalCombosCb && seasonalCombosCb.checked;
+		if (cls === "seasonal" && !seasonalCombosOn) otherParts.push(slot);
+		else mainParts.push(slot);
+	}
+	let html = "";
+	if (mainParts.length) {
+		html += "<div style='margin-bottom:6px;'><div style='font-size:13px;color:#aaa;margin-bottom:2px;'>Breedable Elements</div>" + mainParts.join("") + "</div>";
+	}
+	if (otherParts.length) {
+		html += "<div><div style='font-size:13px;color:#aaa;margin-bottom:2px;'>Other Elements</div>" + otherParts.join("") + "</div>";
+	}
+	return html;
+output
+  [completemonstercount = 0,''][totalmonstercount = 0,''][layoutMaker(islandlayout)]
+
+setelements
+  [applyElements()]^[preset == "None"]
+  [e1 = "Earth",''][e2 = "Cold",''][e3 = "Water",''][e4 = "Plant",'']^[preset == "Plant Island"]
+  [e1 = "Cold",''][e2 = "Water",''][e3 = "Plant",''][e4 = "Air",'']^[preset == "Cold Island"]
+  [e1 = "Earth",''][e2 = "Cold",''][e3 = "Water",''][e4 = "Air",'']^[preset == "Air Island"]
+  [e1 = "Earth",''][e2 = "Water",''][e3 = "Plant",''][e4 = "Air",'']^[preset == "Water Island"]
+  [e1 = "Earth",''][e2 = "Cold",''][e3 = "Plant",''][e4 = "Air",'']^[preset == "Earth Island"]
+  [e1 = "Earth",''][e2 = "Plant",''][e3 = "Air",''][e4 = "Fire",'']^[preset == "Fire Haven"]
+  [e1 = "Cold",''][e2 = "Water",''][e3 = "Air",''][e4 = "Fire",'']^[preset == "Fire Oasis"]
+  [e1 = "Cold",''][e2 = "Plant",''][e3 = "Fire",''][e4 = "Light",'']^[preset == "Light Island"]
+  [e1 = "Water",''][e2 = "Plant",''][e3 = "Fire",''][e4 = "Psychic",'']^[preset == "Psychic Island"]
+  [e1 = "Earth",''][e2 = "Cold",''][e3 = "Fire",''][e4 = "Faerie",'']^[preset == "Faerie Island"]
+  [e1 = "Earth",''][e2 = "Water",''][e3 = "Fire",''][e4 = "Bone",'']^[preset == "Bone Island"]
+  [e1 = "Light",''][e2 = "Psychic",''][e3 = "Faerie",''][e4 = "Bone",'']^[preset == "Magical Sanctum"]
+  [e1 = "Earth",''][e2 = "Cold",''][e3 = "Water",''][e4 = "Plant",''][e5 = "Air",''][e6 = "Fire",'']^[preset == "All Natural"]
+  [e1 = "Plasma",''][e2 = "Shadow",''][e3 = "Mech",''][e4 = "Crystal",''][e5 = "Poison",''] ^[preset == "All Ethereal"]
+  [e1 = firstnatural.selectOne,''][e2 = secondnatural.selectOne,''][e3 = "Fire",''][e4 = magicale.selectOne,'']^[preset == "Random Magical Island"]
+  [e1 = firstnaturalairless.selectOne,''][e2 = secondnaturalairless.selectOne,''][e3 = thirdnatural.selectOne,''][e4 = magicale.selectOne,'']^[preset == "Random Magical Island Fireless"]
+  [e1 = "Earth",''][e2 = "Cold",''][e3 = "Water",''][e4 = "Plant",''][e5 = "Air",''][e6 = "Plasma",''][e7 = "Shadow",''][e8 = "Mech",''][e9 = "Crystal",''][e10 = "Poison",'']^[preset == "Mirrored"]
+  [e1 = "Control",''][e2 = "Hoax",''][e3 = "Ruin",''][e4 = "Depths",'']^[preset == "Paironormal Carnival"] 
+firstnatural
+  Earth
+  Cold
+  Water
+  Plant
+
+firstnaturalairless
+  Earth
+  Cold
+  Water
+
+secondnatural
+  Cold^[e1 == "Earth"]
+  Water^[e1 == "Earth" || e1 == "Cold"]
+  Plant^[e1 == "Earth" || e1 == "Cold" || e1 == "Water"]
+  Air^[e1 == "Earth" || e1 == "Cold" || e1 == "Water" || e1 == "Plant"]
+
+secondnaturalairless
+  Cold^[e1 == "Earth"]
+  Water^[e1 == "Earth" || e1 == "Cold"]
+  Plant^[e1 == "Earth" || e1 == "Cold" || e1 == "Water"]
+
+thirdnatural
+  Water^[e2 == "Cold"]
+  Plant^[ e2 == "Cold" || e2 == "Water"]
+  Air^[e2 == "Cold" || e2 == "Water" || e2 == "Plant"]
+
+magicale
+  Light
+  Psychic
+  Faerie
+  Bone
+  
+elements
+  Earth
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/c/ca/Earth_Element.png" height=[iconsize]px>
+    color = #938879
+    id = 1
+    class = natural
+  Cold
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/f/f7/Cold_Element.png" height=[iconsize]px>
+    color = #B6F6FF
+    id = 2
+    class = natural
+  Water
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/a/a9/Water_Element.png" height=[iconsize]px>
+    color = #0CF4F5
+    id = 3
+    class = natural
+  Plant
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/e/e9/Plant_Element.png" height=[iconsize]px>
+    color = #7BCA17
+    id = 4
+    class = natural
+  Air
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/b/b6/Air_Element.png" height=[iconsize]px>
+    color = #FFE7BD
+    id = 5
+    class = natural
+  Fire
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/8/86/Fire_Element.png" height=[iconsize]px>
+    color = #FC5B02
+    id = 6
+    class = natural
+  Light
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/e/e0/Light_Element.png" height=[iconsize]px>
+    color = #FAFBCA
+    id = 7
+    class = magical
+  Psychic
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/7/70/Psychic_Element.png" height=[iconsize]px>
+    color = #FF7CF2
+    id = 8
+    class = magical
+  Faerie
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/0/01/Faerie_Element.png" height=[iconsize]px>
+    color = #B996D4
+    id = 9
+    class = magical
+  Bone
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/1/1b/Bone_Element.png" height=[iconsize]px>
+    color = #CDB39E
+    id = 10
+    class = magical
+    description = Bone Monsters either appear undead, or have bones as a major part of their bodies.
+  Plasma
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/c/c2/Plasma_Element.png" height=[iconsize]px>
+    color = #9DB0F6
+    id = 11
+    class = ethereal
+  Shadow
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/a/ab/Shadow_Element.png" height=[iconsize]px>
+    color = #5D5F58
+    id = 12
+    class = ethereal
+  Mech
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/f/fa/Mech_Element.png" height=[iconsize]px>
+    color = #ADACA9
+    id = 13
+    class = ethereal
+  Crystal
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/3/33/Crystal_Element.png" height=[iconsize]px>
+    color = #74FFC2
+    id = 14
+    class = ethereal
+  Poison
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/e/e0/Poison_Element.png" height=[iconsize]px>
+    color = #C8D540
+    id = 15
+    class = ethereal
+  Control
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/0/0f/Control_Element.png" height=[iconsize]px>
+    color = #CA764A
+    id = 16
+    class = paironormal
+  Hoax
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/a/a5/Hoax_Element.png" height=[iconsize]px>
+    color = #34BFD7
+    id = 17
+    class = paironormal
+  Ruin
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/6/64/Ruin_Element.png" height=[iconsize]px>
+    color = #9FA079
+    id = 18
+    class = paironormal
+  Depths
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/4/49/Depths_Element.png" height=[iconsize]px>
+    color = #605B79
+    id = 19
+    class = paironormal
+  Spooktacle
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/6/6c/Spooktacle_Element.png" height=[iconsize]px>
+    color = #EA7838
+    id = 20
+    class = seasonal
+  Festival of Yay
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/e/ef/Festival_of_Yay_Element.png" height=[iconsize]px>
+    color = #4F9834
+    id = 21
+    class = seasonal
+  Season of Love
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/f/f5/Season_of_Love_Element.png" height=[iconsize]px>
+    color = #FF758A
+    id = 22
+    class = seasonal
+  Eggs-Travaganza
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/e/e5/Eggs-Travaganza_Element.png" height=[iconsize]px>
+    color = #D86757
+    id = 23
+    class = seasonal
+  SummerSong
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/2/23/SummerSong_Element.png" height=[iconsize]px>
+    color = #FFED31
+    id = 24
+    class = seasonal
+  Feast-Ember
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/c/c8/Feast-Ember_Element.png" height=[iconsize]px>
+    color = #C07013
+    id = 25
+    class = seasonal
+  Beat Hereafter
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/6/62/Beat_Hereafter_Element.png" height=[iconsize]px>
+    color = #B23A35
+    id = 26
+    class = seasonal
+  Echoes of Eco
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/a/a6/Echoes_of_Eco_Element.png" height=[iconsize]px>
+    color = #09ED97
+    id = 27
+    class = seasonal
+  Anniversary Month
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/8/8d/Anniversary_Month_Element.png" height=[iconsize]px>
+    color = #F0A9AF
+    id = 28
+    class = seasonal
+  Crescendo Moon
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/a/aa/Crescendo_Moon_Element.png" height=[iconsize]px>
+    color = #FADFA8
+    id = 29
+    class = seasonal
+  SkyPainting
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/8/84/SkyPainting_Element.png" height=[iconsize]px>
+    color = #FEFBEE
+    id = 30
+    class = seasonal
+  Life-Formula
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/9/90/Life-Formula_Element.png" height=[iconsize]px>
+    color = #B0FAF5
+    id = 31
+    class = seasonal
+  Cloverspell
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/3/3a/Cloverspell_Element.png" height=[iconsize]px>
+    color = #74D438
+    id = 32
+    class = seasonal
+  MindBoggle
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/4/45/MindBoggle_Element.png" height=[iconsize]px>
+    color = #CB261C
+    id = 33
+    class = seasonal
+  Perplexplore
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/a/a2/Perplexplore_Element.png" height=[iconsize]px>
+    color = #E49740
+    id = 34
+    class = seasonal
+  Legendary
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/2/20/Legendary_Element.png" height=[iconsize]px>
+    color = #FFD700
+    id = 35
+    class = legendary
+  Mythical
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/0/03/Mythical_Element.png" height=[iconsize]px>
+    color = #79FEFB
+    id = 36
+    class = mythical
+  Dream
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/e/e5/Dream_Element.png" height=[iconsize]px>
+    color = #504578
+    id = 37
+    class = mythical
+  Null
+    icon = <img src="https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png" height=[iconsize]px style="opacity:0.3;filter:grayscale(1);">
+    color = #000000
+    id = 0
+
+
+monsters
+  ???^0
+    elements
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png
+    group = ???
+    owner = ???
+    alt = false
+  Noggin
+    elements
+      Earth
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/ff/Noggin.png
+    group = percussion
+    owner = Big Blue Bubble
+    alt = false
+  Mammott
+    elements
+      Cold
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/c6/Mammott.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Drumpler
+    elements
+      Earth
+      Cold
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/46/Drumpler.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Toe Jammer
+    elements
+      Water
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/3/33/Toe_Jammer.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Fwog
+    elements
+      Earth
+      Water
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/7a/Fwog.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Maw
+    elements
+      Cold
+      Water
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/18/Maw.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  T-Rox
+    elements
+      Earth
+      Cold
+      Water
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/ca/T-Rox.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Potbelly
+    elements
+      Plant
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e0/Potbelly.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Shrubb
+    elements
+      Earth
+      Plant
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/a/a6/Shrubb.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Furcorn
+    elements
+      Cold
+      Plant
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/41/Furcorn.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Oaktopus
+    elements
+      Water
+      Plant
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/15/Oaktopus.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Clamble
+    elements
+      Earth
+      Cold
+      Plant
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e2/Clamble.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Pummel
+    elements
+      Earth
+      Water
+      Plant
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/ec/Pummel.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Bowgart
+    elements
+      Cold
+      Water
+      Plant
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/5b/Bowgart.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Entbrat
+    elements
+      Earth
+      Cold
+      Water
+      Plant
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/ca/Entbrat.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Tweedle
+    elements
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/18/Tweedle.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Cybop
+    elements
+      Earth
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/b/b3/Cybop.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Pango
+    elements
+      Cold
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/9c/Pango.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Quibble
+    elements
+      Water
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/fb/Quibble.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Danidoo
+    elements
+      Plant
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/7b/Dandidoo.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  PomPom
+    elements
+      Earth
+      Cold
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/07/PomPom.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Scups
+    elements
+      Earth
+      Water
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/c5/Scups.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Reedling
+    elements
+      Earth
+      Plant
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/6/65/Reedling.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Congle
+    elements
+      Cold
+      Water
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e0/Congle.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Thumpies
+    elements
+      Cold
+      Plant
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/07/Thumpies.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Spunge
+    elements
+      Water
+      Plant
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/22/Spunge.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Riff
+    elements
+      Earth
+      Cold
+      Water
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/c3/Riff.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Quarrister
+    elements
+      Earth
+      Cold
+      Plant
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/6/68/Quarrister.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Shellbeat
+    elements
+      Earth
+      Water
+      Plant
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/23/Shellbeat.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Deedge
+    elements
+      Cold
+      Water
+      Plant
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/74/Deedge.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Mimic
+    elements
+      Earth
+      Cold
+      Water
+      Plant
+      Air
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/a/a8/Mimic.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Kayna
+    elements
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/f3/Kayna.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Stogg
+    elements
+      Earth
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e7/Stogg.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Boskus
+    elements
+      Cold
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/b/b7/Boskus.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Phangler
+    elements
+      Water
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/59/Phangler.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Flowah
+    elements
+      Plant
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/f6/Flowah.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Glowl
+    elements
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/98/Glowl.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Ziggurab
+    elements
+      Earth
+      Cold
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/2f/Ziggurab.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Thrumble
+    elements
+      Earth
+      Water
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/5e/Thrumble.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Repatillo
+    elements
+      Earth
+      Plant
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/3/32/Repatillo.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Floogull
+    elements
+      Earth
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/0b/Floogull.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Wynq
+    elements
+      Cold
+      Water
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/6/62/Wynq.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Sooza
+    elements
+      Cold
+      Plant
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/ef/Sooza.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Woolabee
+    elements
+      Cold
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e2/Woolabee.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Rootitoot
+    elements
+      Water
+      Plant
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e0/Rootitoot.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Whaddle
+    elements
+      Water
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/a/a9/Whaddle.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Barrb
+    elements
+      Plant
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/29/Barrb.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Tiawa
+    elements
+      Earth
+      Cold
+      Water
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/1d/Tiawa.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  PongPing
+    elements
+      Earth
+      Cold
+      Plant
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/6/69/PongPing.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Krillby
+    elements
+      Earth
+      Cold
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/02/Krillby.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Edamimi
+    elements
+      Earth
+      Water
+      Plant
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/d/d9/Edamimi.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Flum Ox
+    elements
+      Earth
+      Water
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/26/Flum_Ox.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Tring
+    elements
+      Earth
+      Plant
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/ed/Tring.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Incisaur
+    elements
+      Cold
+      Water
+      Plant
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/05/Incisaur.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Sneyser
+    elements
+      Cold
+      Water
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/d/db/Sneyser.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Yelmut
+    elements
+      Cold
+      Plant
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/90/Yelmut.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Bisonorus
+    elements
+      Water
+      Plant
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/3/38/Bisonorus.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Gnarls
+    elements
+      Earth
+      Cold
+      Water
+      Plant
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/b/b7/Gnarls.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Tuskski
+    elements
+      Earth
+      Cold
+      Water
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/b/b4/Tuskski.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Drummidary
+    elements
+      Earth
+      Cold
+      Plant
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/3/30/Drummidary.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Candelavra
+    elements
+      Earth
+      Water
+      Plant
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/2c/Candelavra.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Bowhead
+    elements
+      Cold
+      Water
+      Plant
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/ef/Bowhead.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Lyriccle
+    elements
+      Earth
+      Cold
+      Water
+      Plant
+      Air
+      Fire
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/7/79/Lyriccle_OG_MSM.png
+    owner = Daniel Henderson
+    group = instrumental
+    alt = true
+  Fluoress
+    elements
+      Light
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/0f/Fluoress.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Bulbo
+    elements
+      Cold
+      Light
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/f8/Bulbo.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Gob
+    elements
+      Plant
+      Light
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/ef/Gob.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Pluckbill
+    elements
+      Fire
+      Light
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/ec/Pluckbill.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Spytrap
+    elements
+      Cold
+      Plant
+      Light
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/01/Spytrap.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Fiddlement
+    elements
+      Cold
+      Fire
+      Light
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/86/Fiddlement.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  TooToo
+    elements
+      Plant
+      Fire
+      Light
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/5e/TooToo.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Blow't
+    elements
+      Cold
+      Plant
+      Fire
+      Light
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/58/Blow%27t.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Theremind
+    elements
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/a/a3/Theremind.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Poppette
+    elements
+      Water
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/cf/Poppette.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Bonkers
+    elements
+      Plant
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e3/Bonkers.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Yuggler
+    elements
+      Fire
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e3/Yuggler.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Cahoot
+    elements
+      Light
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/3/35/Cahoot.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Tapricorn
+    elements
+      Water
+      Plant
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/06/Tapricorn.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Periscorp
+    elements
+      Water
+      Fire
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/b/b7/Periscorp.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Rooba
+    elements
+      Plant
+      Fire
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/7f/Rooba.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Gloptic
+    elements
+      Water
+      Plant
+      Fire
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e2/Gloptic.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Floot Fly
+    elements
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/27/Floot_Fly.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  HippityHop
+    elements
+      Earth
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/5e/HippityHop.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Squot
+    elements
+      Cold
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/75/Squot.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Wimmzies
+    elements
+      Fire
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/07/Wimmzies.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Knucklehead
+    elements
+      Light
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/94/Knucklehead.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Déjà-Jin
+    elements
+      Psychic
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/57/D%C3%A9j%C3%A0-Jin.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Cantorell
+    elements
+      Earth
+      Cold
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/8e/Cantorell.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Bridg-it
+    elements
+      Earth
+      Fire
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/01/Bridg-it.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Clavi Gnat
+    elements
+      Cold
+      Fire
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/a/a3/Clavi_Gnat.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Frondley
+    elements
+      Light
+      Psychic
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/7b/Frondley.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Pladdie
+    elements
+      Earth
+      Cold
+      Fire
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/fc/Pladdie.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Clackula
+    elements
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/47/Clackula.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Peckidna
+    elements
+      Earth
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/01/Peckidna.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Denchuhs
+    elements
+      Water
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/9f/Denchuhs.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Hawlo
+    elements
+      Fire
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/88/Hawlo.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Roarick
+    elements
+      Light
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/fc/Roarick.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Xyster
+    elements
+      Psychic
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/c9/Xyster.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Osstax
+    elements
+      Faerie
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/43/Osstax.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Withur
+    elements
+      Earth
+      Water
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/47/Withur.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Uuduk
+    elements
+      Earth
+      Fire
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/79/Uuduk.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Banjaw
+    elements
+      Water
+      Fire
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/c1/Banjaw.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  G'day
+    elements
+      Light
+      Psychic
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/ee/G%27day.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Mushaboom
+    elements
+      Light
+      Faerie
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/fe/Mushaboom.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Larvaluss
+    elements
+      Psychic
+      Faerie
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/97/Larvaluss.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Plinkajou
+    elements
+      Earth
+      Water
+      Fire
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/d/d2/Plinkajou.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Enchantling
+    elements
+      Light
+      Psychic
+      Faerie
+      Bone
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/7f/Enchantling.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Ghazt
+    elements
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/3/37/Ghazt.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Grumpyre
+    elements
+      Shadow
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/d/d1/Grumpyre.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Whisp
+    elements
+      Plasma
+      Shadow
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/9e/Whisp.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Reebro
+    elements
+      Mech
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e7/Reebro.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Nebulob
+    elements
+      Plasma
+      Mech
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e8/Nebulob.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Arackulele
+    elements
+      Shadow
+      Mech
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/56/Arackulele.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Yooreek
+    elements
+      Plasma
+      Shadow
+      Mech
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/13/Yooreek.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Jeeode
+    elements
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/0f/Jeeode.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Sox
+    elements
+      Plasma
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/23/Sox.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Boodoo
+    elements
+      Shadow
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/5d/Boodoo.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Bellowfish
+    elements
+      Mech
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/7e/Bellowfish.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Meebkin
+    elements
+      Plasma
+      Shadow
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/f1/Meebkin.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Gaddzooks
+    elements
+      Plasma
+      Mech
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/f3/Gaddzooks.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Nitebear
+    elements
+      Shadow
+      Mech
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/1d/Nitebear.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Whaill
+    elements
+      Plasma
+      Shadow
+      Mech
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/70/Whaill.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Humbug
+    elements
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Humbug.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Jellbilly
+    elements
+      Plasma
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/cf/Jellbilly.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Kazilleon
+    elements
+      Shadow
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/a/a7/Kazilleon.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Dragong
+    elements
+      Mech
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e0/Dragong.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Fung Pray
+    elements
+      Crystal
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/1d/Fung_Pray.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Blarret
+    elements
+      Plasma
+      Shadow
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/93/Blarret.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Auglur
+    elements
+      Plasma
+      Mech
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/d/db/Auglur.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  Flasque
+    elements
+      Plasma
+      Crystal
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/b/be/Flasque.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Piplash
+    elements
+      Shadow
+      Mech
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/d/dd/Piplash.png
+    owner = Big Blue Bubble
+    group = instrumental
+    alt = false
+  X'rt
+    elements
+      Shadow
+      Crystal
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/0c/X%27rt.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Teeter-Tauter
+    elements
+      Mech
+      Crystal
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/77/Teeter-Tauter.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Vhenshun
+    elements
+      Plasma
+      Shadow
+      Mech
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/c2/Vhenshun.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Pentumbra
+    elements
+      Plasma
+      Shadow
+      Crystal
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/18/Pentumbra.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Rhysmuth
+    elements
+      Plasma
+      Mech
+      Crystal
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/2e/Rhysmuth.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  Oogiddy
+    elements
+      Shadow
+      Mech
+      Crystal
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/b/b4/Oogiddy.png
+    owner = Big Blue Bubble
+    group = percussion
+    alt = false
+  BeMeebEth
+    elements
+      Plasma
+      Shadow
+      Mech
+      Crystal
+      Poison
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/7d/BeMeebEth.png
+    owner = Big Blue Bubble
+    group = vocal
+    alt = false
+  Hairionette
+    elements
+      Control
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/d/d5/Hairionette_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/73/Hairionette_%28Minor%29.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Owlesque
+    elements
+      Hoax
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/99/Owlesque_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/ed/Owlesque_%28Minor%29.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+  Arcorina
+    elements
+      Ruin
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/0/02/Arcorina_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/4a/Arcorina_%28Minor%29.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+  Shhimmer
+    elements
+      Depths
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/43/Shhimmer_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/45/Shhimmer_%28Minor%29.png
+    group = percussion
+    owner = Big Blue Bubble
+    alt = false
+  Scallyrags
+    elements
+      Control
+      Hoax
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/c1/Scallyrags_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/a/ad/Scallyrags_%28Minor%29.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Raqsoun
+    elements
+      Control
+      Ruin
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/3/3c/Raqsoun_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/1e/Raqsoun_%28Minor%29.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+  eRmA gUrDy
+    elements
+      Control
+      Depths
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/9f/ERmA_gUrDy_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/ed/ERmA_gUrDy_%28Minor%29.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+  Dakktyl
+    elements
+      Hoax
+      Ruin
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/a/a0/Dakktyl_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/2b/Dakktyl_%28Minor%29.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+  The Inflatterer
+    elements
+      Hoax
+      Depths
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/55/The_Inflatterer_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/25/The_Inflatterer_%28Minor%29.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+  Jerm
+    elements
+      Control
+      Hoax
+      Ruin
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/6/6d/Jerm_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/14/Jerm_%28Minor%29.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+  Galymph
+    elements
+      Control
+      Hoax
+      Depths
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/8f/Galymph_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/1c/Galymph_%28Minor%29.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Illoost
+    elements
+      Hoax
+      Ruin
+      Depths
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/77/Illoost_%28Major%29.png
+    minorurl = https://static.wikia.nocookie.net/mysingingmonsters/images/d/d2/Illoost_%28Minor%29.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+  Punkleton
+    elements
+      Spooktacle
+    requires
+      Bowgart
+      T-Rox
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/54/Punkleton.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Yool
+    elements
+      Festival of Yay
+    requires
+      Thumpies
+      Congle
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/80/Yool.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Schmoochle
+    elements
+      Season of Love
+    requires
+      Riff
+      Tweedle
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/83/Schmoochle.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Hoola
+    elements
+      SummerSong
+    requires
+      PomPom
+      Pango
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/3/38/Hoola.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Blabbit
+    elements
+      Eggs-Travaganza
+    requires
+      Scups
+      Spunge
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/a/a2/Blabbit.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Gobbleygourd
+    elements
+      Feast-Ember
+    requires
+      Glowl
+      Kayna
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/86/Gobbleygourd.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Clavavera
+    elements
+      Beat Hereafter
+    requires
+      Withur
+      Clackula
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/c9/Clavavera.png
+    group = percussion
+    owner = Big Blue Bubble
+    alt = false
+  Viveine
+    elements
+      Echoes of Eco
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/27/Viveine.png
+    group = percussion
+    owner = Big Blue Bubble
+    alt = false
+  Jam Boree
+    elements
+      Anniversary Month
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/5c/Jam_Boree.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+  Carillong
+    elements
+      Crescendo Moon
+    requires
+      Roarick
+      Mushaboom
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/10/Carillong.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+  Whiz-bang
+    elements
+      SkyPainting
+    requires
+      Blow't
+      Spytrap
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/a/ab/Whiz-bang.png
+    group = percussion
+    owner = Big Blue Bubble
+    alt = false
+  Monculus
+    elements
+      Life-Formula
+    requires
+      Nebulob
+      Jeeode
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/47/Monculus.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Ffidyll
+    elements
+      Cloverspell
+    requires
+      Pladdie
+      Floot Fly
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/f0/Ffidyll.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+  Boo'qwurm
+    elements
+      MindBoggle
+    requires
+      Periscorp
+      Bonkers
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/47/Boo%27qwurm.png
+    group = percussion
+    owner = Big Blue Bubble
+    alt = false
+  Spurrit
+    elements
+      Perplexplore
+    requires
+      Wynq
+      Maw
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/f/fd/Spurrit.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+  Shugabush
+    elements
+      Legendary
+    requires
+      Bowgart
+      Clamble
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/b/be/Shugabush.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+  Tawkerr
+    elements
+      Legendary
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/8a/Tawkerr.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = werdos
+  Parlsona
+    elements
+      Legendary
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/3/34/Parlsona.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = werdos
+  Maggpi
+    elements
+      Legendary
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/81/Maggpi.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = werdos
+  Stoowarb
+    elements
+      Legendary
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/d/d4/Stoowarb.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = werdos
+  Shugabass
+    elements
+      Legendary
+    requires
+      Shugabush
+      Potbelly
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/80/Shugabass.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = shugafam
+  Shugabeats
+    elements
+      Legendary
+    requires
+      Shugabush
+      Furcorn
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/84/Shugabeats.png
+    group = percussion
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = shugafam
+  Shugabuzz
+    elements
+      Legendary
+    requires
+      Shugabush
+      Quibble
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/7e/Shugabuzz.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = shugafam
+  Shugajo
+    elements
+      Legendary
+    requires
+      Shugabush
+      Oaktopus
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/9f/Shugajo.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = shugafam
+  Shugarock
+    elements
+      Legendary
+    requires
+      Shugabush
+      Mammott
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/40/Shugarock.png
+    group = percussion
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = shugafam
+  Shugavox
+    elements
+      Legendary
+    requires
+      Shugabush
+      Deedge
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/3/3b/Shugavox.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = shugafam
+  Shugitar
+    elements
+      Legendary
+    requires
+      Shugabush
+      PomPom
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/c9/Shugitar.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = shugafam
+  Charrkoll
+    elements
+      Legendary
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/ec/Charrkoll.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = werdos
+  bbli$zard
+    elements
+      Legendary
+    requires
+      Thumpies
+      Congle
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/7/78/Bbli%24zard.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = other
+  T-Pirainha
+    elements
+      Legendary
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/9/93/T-Pirainha.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+    monsterclass = legendary
+    subclass = other
+    requireElement = Water
+  Gemi-Geni
+    elements
+      Air
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/c/c0/Gemi-Geni.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Amethossil
+    elements
+      Earth
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/5/55/Amethossil.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Chillax
+    elements
+      Cold
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/c/cc/Chillax.png
+    group = percussion
+    owner = Jazzberry
+    alt = true
+  Kazala
+    elements
+      Air
+      Earth
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/5/56/Kazala.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Grimlin
+    elements
+      Air
+      Cold
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/b2/Image1705.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Alposse
+    elements
+      Earth
+      Cold
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/44/Alposse.png
+    group = vocal
+    owner = Jazzberry
+    alt = true
+  Brassarajah
+    elements
+      Air
+      Earth
+      Cold
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/a/a1/Brassarajah.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Peekatto
+    elements
+      Air
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/e/e2/Peekatto.PNG
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Kreep
+    elements
+      Plant
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/8/88/Kreep.PNG
+    group = vocal
+    owner = Jazzberry
+    alt = true
+  Meloch-Ness
+    elements
+      Water
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/5/54/Meloch_ness.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  XavoJavo
+    elements
+      Air
+      Plant
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/6/6a/XavoJavo.PNG
+    group = percussion
+    owner = Jazzberry
+    alt = true
+  Kyoomulix
+    elements
+      Air
+      Water
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/40/Kyoomulix.PNG
+    group = percussion
+    owner = Jazzberry
+    alt = true
+  Jitterbud
+    elements
+      Plant
+      Water
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/5/5d/Jitterbud.png
+    group = percussion
+    owner = Jazzberry
+    alt = true
+  Zephunda
+    elements
+      Air
+      Plant
+      Water
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/6/6c/Zephunda.png
+    group = percussion
+    owner = Jazzberry
+    alt = true
+  Caylsicle
+    elements
+      Air
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/9/97/Caylsicle.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Shamalaka
+    elements
+      Plant
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/6/60/Shamalaka.png
+    group = percussion
+    owner = Jazzberry
+    alt = true
+  Cranile
+    elements
+      Cold
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/0/0a/Cranile.png
+    group = percussion
+    owner = Jazzberry
+    alt = true
+  Weedidoot
+    elements
+      Air
+      Plant
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/bb/Weedidoot.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Plukkerib
+    elements
+      Air
+      Cold
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/bc/Plukkerib.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Acrashnid
+    elements
+      Plant
+      Cold
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/2/22/Acrashnid.png
+    group = percussion
+    owner = Jazzberry
+    alt = true
+  Kahnyawn
+    elements
+      Air
+      Plant
+      Cold
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/4b/Kahnyawn.png
+    group = vocal
+    owner = Jazzberry
+    alt = true
+  Ukulash
+    elements
+      Air
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/0/06/Ukulash_%28Not_Glowing%29.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Ding'Ky
+    elements
+      Earth
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/e/ed/Ding%27Ky_%28Not_Glowing%29.png
+    group = percussion
+    owner = Jazzberry
+    alt = true
+  Starkle
+    elements
+      Water
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/4c/Starkle_%28Face_And_Not_Glowing%29.png
+    group = vocal
+    owner = Jazzberry
+    alt = true
+  Wakka-Moll
+    elements
+      Air
+      Earth
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/7/72/Wakka-Moll.png
+    group = percussion
+    owner = Jazzberry
+    alt = true
+  Alstrata
+    elements
+      Air
+      Water
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/8/8b/Alstrata_%28Not_Glowing%29.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Geckneck
+    elements
+      Earth
+      Water
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/3/3c/Geckneck_%28Not_Playing%29.png
+    group = vocal
+    owner = Jazzberry
+    alt = true
+  Shreef-Ine
+    elements
+      Air
+      Earth
+      Water
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/0/08/Shreef-Ine_%28Not_Glowing%29.png
+    group = instrumental
+    owner = Jazzberry
+    alt = true
+  Floodbud
+    elements
+      Water
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/a/ad/Floodbud.webp
+    group = vocal
+    owner = Raw Zebra
+    alt = true
+  Varrow
+    elements
+      Air
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/d/da/Varow.png
+    group = instrumental
+    owner = Raw Zebra
+    alt = true
+  Yap
+    elements
+      Plant
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/40/Yap%28TLL%29.png
+    group = instrumental
+    owner = Raw Zebra
+    alt = true
+  Wadee
+    elements
+      Water
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/bf/Wadee.png
+    group = percussion
+    owner = Raw Zebra
+    alt = true
+  Dulsylvan
+    elements
+      Air
+      Plant
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/4d/Dulsylvan.png
+    group = instrumental
+    owner = Raw Zebra
+    alt = true
+  Banno
+    elements
+      Air
+      Water
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/7/7e/Bannonew.png
+    group = vocal
+    owner = Raw Zebra
+    alt = true
+  Choralle
+    elements
+      Plant
+      Water
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/e/ea/Choralle.webp
+    group = instrumental
+    owner = Raw Zebra
+    alt = true
+  Stoopa
+    elements
+      Air
+      Plant
+      Water
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/2/26/Stoopa.png
+    group = percussion
+    owner = Raw Zebra
+    alt = true
+  Stratinie
+    elements
+      Air
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/b0/Stratinie.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Pumhiss
+    elements
+      Air
+      Water
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/a/af/Pumhiss.png
+    group = percussion
+    owner = B D-Signs
+    alt = true
+  Eyebiscus
+    elements
+      Air
+      Plant
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/3/33/Eyebiscus.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Axolute
+    elements
+      Air
+      Plant
+      Water
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/2/2d/Axolute.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Kertiray
+    elements
+      Air
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/7/79/Kertiray.png
+    group = percussion
+    owner = B D-Signs
+    alt = true
+  Snaracenia
+    elements
+      Plant
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/d/d2/Snaracenia.png
+    group = percussion
+    owner = B D-Signs
+    alt = true
+  Marymno
+    elements
+      Plant
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/0/07/Marymno.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Luminay
+    elements
+      Earth
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/5/55/Luminay.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Escarbage
+    elements
+      Cold
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/0/07/Escarbage.png
+    group = vocal
+    owner = B D-Signs
+    alt = true
+  Wakawurms
+    elements
+      Air
+      Water
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/4f/Wakawurms.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Qilasuri
+    elements
+      Air
+      Cold
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/ba/Qilasuri.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  ScribbKaeg
+    elements
+      Plant
+      Earth
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/a/a5/ScribbKaeg.png
+    group = percussion
+    owner = B D-Signs
+    alt = true
+  Kaprok
+    elements
+      Plant
+      Earth
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/4c/Kaprok.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Enstemble
+    elements
+      Plant
+      Faerie
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/46/Enstemble.png
+    group = vocal
+    owner = B D-Signs
+    alt = true
+  Staeshine
+    elements
+      Earth
+      Cold
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/1/1b/Staeshine.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Caracoal
+    elements
+      Earth
+      Fire
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/1/11/Caracoal.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Gargyowl
+    elements
+      Earth
+      Faerie
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/2/2f/Gargyowl.png
+    group = vocal
+    owner = B D-Signs
+    alt = true
+  Glaciolm
+    elements
+      Water
+      Cold
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/bd/Glaciolm.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Penimbra
+    elements
+      Air
+      Water
+      Cold
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/b4/Penimbra.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Gnawgama
+    elements
+      Plant
+      Earth
+      Faerie
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/a/a8/Gnawgama.png
+    group = instrumental
+    owner = B D-Signs
+    alt = true
+  Kammelamp
+    elements
+      Earth
+      Cold
+      Fire
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/a/a6/Kammelamp.png
+    group = vocal
+    owner = B D-Signs
+    alt = true
+  G-Stapahn
+    elements
+      Air
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/e/e7/G-Stapahn.png
+    group = instrumental
+    owner = Slimer
+    alt = true
+  Gnaildwuhm
+    elements
+      Earth
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/1/1e/Gnaildwuhm.png
+    group = instrumental
+    owner = Slimer
+    alt = true
+  Nightae
+    elements
+      Air
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/c/c3/Nightae.png
+    group = percussion
+    owner = Slimer
+    alt = true
+  Triceptic
+    elements
+      Earth
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/7/73/Triceptic.png
+    group = vocal
+    owner = Slimer
+    alt = true
+  Mt'Draum
+    elements
+      Air
+      Earth
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/5/52/Mt%27Draum.png
+    group = percussion
+    owner = Slimer
+    alt = true
+  Hmhph
+    elements
+      Earth
+      Light
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/9/93/Hmhph.png
+    group = vocal
+    owner = Slimer
+    alt = true
+  Volkeyno
+    elements
+      Air
+      Fire
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/c/cd/Volkeyno.png
+    group = instrumental
+    owner = Slimer
+    alt = true
+  Xylowah
+    elements
+      Air
+      Earth
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/8/86/Xylowah.png
+    group = instrumental
+    owner = Slimer
+    alt = true
+  Pengwip
+    elements
+      Air
+      Light
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/c/c1/Pengwip.png
+    group = instrumental
+    owner = Slimer
+    alt = true
+  Hendbubet
+    elements
+      Air
+      Earth
+      Light
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/bf/Hendbubet.png
+    group = vocal
+    owner = Slimer
+    alt = true
+  Windpipe
+    elements
+      Air
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/bf/Windpipe.png
+    group = instrumental
+    owner = Gooseberry
+    alt = true
+  Bumbershoot
+    elements
+      Air
+      Water
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/ba/Bumbershoot.png
+    group = percussion
+    owner = Gooseberry
+    alt = true
+  G'loink
+    elements
+      Earth
+      Water
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/1/11/G%27loink.png
+    group = vocal
+    owner = Gooseberry
+    alt = true
+  Glarynx
+    elements
+      Earth
+      Bone
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/b5/Glarynx.png
+    group = vocal
+    owner = Gooseberry
+    alt = true
+  Lillopard
+    elements
+      Air
+      Plant
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/8/83/Lillopard.png
+    group = vocal
+    owner = Gooseberry
+    alt = true
+  Moptopiq
+    elements
+      Cold
+      Psychic
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/4d/Moptopiq.png
+    group = instrumental
+    owner = Gooseberry
+    alt = true
+  Mosstodon
+    elements
+      Plant
+      Cold
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/1/13/Mosstodon.png
+    group = instrumental
+    owner = Gooseberry
+    alt = true
+  Siphone
+    elements
+      Water
+      Psychic
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/c/c7/Siphone.png
+    group = instrumental
+    owner = Gooseberry
+    alt = true
+  Wibbat
+    elements
+      Air
+      Cold
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/7/70/Wibbat.png
+    group = instrumental
+    owner = Gooseberry
+    alt = true
+  Runigolem
+    elements
+      Earth
+      Fire
+      Faerie
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/c/c4/Runigolem.png
+    group = instrumental
+    owner = Astroshock25
+    alt = true
+  Iceratops
+    elements
+      Cold
+      Fire
+      Faerie
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/a/aa/Iceratops.png
+    group = vocal
+    owner = Astroshock25
+    alt = true
+  Aardpad
+    elements
+      Fire
+      Faerie
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/8/8a/Aardpad.png
+    group = percussion
+    owner = Astroshock25
+    alt = true
+  Lyghtbuhg
+    elements
+      Cold
+      Faerie
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/a/ae/Lyghtbuhg.png
+    group = instrumental
+    owner = Astroshock25
+    alt = true
+  Zombone
+    elements
+      Earth
+      Faerie
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/7/75/Zombone.png
+    group = percussion
+    owner = Astroshock25
+    alt = true
+  Buffahorn
+    elements
+      Fire
+      Faerie
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/7/7d/Buffahorn.png
+    group = vocal
+    owner = Astroshock25
+    alt = true
+  Robbleyvult
+    elements
+      Air
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/1/14/Robbleyvult.png
+    group = vocal
+    owner = MSM Quibble Fan
+    alt = true
+  Naurra
+    elements
+      Water
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/c/c8/Naurra.png
+    group = instrumental
+    owner = MSM Quibble Fan
+    alt = true
+  Glixle
+    elements
+      Air
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/1/10/Glixle.png
+    group = vocal
+    owner = MSM Quibble Fan
+    alt = true
+  Squakhap'n
+    elements
+      Air
+      Water
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/9/9c/Squakhap%27n.png
+    group = instrumental
+    owner = MSM Quibble Fan
+    alt = true
+  Drapevine
+    elements
+      Air
+      Plant
+      Faerie
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/6/6f/Drapevine.png
+    group = instrumental
+    owner = MSM Quibble Fan
+    alt = true
+  Dreamweaver
+    elements
+      Air
+      Psychic
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/7/72/Dreamweaver.png
+    group = instrumental
+    owner = MSM Quibble Fan
+    alt = true
+  G'boy
+    elements
+      Cold
+      Fire
+      Psychic
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/2/2c/G%27boy.png
+    group = percussion
+    owner = MSM Quibble Fan
+    alt = true
+  Boldemolt
+    elements
+      Air
+      Earth
+      Fire
+      Bone
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/c/c7/Boldemolt.png
+    group = instrumental
+    owner = MSM Quibble Fan
+    alt = true
+  Cavernyx
+    elements
+      Air
+      Earth
+      Faerie
+      Light
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/5/54/Cavernyx.png
+    group = instrumental
+    owner = MSM Quibble Fan
+    alt = true
+  G'joob
+    elements
+      Mythical
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/88/G%27joob.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Pummel
+      T-Rox
+  Yawstrich
+    elements
+      Mythical
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/47/Yawstrich.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Scups
+      T-Rox
+  Strombonin
+    elements
+      Mythical
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/6/61/Strombonin.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Spunge
+      Bowgart
+  Anglow
+    elements
+      Mythical
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/6/6d/Anglow.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Scups
+      Pummel
+  Hyehehe
+    elements
+      Mythical
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/6/62/Hyehehe.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Thumpies
+      PomPom
+  Buzzinga
+    elements
+      Mythical
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/2/2e/Buzzinga.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Reedling
+      Barrb
+  Cherubble
+    elements
+      Mythical
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/8/88/Cherubble.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Congle
+      Woolabee
+  Cataliszt
+    elements
+      Dream
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/5/5c/Cataliszt.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      G'joob
+      Yawstrich
+  Bleatnik
+    elements
+      Mythical
+      Dream
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/c/c7/Bleatnik.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Cataliszt
+      G'joob
+  Cranchee
+    elements
+      Mythical
+      Dream
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/b/b9/Cranchee.png
+    group = vocal
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Cataliszt
+      Strombonin
+  Sporerow
+    elements
+      Mythical
+      Dream
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/4/49/Sporerow.png
+    group = percussion
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Cataliszt
+      Yawstrich
+  Pinghound
+    elements
+      Mythical
+      Dream
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/d/d0/Pinghound.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Cataliszt
+      Anglow
+  Wheezel
+    elements
+      Mythical
+      Dream
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/e/e8/Wheezel.png
+    group = percussion
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Cataliszt
+      Hyehehe
+  Knurv
+    elements
+      Mythical
+      Dream
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/6/61/Knurv.png
+    group = instrumental
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Cataliszt
+      Buzzinga
+  ShLep
+    elements
+      Mythical
+      Dream
+    imageurl = https://static.wikia.nocookie.net/mysingingmonsters/images/1/1d/ShLep.png
+    group = percussion
+    owner = Big Blue Bubble
+    alt = false
+    requires
+      Cataliszt
+      Cherubble
+  Brassabuleum
+    elements
+      Earth
+      Air
+      Faerie
+      Bone
+    imageurl = https://user.uploads.dev/file/cf5a96eb29f57be4b8cbd91d8dfe6bfa.webp
+    group = instrumental
+    owner = Canny
+    alt = false
+  Sphilunx
+    elements
+      Earth
+      Air
+      Light
+      Faerie
+    imageurl = https://user.uploads.dev/file/b7a168c04ae42ad7652982bb5e0f321c.webp
+    group = instrumental
+    owner = Mewi
+    alt = false
+  Lyrm
+    elements
+      Cold
+      Light
+      Bone
+    imageurl = https://user.uploads.dev/file/c25fbae2a71e9eec3df929870aa41950.webp
+    group = instrumental
+    owner = Canny
+    alt = false
+  Lumpet
+    elements
+      Water
+      Plasma
+    imageurl = https://user.uploads.dev/file/960e5618dea4465c64a21324a136d467.webp
+    group = instrumental
+    owner = PFA
+    alt = false
+  BinkBonk
+    elements
+      Plant
+      Plasma
+    imageurl = https://user.uploads.dev/file/2d7a7a91ca7e659c427ee1267c2b3677.webp
+    group = percussion
+    owner = PFA
+    alt = false
+  Yokaynide
+    elements
+      Psychic
+      Shadow
+      Mech
+      Poison
+    imageurl = https://user.uploads.dev/file/f77330e32573ba0b2d9d2c64c5fa4493.webp
+    group = vocal
+    owner = ToCP
+    alt = false
+  Jammar'Dodj
+    elements
+      Water
+      Plant
+      Faerie
+      Plasma
+    imageurl = https://user.uploads.dev/file/e467e4dc6811711c40ed42b50e049d4f.webp
+    group = percussion
+    owner = Canny
+    alt = false
+  Floregwel
+    elements
+      Water
+      Plant
+      Crystal
+    imageurl = https://user.uploads.dev/file/b8176b705504f795f5668bf35e4565de.webp
+    group = instrumental
+    owner = MSMations
+    alt = false
+  Sappstring
+    elements
+      Plant
+      Hoax
+    imageurl = https://user.uploads.dev/file/d5f68cf6d3818cddb811c716db00d365.webp
+    minorurl = https://user.uploads.dev/file/338c1dd7127d39a571f9b1cc3792e2fe.webp
+    group = instrumental
+    owner = CaryMations
+    alt = false
+  PalFrass
+    elements
+      Psychic
+      Control
+    imageurl = https://user.uploads.dev/file/ff6b7ab1c790d4399b4d80e55a08c0d5.webp
+    minorurl = https://user.uploads.dev/file/2d85e398b83733d710ed6e39dcf4f242.webp
+    group = instrumental
+    owner = MawDaBoi
+    alt = false
+  Hammergeier
+    elements
+      Earth
+      Air
+      Light
+      Bone
+    imageurl = https://user.uploads.dev/file/fe764461a40994554990026a793c6e19.webp
+    group = percussion
+    owner = Mewi
+    alt = false
+  Cantrum
+    elements
+      Plant
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/f/f1/Cantrum.png
+    group = instrumental
+    owner = Maxiroon
+    alt = true
+  Chaintide
+    elements
+      Water
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/6/64/Chaintide.png
+    group = instrumental
+    owner = Maxiroon
+    alt = true
+  Fundae
+    elements
+      Cold
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/e/ed/Fundae.png
+    group = instrumental
+    owner = Maxiroon
+    alt = true
+  Cristofern
+    elements
+      Plant
+      Water
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/a/a2/Cristofern.png
+    group = instrumental
+    owner = Maxiroon
+    alt = true
+  Maskarade
+    elements
+      Plant
+      Cold
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/47/Maskarade.png
+    group = instrumental
+    owner = Maxiroon
+    alt = true
+  Plorgob
+    elements
+      Water
+      Cold
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/d/d9/Plorgob.png
+    group = instrumental
+    owner = Maxiroon
+    alt = true
+  Belloe
+    elements
+      Plant
+      Water
+      Cold
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/1/1b/Belloe.png
+    group = instrumental
+    owner = Maxiroon
+    alt = true
+  Volcamel
+    elements
+      Earth
+      Fire
+      Psychic
+    imageurl = https://user.uploads.dev/file/df38f9b611d1b78a36b39ad20a243064.webp
+    group = instrumental
+    owner = Mewi
+    alt = false
+  Hughedge
+    elements
+      Cold
+      Plant
+      Fire
+      Faerie
+    imageurl = https://user.uploads.dev/file/f5f18302ccc31ca0b5172242dec98002.webp
+    group = vocal
+    owner = Mewi
+    alt = false
+  Gungus
+    elements
+      Plant
+      Faerie
+      Bone
+    imageurl = https://user.uploads.dev/file/1becdd9a0ed9656582d87a4de1bed383.webp
+    group = instrumental
+    owner = Mewi
+    alt = false
+  Litchatchi
+    elements
+      Air
+      Bone
+      Shadow
+    imageurl = https://user.uploads.dev/file/37dc5272d53a0cdebe5e3731f1bfaaf0.webp
+    group = instrumental
+    owner = DarylAnimates
+    alt = false
+  Deathabach
+    elements
+      Water
+      Faerie
+      Bone
+    imageurl = https://user.uploads.dev/file/07839ab663732e1e5b085cca001838f8.webp
+    group = instrumental
+    owner = Mewi
+    alt = false
+  Herbot
+    elements
+      Plant
+      Mech
+    imageurl = https://user.uploads.dev/file/3dca30402a100a4f90659be9206aac52.webp
+    group = percussion
+    owner = PFA
+    alt = false
+  Doezbold
+    elements
+      Earth
+      Mech
+    imageurl = https://user.uploads.dev/file/c3d9cb94be16fa662f3a1837fadd9afb.webp
+    group = percussion
+    owner = PFA
+    alt = false
+  Zibibæp
+    elements
+      Air
+      Shadow
+      Mech
+    imageurl = https://user.uploads.dev/file/8e18cccce4a3fbd3edeae74ba41dd8a2.webp
+    group = percussion
+    owner = MawDaBoi
+    alt = false
+  Sjobörk
+    elements
+      Light
+      Crystal
+    imageurl = https://user.uploads.dev/file/ab456026612ad19baf43000625018b96.webp
+    group = instrumental
+    owner = ToCP
+    alt = false
+  Goobub
+    elements
+      Water
+      Plant
+      Plasma
+    imageurl = https://user.uploads.dev/file/ee4bbc141dbef0974e879077cce06c78.webp
+    group = vocal
+    owner = MSMations
+    alt = false
+  Glitsou
+    elements
+      Earth
+      Psychic
+      Ruin
+    imageurl = https://user.uploads.dev/file/6cd53791b40a836303f8a2eb8e6753f7.webp
+    minorurl = https://user.uploads.dev/file/87480db7849a572e388cd0b9762e68da.webp
+    group = vocal
+    owner = ToCP
+    alt = false
+  Trenchine
+    elements
+      Water
+      Hoax
+    imageurl = https://user.uploads.dev/file/1bd61ab07329b0bbfec17e1fcaf5858e.webp
+    minorurl = https://user.uploads.dev/file/a2aa698b89a82daca8e10794e2447556.webp
+    group = vocal
+    owner = CaryMations
+    alt = false
+  Obscurred
+    elements
+      Shadow
+      Hoax
+      Depths
+    imageurl = https://user.uploads.dev/file/ce925d96f8fc098c0b9ae9e31faf7cd0.webp
+    minorurl = https://user.uploads.dev/file/20531791c25f3776541ee1210c492754.webp
+    group = vocal
+    owner = Mochi 🍧
+    alt = false
+  Buzzurvive
+    elements
+      Shadow
+      Poison
+      Ruin
+    imageurl = https://user.uploads.dev/file/2a3ec3ac63d1986bf66f726558e852bb.webp
+    minorurl = https://user.uploads.dev/file/69d5aa44f66e15e08367ec3dd96f2337.webp
+    group = percussion
+    owner = Toonklebug9
+    alt = false
+  Touff-Paste
+    elements
+      Water
+      Bone
+      Ruin
+    imageurl = https://user.uploads.dev/file/ff44f478f65969277f4a784785ca25e6.webp
+    minorurl = https://user.uploads.dev/file/95e1ed2131a7847e2ad76a71d07edf05.webp
+    group = percussion
+    owner = DarylAnimates
+    alt = false
+  Glasphoria
+    elements
+      Plasma
+      Hoax
+    imageurl = https://user.uploads.dev/file/10aab98e30fbd1a5ca0abfc582814b36.webp
+    minorurl = https://user.uploads.dev/file/c1629c1618acc55f349d242efe215126.webp
+    group = vocal
+    owner = LowkeyToxtricity
+    alt = false
+  Wirrley
+    elements
+      Plant
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/b4/Wirrley.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Whymper
+    elements
+      Cold
+      Shadow
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/6/63/Whymper_%28Nick_P%29.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Malarigear
+    elements
+      Air
+      Mech
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/e/e2/Malariger.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Neptoulios
+    elements
+      Water
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/46/Neptoulios.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Eruptoise
+    elements
+      Earth
+      Poison
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/7/78/Eruptoise.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  AuRoara
+    elements
+      Cold
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/a/aa/AuRoara.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Cankermon
+    elements
+      Air
+      Shadow
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/2/2c/Cankermon.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Rustashun
+    elements
+      Water
+      Mech
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/f/ff/Rustashun.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Cobblins
+    elements
+      Earth
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/6/6f/Cobblins.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Foulgus
+    elements
+      Plant
+      Poison
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/b4/Foulgus.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Nimble
+    elements
+      Air
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/c/cb/Nimble.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Twangloor
+    elements
+      Water
+      Shadow
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/0/0d/Twangloor.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Charcarite
+    elements
+      Earth
+      Mech
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/d/df/Charcarite.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  ShardStalk
+    elements
+      Plant
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/8/84/ShardStalk.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Manucuas
+    elements
+      Cold
+      Poison
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/2/22/Manucuas.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Hyddrydra
+    elements
+      Water
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/44/Hyddrydra_%28Playing%29.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Throt
+    elements
+      Earth
+      Shadow
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/5/59/Throt_%28Playing%29.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Thump'tron
+    elements
+      Plant
+      Mech
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/2/2b/Thump%27tron.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Frozaic
+    elements
+      Cold
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/4/4e/Frozaic.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Nucallio
+    elements
+      Air
+      Poison
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/b/bd/Nucallio.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Clarvynett
+    elements
+      Earth
+      Plasma
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/d/d3/Clarvynett.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Stique
+    elements
+      Plant
+      Shadow
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/5/51/Stique.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Sproong
+    elements
+      Cold
+      Mech
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/e/e1/Sproong.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Whooby
+    elements
+      Air
+      Crystal
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/c/c9/Whooby.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+  Lampree
+    elements
+      Water
+      Poison
+    imageurl = https://static.wikia.nocookie.net/my-singing-monsters-ideas/images/d/dc/Lampree.png/revision/latest
+    group = percussion
+    owner = Nick P
+    alt = true
+elementicons
+  [elementIconsHtml()]
+islandlayout
+  container
+		style = height:auto;width:auto;border: 5px solid #B94F2D;border-radius:35px;background: radial-gradient(circle at 50% 0%, #5a3a7d 0%, #2a1540 60%, #0a0510 100%);padding:16px;
+  grid
+    a a a a a
+    b b d d d
+    e e e e e
+    f f g g g
+    i i i i i
+  columnSizes = 1fr 1fr 1fr 1fr 1fr
+  areas
+    a
+      content = <details open><summary style="cursor:pointer;font-size:25px;color:white;">Island Info</summary><p>[setelements][precomputeCounts(),'']<h2>[mainelement = reindex.selectOne,''][bi = biome.selectOne,''][i = islandname]</h2></p></details>
+      style = [cbChecked("showislandinfo", true) ? "border: 5px solid #B94F2D;border-radius:25px;background: radial-gradient(circle at 50% 20%, #5a3a7d 0%, #2a1540 70%, #0a0510 100%);color:white;font-size:25px;padding:14px 18px;" : "display:none;"]
+    b
+      content = <details open><summary style="cursor:pointer;font-size:20px;color:white;">Elements</summary>[islandtype === "Islet" ? (elements[e1] || elements.Null).icon : elementicons]</details>
+      style = [(islandtype === "Outer Island" || !cbChecked("showelements", true)) ? "display:none;" : "height:auto;color:white;font-size:20px;padding:14px 18px;"]
+    d
+      content = <details open><summary style="cursor:pointer;font-size:20px;color:white;">Song Info</summary> <p>Tempo - [bpm]</p><p>Key - [keyout] [scaleout.titleCase]</p><p>Genre - [genreout]</p><p>Time Signature - [timesigout]</p><p style="text-align:center;"><button class="msm-button btn-sm" onclick="rerollSongInfo()"><img src="https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Acapella_%28Composer_Type%29.png" class="btn-icon" loading="lazy"> Reroll Song Info</button></p></details>
+      style = [showsonginfo.checked ? "height:auto;color:white;font-size:20px;padding:14px 18px;" : "display:none;"]
+    e
+      content = <details open><summary style="cursor:pointer;font-size:20px;color:white;">Monsters</summary> <div style="padding: 0px;width:100%;margin:auto;">[monsterlist]</div></details>
+      style = height:auto;color:white;font-size:20px;padding:14px 18px;
+    f
+      content = <details open><summary style="cursor:pointer;font-size:20px;color:white;">Monster Count</summary><h2>Total Monster Count: [completemonstercount] / [totalmonstercount]</h2></details>
+      style = [showmonstercount.checked ? "padding:14px 18px;" : "display:none;"]
+    g
+      content = <details open><summary style="cursor:pointer;font-size:20px;color:white;">Island Boss</summary>[generateIslandBoss()]</details>
+      style = [showboss && cbChecked("showboss", true) ? "height:auto;color:white;font-size:20px;padding:14px 18px;" : "display:none;"]
+    i
+      content = <details open><summary style="cursor:pointer;font-size:20px;color:white;">Breeding Combinations</summary> <div style="padding:10px;">[generateBreedingTree()]</div></details>
+      style = [(showbreeding.checked && islandtype === "Island") ? "height:auto;color:white;font-size:20px;padding:14px 18px;" : "display:none;"]
+
+islandname
+  [customislandname.value.trim() || (islandtype === "Outer Island" ? outerword.selectOne + " " + bi.selectOne : (namestyle === "Direct" ? mainelement.selectOne : (namestyle === "Adjectives" ? (synonyms[mainelement.selectOne] && synonyms[mainelement.selectOne].adjectives ? synonyms[mainelement.selectOne].adjectives.selectOne.evaluateItem.charAt(0).toUpperCase() + synonyms[mainelement.selectOne].adjectives.selectOne.evaluateItem.slice(1) : mainelement.selectOne) : (Math.random() < 0.5 ? mainelement.selectOne : (synonyms[mainelement.selectOne] ? (s = synonyms[mainelement.selectOne].selectOne.evaluateItem, s.charAt(0).toUpperCase() + s.slice(1)) : mainelement.selectOne))) + " " + bi.selectOne))]
+outerword
+  Party
+  Space
+  Cloud
+  Cave
+  Star
+  Moon
+  Sun
+  Rainbow
+  Thunder
+  Forest
+  Desert
+  Ocean
+  Glacier
+  Volcano
+  Meadow
+  Canyon
+  Tundra
+  Jungle
+  Garden
+  Harbor
+  Summit
+  Valley
+  Grove
+  Reef
+  Aurora
+  Prism
+  Mirage
+  Nexus
+  Haven
+  Oasis
+  Vault
+  Zenith
+  Echo
+  Drift
+  Pulse
+  Nova
+  Orbit
+  Solstice
+  Equinox
+  Nebula
+  Comet
+  Meteor
+  Eclipse
+  Galaxy
+  Cosmos
+  Void
+  Quasar
+  Blossom
+  Breeze
+  Brook
+  Cedar
+  Cinnamon
+  Citrus
+  Cobble
+  Coral
+  Cove
+  Crest
+  Crimson
+  Daisy
+  Dawn
+  Dew
+  Dusk
+  Ember
+  Fable
+  Feather
+  Fern
+  Festival
+  Fiddle
+  Flute
+  Fossil
+  Fountain
+  Frost
+  Gale
+  Garnet
+  Gazebo
+  Ginger
+  Glade
+  Glitter
+  Goblet
+  Gondola
+  Granite
+  Gusto
+  Halcyon
+  Halo
+  Harvest
+  Hearth
+  Hedge
+  Holly
+  Honey
+  Horn
+  Ichor
+  Icicle
+  Indigo
+  Iris
+  Ivory
+  Jade
+  Jasmine
+  Jewel
+  Juniper
+  Kelp
+  Kettle
+  Kite
+  Lace
+  Lagoon
+  Lantern
+  Laurel
+  Lavender
+  Lemon
+  Lily
+  Lyre
+  Magnolia
+  Mango
+  Marble
+  Marigold
+  Marshmallow
+  Mint
+  Mirror
+  Moonstone
+  Moss
+  Nectar
+  Needle
+  Nest
+  Nougat
+  Oak
+  Onyx
+  Opal
+  Orchard
+  Orchid
+  Palm
+  Panther
+  Papaya
+  Parchment
+  Parlor
+  Passion
+  Peach
+  Pearl
+  Pebble
+  Pelican
+  Pepper
+  Perch
+  Periwinkle
+  Petal
+  Picnic
+  Pillar
+  Pine
+  Pippin
+  Pistil
+  Plume
+  Pocket
+  Pollen
+  Pond
+  Poppy
+  Prancer
+  Puddle
+  Pumpkin
+  Quartz
+  Quill
+  Quince
+  Rabbit
+  Rapids
+  Rattan
+  Reverie
+  Ribbon
+  Riddle
+  River
+  Robin
+  Rose
+  Ruby
+  Sable
+  Saffron
+  Sage
+  Sail
+  Sakura
+  Salt
+  Sandal
+  Sapphire
+  Satin
+  Scarab
+  Scone
+  Seal
+  Sediment
+  Seed
+  Shell
+  Sienna
+  Silk
+  Silver
+  Sky
+  Snow
+  Sparrow
+  Spice
+  Spruce
+  Squirrel
+  Stream
+  Sugar
+  Sunflower
+  Sunset
+  Swan
+  Syrup
+  Taffy
+  Tamarind
+  Tangerine
+  Tapestry
+  Tassel
+  Temple
+  Thicket
+  Thimble
+  Thorn
+  Tide
+  Tiger
+  Tinsel
+  Topaz
+  Trail
+  Treble
+  Trumpet
+  Tulip
+  Umbra
+  Vanilla
+  Velvet
+  Verdant
+  Violet
+  Vista
+  Walnut
+  Wasp
+  Wave
+  Whale
+  Whisper
+  Willow
+  Wind
+  Winter
+  Wisteria
+  Woods
+  Yew
+  Zephyr
+  Zinnia
+  Zither
+  Almond
+  Anchor
+  Anemone
+  Aster
+  Atom
+  Aviary
+  Bamboo
+  Barn
+  Barrel
+  Basin
+  Beacon
+  Beetle
+
+
+synonyms
+  Earth
+    Ground
+    Terrain
+    Soil
+    Land
+    Stone
+    Rock
+    Dirt
+    Clay
+    Terra
+    Geode
+    Pebble
+    adjectives
+      earthen
+      rocky
+      mineral
+      grounded
+      terrestrial
+  Cold
+    Ice
+    Frost
+    Chill
+    Winter
+    Snow
+    Freeze
+    Glacial
+    Arctic
+    Tundra
+    Permafrost
+    Crystal Frost
+    adjectives
+      frozen
+      icy
+      frigid
+      glacial
+      arctic
+  Water
+    Aqua
+    Sea
+    Ocean
+    Liquid
+    Tide
+    Wave
+    Stream
+    River
+    Lake
+    Deep
+    Current
+    adjectives
+      aquatic
+      fluid
+      watery
+      riparian
+      submerged
+  Plant
+    Flora
+    Vegetation
+    Greenery
+    Nature
+    Leaf
+    Vine
+    Blossom
+    Root
+    Stem
+    Moss
+    Fern
+    adjectives
+      verdant
+      leafy
+      overgrown
+      botanical
+      mossy
+  Air
+    Wind
+    Sky
+    Breeze
+    Atmosphere
+    Gust
+    Cloud
+    Gale
+    Zephyr
+    Draft
+    Tempest
+    Breath
+    adjectives
+      airy
+      windswept
+      breezy
+      atmospheric
+      cloudy
+  Fire
+    Flame
+    Blaze
+    Heat
+    Burn
+    Ember
+    Inferno
+    Lava
+    Spark
+    Magma
+    Scorch
+    adjectives
+      fiery
+      molten
+      scorched
+      volcanic
+      blazing
+  Light
+    Luminous
+    Radiance
+    Glow
+    Bright
+    Beam
+    Shine
+    Gleam
+    Illumination
+    Phosphor
+    Prism Light
+    Aurora
+    adjectives
+      luminous
+      radiant
+      gleaming
+      brilliant
+      phosphorescent
+  Psychic
+    Mind
+    Mental
+    Psionic
+    Telepathy
+    Thought
+    Cognition
+    Brainwave
+    Intellect
+    Consciousness
+    Encephalon
+    Clairvoyance
+    adjectives
+      psionic
+      cerebral
+      hypnotic
+      telepathic
+      mind-bending
+  Faerie
+    Fairy
+    Fae
+    Fey
+    Pixie
+    Sprite
+    Nymph
+    Sylph
+    Enchantment
+    Glamour
+    Wee Folk
+    Elfin
+    adjectives
+      enchanted
+      whimsical
+      sprite-like
+      glamoured
+      elfin
+  Bone
+    Skeleton
+    Skeletal
+    Marrow
+    Osteo
+    Fossil
+    Calcified
+    Remains
+    Ossein
+    Ivory
+    Cartilage
+    Joint
+    adjectives
+      skeletal
+      ossified
+      fossilized
+      calcified
+      marrow-bared
+  Plasma
+    Gel
+    Fluid
+    Ionized
+    Bio
+    Slime
+    Ooze
+    Viscous
+    Proto-plasm
+    Cytoplasm
+    Colloid
+    Suspension
+    adjectives
+      viscous
+      gelatinous
+      oozing
+      fluid
+      amorphous
+  Shadow
+    Dark
+    Darkness
+    Shade
+    Umbra
+    Gloom
+    Obsidian
+    Eclipse
+    Void
+    Penumbra
+    Nightfall
+    Dusk
+    adjectives
+      shadowed
+      darkened
+      gloomy
+      umbral
+      eclipsed
+  Mech
+    Machine
+    Mechanical
+    Robotic
+    Gear
+    Automaton
+    Cog
+    Piston
+    Cyborg
+    Contraption
+    Apparatus
+    Engine
+    adjectives
+      mechanical
+      metallic
+      geared
+      automated
+      clockwork
+  Crystal
+    Gem
+    Mineral
+    Quartz
+    Prism
+    Amethyst
+    Geode Stone
+    Facet
+    Shard
+    Lattice
+    Refraction
+    Jewel
+    adjectives
+      crystalline
+      faceted
+      prismatic
+      gem-studded
+      refractive
+  Poison
+    Toxic
+    Venom
+    Toxin
+    Acid
+    Corrosive
+    Contamination
+    Blight
+    Miasma
+    Pathogen
+    Taint
+    Noxious
+    adjectives
+      toxic
+      venomous
+      corrosive
+      noxious
+      tainted
+  Control
+    Command
+    Domination
+    Manipulation
+    Authority
+    Influence
+    Subjugation
+    Sway
+    Direction
+    Governance
+    Reign
+    Overrule
+    adjectives
+      controlled
+      commanding
+      authoritative
+      governing
+      subjugating
+  Hoax
+    Trick
+    Deception
+    Illusion
+    Prank
+    Ruse
+    Fraud
+    Sham
+    Charade
+    Fabrication
+    Racket
+    Spoof
+    adjectives
+      illusory
+      deceptive
+      trickster-like
+      fabricated
+      mirage-like
+  Ruin
+    Decay
+    Destruction
+    Devastation
+    Wreckage
+    Rubble
+    Collapse
+    Desolation
+    Dilapidation
+    Crumble
+    Wither
+    Desolate
+    adjectives
+      ruined
+      decayed
+      dilapidated
+      crumbling
+      desolate
+  Depths
+    Abyss
+    Chasm
+    Void
+    Deep
+    Trench
+    Fissure
+    Gorge
+    Crevasse
+    Ravine
+    Underworld
+    Nether
+    adjectives
+      abyssal
+      fathomless
+      subterranean
+      chasmic
+      void-like
+
+legendaryReqMet(l, nameSet) =>
+	if (!l.requires) {
+		if (l.requireElement) {
+			let nm = islandname.evaluateItem;
+			return nm && nm.indexOf(l.requireElement) !== -1;
+		}
+		return true;
+	}
+	let r0 = l.requires[0], r1 = l.requires[1];
+	if (r0 === 'Shugabush' || r1 === 'Shugabush') {
+		let sb = monsters.Shugabush;
+		if (!sb || !sb.requires) return false;
+		let shugaReq = sb.requires.consumableList.selectAll.map(function(e) { return e.evaluateItem; });
+		let otherParent = r0 === 'Shugabush' ? r1 : r0;
+		return nameSet.has(otherParent) && nameSet.has(shugaReq[0]) && nameSet.has(shugaReq[1]);
+	}
+	return nameSet.has(r0) && nameSet.has(r1);
+
+buildMonsterLookup() =>
+	if (window.monsterLookup) return '';
+	let lookup = {};
+	let seasonals = [];
+	let legendaries = [];
+	let werdos = [];
+	let mythicals = [];
+	let monKeys = Object.keys(monsters).filter(function(k) { return k !== 'consumableList' && typeof monsters[k] === 'object' && k !== '???'; });
+	for (let i = 0; i < monKeys.length; i++) {
+		let name = monKeys[i];
+		let mon = monsters[name];
+		if (!mon || !mon.elements) continue;
+		let elems = mon.elements.consumableList.selectAll.map(function(e) { return e.evaluateItem; });
+		if (elems.length === 0) continue;
+		let requires = mon.requires ? mon.requires.consumableList.selectAll.map(function(e) { return e.evaluateItem; }) : null;
+		let monClass = mon.monsterclass ? mon.monsterclass.evaluateItem : '';
+		let subClass = mon.subclass ? mon.subclass.evaluateItem : '';
+		if (monClass === 'legendary') {
+			let lEntry = {
+				name: name,
+				imageurl: mon.imageurl || 'https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png',
+				owner: mon.owner || '???',
+				group: mon.group || '???',
+				alt: false,
+				element: elems[0],
+				requires: requires,
+				subclass: subClass,
+				requireElement: mon.requireElement ? mon.requireElement.evaluateItem : null
+			};
+			if (subClass === 'werdos') {
+				werdos.push(lEntry);
+			} else {
+				legendaries.push(lEntry);
+			}
+			continue;
+		}
+		let hasDream = elems.indexOf('Dream') !== -1;
+		let hasMythical = elems.indexOf('Mythical') !== -1;
+		if (hasDream || hasMythical) {
+			mythicals.push({
+				name: name,
+				imageurl: mon.imageurl || 'https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png',
+				owner: mon.owner || '???',
+				group: mon.group || '???',
+				alt: false,
+				elements: elems,
+				requires: requires
+			});
+			continue;
+		}
+		if (requires) {
+			seasonals.push({
+				name: name,
+				imageurl: mon.imageurl || 'https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png',
+				owner: mon.owner || '???',
+				group: mon.group || '???',
+				alt: false,
+				element: elems[0],
+				requires: requires
+			});
+			let sKey = elems[0];
+			if (!lookup[sKey]) {
+				lookup[sKey] = {
+					name: name,
+					imageurl: mon.imageurl || 'https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png',
+					owner: mon.owner || '???',
+					group: mon.group || '???',
+					alt: false,
+					seasonal: true
+				};
+			}
+			if (!lookup[sKey + '__alts']) lookup[sKey + '__alts'] = [];
+			continue;
+		}
+		let key = elems.slice().sort(function(a,b){ return (elements[a]||elements.Null).id - (elements[b]||elements.Null).id; }).join(',');
+		let isAlt = mon.alt === true;
+		let entry = {
+			name: name,
+			imageurl: mon.imageurl || 'https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png',
+			owner: mon.owner || '???',
+			group: mon.group || '???',
+			alt: isAlt,
+			minorurl: mon.minorurl || null
+		};
+		let prev = lookup[key];
+		if (!prev || (isAlt === false && prev.alt === true)) {
+			lookup[key] = entry;
+		}
+		if (!lookup[key + '__alts']) lookup[key + '__alts'] = [];
+		if (isAlt) {
+			lookup[key + '__alts'].push(entry);
+		}
+	}
+	window.monsterLookup = lookup;
+	window.seasonalMonsters = seasonals;
+	window.legendaryMonsters = legendaries;
+	window.werdosMonsters = werdos;
+	window.mythicalMonsters = mythicals;
+	return '';
+
+prepareIslandData() =>
+	buildMonsterLookup();
+	let n = Number(elementmax);
+	let rawElems = [e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15].slice(0, n);
+	let elems = rawElems.filter(function(e){ return e && e !== ""; });
+	n = elems.length;
+	let sig = n + '|' + elems.join(',') + '|' + iconsize;
+	if (window._islandDataSig === sig && window._islandData) return '';
+	window._islandDataSig = sig;
+	let total = 1 << n;
+	let lookup = window.monsterLookup;
+	let iconCache = {};
+	for (let i = 0; i < n; i++) iconCache[elems[i]] = (elements[elems[i]] || elements.Null).icon.evaluateItem;
+	let popcnt = new Int8Array(total);
+	let maskKeys = new Array(total);
+	popcnt[0] = 0;
+	maskKeys[0] = '';
+	for (let mask = 1; mask < total; mask++) {
+		popcnt[mask] = popcnt[mask & (mask - 1)] + 1;
+		let key = '';
+		for (let i = 0; i < n; i++) {
+			if (mask & (1 << i)) {
+				key += (key ? ',' : '') + elems[i];
+			}
+		}
+		maskKeys[mask] = key;
+	}
+	let maskIconCache = new Array(total);
+	let getMaskIcons = function(mask) {
+		if (maskIconCache[mask] !== undefined) return maskIconCache[mask];
+		let icons = '';
+		for (let i = 0; i < n; i++) {
+			if (mask & (1 << i)) icons += iconCache[elems[i]];
+		}
+		maskIconCache[mask] = icons;
+		return icons;
+	};
+	window._islandData = { n: n, total: total, popcnt: popcnt, maskKeys: maskKeys, maskIcons: maskIconCache, getMaskIcons: getMaskIcons, iconCache: iconCache, lookup: lookup };
+	return '';
+
+buildSizeTabs(sizes) =>
+	let tabId = 'mtabs_' + Math.random().toString(36).slice(2,9);
+	let cardW = layoutsize * 1.25;
+	let containerW = 700;
+	let cols = Number(cardcolumns);
+	let effectiveCols = cols > 0 ? cols : Math.max(1, Math.floor(containerW / (cardW + 8)));
+	let perPage = Math.max(6, effectiveCols * 3);
+	let html = '<div class="monster-tabs" id="' + tabId + '" data-per-page="' + perPage + '">';
+	html += '<div class="monster-tabs-bar">';
+	for (let i = 0; i < sizes.length; i++) {
+		html += '<button class="mtab-btn' + (i === 0 ? ' active' : '') + '" onclick="monsterTabSwitch(\'' + tabId + '\',' + i + ',' + sizes.length + ')">' + sizes[i].name + (sizes[i].count !== undefined ? ' (' + sizes[i].count + ')' : '') + '</button>';
+	}
+	html += '</div>';
+	window._mtabsData = window._mtabsData || {};
+	let dataKey = tabId;
+	window._mtabsData[dataKey] = {sizes: [], perPage: perPage, cols: cols, cardW: cardW};
+	for (let i = 0; i < sizes.length; i++) {
+		let cards;
+		let isRaw = !!sizes[i].raw;
+		if (isRaw) {
+			cards = [sizes[i].html];
+		} else {
+			cards = sizes[i].cards || [];
+		}
+		window._mtabsData[dataKey].sizes.push({name: sizes[i].name, count: sizes[i].count, cards: cards, raw: isRaw});
+		let showPager = !isRaw && cards.length > perPage;
+		html += '<div class="mtab-content' + (i === 0 ? ' active' : '') + '" style="' + (i === 0 ? '' : 'display:none;') + '" data-tab-idx="' + i + '">';
+		if (isRaw) {
+			html += sizes[i].html;
+		} else {
+			html += '<div class="mtab-page-wrap" data-tab-idx="' + i + '">';
+			html += renderMtabPage(dataKey, i, 0);
+			html += '</div>';
+			if (showPager) {
+				let totalPages = Math.ceil(cards.length / perPage);
+				html += renderMtabPager(dataKey, i, 0, totalPages);
+			}
+		}
+		html += '</div>';
+	}
+	html += '</div>';
+	return html;
+
+renderMtabPage(dataKey, tabIdx, page) =>
+	let data = window._mtabsData[dataKey];
+	if (!data) return '';
+	let s = data.sizes[tabIdx];
+	if (!s) return '';
+	let perPage = data.perPage;
+	let start = page * perPage;
+	let end = Math.min(start + perPage, s.cards.length);
+	let cols = data.cols;
+	let cardW = data.cardW;
+	let gridCols = cols > 0 ? 'repeat(' + cols + ',minmax(' + cardW + 'px,1fr))' : 'repeat(auto-fit,minmax(' + cardW + 'px,1fr))';
+	let html = '<div style="padding:8px;display:grid;grid-template-columns:' + gridCols + ';gap:' + cardgap + 'px;justify-items:center;align-items:center;">';
+	for (let i = start; i < end; i++) html += s.cards[i];
+	html += '</div>';
+	return html;
+
+renderMtabPager(dataKey, tabIdx, page, totalPages) =>
+	let html = '<div class="mtab-pager" data-tab-idx="' + tabIdx + '">';
+	html += '<button class="mtab-page-btn" onclick="mtabPageChange(\'' + dataKey + '\',' + tabIdx + ',' + Math.max(0, page - 1) + ')"' + (page === 0 ? ' disabled' : '') + '>&#9664;</button>';
+	html += '<span class="mtab-page-info">Page ' + (page + 1) + ' / ' + totalPages + '</span>';
+	html += '<button class="mtab-page-btn" onclick="mtabPageChange(\'' + dataKey + '\',' + tabIdx + ',' + Math.min(totalPages - 1, page + 1) + ')"' + (page >= totalPages - 1 ? ' disabled' : '') + '>&#9654;</button>';
+	html += '</div>';
+	return html;
+precomputeCounts() =>
+	buildMonsterLookup();
+	if (islandtype === "Islet") {
+		let target = e1;
+		let monKeys = Object.keys(monsters).filter(function(k) { return k !== 'consumableList' && k !== '???' && typeof monsters[k] === 'object'; });
+		let altsFillOn = cbChecked("altsfill", false);
+		let total = 0, complete = 0;
+		for (let i = 0; i < monKeys.length; i++) {
+			let mon = monsters[monKeys[i]];
+			if (!mon || !mon.elements) continue;
+			let elems = mon.elements.consumableList.selectAll.map(function(e) { return e.evaluateItem; });
+			if (elems.length === 0 || elems.indexOf(target) === -1) continue;
+			total++;
+			if (mon.alt !== true || altsFillOn) complete++;
+		}
+		totalmonstercount = total;
+		completemonstercount = complete;
+		return '';
+	}
+	if (islandtype === "Outer Island") {
+		let monKeys = Object.keys(monsters).filter(function(k) { return k !== 'consumableList' && k !== '???' && typeof monsters[k] === 'object'; });
+		let pool = [];
+		for (let i = 0; i < monKeys.length; i++) {
+			let mon = monsters[monKeys[i]];
+			if (!mon || !mon.elements || mon.requires) continue;
+			let elems = mon.elements.consumableList.selectAll.map(function(e) { return e.evaluateItem; });
+			if (elems.length === 0) continue;
+			pool.push({isAlt: mon.alt === true});
+		}
+		let count = Math.max(1, Math.min(Number(monsteramount) || 10, pool.length));
+		totalmonstercount = count;
+		completemonstercount = pool.slice(0, count).filter(function(m) { return !m.isAlt; }).length;
+		return '';
+	}
+	prepareIslandData();
+	let d = window._islandData;
+	let n = d.n, total = d.total, popcnt = d.popcnt, maskKeys = d.maskKeys;
+	let lookup = d.lookup;
+	let tCount = 0, cCount = 0;
+	let islandMonsterNames = new Set();
+	let altsFillOn = cbChecked("altsfill", false);
+	for (let mask = 1; mask < total; mask++) {
+		let size = popcnt[mask];
+		if (!isComboSizeEnabled(size)) continue;
+		let data = lookup[maskKeys[mask]];
+		tCount++;
+		if (data && (!data.alt || altsFillOn)) {
+			cCount++;
+			islandMonsterNames.add(data.name);
+		}
+	}
+	let seasonalCb = document.getElementById('seasonal');
+	if (seasonalCb && seasonalCb.checked) {
+		let islandElemsSet = new Set([e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15].slice(0, n));
+		for (let s of (window.seasonalMonsters || [])) {
+			if (islandElemsSet.has(s.element)) {
+				tCount++; cCount++;
+			} else if (islandMonsterNames.has(s.requires[0]) && islandMonsterNames.has(s.requires[1])) {
+				tCount++; cCount++;
+			}
+		}
+	}
+	let legendaryCb = document.getElementById('legendary');
+	if (legendaryCb && legendaryCb.checked) {
+		for (let l of (window.legendaryMonsters || [])) {
+			if (l.requires) {
+				if (legendaryReqMet(l, islandMonsterNames)) {
+					tCount++; cCount++;
+				}
+			} else if (l.requireElement) {
+				if (legendaryReqMet(l, islandMonsterNames)) {
+					tCount++; cCount++;
+				}
+			} else {
+				tCount++; cCount++;
+			}
+		}
+		let werdosPool = (window.werdosMonsters || []).slice();
+		for (let i = werdosPool.length - 1; i > 0; i--) {
+			let j = Math.floor(Math.random() * (i + 1));
+			[werdosPool[i], werdosPool[j]] = [werdosPool[j], werdosPool[i]];
+		}
+		let selectedWerdos = werdosPool.slice(0, 2);
+		for (let w of selectedWerdos) {
+			tCount++; cCount++;
+		}
+	}
+	let mythicalCountCb = document.getElementById('mythical');
+	if (mythicalCountCb && mythicalCountCb.checked) {
+		let mythicalMatched = {};
+		let changed = true;
+		while (changed) {
+			changed = false;
+			for (let m of (window.mythicalMonsters || [])) {
+				if (mythicalMatched[m.name]) continue;
+				if (m.requires && islandMonsterNames.has(m.requires[0]) && islandMonsterNames.has(m.requires[1])) {
+					mythicalMatched[m.name] = true;
+					islandMonsterNames.add(m.name);
+					tCount++; cCount++;
+					changed = true;
+				}
+			}
+		}
+	}
+	totalmonstercount = tCount;
+	completemonstercount = cCount;
+	return '';
+
+generateIslandBoss() =>
+	buildMonsterLookup();
+	let n = Number(elementmax);
+	let islandElems = [e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15].slice(0, n).filter(function(v){return v;});
+	let islandSet = {};
+	for (let e of islandElems) islandSet[e] = true;
+	let monKeys = Object.keys(monsters).filter(function(k){ return k !== 'consumableList' && k !== '???' && typeof monsters[k] === 'object'; });
+	let boss = null;
+	let bossElemCount = 0;
+	for (let i = 0; i < monKeys.length; i++) {
+		let name = monKeys[i];
+		let mon = monsters[name];
+		if (!mon || !mon.elements) continue;
+		if (mon.requires) continue;
+		if (shouldHideMonster(mon)) continue;
+		let elems = mon.elements.consumableList.selectAll.map(function(e){ return e.evaluateItem; });
+		if (elems.length === 0) continue;
+		let allPresent = true;
+		for (let e of elems) { if (!islandSet[e]) { allPresent = false; break; } }
+		if (!allPresent) continue;
+		if (elems.length > bossElemCount) {
+			bossElemCount = elems.length;
+			boss = {name: name, mon: mon, elems: elems};
+		}
+	}
+	if (!boss) return '<p style="color:#aaa;text-align:center;">No boss monster found for this island.</p>';
+	let mysteryImg = "https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png";
+	let imgUrl = boss.mon.imageurl || mysteryImg;
+	let groupIcons = {"vocal":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Acapella_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","instrumental":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/b/bb/Pitched_Instrumental_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","percussion":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Percussion_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","???":"<span></span>","vocals":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Acapella_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">"};
+	let iconsHtml = '';
+	for (let e of boss.elems) {
+		let el = elements[e] || elements.Null;
+		let color = el.color.evaluateItem;
+		iconsHtml += "<span class='elem-tip' style='position:relative;display:inline-block;margin:2px;'>" + el.icon.evaluateItem + "<span class='elem-tip-label' style='background:" + color + ";color:" + (isLightColor(color) ? "#1a0f2a" : "#fff") + ";border-color:" + color + ";'>" + e + "</span></span>";
+	}
+	let groupIcon = groupIcons[boss.mon.group] || groupIcons["???"];
+	let showOwner = cbChecked("showowner", true);
+	let showGroup = cbChecked("showgroupicon", true);
+	let showElems = cbChecked("showelemicons", true);
+	let html = '<div style="display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;padding:10px;">';
+	html += '<img src="' + imgUrl + '" style="height:' + bosssize + 'px;border-radius:15px;border:4px solid #FFD700;box-shadow:0 0 12px rgba(255,215,0,0.4);" loading="lazy">';
+	html += '<div style="text-align:center;">';
+	html += '<div style="font-size:14px;color:#aaa;">👑 Island Boss</div>';
+	html += '<div style="font-size:26px;color:#FFD700;font-weight:bold;">' + boss.name + '</div>';
+	if (showOwner) html += '<div style="font-size:13px;color:#ccc;">by ' + (boss.mon.owner || '???') + '</div>';
+	if (showElems) html += '<div style="margin-top:6px;">' + iconsHtml + '</div>';
+	if (showGroup) html += '<div style="margin-top:4px;">' + groupIcon + '</div>';
+	html += '<div style="font-size:13px;color:#5ED317;margin-top:4px;">' + bossElemCount + ' elements</div>';
+	html += '</div>';
+	html += '</div>';
+	return html;
+
+generateMonsterList() =>
+	buildMonsterLookup();
+	completemonstercount = 0;
+	totalmonstercount = 0;
+	if (islandtype === "Islet") return generateIsletList();
+	if (islandtype === "Outer Island") return generateOuterIslandList();
+	prepareIslandData();
+	let d = window._islandData;
+	let n = d.n, total = d.total, popcnt = d.popcnt, maskKeys = d.maskKeys, getMaskIcons = d.getMaskIcons;
+	let lookup = d.lookup;
+	let mysteryImg = "https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png";
+	let mysteryData = {name:"???", imageurl:mysteryImg, owner:"???", group:"???", alt:false};
+	let groupIcons = {"vocal":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Acapella_%28Composer_Type%29.png\" height=" + iconsize + "px>","instrumental":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/b/bb/Pitched_Instrumental_%28Composer_Type%29.png\" height=" + iconsize + "px>","percussion":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Percussion_%28Composer_Type%29.png\" height=" + iconsize + "px>","???":"<span></span>"};
+	let sizeNames = ["","Singles","Doubles","Triples","Quads","Quintuples","Sextuples","Septuples","Octuples","Nonuples","Decuples","Undecuples","Duodecuples","Tredecuples","Quattuordecuples","Quindecuples"];
+	let hideMissing = cbChecked("hidemissing", false) || n > 9;
+	let sizeCounts = {};
+	let missingCards = [];
+	let missingCount = 0;
+	let islandMonsterNames = new Set();
+	let showOwner = cbChecked("showowner", true);
+	let showGroup = cbChecked("showgroupicon", true);
+	let showElems = cbChecked("showelemicons", true);
+	let sizeParts = {};
+	for (let mask = 1; mask < total; mask++) {
+		let size = popcnt[mask];
+		if (!isComboSizeEnabled(size)) continue;
+		let key = maskKeys[mask];
+		let altsFillOn = cbChecked("altsfill", false);
+		let data = lookup[key];
+		let isMissing = !data || (data.alt && !altsFillOn);
+		if (!data || (data.alt && !altsFillOn)) data = mysteryData;
+		totalmonstercount += 1;
+		if (!isMissing) {
+			sizeCounts[size] = (sizeCounts[size] || 0) + 1;
+			completemonstercount += 1;
+			islandMonsterNames.add(data.name);
+		}
+		if (isMissing) {
+			missingCount++;
+			if (hideMissing) continue;
+		}
+		let cardParts = [];
+		cardParts.push('<div class="mcard' + (isMissing ? ' mcard-missing' : '') + '" style="height:' + (layoutsize*1.75) + 'px;width:' + (layoutsize*1.25) + 'px;border-radius:' + cardradius + 'px;">');
+		cardParts.push('<div class="mcard-header"><span class="mcard-name">' + data.name + '</span>' + (showOwner ? '<span class="mcard-owner">by ' + data.owner + '</span>' : '') + '</div>');
+		if (data.minorurl) {
+			cardParts.push(paironormalImageHtml(data.imageurl, data.minorurl, imagesize));
+		} else {
+			cardParts.push('<div class="mcard-img"><img src="' + data.imageurl + '" height="' + imagesize + '" loading="lazy"></div>');
+		}
+		cardParts.push('<div class="mcard-elems">' + (showElems ? getMaskIcons(mask) : '') + '</div>');
+		cardParts.push('<div class="mcard-group">' + (showGroup ? groupIcons[data.group] : '') + '</div>');
+		cardParts.push('</div>');
+		if (isMissing) missingCards.push(cardParts.join(''));
+		else {
+			if (!sizeParts[size]) sizeParts[size] = [];
+			sizeParts[size].push(cardParts.join(''));
+		}
+	}
+	let html = "";
+	let sizes = [];
+	for (let size = 1; size <= n; size++) {
+		if (!sizeParts[size] || sizeCounts[size] === 0) continue;
+		sizes.push({name: sizeNames[size], count: sizeCounts[size], cards: sizeParts[size]});
+	}
+	if (missingCards.length && !hideMissing) {
+		sizes.push({name: "Missing", count: missingCards.length, cards: missingCards});
+	}
+	let seasonalCb = document.getElementById('seasonal');
+	if (seasonalCb && seasonalCb.checked) {
+		let islandElemsSet = new Set([e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15].slice(0, Number(elementmax)).filter(function(v){return v;}));
+		let seasonalParts = [];
+		for (let s of (window.seasonalMonsters || [])) {
+			if (islandElemsSet.has(s.element)) continue;
+			if (islandMonsterNames.has(s.requires[0]) && islandMonsterNames.has(s.requires[1])) {
+				seasonalParts.push(renderMonsterCard(s.name, monsters[s.name], [s.element]));
+				completemonstercount += 1;
+				totalmonstercount += 1;
+			}
+		}
+		if (seasonalParts.length) {
+			sizes.push({name: "Seasonals", count: seasonalParts.length, cards: seasonalParts});
+		}
+	}
+	let legendaryCb = document.getElementById('legendary');
+	if (legendaryCb && legendaryCb.checked) {
+		let legendaryParts = [];
+		for (let l of (window.legendaryMonsters || [])) {
+			if (l.requires) {
+				if (legendaryReqMet(l, islandMonsterNames)) {
+					legendaryParts.push(renderMonsterCard(l.name, monsters[l.name], [l.element]));
+					completemonstercount += 1;
+					totalmonstercount += 1;
+				}
+			} else if (l.requireElement) {
+				if (legendaryReqMet(l, islandMonsterNames)) {
+					legendaryParts.push(renderMonsterCard(l.name, monsters[l.name], [l.element]));
+					completemonstercount += 1;
+					totalmonstercount += 1;
+				}
+			} else {
+				legendaryParts.push(renderMonsterCard(l.name, monsters[l.name], [l.element]));
+				completemonstercount += 1;
+				totalmonstercount += 1;
+			}
+		}
+		if (legendaryParts.length) {
+			sizes.push({name: "Legendaries", count: legendaryParts.length, cards: legendaryParts});
+		}
+		let werdosPool = (window.werdosMonsters || []).slice();
+		for (let i = werdosPool.length - 1; i > 0; i--) {
+			let j = Math.floor(Math.random() * (i + 1));
+			[werdosPool[i], werdosPool[j]] = [werdosPool[j], werdosPool[i]];
+		}
+		let selectedWerdos = werdosPool.slice(0, 2);
+		let werdosParts = [];
+		for (let w of selectedWerdos) {
+			werdosParts.push(renderMonsterCard(w.name, monsters[w.name], [w.element]));
+			completemonstercount += 1;
+			totalmonstercount += 1;
+		}
+		if (werdosParts.length) {
+			sizes.push({name: "Werdos", count: werdosParts.length, cards: werdosParts});
+		}
+	}
+	let mythicalCb = document.getElementById('mythical');
+	if (mythicalCb && mythicalCb.checked) {
+		let mythicalParts = [];
+		let mythicalMatched = {};
+		let changed = true;
+		while (changed) {
+			changed = false;
+			for (let m of (window.mythicalMonsters || [])) {
+				if (mythicalMatched[m.name]) continue;
+				if (m.requires && islandMonsterNames.has(m.requires[0]) && islandMonsterNames.has(m.requires[1])) {
+					mythicalMatched[m.name] = true;
+					islandMonsterNames.add(m.name);
+					mythicalParts.push(renderMonsterCard(m.name, monsters[m.name], m.elements));
+					completemonstercount += 1;
+					totalmonstercount += 1;
+					changed = true;
+				}
+			}
+		}
+		if (mythicalParts.length) {
+			sizes.push({name: "Mythicals", count: mythicalParts.length, cards: mythicalParts});
+		}
+	}
+	if (showalts.checked) {
+		let altsHtml = generateAltsInner();
+		if (altsHtml) sizes.push({name: "Alternatives", html: altsHtml, raw: true});
+	}
+	return buildSizeTabs(sizes);
+generateIsletList() =>
+	buildMonsterLookup();
+	let target = e1;
+	let monKeys = Object.keys(monsters).filter(function(k) { return k !== 'consumableList' && k !== '???' && typeof monsters[k] === 'object'; });
+	let matches = [];
+	let altMatches = [];
+	for (let i = 0; i < monKeys.length; i++) {
+		let name = monKeys[i];
+		let mon = monsters[name];
+		if (!mon || !mon.elements) continue;
+		let elems = mon.elements.consumableList.selectAll.map(function(e) { return e.evaluateItem; });
+		if (elems.length === 0) continue;
+		if (elems.indexOf(target) === -1) continue;
+		let entry = {name: name, elems: elems, isAlt: mon.alt === true, mon: mon};
+		if (mon.alt === true) altMatches.push(entry);
+		else matches.push(entry);
+	}
+	matches.sort(function(a, b) { if (a.elems.length !== b.elems.length) return a.elems.length - b.elems.length; return a.name.localeCompare(b.name); });
+	let altsFillOn = cbChecked("altsfill", false);
+	let fillAlts = altsFillOn ? altMatches : [];
+	totalmonstercount = matches.length + altMatches.length;
+	completemonstercount = matches.length + fillAlts.length;
+	let sizeNames = ["","Singles","Doubles","Triples","Quads","Quintuples","Sextuples","Septuples","Octuples","Nonuples","Decuples","Undecuples","Duodecuples","Tredecuples","Quattuordecuples","Quindecuples"];
+	let sizeGroups = {};
+	for (let m of matches) {
+		let s = m.elems.length;
+		if (!sizeGroups[s]) sizeGroups[s] = [];
+		sizeGroups[s].push(m);
+	}
+	for (let m of fillAlts) {
+		let s = m.elems.length;
+		if (!sizeGroups[s]) sizeGroups[s] = [];
+		sizeGroups[s].push(m);
+	}
+	let html = "";
+	let sizes = [];
+	for (let s in sizeGroups) {
+		let grp = sizeGroups[s];
+		let cards = [];
+		for (let m of grp) cards.push(renderMonsterCard(m.name, m.mon, m.elems));
+		sizes.push({name: sizeNames[s] || (s + "-element"), count: grp.length, cards: cards});
+	}
+	if (showalts.checked && altMatches.length > 0 && !altsFillOn) {
+		let altsHtml = generateIsletAltsInner(altMatches);
+		if (altsHtml) sizes.push({name: "Alternatives", html: altsHtml, raw: true});
+	}
+	if (sizes.length === 0) return '<p style="color:#aaa;text-align:center;">No monsters found with the ' + target + ' element.</p>';
+	return buildSizeTabs(sizes);
+
+generateIsletAltsInner(altMatches) =>
+	let groupIcons = {"vocal":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Acapella_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","instrumental":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/b/bb/Pitched_Instrumental_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","percussion":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Percussion_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","???":"<span></span>","vocals":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Acapella_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">"};
+	let cardStyle = "box-sizing:border-box;border:4px solid #B94F2D;border-radius:14px;background:radial-gradient(circle at 50% 30%, #5a3a7d 0%, #2a1540 60%, #0a0510 100%);padding:8px;text-align:center;color:white;display:flex;flex-direction:column;align-items:center;gap:4px;transition:transform 0.25s,box-shadow 0.25s,border-color 0.25s;";
+	let imgStyle = "height:" + (imagesize * 0.7) + "px;border-radius:10px;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.5));";
+	let nameStyle = "font-size:14px;font-weight:bold;color:#FFD700;";
+	let smallStyle = "font-size:11px;color:#aaa;";
+	let altsByCombo = {};
+	for (let m of altMatches) {
+		let comboKey = m.elems.slice().sort(function(a,b){ return (elements[a]||elements.Null).id - (elements[b]||elements.Null).id; }).join(',');
+		if (!altsByCombo[comboKey]) {
+			let icons = '';
+			for (let e of m.elems) {
+				if (elements[e] && elements[e].icon) icons += elements[e].icon.evaluateItem;
+			}
+			altsByCombo[comboKey] = { monsters: [], icons: icons, size: m.elems.length };
+		}
+		altsByCombo[comboKey].monsters.push({name: m.name, imageurl: m.mon.imageurl || 'https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png', group: m.mon.group || '???'});
+	}
+	let comboOrder = Object.keys(altsByCombo).sort(function(a,b) {
+		let sa = altsByCombo[a].size, sb = altsByCombo[b].size;
+		if (sa !== sb) return sa - sb;
+		return a.localeCompare(b);
+	});
+	let html = "";
+	if (comboOrder.length === 0) return '';
+	html += '<div style="padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;">';
+	for (let key of comboOrder) {
+		let group = altsByCombo[key];
+		html += '<div style="border:4px solid #B94F2D;border-radius:20px;background:linear-gradient(180deg, rgba(65,41,93,0.4), rgba(26,15,42,0.3));padding:10px;">';
+		html += '<div style="font-size:12px;color:#aaa;margin-bottom:8px;">' + group.icons + '</div>';
+		html += '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">';
+		for (let m of group.monsters) {
+			html += '<div style="' + cardStyle + '">';
+			html += '<img src="' + m.imageurl + '" style="' + imgStyle + '" loading="lazy">';
+			html += '<div style="' + nameStyle + '">' + m.name + '</div>';
+			html += '<div style="' + smallStyle + '">' + (groupIcons[m.group] || "") + '</div>';
+			html += '</div>';
+		}
+		html += '</div>';
+		html += '</div>';
+	}
+	html += '</div>';
+	return html;
+
+generateOuterIslandList() =>
+	buildMonsterLookup();
+	let monKeys = Object.keys(monsters).filter(function(k) { return k !== 'consumableList' && k !== '???' && typeof monsters[k] === 'object'; });
+	let pool = [];
+	for (let i = 0; i < monKeys.length; i++) {
+		let name = monKeys[i];
+		let mon = monsters[name];
+		if (!mon || !mon.elements) continue;
+		if (mon.requires) continue;
+		if (shouldHideMonster(mon)) continue;
+		let elems = mon.elements.consumableList.selectAll.map(function(e) { return e.evaluateItem; });
+		if (elems.length === 0) continue;
+		pool.push({name: name, elems: elems, isAlt: mon.alt === true, mon: mon});
+	}
+	let count = Math.max(1, Math.min(Number(monsteramount) || 10, pool.length));
+	for (let i = pool.length - 1; i > 0; i--) {
+		let j = Math.floor(Math.random() * (i + 1));
+		let tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+	}
+	let selected = pool.slice(0, count);
+	totalmonstercount = selected.length;
+	completemonstercount = selected.filter(function(m) { return !m.isAlt; }).length;
+	let sizes = [];
+	let mainCards = [];
+	for (let m of selected) mainCards.push(renderMonsterCard(m.name, m.mon, m.elems));
+	sizes.push({name: "Monsters", count: selected.length, cards: mainCards});
+	let seasonalCb = document.getElementById('seasonal');
+	if (seasonalCb && seasonalCb.checked) {
+		let islandNames = new Set(selected.map(function(m) { return m.name; }));
+		let seasonalParts = [];
+		for (let s of (window.seasonalMonsters || [])) {
+			if (islandNames.has(s.requires[0]) && islandNames.has(s.requires[1])) {
+				seasonalParts.push(renderMonsterCard(s.name, monsters[s.name], [s.element]));
+				completemonstercount += 1;
+				totalmonstercount += 1;
+			}
+		}
+		if (seasonalParts.length) sizes.push({name: "Seasonals", count: seasonalParts.length, cards: seasonalParts});
+	}
+	return buildSizeTabs(sizes);
+
+paironormalImageHtml(majorUrl, minorUrl, sz) =>
+	let imgId = 'pimg_' + Math.random().toString(36).slice(2, 10);
+	let html = '<div class="mcard-img" style="flex-direction:column;gap:4px;">';
+	html += '<img id="' + imgId + '" src="' + majorUrl + '" height="' + sz + '" loading="lazy" data-major="' + majorUrl + '" data-minor="' + minorUrl + '">';
+	html += '<div class="ptab-bar">';
+	html += '<button class="ptab-btn active" onclick="paironormalFormSwitch(\'' + imgId + '\',this,\'major\')">Major</button>';
+	html += '<button class="ptab-btn" onclick="paironormalFormSwitch(\'' + imgId + '\',this,\'minor\')">Minor</button>';
+	html += '</div>';
+	html += '</div>';
+	return html;
+
+renderMonsterCard(name, mon, elems) =>
+	let mysteryImg = "https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png";
+	let groupIcons = {"vocal":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Acapella_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","instrumental":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/b/bb/Pitched_Instrumental_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","percussion":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Percussion_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","???":"<span></span>","vocals":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Acapella_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">"};
+	let imgUrl = mon.imageurl || mysteryImg;
+	let owner = mon.owner || "???";
+	let group = mon.group || "???";
+	let icons = "";
+	for (let e of elems) {
+		if (elements[e] && elements[e].icon) icons += elements[e].icon.evaluateItem;
+	}
+	let showOwner = cbChecked("showowner", true);
+	let showGroup = cbChecked("showgroupicon", true);
+	let showElems = cbChecked("showelemicons", true);
+	let isMissing = (name === "???" || !mon.imageurl);
+	let html = '<div class="mcard' + (isMissing ? ' mcard-missing' : '') + '" style="height:' + (layoutsize*1.75) + 'px;width:' + (layoutsize*1.25) + 'px;border-radius:' + cardradius + 'px;">';
+	html += '<div class="mcard-header"><span class="mcard-name">' + name + '</span>' + (showOwner ? '<span class="mcard-owner">by ' + owner + '</span>' : '') + '</div>';
+	if (mon.minorurl) {
+		html += paironormalImageHtml(imgUrl, mon.minorurl, imagesize);
+	} else {
+		html += '<div class="mcard-img"><img src="' + imgUrl + '" height="' + imagesize + '" loading="lazy"></div>';
+	}
+	html += '<div class="mcard-elems">' + (showElems ? icons : '') + '</div>';
+	html += '<div class="mcard-group">' + (showGroup ? (groupIcons[group] || "") : '') + '</div>';
+	html += '</div>';
+	return html;
+
+generateAltsInner() =>
+	if (islandtype !== "Island") return '';
+	prepareIslandData();
+	let d = window._islandData;
+	let n = d.n, total = d.total, popcnt = d.popcnt, maskKeys = d.maskKeys, getMaskIcons = d.getMaskIcons;
+	let lookup = d.lookup;
+	let groupIcons = {"vocal":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Acapella_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","instrumental":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/b/bb/Pitched_Instrumental_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","percussion":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Percussion_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">","???":"<span></span>","vocals":"<img src=\"https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Acapella_%28Composer_Type%29.png\" height=\"" + iconsize + "px\">"};
+	let cardStyle = "box-sizing:border-box;border:4px solid #B94F2D;border-radius:14px;background:radial-gradient(circle at 50% 30%, #5a3a7d 0%, #2a1540 60%, #0a0510 100%);padding:8px;text-align:center;color:white;display:flex;flex-direction:column;align-items:center;gap:4px;transition:transform 0.25s,box-shadow 0.25s,border-color 0.25s;";
+	let imgStyle = "height:" + (imagesize * 0.7) + "px;border-radius:10px;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.5));";
+	let nameStyle = "font-size:14px;font-weight:bold;color:#FFD700;";
+	let smallStyle = "font-size:11px;color:#aaa;";
+	let altsByCombo = {};
+	for (let mask = 1; mask < total; mask++) {
+		let size = popcnt[mask];
+		if (!isComboSizeEnabled(size)) continue;
+		let comboKey = maskKeys[mask];
+		let altsList = lookup[comboKey + '__alts'];
+		let baseData = lookup[comboKey];
+		if (!altsList || altsList.length === 0) continue;
+		let altsFillOn = cbChecked("altsfill", false);
+		if (altsFillOn && (!baseData || baseData.alt)) continue;
+		let allMonsters = [];
+		if (baseData && !baseData.alt) allMonsters.push(baseData);
+		for (let a of altsList) allMonsters.push(a);
+		if (allMonsters.length < 1) continue;
+		altsByCombo[comboKey] = { monsters: allMonsters, icons: getMaskIcons(mask), size: size };
+	}
+	let comboOrder = [];
+	for (let mask = 1; mask < total; mask++) {
+		let sz = popcnt[mask];
+		if (!isComboSizeEnabled(sz)) continue;
+		let comboKey = maskKeys[mask];
+		if (altsByCombo[comboKey]) comboOrder.push(comboKey);
+	}
+	let html = "";
+	if (comboOrder.length === 0) return '';
+	html += '<div style="padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;">';
+	for (let key of comboOrder) {
+		let group = altsByCombo[key];
+		html += '<div style="border:4px solid #B94F2D;border-radius:20px;background:linear-gradient(180deg, rgba(65,41,93,0.4), rgba(26,15,42,0.3));padding:10px;">';
+		html += '<div style="font-size:12px;color:#aaa;margin-bottom:8px;">' + group.icons + '</div>';
+		html += '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">';
+		for (let m of group.monsters) {
+			html += '<div style="' + cardStyle + '">';
+			html += '<img src="' + m.imageurl + '" style="' + imgStyle + '" loading="lazy">';
+			html += '<div style="' + nameStyle + '">' + m.name + '</div>';
+			html += '<div style="' + smallStyle + '">' + groupIcons[m.group] + '</div>';
+			html += '</div>';
+		}
+		html += '</div>';
+		html += '</div>';
+	}
+	html += '</div>';
+	return html;
+generateBreedingTree() =>
+	if (islandtype !== "Island") return '<p style="color:#aaa;text-align:center;">Breeding combinations are only available for Island type.</p>';
+	prepareIslandData();
+	let d = window._islandData;
+	let n = d.n, total = d.total, popcnt = d.popcnt, maskKeys = d.maskKeys, getMaskIcons = d.getMaskIcons;
+	let lookup = d.lookup;
+	let mysteryImg = "https://static.wikia.nocookie.net/mysingingmonsters/images/3/31/Mystery_Like.png";
+	let mysteryData = {name:"???", imageurl:mysteryImg};
+	let nodes = [];
+	let nameToId = {};
+	let maxLevel = 0;
+	let maxBreedSize = n <= 7 ? n : (n <= 10 ? 5 : 4);
+	for (let mask = 1; mask < total; mask++) {
+		let size = popcnt[mask];
+		if (size > maxBreedSize) continue;
+		if (!isComboSizeEnabled(size)) continue;
+		let childKey = maskKeys[mask];
+		let rawEntry = lookup[childKey];
+		let altsFillOn = cbChecked("altsfill", false);
+		let isMissing = !rawEntry || (rawEntry.alt && !altsFillOn);
+		let childData = rawEntry || mysteryData;
+		if (childData.alt && !altsFillOn) childData = mysteryData;
+		let id = "m_" + mask;
+		let node = {id: id, mask: mask, name: childData.name, imageurl: childData.imageurl, icons: getMaskIcons(mask), size: size, level: size - 1, parents: [], kind: "regular", missing: isMissing};
+		nodes.push(node);
+		if (childData.name && childData.name !== "???" && !isMissing) nameToId[childData.name] = id;
+		if (size >= 2 && size <= maxBreedSize) {
+			for (let sub = (mask - 1) & mask; sub > 0; sub = (sub - 1) & mask) {
+				let comp = mask ^ sub;
+				if (sub >= comp) continue;
+				node.parents.push(["m_" + sub, "m_" + comp]);
+			}
+		}
+		if (node.level > maxLevel) maxLevel = node.level;
+	}
+	let seasonalCb = document.getElementById("seasonal");
+	let hasSeasonal = false;
+	if (seasonalCb && seasonalCb.checked) {
+		let islandElemsSet = new Set([e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15].slice(0, Number(elementmax)).filter(function(v){return v;}));
+		let islandNames = new Set();
+		for (let nd of nodes) if (nd.name && nd.name !== "???") islandNames.add(nd.name);
+		for (let s of (window.seasonalMonsters || [])) {
+			if (islandElemsSet.has(s.element)) continue;
+			if (!islandNames.has(s.requires[0]) || !islandNames.has(s.requires[1])) continue;
+			let sIcon = (elements[s.element] || elements.Null).icon.evaluateItem;
+			let id = "s_" + s.name.replace(/\s+/g, "_");
+			let p1 = nameToId[s.requires[0]], p2 = nameToId[s.requires[1]];
+			nodes.push({id: id, name: s.name, imageurl: s.imageurl, icons: sIcon, size: 0, level: maxLevel + 1, parents: [[p1, p2]], kind: "seasonal", missing: false});
+			nameToId[s.name] = id;
+			hasSeasonal = true;
+		}
+	}
+	if (hasSeasonal) maxLevel++;
+	let legendaryCb = document.getElementById("legendary");
+	let hasLegendary = false;
+	if (legendaryCb && legendaryCb.checked) {
+		let islandNames = new Set();
+		for (let nd of nodes) if (nd.name && nd.name !== "???") islandNames.add(nd.name);
+		for (let l of (window.legendaryMonsters || [])) {
+			if (!l.requires) continue;
+			if (!legendaryReqMet(l, islandNames)) continue;
+			let lIcon = (elements[l.element] || elements.Null).icon.evaluateItem;
+			let id = "l_" + l.name.replace(/\s+/g, "_");
+			let p1 = nameToId[l.requires[0]], p2 = nameToId[l.requires[1]];
+			nodes.push({id: id, name: l.name, imageurl: l.imageurl, icons: lIcon, size: 0, level: maxLevel + 1, parents: [[p1, p2]], kind: "legendary", missing: false});
+			nameToId[l.name] = id;
+			hasLegendary = true;
+		}
+	}
+	if (hasLegendary) maxLevel++;
+	let mythicalCb = document.getElementById("mythical");
+	let hasMythical = false;
+	if (mythicalCb && mythicalCb.checked) {
+		let islandNames = new Set();
+		for (let nd of nodes) if (nd.name && nd.name !== "???") islandNames.add(nd.name);
+		let mythicalMatched = {};
+		let changed = true;
+		while (changed) {
+			changed = false;
+			for (let m of (window.mythicalMonsters || [])) {
+				if (mythicalMatched[m.name]) continue;
+				if (!m.requires) continue;
+				if (!islandNames.has(m.requires[0]) || !islandNames.has(m.requires[1])) continue;
+				mythicalMatched[m.name] = true;
+				islandNames.add(m.name);
+				let mIcon = m.elements.map(function(e) { return (elements[e] || elements.Null).icon.evaluateItem; }).join(' ');
+				let id = "my_" + m.name.replace(/\s+/g, "_");
+				let p1 = nameToId[m.requires[0]], p2 = nameToId[m.requires[1]];
+				nodes.push({id: id, name: m.name, imageurl: m.imageurl, icons: mIcon, size: 0, level: maxLevel + 1, parents: [[p1, p2]], kind: "mythical", missing: false});
+				nameToId[m.name] = id;
+				hasMythical = true;
+				changed = true;
+			}
+		}
+	}
+	if (hasMythical) maxLevel++;
+	let nodeMap = {};
+	for (let nd of nodes) nodeMap[nd.id] = nd;
+	let imgSize = Math.max(36, Math.round(imagesize * 0.5));
+	let borderFor = function(nd) {
+		if (nd.kind === "legendary") return "#FFD700";
+		if (nd.kind === "mythical") return "#D04FFF";
+		if (nd.kind === "seasonal") return "#5ED317";
+		return "#B94F2D";
+	};
+	let cellHtml = function(nd, sizeOverride) {
+		let sz = sizeOverride || imgSize;
+		let border = borderFor(nd);
+		let missingCls = nd.missing ? " btable-missing" : "";
+		return '<span class="btable-cell' + missingCls + '" style="position:relative;display:inline-block;vertical-align:middle;">' +
+			'<img src="' + nd.imageurl + '" style="width:' + sz + 'px;height:' + sz + 'px;object-fit:contain;border-radius:8px;border:3px solid ' + border + ';background:rgba(0,0,0,0.4);cursor:pointer;" loading="lazy">' +
+			'<span class="btable-tip" style="position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:6px;background:#1a0f2a;border:2px solid ' + border + ';border-radius:8px;padding:6px 10px;white-space:nowrap;z-index:30;pointer-events:none;text-align:center;">' +
+				'<span style="display:block;font-size:13px;font-weight:bold;color:white;">' + nd.name + '</span>' +
+				'<span style="display:block;font-size:16px;line-height:1;margin-top:2px;">' + nd.icons + '</span>' +
+			'</span>' +
+		'</span>';
+	};
+	let comboHtml = function(nd, p1, p2, smallImg) {
+		let sz = smallImg ? Math.round(imgSize * 0.8) : imgSize;
+		return '<div class="btable-combo">' + cellHtml(p1, sz) +
+			'<span class="btable-op">+</span>' + cellHtml(p2, sz) +
+			'<span class="btable-arrow">&rarr;</span>' + cellHtml(nd, sz) +
+		'</div>';
+	};
+	let grouped = [];
+	let seenResult = {};
+	for (let nd of nodes) {
+		if (!nd.parents || nd.parents.length === 0) continue;
+		if (seenResult[nd.id]) continue;
+		if (nd.missing) continue;
+		seenResult[nd.id] = true;
+		let combos = [];
+		for (let pair of nd.parents) {
+			let p1 = nodeMap[pair[0]], p2 = nodeMap[pair[1]];
+			if (!p1 || !p2) continue;
+			combos.push([p1, p2]);
+		}
+		if (combos.length === 0) continue;
+		grouped.push({nd: nd, combos: combos});
+	}
+	let rows = '';
+	let rowCt = 0;
+	let maxRows = 300;
+	let truncated = 0;
+	window._btableCombos = [];
+	window._btableImgSize = imgSize;
+	for (let g of grouped) {
+		if (rowCt >= maxRows) { truncated++; continue; }
+		rowCt++;
+		let border = borderFor(g.nd);
+		let resultCell = '<td class="btable-result" style="text-align:center;padding:10px;border-right:2px solid rgba(185,79,45,0.4);">' + cellHtml(g.nd) + '</td>';
+		let comboCell;
+		if (g.combos.length === 1) {
+			let c = g.combos[0];
+			comboCell = '<td style="padding:10px;">' + comboHtml(g.nd, c[0], c[1]) + '</td>';
+		} else {
+			let first = g.combos[0];
+			let serNode = function(nd) { return {n: nd.name, i: nd.imageurl, e: nd.icons, k: nd.kind, m: nd.missing}; };
+			let comboData = [];
+			for (let i = 1; i < g.combos.length; i++) {
+				let c = g.combos[i];
+				comboData.push({s: serNode(g.nd), a: serNode(c[0]), b: serNode(c[1])});
+			}
+			let comboIdx = window._btableCombos.length;
+			window._btableCombos.push(comboData);
+			comboCell = '<td style="padding:10px;">' +
+				'<details class="btable-details" data-combo-idx="' + comboIdx + '" ontoggle="renderBtableCombo(this)">' +
+					'<summary class="btable-summary">' +
+						'<span class="btable-count">' + g.combos.length + ' combinations</span>' +
+						comboHtml(g.nd, first[0], first[1], true) +
+					'</summary>' +
+					'<div class="btable-extra"></div>' +
+				'</details>' +
+			'</td>';
+		}
+		rows += '<tr class="btable-row">' + resultCell + comboCell + '</tr>';
+	}
+	if (truncated) rows += '<tr><td colspan="2" class="btable-empty">...and ' + truncated + ' more results (capped at ' + maxRows + ' for performance)</td></tr>';
+	if (!rows) rows = '<tr><td colspan="2" class="btable-empty">No breeding combinations available.</td></tr>';
+	let html = '<div class="btable-scroll" style="overflow:auto;max-width:100%;">' +
+		'<table class="btable" style="border-collapse:collapse;margin:0 auto;width:100%;max-width:720px;">' +
+			'<thead><tr>' +
+				'<th class="btable-th" style="width:34%;">Result</th>' +
+				'<th class="btable-th">Combination</th>' +
+			'</tr></thead>' +
+			'<tbody>' + rows + '</tbody>' +
+		'</table></div>';
+	return html;
+monsterlist
+  [generateMonsterList()]
+groupicon
+  [image("https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Acapella_%28Composer_Type%29.png", iconsize, iconsize)]^[monsters[mon].group == "vocal"]
+  [image("https://static.wikia.nocookie.net/mysingingmonsters/images/b/bb/Pitched_Instrumental_%28Composer_Type%29.png", iconsize, iconsize)]^[monsters[mon].group == "instrumental"]
+  [image("https://static.wikia.nocookie.net/mysingingmonsters/images/9/96/Percussion_%28Composer_Type%29.png", iconsize, iconsize)]^[monsters[mon].group == "percussion"]
+  <span></span>^[monsters[mon].group == "???"]
+monsterlayout
+  container
+		style = height:[layoutsize*1.75]px;width:[layoutsize*1.25]px;border: 5px solid #B94F2D;border-radius:28px;background: radial-gradient(circle at 50% 30%, #5a3a7d 0%, #2a1540 60%, #0a0510 100%);
+  grid
+    a a
+    b b
+    c c
+    d d
+  areas
+    a
+      content = [mon = monsters] <br> <small> by [monsters[mon].owner] </small>
+      style = border-bottom: 3px solid #B94F2D;background: linear-gradient(180deg, rgba(185,79,45,0.25), rgba(65,41,93,0.4));padding:10px 8px;text-align:center;color:white;
+    b
+      content = <img src = "[monsters[mon].imageurl]" height = [imagesize]>
+      style = display:flex;align-items:center;justify-content:center;padding:8px;
+    c
+      content=[elementicons]
+      style = border-top: 2px solid rgba(185,79,45,0.3);background: rgba(0,0,0,0.25);padding:6px 8px;
+    d
+      content = [groupicon]
+      style = border-top: 2px solid rgba(185,79,45,0.3);background: linear-gradient(180deg, rgba(0,0,0,0.15), rgba(0,0,0,0.4));padding:6px 8px;
+
+
+
+
+reindex
+  [e1]^[elementmax >= 1 && isRegularElement(e1)]
+  [e2]^[elementmax >= 2 && isRegularElement(e2)]
+  [e3]^[elementmax >= 3 && isRegularElement(e3)]
+  [e4]^[elementmax >= 4 && isRegularElement(e4)]
+  [e5]^[elementmax >= 5 && isRegularElement(e5)]
+  [e6]^[elementmax >= 6 && isRegularElement(e6)]
+  [e7]^[elementmax >= 7 && isRegularElement(e7)]
+  [e8]^[elementmax >= 8 && isRegularElement(e8)]
+  [e9]^[elementmax >= 9 && isRegularElement(e9)]
+  [e10]^[elementmax >= 10 && isRegularElement(e10)]
+  [e11]^[elementmax >= 11 && isRegularElement(e11)]
+  [e12]^[elementmax >= 12 && isRegularElement(e12)]
+  [e13]^[elementmax >= 13 && isRegularElement(e13)]
+  [e14]^[elementmax >= 14 && isRegularElement(e14)]
+  [e15]^[elementmax >= 15 && isRegularElement(e15)]
+
+hasElem(e) =>
+	let elems = [e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15];
+	for (let i = 0; i < elems.length; i++) { if (elems[i] === e) return true; }
+	return false;
+
+isRegularElement(e) =>
+	let el = elements[e];
+	if (!el || !el.class) return false;
+	let cls = el.class.evaluateItem;
+	return cls === "natural" || cls === "magical" || cls === "ethereal" || cls === "paironormal";
+
+hasBoth(a, b) =>
+	return hasElem(a) && hasElem(b);
+
+isLightColor(hex) =>
+	let h = String(hex).replace('#', '');
+	if (h.length !== 6) return false;
+	let r = parseInt(h.slice(0,2), 16), g = parseInt(h.slice(2,4), 16), b = parseInt(h.slice(4,6), 16);
+	return (r*0.299 + g*0.587 + b*0.114) > 170;
+
+
+biome
+  Abyss^[hasElem("Shadow")]
+  Altiplano^[hasElem("Earth")]
+  Anchialine^[hasElem("Water")]
+  Aquifer^[hasElem("Water")]
+  Archipelago^[hasElem("Water")]
+  Arroyo^[hasElem("Water")]
+  Atoll^[hasElem("Water")]
+  Atmosphere^[hasElem("Air")]
+  Atrium
+  Attic
+  Avenue
+  Backwater^[hasElem("Water")]
+  Badland^[hasElem("Earth")]
+  Badlands^[hasElem("Earth")]
+  Barn
+  Barranca^[hasElem("Earth")]
+  Basement^[hasElem("Shadow")]
+  Basin
+  Bay^[hasElem("Water")]
+  Bayou^[hasElem("Water")]
+  Beach^[hasElem("Water")]
+  Bedroom
+  Bench
+  Berm
+  Biosphere^[hasElem("Plant")]
+  Bivouac
+  Bluff^[hasElem("Earth")]
+  Bocage^[hasElem("Plant")]
+  Bog^[hasElem("Water")]
+  Borehole^[hasElem("Earth")]
+  Borough
+  Bower^[hasElem("Plant")]
+  Bracken^[hasBoth("Plant","Fire")]
+  Brook^[hasElem("Water")]
+  Burg
+  Butte^[hasElem("Earth")]
+  Cabin
+  Caldera^[hasBoth("Earth","Fire")]
+  Camp
+  Campus
+  Canal^[hasElem("Water")]
+  Canopy^[hasElem("Plant")]
+  Canyon^[hasElem("Earth")]
+  Cape
+  Capital
+  Caravan
+  Castle
+  Catacomb^[hasElem("Bone")]
+  Cave^[hasElem("Earth")]
+  Cavern^[hasElem("Earth")]
+  Cellar^[hasElem("Shadow")]
+  Cenote^[hasElem("Water")]
+  Chaparral^[hasElem("Plant")]
+  Chasm^[hasElem("Earth")]
+  Chateau
+  Chimney
+  Church
+  Citadel
+  City
+  Claypan^[hasBoth("Earth","Water")]
+  Cliff^[hasElem("Earth")]
+  Closet
+  Cloud^[hasElem("Air")]
+  Cloudforest^[hasElem("Plant")]
+  Clough
+  Coast^[hasElem("Water")]
+  Coastline^[hasElem("Water")]
+  Col
+  Colony
+  Commons
+  Compound
+  Confluence^[hasElem("Water")]
+  Continent
+  Coppice^[hasElem("Plant")]
+  Copse^[hasElem("Plant")]
+  Coral^[hasElem("Water")]
+  Corridor
+  Cottage
+  Cove^[hasElem("Water")]
+  Crag^[hasElem("Earth")]
+  Crater^[hasBoth("Earth","Fire")]
+  Creek^[hasElem("Water")]
+  Crevasse^[hasBoth("Earth","Cold")]
+  Crypt^[hasElem("Bone")]
+  Culvert^[hasElem("Water")]
+  Dale
+  Dam^[hasElem("Water")]
+  Debouchure
+  Dell^[hasElem("Earth")]
+  Delta^[hasElem("Water")]
+  Den^[hasElem("Shadow")]
+  Depression^[hasElem("Earth")]
+  Desert^[hasBoth("Earth","Air")]
+  Desertscape^[hasElem("Earth")]
+  Ditch^[hasElem("Water")]
+  Dock^[hasElem("Water")]
+  Dome
+  Dormitory
+  Downs
+  Dunefield^[hasBoth("Earth","Air")]
+  Dungeon^[hasElem("Shadow")]
+  Earthquake^[hasElem("Earth")]
+  Elfinwood^[hasElem("Plant")]
+  Enclave
+  Escarpment^[hasElem("Earth")]
+  Estancia
+  Estuary^[hasElem("Water")]
+  Everglades^[hasBoth("Water","Plant")]
+  Factory^[hasElem("Mech")]
+  Fairway
+  Farm
+  Farmstead
+  Fell
+  Fen^[hasElem("Water")]
+  Fernery^[hasElem("Plant")]
+  Firth^[hasElem("Water")]
+  Fjord^[hasElem("Water")]
+  Flats^[hasElem("Water")]
+  Floe^[hasBoth("Water","Cold")]
+  Foothill^[hasElem("Earth")]
+  Foreland^[hasElem("Earth")]
+  Forest^[hasElem("Plant")]
+  Forestscape^[hasElem("Plant")]
+  Fort
+  Fortress
+  Frith^[hasElem("Plant")]
+  Fumarole^[hasElem("Fire")]
+  Garage^[hasElem("Mech")]
+  Garden^[hasElem("Plant")]
+  Garrison
+  Gatehouse
+  Geyser^[hasBoth("Water","Fire")]
+  Ghyll^[hasElem("Water")]
+  Glacier^[hasElem("Cold")]
+  Glade^[hasElem("Plant")]
+  Glen^[hasElem("Plant")]
+  Gorge^[hasElem("Earth")]
+  Grassland^[hasElem("Plant")]
+  Grotto^[hasElem("Earth")]
+  Gully^[hasElem("Earth")]
+  Hamlet
+  Hangar^[hasElem("Mech")]
+  Harbor^[hasElem("Water")]
+  Headland
+  Heath^[hasBoth("Plant","Air")]
+  Hedge^[hasElem("Plant")]
+  Hedgerow^[hasElem("Plant")]
+  Highland^[hasElem("Earth")]
+  Hinterland
+  Hollow^[hasElem("Earth")]
+  Homestead
+  Hotspring^[hasBoth("Water","Fire")]
+  House
+  Hut
+  Iceberg^[hasBoth("Water","Cold")]
+  Icecap^[hasBoth("Cold","Air")]
+  Icesheet^[hasBoth("Cold","Air")]
+  Inlet^[hasElem("Water")]
+  Island
+  Islet
+  Isthmus^[hasElem("Water")]
+  Jungle^[hasElem("Plant")]
+  Junglepath^[hasElem("Plant")]
+  Kame^[hasElem("Earth")]
+  Karst^[hasBoth("Earth","Water")]
+  Kitchen
+  Knoll^[hasElem("Earth")]
+  Labyrinth
+  Lagoon^[hasElem("Water")]
+  Lair^[hasElem("Shadow")]
+  Lake^[hasElem("Water")]
+  Lawn^[hasElem("Plant")]
+  Ledge^[hasElem("Earth")]
+  Levor
+  Limantour
+  Loch^[hasElem("Water")]
+  Logcabin
+  Mangrove^[hasBoth("Water","Plant")]
+  Manor
+  Mansion
+  Maquis^[hasElem("Plant")]
+  Market
+  Marsh^[hasElem("Water")]
+  Masia
+  Meadow^[hasElem("Plant")]
+  Mesa^[hasElem("Earth")]
+  Metropolis
+  Middens^[hasElem("Bone")]
+  Mill
+  Mine^[hasElem("Earth")]
+  Mineshaft^[hasElem("Earth")]
+  Mire^[hasBoth("Earth","Water")]
+  Moat^[hasElem("Water")]
+  Monastery
+  Monolith^[hasElem("Earth")]
+  Moor^[hasBoth("Plant","Air")]
+  Moraine^[hasElem("Earth")]
+  Mosque
+  Mound^[hasElem("Earth")]
+  Mountain^[hasElem("Earth")]
+  Mountainous^[hasElem("Earth")]
+  Mudflat^[hasBoth("Earth","Water")]
+  Muskeg^[hasBoth("Water","Plant")]
+  Narrows^[hasElem("Water")]
+  Niche
+  Oasis^[hasElem("Water")]
+  Caverns^[hasElem("Earth")]
+  Crevass^[hasElem("Earth")]
+  Dryland^[hasElem("Earth")]
+  Gulch^[hasElem("Earth")]
+  Hilltop^[hasElem("Earth")]
+  Landslide^[hasElem("Earth")]
+  Massif^[hasElem("Earth")]
+  Outcrop^[hasElem("Earth")]
+  Plateau^[hasElem("Earth")]
+  Quarry^[hasElem("Earth")]
+  Ravine^[hasElem("Earth")]
+  Rockery^[hasElem("Earth")]
+  Sandbar^[hasElem("Earth")]
+  Stoneworks^[hasElem("Earth")]
+  Tableland^[hasElem("Earth")]
+  Talus^[hasElem("Earth")]
+  Terrace^[hasElem("Earth")]
+  Tombolo^[hasElem("Earth")]
+  Tuff^[hasElem("Earth")]
+  Frostbite^[hasElem("Cold")]
+  Frostland^[hasElem("Cold")]
+  Frostplain^[hasElem("Cold")]
+  Icewall^[hasElem("Cold")]
+  Permafrost^[hasElem("Cold")]
+  Snowdrift^[hasElem("Cold")]
+  Tundra^[hasElem("Cold")]
+  Eddy^[hasElem("Water")]
+  Floodplain^[hasElem("Water")]
+  Maelstrom^[hasBoth("Water","Air")]
+  Millpond^[hasElem("Water")]
+  Oxbow^[hasElem("Water")]
+  Rapids^[hasElem("Water")]
+  Riverbed^[hasElem("Water")]
+  Seafloor^[hasElem("Water")]
+  Seamount^[hasElem("Water")]
+  Shoal^[hasElem("Water")]
+  Springs^[hasElem("Water")]
+  Swamp^[hasBoth("Earth","Water")]
+  Tidepool^[hasElem("Water")]
+  Torrent^[hasElem("Water")]
+  Whirlpool^[hasBoth("Water","Air")]
+  Flowerbed^[hasElem("Plant")]
+  Orchard^[hasElem("Plant")]
+  Rainforest^[hasElem("Plant")]
+  Savanna^[hasElem("Plant")]
+  Thicket^[hasElem("Plant")]
+  Vineyard^[hasElem("Plant")]
+  Gale^[hasElem("Air")]
+  Nimbus^[hasElem("Air")]
+  Stratosphere^[hasElem("Air")]
+  Updraft^[hasElem("Air")]
+  Inferno^[hasElem("Fire")]
+  Solfatara^[hasElem("Fire")]
+  Beacon^[hasElem("Light")]
+  Lighthouse^[hasElem("Light")]
+  Prism^[hasElem("Light")]
+  Radiance^[hasElem("Light")]
+  Hallucination^[hasElem("Psychic")]
+  Mindscape^[hasElem("Psychic")]
+  Trance^[hasElem("Psychic")]
+  Glamour^[hasElem("Faerie")]
+  Ossuary^[hasElem("Bone")]
+  Ribcage^[hasElem("Bone")]
+  Darkroom^[hasElem("Shadow")]
+  Gloom^[hasElem("Shadow")]
+  Shadowscape^[hasElem("Shadow")]
+  Umbra^[hasElem("Shadow")]
+  Gearworks^[hasElem("Mech")]
+  Steamworks^[hasElem("Mech")]
+  Mainframe^[hasElem("Control")]
+  Illusion^[hasElem("Hoax")]
+  Mirage^[hasElem("Hoax")]
+  Wasteland^[hasElem("Ruin")]
+  Alleyway
+  Atrium
+  Bunker
+  Cafeteria
+  Carousel
+  Courtyard
+  Crossroads
+  Gallery
+  Greenhouse
+  Gymnasium
+  Library
+  Mall
+  Observatory
+  Parlor
+  Playground
+  Promenade
+  Rooftop
+  Solarium
+  Study
+  Sunroom
+  Veranda
+  Ballroom
+  Chapel
+  Conservatory
+  Foyer
+  Icefield^[hasElem("Cold")]
+  Snowfield^[hasElem("Cold")]
+  Ridge^[hasElem("Earth")]
+  Scree^[hasElem("Earth")]
+  Boulders^[hasElem("Earth")]
+  Brinepool^[hasElem("Water")]
+  Hotsping^[hasElem("Water")]
+  Bramble^[hasElem("Plant")]
+  Pollenfield^[hasElem("Plant")]
+  Poppyfield^[hasElem("Plant")]
+  Reedbed^[hasElem("Plant")]
+  Cedar^[hasElem("Plant")]
+  Pinebarrens^[hasElem("Plant")]
+  Willow^[hasElem("Plant")]
+  Moss^[hasElem("Plant")]
+  Ferngully^[hasElem("Plant")]
+  Windtunnel^[hasElem("Air")]
+  Magma^[hasElem("Fire")]
+  Emberpit^[hasElem("Fire")]
+  Ashplain^[hasElem("Fire")]
+  Lavafield^[hasElem("Fire")]
+  Lavatube^[hasElem("Fire")]
+  Scorch^[hasElem("Fire")]
+  Sunbeam^[hasElem("Light")]
+  Pixie^[hasElem("Faerie")]
+  Enchantment^[hasElem("Faerie")]
+  Boneyard^[hasElem("Bone")]
+  Fossilbed^[hasElem("Bone")]
+  Oozepit^[hasElem("Plasma")]
+  Gelpool^[hasElem("Plasma")]
+  Machine^[hasElem("Mech")]
+  Geode^[hasElem("Crystal")]
+  Prismcavern^[hasElem("Crystal")]
+  Acidbog^[hasElem("Poison")]
+  Venom^[hasElem("Poison")]
+  Trench^[hasElem("Depths")]
+  Sunless^[hasElem("Depths")]
+  Banquet
+  Aerie^[hasElem("Air")]
+  Alcove
+  Amphitheater
+  Auditorium
+  Belfry
+  Brewery
+  Buttery
+  Campground
+  Canteen
+  Carrack
+  Causeway
+  Chancel^[hasElem("Light")]
+  Chickcharney
+  Cistern^[hasElem("Water")]
+  Cloister^[hasElem("Light")]
+  Colonnade
+  Countinghouse^[hasElem("Mech")]
+  Court
+  Craigmor^[hasElem("Earth")]
+  Crib
+  Diggings^[hasElem("Earth")]
+  Diningroom
+  Dirigible^[hasElem("Air")]
+  Doghouse
+  Dolmen
+  Drawbridge
+  Driftway
+  Drumlin^[hasElem("Earth")]
+  Dugout
+  Earthwork^[hasElem("Earth")]
+  Eaves
+  Elevator
+  Embassy
+  Estate
+  Eyrie^[hasElem("Air")]
+  Fairground^[hasElem("Light")]
+  Fiefdom
+  Firepit^[hasElem("Fire")]
+  Flophouse
+  Foundry^[hasElem("Mech")]
+  Gazebo
+  Grange^[hasElem("Plant")]
+  Guardhouse^[hasElem("Earth")]
+  Guildhall
+  Halidom
+  Hammam
+  Hanger
+  Hayloft^[hasElem("Plant")]
+  Hive
+  Holdfast^[hasElem("Earth")]
+  Hostelry
+  Icehouse^[hasElem("Cold")]
+  Igloo^[hasElem("Cold")]
+  Jauntingcar
+  Keep^[hasElem("Earth")]
+  Kiosk
+  Landfill^[hasElem("Earth")]
+  Levee^[hasElem("Water")]
+  Lookout^[hasElem("Air")]
+  Lodge^[hasElem("Plant")]
+  Louvre
+  Marrow^[hasElem("Bone")]
+  Mart
+  Mecca
+  Menagerie
+  Midden^[hasElem("Bone")]
+  Milecastle
+  Mission^[hasElem("Light")]
+  Monopoly^[hasElem("Mech")]
+  Moot
+  Nave
+  Nest^[hasElem("Plant")]
+  Nursery
+  Offal
+  Oriel
+  Oven^[hasElem("Fire")]
+  Paddock^[hasElem("Plant")]
+  Pagoda^[hasElem("Plant")]
+  Palace^[hasElem("Light")]
+  Pandiculation
+  Pantry
+  Parapet
+  Pavilion
+  Pen
+  Pergola^[hasElem("Plant")]
+  Pharos^[hasElem("Light")]
+  Piazza
+  Pilaster^[hasElem("Mech")]
+  Pithouse
+  Pompey
+  Portal
+  Presbytery^[hasElem("Light")]
+  Quonset
+  Rathole
+  Refectory
+  Retreat^[hasElem("Ruin")]
+  Rotunda
+  Saloon
+  Sanctum^[hasElem("Shadow")]
+  Schoolhouse
+  Scriptorium
+  Seance^[hasElem("Psychic")]
+  Semaphore
+  Shack^[hasElem("Plant")]
+  Shebang
+  Shipyard^[hasElem("Mech")]
+  Shrine
+  Siege^[hasElem("Earth")]
+  Silo^[hasElem("Plant")]
+  Skerry^[hasElem("Water")]
+  Spa^[hasElem("Water")]
+  Stairwell
+  Stateroom
+  Steeple^[hasElem("Light")]
+  Stoa
+  Stronghold^[hasElem("Earth")]
+  Studio^[hasElem("Mech")]
+  Suntrap^[hasElem("Light")]
+  Tabernacle^[hasElem("Light")]
+  Taproom
+  Tavern
+  Temple
+  Tenement
+  Tholos
+  Tomb^[hasElem("Bone")]
+  Townhouse^[hasElem("Plant")]
+  Undercroft^[hasElem("Shadow")]
+  Vestibule^[hasElem("Shadow")]
+  Viaduct
+  Vicarage^[hasElem("Plant")]
+  Ward
+  Washhouse
+  Watchtower^[hasElem("Air")]
+  Watershed^[hasElem("Water")]
+  Wellhouse^[hasElem("Water")]
+  Windy^[hasElem("Air")]
+  Workhouse^[hasElem("Mech")]
+  Yurt
+terrain
+  Earth = cracked stone pavement, rocky dirt paths, compacted gravel beds, weathered cobblestone
+  Cold = snow-covered ground, frosty ice sheets, frozen tundra, crystalline frost plains
+  Water = wet sand, shallow tidal pools, damp mossy shore, rippling waterlogged terrain
+  Plant = lush green grass, mossy earth, root-tangled soil, vibrant meadow ground
+  Air = windswept grass, cloud-like soft terrain, airy floating platforms, breezy open fields
+  Fire = scorched earth, obsidian glass ground, glowing magma cracks, charred volcanic rock
+  Light = gleaming marble floors, radiant crystal tiles, sunlit polished stone, luminous alabaster ground
+  Psychic = swirling patterned ground, iridescent psychic sand, floating mind-shards, hypnotic spiral terrain
+  Faerie = flower-petal pathways, enchanted moss, glittering fairy-ring ground, pastel blossom-strewn earth
+  Bone = bone-strewn dry earth, calcified white sand, fossilized terrain, chalky dust plains
+  Plasma = bubbling gelatinous ground, glowing plasma pools, viscous luminous surface, rippling energy terrain
+  Shadow = dark void-like terrain, shadowy mist floor, ink-black ground, darkness-shrouded earth
+  Mech = metallic plating, gear-studded floors, copper mechanical walkways, iron riveted ground
+  Crystal = crystal shard terrain, faceted gem floors, prismatic crystal ground, geode-studded earth
+  Poison = toxic sludge pools, corroded swampy ground, bubbling venomous terrain, acidic mossy flats
+  Control = grid-patterned floor, hovering control panels, digital terrain, circuit-lined ground
+  Hoax = glitchy shifting terrain, illusory ground, pixelated false earth, reality-warping static floor
+  Ruin = crumbling ancient pavement, moss-covered ruins, decayed broken stonework, fractured tile ground
+  Depths = abyssal dark seafloor, bioluminescent deep terrain, crushing dark pressure floor, deep ocean trench ground
+
+sky
+  Earth = a dusty brown-tinged sky with swirling sediment
+  Cold = a pale frosty grey sky heavy with snow clouds
+  Water = a misty teal sky with visible moisture and light rain
+  Plant = a vibrant green-hued sky with drifting pollen and spores
+  Air = a bright airy sky with wispy white clouds and visible wind currents
+  Fire = a smoldering orange-red sky with drifting embers and ash
+  Light = a radiant golden sky filled with warm brilliant light
+  Psychic = a deep indigo sky swirling with psychic energy patterns
+  Faerie = a soft pastel pink-purple sky shimmering with fairy dust
+  Bone = a bone-white pale sky with dusty chalk clouds
+  Plasma = a glowing magenta sky rippling with plasma energy
+  Shadow = a pitch-dark sky with barely visible shadowy tendrils
+  Mech = a metallic grey sky with mechanical clouds and steam
+  Crystal = a prismatic sky refracting light into rainbow bands
+  Poison = a sickly yellow-green sky with toxic haze
+  Control = a digital sky with grid lines and data streams
+  Hoax = a glitchy pixelated sky with shifting false colors
+  Ruin = a faded grey sky with crumbling clouds and dust
+  Depths = a pitch-black abyssal sky with bioluminescent specks
+
+bpm
+  [bpmVal()]
+bpmVal() =>
+	return Math.floor(Math.random() * (Number(bpmax) - Number(bpmin) + 1)) + Number(bpmin);
+
+keyout
+  [keymode === "Any" ? key.selectOne : keymode]
+
+scaleout
+  [scalemode === "Any" ? scale.selectOne : scalemode]
+
+genreout
+  [genremode === "Any" ? mgenre.selectOne : genremode]
+
+timesig
+  4/4^50
+  3/4
+  6/8
+  5/4
+  7/8
+  2/4
+
+timesigout
+  [timesigmode === "Any" ? timesig.selectOne : timesigmode]
+
+cbChecked(id, def) =>
+	let el = document.getElementById(id);
+	if (!el) return def;
+	return el.checked;
+
+isComboSizeEnabled(size) =>
+	let el = document.getElementById("combosize" + size);
+	if (!el) return true;
+	return el.checked;
+
+shouldHideMonster(mon) =>
+	if (!mon) return false;
+	if (cbChecked("hidefanmade", false) && mon.alt === true) return true;
+	return false;
+
+key
+  C
+  C#
+  D
+  D#
+  E
+  F
+  F#
+  G
+  G#
+  A
+  A#
+  B
+
+scale
+  major^50
+  minor^50
+  harmonic minor^50
+  melodic minor
+  dorian
+  phrygian
+  lydian
+  mixolydian
+  locrian
+  pentatonic major
+  pentatonic minor
+  blues
+  whole tone
+  diminished
+  chromatic
+
+mgenre
+  Alternative
+  Anime
+  Blues
+  Children's Music
+  Classical
+  Comedy
+  Commercial
+  Country
+  Dance
+  Electronic
+  Enka
+  Folk
+  Gospel
+  Hip-Hop
+  Indie Pop
+  Industrial
+  Inspirational
+  J-Pop
+  Jazz
+  K-Pop
+  Latin
+  New Age
+  Opera
+  Pop
+  R&B
+  Rap
+  Reggae
+  Rock
+  Soul
+  Soundtrack
+  Spoken Word
+  Vocal
+  World
+
+
+bgData
+  url = [bgUrl.selectOne]
+  size = cover
+  repeat = no-repeat
+	position = center
+	opacity = [cbChecked("showbackground", false) ? 0.4 : 0]
+
+bgUrl
+  https://static.wikia.nocookie.net/mysingingmonsters/images/3/32/Plant_Island_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/b/b7/Cold_Island_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/e/ed/Air_Island_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/0/06/Water_Island_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/e/ec/Earth_Island_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/0/04/Shugabush_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/d/db/The_Colossingum_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/f/f3/Gold_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/0/01/Ethereal_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/1/16/Ethereal_Workshop_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/e/e5/Fire_Haven_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/8/8c/Fire_Oasis_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/9/90/Mythical_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/1/17/Light_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/1/16/Psychic_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/e/e7/Faerie_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/f/f1/Bone_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/d/d4/Magical_Sanctum_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/2/20/Magical_Nexus_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/6/65/Paironormal_Carnival_Backdrop_%28Major%29.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/f/f5/Seasonal_Shanty_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/8/8e/Amber_Island_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/0/08/Wublin_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/7/74/Celestial_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/8/88/Tribal_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/4/4b/Composer_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/0/0f/Mirror_Plant_Island_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/2/27/Mirror_Cold_Island_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/0/01/Mirror_Air_Island_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/7/76/Mirror_Water_Island_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/5/53/Mirror_Earth_Island_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/4/47/Plasma_Islet_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/8/8b/Mech_Islet_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/d/d7/Shadow_Islet_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/e/ed/Crystal_Islet_Backdrop.png
+  https://static.wikia.nocookie.net/mysingingmonsters/images/f/f0/Mirror_Light_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/9/97/Mirror_Psychic_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/a/a1/Mirror_Faerie_Island_Backdrop.jpg
+  https://static.wikia.nocookie.net/mysingingmonsters/images/a/a3/Mirror_Bone_Island_Backdrop.jpg
+
+commentOptions
+	width = 80%
+	height = 350
+	commentPlaceholderText = Add a friendly comment.
+	submitButtonText = SUBMIT
+
+commentsPlugin = {import:comments-plugin} 
+consumableListLoop = {import:consumable-list-loop-plugin}
+image = {import:image-plugin}
+makeTable = {import:improved-make-table-plugin}
+markdown = {import:markdown-plugin}
+font = {import:font-plugin}
+tap = {import:tap-plugin}
+seeder = {import:seeder-plugin}
+generatorStats = {import:generator-stats-plugin}
+excludeItems = {import:exclude-items-plugin}
+image2 = {import:random-image-plugin}
+layoutMaker = {import:layout-maker-plugin}
+roundNumber = {import:rounding-plugin}
+lockableList = {import:lockable-list-plugin}
+joinLists = {import:join-lists-plugin}
+background = {import:background-image-plugin}
+

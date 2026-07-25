@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>sci-fi-sys-gen — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  html { color-scheme: light dark; }
+  body { text-align: left; font-family: system-ui, sans-serif; }
+  .wrap { max-width: 720px; margin: 2em auto; padding: 0 1em; }
+  h1 { text-align: center; }
+  .card {
+    border: 1px solid currentColor;
+    border-radius: 10px;
+    padding: 1em 1.2em;
+    margin: 1em 0;
+    opacity: 0.9;
+    position: relative;
+  }
+  .card .label {
+    font-size: 0.75em;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    opacity: 0.6;
+  }
+  .card .name { font-size: 1.6em; font-weight: 700; }
+  .card .type { opacity: 0.8; margin-top: 0.2em; }
+  .card .actions {
+    margin-top: 0.6em;
+    display: flex;
+    gap: 0.5em;
+  }
+  .card .actions button {
+    font-size: 0.8em;
+    padding: 0.25em 0.8em;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  #topBar { display: flex; gap: 0.5em; justify-content: center; margin: 1.5em 0; }
+  #topBar button {
+    font-size: 1.05em;
+    padding: 0.5em 1.6em;
+    cursor: pointer;
+    border-radius: 8px;
+  }
+  #extrasBar { margin: 2em 0; }
+  #extrasBar h2 { font-size: 1.1em; opacity: 0.7; text-align: center; }
+  #extrasEl { display: flex; flex-wrap: wrap; gap: 0.5em; justify-content: center; }
+  #extrasEl .chip {
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    padding: 0.25em 0.9em;
+    font-size: 0.95em;
+  }
+  #extrasActions { display: flex; gap: 0.5em; justify-content: center; margin-top: 0.8em; }
+  #extrasActions button { font-size: 0.9em; padding: 0.4em 1.2em; cursor: pointer; border-radius: 8px; }
+  button[disabled] { opacity: 0.4; cursor: default; }
+  #toastEl {
+    position: fixed;
+    bottom: 1.5em;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #222;
+    color: #fff;
+    padding: 0.5em 1.2em;
+    border-radius: 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    z-index: 99;
+  }
+  #toastEl.show { opacity: 0.95; }
+  #loadingEl { text-align: center; opacity: 0.6; padding: 2em; }
+</style>
+
+<div class="wrap">
+  <h1>[title]</h1>
+  <div id="loadingEl">Loading names…</div>
+  <div id="resultCtn" hidden></div>
+  <div id="topBar" hidden>
+    <button id="rerollAllBtn">🎲 randomize all</button>
+    <button id="copyAllBtn">📋 copy all</button>
+  </div>
+  <div id="extrasBar" hidden>
+    <h2>More names</h2>
+    <div id="extrasEl"></div>
+    <div id="extrasActions">
+      <button id="rerollExtrasBtn">🎲 reroll names</button>
+      <button id="copyExtrasBtn">📋 copy names</button>
+    </div>
+  </div>
+</div>
+<div id="toastEl"></div>
+
+<script>
+  let namePool = [];
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1400);
+  }
+
+  let state = { star: {}, planet: {}, species: {} };
+
+  function pickName(usedSet) {
+    let n;
+    do { n = namePool[Math.floor(Math.random() * namePool.length)]; }
+    while (usedSet && usedSet.has(n));
+    return n;
+  }
+
+  function collectUsed() {
+    let s = new Set();
+    for (let k of ["star","planet","species"]) if (state[k].name) s.add(state[k].name);
+    return s;
+  }
+
+  function reroll(key) {
+    let used = collectUsed();
+    if (state[key].name) used.delete(state[key].name);
+    state[key].name = pickName(used);
+    renderCard(key);
+  }
+
+  function rerollType(key) {
+    if (key === "star") state[key].type = root.starType.selectOne.evaluateItem;
+    else if (key === "planet") state[key].type = root.planetType.selectOne.evaluateItem;
+    else return;
+    renderCard(key);
+  }
+  window.rerollType = rerollType;
+
+  function rerollAll() {
+    let used = new Set();
+    for (let key of ["star","planet","species"]) {
+      state[key].name = pickName(used);
+      used.add(state[key].name);
+    }
+    state.star.type = root.starType.selectOne.evaluateItem;
+    state.planet.type = root.planetType.selectOne.evaluateItem;
+    state.species.type = "—";
+    renderAll();
+  }
+
+  function cardHTML(key, label) {
+    let s = state[key];
+    let typeBtn = (key === "star" || key === "planet")
+      ? `<button onclick="rerollType('${key}')">🎲 type</button>`
+      : "";
+    return `<div class="card" data-key="${key}">
+      <div class="label">${label}</div>
+      <div class="name">${escapeHtml(s.name)}</div>
+      <div class="type">${escapeHtml(s.type)}</div>
+      <div class="actions">
+        <button onclick="reroll('${key}')">🎲 reroll</button>
+        ${typeBtn}
+        <button onclick="copyCard('${key}')">📋 copy</button>
+      </div>
+    </div>`;
+  }
+
+  function renderCard(key) {
+    let el = resultCtn.querySelector(`.card[data-key="${key}"]`);
+    if (el) el.outerHTML = cardHTML(key, labelFor(key));
+  }
+  function renderAll() {
+    resultCtn.innerHTML =
+      cardHTML("star","Star") +
+      cardHTML("planet","Planet") +
+      cardHTML("species","Species");
+  }
+  function labelFor(key) { return {star:"Star",planet:"Planet",species:"Species"}[key]; }
+
+  window.reroll = reroll;
+  window.rerollAll = rerollAll;
+
+  function cardText(key) {
+    let s = state[key];
+    return s.type === "—" ? `${labelFor(key)}: ${s.name}` : `${labelFor(key)}: ${s.name} — ${s.type}`;
+  }
+  function allText() { return ["star","planet","species"].map(cardText).join("\n"); }
+
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); toast("Copied!"); }
+    catch (e) {
+      let ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); toast("Copied!"); } catch (_) { toast("Copy failed"); }
+      ta.remove();
+    }
+  }
+  window.copyCard = (key) => copyText(cardText(key));
+  window.copyAll = () => copyText(allText());
+
+  rerollAllBtn.addEventListener("click", rerollAll);
+  copyAllBtn.addEventListener("click", window.copyAll);
+
+  let extras = [];
+  function rerollExtras() {
+    let used = collectUsed();
+    extras = [];
+    for (let i = 0; i < 5; i++) {
+      let n = pickName(used);
+      used.add(n);
+      extras.push(n);
+    }
+    renderExtras();
+  }
+  function renderExtras() {
+    extrasEl.innerHTML = extras.map(n => `<span class="chip">${escapeHtml(n)}</span>`).join("");
+  }
+  function extrasText() { return extras.join(", "); }
+  window.copyExtras = () => copyText(extrasText());
+  rerollExtrasBtn.addEventListener("click", rerollExtras);
+  copyExtrasBtn.addEventListener("click", window.copyExtras);
+
+  (async () => {
+    try {
+      namePool = await root.loadNames();
+      loadingEl.hidden = true;
+      resultCtn.hidden = false;
+      topBar.hidden = false;
+      extrasBar.hidden = false;
+      rerollAllBtn.disabled = false;
+      copyAllBtn.disabled = false;
+      rerollAll();
+      rerollExtras();
+    } catch (e) {
+      loadingEl.textContent = "Failed to load names: " + e;
+    }
+  })();
+</script>
+
+</body>
+</html>

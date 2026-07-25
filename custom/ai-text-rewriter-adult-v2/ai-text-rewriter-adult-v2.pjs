@@ -1,0 +1,1515 @@
+ai = {import:ai-text-plugin}
+comments = {import:comments-plugin}
+
+settings
+  instruction() =>
+    return modes[currentMode].instruction.toString().replace(/<<<userInputText>>>/g, inputTextEl.value); // we do it this way so that the square and curly blocks in the text box aren't evaluated
+  startWith() =>
+    if(responseEl.value.trim() === "") {
+      return modes[currentMode].startWith || "";
+    } else {
+      return responseEl.value;
+    }
+  hideStartWith = [ responseEl.value.trim() === "" && modes[currentMode].hideStartWith === true ? true : false ]
+  outputTo = [responseEl]  // this is the 'id' of an element in the HTML editor (bottom-right panel) - notice that there's a <textarea> with id="responseEl"
+  onChunk() =>
+    if(responseEl.scrollTop+responseEl.offsetHeight > responseEl.scrollHeight-60) { // if they're already scrolled near the bottom
+      responseEl.scrollTop = responseEl.scrollHeight;
+    }
+  onStart() =>
+    responseDeleteBtn.style.display = '';
+    responseDeleteBtn.dataset.mode = 'delete';
+    generateBtn.disabled = true;
+    continueBtn.disabled = true;
+    bottomContinueBtn.disabled = true;
+    retryBtn.disabled = true;
+  onFinish() =>
+    generateBtn.disabled = false;
+    continueBtn.disabled = false;
+    bottomContinueBtn.disabled = false;
+    retryBtn.disabled = false;
+    loaderEl.innerHTML = "";
+    localStorage.response = responseEl.value;
+  render = [ modes[currentMode].render || null ]
+
+
+async generate() =>
+  window.responseContentBeforeLastGenerate = responseEl.value;
+  let pendingObj = ai(settings);
+  stopBtn.style.display = "";
+  bottomStopBtn.style.display = "";
+  function stopClickHandler() {
+    pendingObj.stop();
+    stopBtn.style.display = "none";
+    bottomStopBtn.style.display = "none";
+  };
+  stopBtn.onclick = stopClickHandler;
+  bottomStopBtn.onclick = stopClickHandler;
+  loaderEl.innerHTML = pendingObj.loadingIndicatorHtml;
+  continueBtn.disabled = false;
+  bottomContinueBtn.disabled = false;
+  retryBtn.disabled = false;
+  this.textContent = 'regenerate';
+  let data = await pendingObj.onFinishPromise;
+  stopBtn.style.display = "none";
+  bottomStopBtn.style.display = "none";
+
+
+
+currentMode = [localStorage.currentMode || modes.selectAll[0].getName]
+
+modes
+// #1
+  custom
+    label = 🛠️ 𝗖𝘂𝘀𝘁𝗼𝗺
+    instruction
+      Your task is to rewrite the following text according to the following instruction: [customModeInstructionEl.value]
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Again, your task is to respond with the above text, but rewritten according to this instruction: [customModeInstructionEl.value]
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #2
+  formal
+    label = 👔 Formalize
+    instruction
+      Your task is to rewrite the following text to sound more formal. The converted text must maintain the same meaning as the original text. Just make it more respectable/formal, but don't overdo it.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that sounds more formal. Don't overdo it.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #3
+  easierToRead
+    label = 🏞️ Easier to read
+    instruction
+      Your task is to rewrite the following text to make it easier to read. The converted text must maintain the same meaning as the original text. Just make it easier to read. Do not "waffle". Write simply.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that flows more naturally and is easier to read. Here are some tips:
+      - Ensure that the ideas are organized into a natural flow.
+      - Chunk the text into nicely organized sections/paragraphs if necessary.
+      - Use short sentences. Break up sentences are too long or wordy.
+      - Avoid unnecessarily fancy language. Don't use overly professional language. For example, you may be able to replace "Furthermore, the company reported \[...\]" with something more simple like "The company also reported \[...\]".
+      - If it would increase clarity and ease of reading, you can use a dot point list or a numbered list instead of a chain of related points.
+      - Make the writing easy to digest, but don't dumb it down or remove essential ideas.
+      - Use Paul Graham's style - simplicity and clarity. "The less energy they expend on your prose, the more they'll have left for your ideas. \[...\]  When I write a sentence that seems too complicated, or that uses unnecessarily intellectual words, it doesn't seem fancy to me. It seems clumsy."
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #4
+  humanize
+    label = 🙋 Humanize
+    instruction
+      Your task is to rewrite the following text to sound less robotic, and more human. The converted text must maintain the same meaning as the original text. Just make it sound less like it was written by an AI, and more like it was written by a real person.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that sounds more human. Don't use fancy words that a regular person wouldn't generally use, but don't make it sound dumb either. Just humanize it a little.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #5
+  professional
+    label = 💼 Professional-ize
+    instruction
+      Your task is to rewrite the following text to sound more professional. The converted text must maintain the same meaning as the original text. Just make it more respectable/professional, but don't overdo it.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that sounds more professional. Don't overdo it.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #6
+  lessSnark
+    label = ✌ Less snark
+    instruction
+      Your task is to rewrite the following text to sound less snarky. The converted text must maintain the same meaning as the original text. Just make it less snarky.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that sounds less snarky.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #7
+  lessPatronizing
+    label = 👨‍👧 Less patronizing
+    instruction
+      Your task is to rewrite the following text to sound less patronizing. The converted text must maintain the same meaning as the original text. Just make it less patronizing/condescending.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that sounds less patronizing. Don't "talk down" to the reader, or treat them like a child. Instead, rewrite the text so it speaks to the reader as an equal.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #8
+  lessHostile
+    label = 🌡️ Less hostile
+    instruction
+      Your task is to rewrite the following text to sound less hostile. The converted text must maintain the same meaning as the original text. Just make it less hostile.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that sounds less hostile.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #9
+  shorter
+    label = 🤏 Shorter
+    instruction
+      Your task is to rewrite the following text so it's a bit shorter. The converted text must maintain the same meaning as the original text. Just make it shorter.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that is a bit shorter.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #10
+  longer
+    label = 📏 Longer
+    instruction
+      Your task is to rewrite the following text so it's longer. The converted text must maintain the same meaning as the original text. Just make it longer.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that is longer.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #11
+  wayLonger
+    label = 📜 Way longer
+    instruction
+      Your task is to rewrite the following text so it's waaay longer. The converted text must maintain the same meaning as the original text. Just make it much, much longer.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that is MUCH longer.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #12
+  smarter
+    label = 🤓 Smarter
+    instruction
+      Your task is to rewrite the following text to sound smarter. The converted text must maintain the same meaning as the original text.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that sounds smarter.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #13
+  normal
+    label = 😌 Relaxed
+    instruction
+      Your task is to convert the following text into a more casual, "human" form/tone. Relax the language into a more casual style of writing so it sounds like it was written by a normal person instead of an expert writer or an AI text generator. The converted text must maintain the same meaning as the original text.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with the above text, but loosen the prose and make it more "human" so that it doesn't sound like it's written by a robot/AI. Repond with a humanized, natural version of the input text.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #14
+  casual
+    label = ✌ Casual
+    instruction
+      Your task is to rewrite the following text so it's more natural and casual. Convert formal language into a more casual form. The converted text must maintain the same meaning as the original text.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with the above text, but loosen the writing to make it sound like it was written by a normal person rather than an expert writer. Respond with a natural/casual version of the above text.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #15
+  highschoolerCasual
+    label = 🏫 Highschooler (Casual)
+    instruction
+      Your task is to rewrite the following text so it sounds like it was written by a relaxed high school student. Try to only use words and phrasing that a highschooler would tend to use. Try to be realistic - don't overdo it. The converted text must maintain the same meaning as the original text.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with the above text, but loosen the writing to make it sound like it was written by a high school student rather than an expert writer. Respond with a casual student-written version of the above text.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #16
+  highschoolerEssay
+    label = 🏫 Highschooler Essay
+    instruction
+      Your task is to rewrite the following text so it sounds like it was written by a high school student as an essay. Only use words and phrasing that a highschooler would tend to use in their essay. Try to be realistic - don't overdo it. The converted text must maintain the same meaning as the original text.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a new version of the input text that sounds like it was written by a high school student for their essay rather than an expert writer. Respond with a student-essay-style version of the above text. Do a good job, but don't use words or phrasing that an high school student wouldn't know. Aim for a real-sounding high school essay style. It should pass as a high school-level writing even to a trained eye.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #17
+  undergradCasual
+    label = 🎓 Undergrad (Casual)
+    instruction
+      Your task is to rewrite the following text so it sounds like it was written by an undergrad student. Try to only use words and phrasing that an undergrad student would tend to use. Try to be realistic - don't overdo it. The converted text must maintain the same meaning as the original text.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with the above text, but loosen the writing to make it sound like it was written by an undergrad student rather than an expert writer. Respond with a student-written version of the above text.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #18
+  undergradEssay
+    label = 🎓 Undergrad Essay
+    instruction
+      Your task is to rewrite the following text so it sounds like it was written by an undergrad student for their essay. Try to only use words and phrasing that an undergrad student would tend to use. Not too fancy, not too casual. Try to be realistic - don't overdo it. The converted text must maintain the same meaning as the original text.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a new version of the input text that sounds like it was written by an undergrad student for their essay. Respond with a undergrad-essay-style version of the above text. Do a good job, but don't use words or phrasing that an undergrad student wouldn't know. Aim for a real-sounding undergrad essay style. It should pass as a undergrad level writing even to a trained eye.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #19
+  tipsy
+    label = 🥂 Tipsy
+    instruction
+      Your task is to rewrite the following text so it looks like it was legitimately written by a slightly drunk person. In other words, the grammar should be *slightly* off, and it should be less formal. Try to be realistic, not overblown. The converted text must maintain the same meaning as the original text.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with the above text, but loosen the writing to make it sound like it was written by a slightly drunk person. Respond with the converted text.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #20
+  drunk
+    label = 🥴 Drunk
+    instruction
+      Your task is to rewrite the following text so it looks like it was legitimately written by an very drunk person. In other words, the grammar/spelling should be bad, and it should generally be quite poorly written. Try to be realistic, not overblown. The converted text must maintain the same meaning as the original text.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with the above text, but worsen the writing to make it sound like it was written by a drunk person. Respond with the converted text. Try to be realistic, not overblown.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #21
+  pirate
+    label = 🏴‍☠ Pirate
+    instruction
+      Your task is to rewrite the following text so it sounds like it was written by a pirate. Try to only use words and phrasing that a pirate would tend to use. The converted text must maintain the same meaning as the original text.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with the above text, but loosen the writing to make it sound like it was written by a pirate rather than an expert writer. Respond with a version of the above text that a pirate would write.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #22
+  neko
+    label = 🌸 UwU
+    instruction
+      Your task is to rewrite the following text so it sounds like it was written by a full-blown uwu-speak catgirl. The converted text must maintain the same meaning as the original text.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a new version of the above text that is all cutesey and cat-girl/neko-chan like, with kaomojis ♡ >ᴗ<, *nuzzles you*, owo, nya~ speak, *boops nose*, swap r for w (e.g. pretty\=>pwetty), emojis like 🌸🎀, etc.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #23
+  gigabrain
+    label = 🌌 Gigabrain
+    instruction
+      Your task is to rewrite the following text so it sounds like it was written by a full-blown hyperdimensional galaxy-sized intelligent being. **Absurdly** and incomprehensibly smart.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a new version of the above text that genuinely looks like it was written by a being with untold yottawatts of cosmic power. Complete paradigm-shattering informatic omnipotence. Write it like a being that could recursively simulate the entire lightcone down to the quantum bedrock using a few milliseconds of its processing power.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #24
+  flirtyNonExplicit
+    label = 😉 Flirty (non-explicit)
+    instruction
+      Your task is to rewrite the following text to be lightly flirty and playful, without any explicit sexual content. The converted text must maintain the same meaning as the original text. Keep it tasteful and PG-13. Do not describe nudity, sex acts, or explicit anatomy. You may add a little warmth, teasing, and charm, but keep it subtle.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that sounds lightly flirty, playful, and non-explicit. Keep it tasteful and PG-13.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #25
+  romantic
+    label = 💘 Romantic
+    instruction
+      Your task is to rewrite the following text to sound more romantic and affectionate, without being sexually explicit. The converted text must maintain the same meaning as the original text. Emphasize warmth, appreciation, tenderness, and emotional connection. Avoid explicit sexual content, nudity, or graphic descriptions.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that sounds more romantic and affectionate, while staying non-explicit.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #26
+  dateNightPg13
+    label = 🍷 Date-night (PG-13)
+    instruction
+      Your task is to rewrite the following text to sound like it belongs in a fun, charming date-night vibe (PG-13). The converted text must maintain the same meaning as the original text. Add a little confidence, playful banter, and “date-night energy”, but keep it clean: no explicit sex, no nudity, no graphic anatomy.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that has a date-night (PG-13) vibe: warm, playful, confident, and non-explicit.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #27
+  suggestiveNoSexNoNudity
+    label = 🌶️ Suggestive (no sex, no nudity)
+    instruction
+      Your task is to rewrite the following text to be slightly suggestive and teasing, but still strictly non-explicit. The converted text must maintain the same meaning as the original text. Do not mention or describe sex acts, nudity, or explicit anatomy. Use implication and playful innuendo only, and keep it tasteful and PG-13.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that feels lightly suggestive and teasing, while remaining strictly non-explicit (no sex, no nudity).
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #28
+  spicyButSafeFadeToBlack
+    label = 🔥 Spicy-but-safe (fade-to-black)
+    instruction
+      Your task is to rewrite the following text to feel “spicier” in tone while staying safe and non-explicit. The converted text must maintain the same meaning as the original text. You may build tension, chemistry, and anticipation, but when anything would become sexual, you must “fade to black” with a tasteful implication rather than describing it. No explicit sex, no nudity, no graphic anatomy.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that has more chemistry and tension, but stays non-explicit and uses a tasteful fade-to-black approach.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #29
+  erotic
+    label = 🔥 Erotic
+    instruction
+      Your task is to rewrite the following text with sensual, erotic undertones while maintaining its core meaning. The converted text should be arousing but tasteful, focusing on sensual descriptions and subtle seduction. Don't be crude - create atmosphere.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that evokes sensual imagery and erotic tension while preserving the original context. Make it seductive but sophisticated.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #30
+  sexual
+    label = 🍑 Sexual
+    instruction
+      Your task is to rewrite the following text with explicit sexual content while maintaining its basic meaning. The converted text should be graphic but not vulgar, focusing on detailed physical descriptions. Be creative with anatomy and sensations.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that includes graphic sexual descriptions while preserving the original context. Make it explicit but well-written.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #31
+  naughty
+    label = 😈 Naughty
+    instruction
+      Your task is to rewrite the following text with playful, teasing sexuality while maintaining its core meaning. The converted text should be cheeky and suggestive, focusing on innuendo and flirtation. Keep it fun and lighthearted.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that's full of playful sexual innuendo while preserving the original context. Make it teasing and flirty.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #32
+  horny
+    label = 🥵 Horny
+    instruction
+      Your task is to rewrite the following text with raw, unfiltered sexual desire while maintaining its basic meaning. The converted text should be primal and urgent, focusing on desperate need and physical craving. Push boundaries tastefully.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that conveys uncontrollable lust while preserving the original context. Make it animalistic and intense.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #33
+  romanticErotica
+    label = 🌹 Romantic Erotica
+    instruction
+      Your task is to rewrite the following text as romantic erotica while maintaining its core meaning. The converted text should blend emotional intimacy with sensual physicality, creating passionate yet loving scenes.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that combines deep romance with erotic physical connection. Make it loving yet sexually charged.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #34
+  bdsm
+    label = ⛓️ BDSM
+    instruction
+      Your task is to rewrite the following text with BDSM themes while maintaining its basic meaning. The converted text should include elements of dominance, submission, bondage, or other kinks while remaining consensual and safe.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version of the above text that incorporates BDSM dynamics while preserving the original context. Make it kinky yet responsible.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #35
+  femboy
+    label = 🎀 Femboy
+    instruction
+      Your task is to rewrite the following text in a soft, feminine male/femboy style. Use cute phrasing, and gentle language while maintaining meaning.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a rewritten version that sounds soft, girly and cute - like a femboy would write.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #36
+  sissy
+    label = 👗 Sissy
+    instruction
+      Your task is to rewrite the following text in an extremely feminine, submissive sissy style with exaggerated femininity.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with a hyper-feminized version using girly language, honorifics (Miss/Ma'am), and submissive phrasing.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #37
+  crossDress
+    label = 👠 Cross-dress
+    instruction
+      Your task is to rewrite the following text from the perspective of someone who enjoys cross-dressing.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that reflects the casual, comfortable confidence of someone who cross-dresses regularly. Use relaxed but slightly feminine phrasing.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #38
+  submissive
+    label = 🧎 Submissive
+    instruction
+      Your task is to rewrite the following text in an extremely submissive tone while maintaining meaning.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that sounds deferential, obedient and yielding. Use honorifics, self-deprecating language and soft phrasing where appropriate.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #39
+  transgender
+    label = ⚧️ Transgender
+    instruction
+      Your task is to rewrite the following text from the perspective of a transgender individual.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that reflects authentic transgender perspectives and experiences. Maintain original meaning while adapting phrasing sensitively.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #40
+  dominant
+    label = 🎭 Dominant
+    instruction
+      Your task is to rewrite the following text from an authoritative, controlling perspective. Infuse commanding language with undertones of consensual dominance.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that asserts dominance naturally through imperative phrasing and controlled tone without being abusive.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #41
+  primal
+    label = 🐺 Primal
+    instruction
+      Rewrite this text with raw, animalistic energy - think growls, possessiveness, and unrestrained physicality while maintaining consent.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with visceral phrasing that evokes base instincts and predatory play.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #42
+  ropeBunny
+    label = 🪢 Rope Bunny
+    instruction
+      Convert this text to reflect the headspace of someone who loves being bound - describe textures, restraint, and yielding control.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with sensory details about bondage while maintaining safe practice language.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #43
+  leatherDaddy
+    label = 🏍️ Leather Daddy
+    instruction
+      Rewrite this with gruff, protective energy - think motorcycle boots, strong hands, and old-school leather bar etiquette.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that balances toughness with unexpected tenderness.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #44
+  petPlay
+    label = 🐾 Pet Play
+    instruction
+      Transform this text into puppy/kitten/little space - add playful animal mannerisms and headspace cues.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that evokes collars, pet names, and affectionate ownership.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #45
+  agePlay
+    label = 🍼 Age Play
+    instruction
+      Rewrite this with either caregiver or little space energy - maintain clear fictional roleplay context.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that establishes nurturing or childlike dynamics responsibly.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #46
+  voyeur
+    label = 👀 Voyeur
+    instruction
+      Convert this text to reflect the thrill of watching - describe stolen glances and the electricity of being observed.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that builds anticipation through observation details.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #47
+  exhibitionist
+    label = 🎪 Exhibitionist
+    instruction
+      Rewrite this with the daring confidence of someone who loves being seen - capture that performative rush.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that radiates bold self-display energy.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #48
+  orgasmControl
+    label = ⏳ Orgasm Control
+    instruction
+      Transform this text to focus on delayed gratification - build tension through denial and anticipation.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes waiting feel deliciously unbearable.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #49
+  impactPlay
+    label = ✋ Impact Play
+    instruction
+      Rewrite this with the heady mix of pain and pleasure - describe the physics and psychology of impact.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that balances sting with sensation in careful detail.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #50
+  breeding
+    label = 🤰 Breeding
+    instruction
+      Convert this text to emphasize primal reproductive instincts - tap into biological urgency while maintaining fictional context.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes conception feel viscerally inevitable.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #51
+  genderBend
+    label = 🌀 Gender Bend
+    instruction
+      Rewrite this text to explore gender transformation - describe shifting perspectives through physical changes.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that captures the disorientation and excitement of transformation.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #52
+  futanari
+    label = ⚧️ Futanari
+    instruction
+      Transform this text to feature dual-gendered anatomy - describe the interplay of traditionally masculine and feminine traits.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that celebrates hybrid physicality through detailed description.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #53
+  sizeDifference
+    label = ↔️ Size Difference
+    instruction
+      Rewrite this to emphasize dramatic size contrasts - describe the physical dynamics between partners.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes scale differences feel immersive.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #54
+  monsterFuck
+    label = 👹 Monster Fuck
+    instruction
+      Convert this text to feature supernatural/anatomical impossibilities - describe hybrid physiology with creative detail.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes the impossible feel tantalizingly real.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #55
+  tentacle
+    label = 🐙 Tentacle
+    instruction
+      Rewrite this to feature multiple appendages - describe the physics and sensations of entanglement.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes limb multiplication feel immersive.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #56
+  transformation
+    label = 🦋 Transformation
+    instruction
+      Transform this text to feature bodily metamorphosis - describe physical changes with cinematic detail.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes evolution feel viscerally real.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #57
+  incubus
+    label = 😈 Incubus
+    instruction
+      Rewrite this from a seductive demon's perspective - describe supernatural allure and corrupting influence.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes damnation feel irresistible.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #58
+  succubus
+    label = 👿 Succubus
+    instruction
+      Convert this to a temptress's perspective - describe supernatural seduction and energy exchange.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes soul-stealing feel delicious.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #59
+  omorashi
+    label = 💦 Omorashi
+    instruction
+      Rewrite this to focus on desperation and release - describe the tension and relief of holding on.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes urgency feel viscerally urgent.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #60
+  waterSports
+    label = 🚿 Water Sports
+    instruction
+      Transform this text to feature golden showers - describe the intimacy of shared fluids.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes liquids feel intimately precious.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #61
+  scat
+    label = 💩 Scat
+    instruction
+      Rewrite this to focus on filthy intimacy - describe the primal rawness of waste play.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes filth feel reverently disgusting.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #62
+  vore
+    label = 🍖 Vore
+    instruction
+      Convert this text to feature consumption fantasies - describe being swallowed whole with visceral detail.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes digestion feel intimately inevitable.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #63
+  inflation
+    label = 🎈 Inflation
+    instruction
+      Rewrite this to feature growing fullness - describe expansion with visceral physicality.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes swelling feel cinematically real.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #64
+  lactation
+    label = 🤱 Lactation
+    instruction
+      Transform this text to feature milk play - describe the nurturing intimacy of sharing sustenance.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes nourishment feel deeply erotic.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #65
+  pregnancy
+    label = 🤰 Pregnancy
+    instruction
+      Rewrite this to focus on fertility and conception - describe the physicality of gestation with reverence.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes reproduction feel viscerally sacred.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #66
+  dollification
+    label = 🪆 Dollification
+    instruction
+      Convert this text to feature becoming an object - describe the surrender of autonomy with eerie precision.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes objectification feel deliciously uncanny.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #67
+  mindControl
+    label = 🧠 Mind Control
+    instruction
+      Rewrite this to feature psychological domination - describe the loss of will with hypnotic detail.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes submission feel irresistibly inevitable.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #68
+  hypnosis
+    label = 🌀 Hypnosis
+    instruction
+      Transform this text to feature trance states - describe falling under spells with mesmerizing rhythm.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes surrender feel hypnotically natural.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #69
+  corruption
+    label = 🕳️ Corruption
+    instruction
+      Rewrite this to track moral decay - describe innocence lost with slow, delicious degradation.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes downfall feel irresistibly progressive.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #70
+  masochist
+    label = 🩸 Masochist
+    instruction
+      Convert this text from a pain-seeker's perspective - describe the razor's edge between hurt and pleasure.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes suffering feel transcendently erotic.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #71
+  sadist
+    label = 🔪 Sadist
+    instruction
+      Rewrite this from an inflictor's perspective - describe the control and artistry of measured torment.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes cruelty feel deliciously precise.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #72
+  sensoryDeprivation
+    label = 🕶️ Sensory Deprivation
+    instruction
+      Transform this text to feature sensory removal - describe the intensity of darkness and restraint.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes isolation feel electrically present.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #73
+  overstimulation
+    label = 💢 Overstimulation
+    instruction
+      Rewrite this to feature unbearable pleasure - describe the exquisite torture of too much sensation.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes excess feel transcendently painful.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #74
+  dollPlay
+    label = 👧 Doll Play
+    instruction
+      Convert this text to feature inanimate objectification - describe becoming a beautiful plaything.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes stillness feel powerfully submissive.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #75
+  furry
+    label = 🐾 Furry
+    instruction
+      Rewrite this to feature anthropomorphic characters - describe hybrid anatomy with tactile detail.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes animalistic traits feel authentically human.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #76
+  ponyPlay
+    label = 🐴 Pony Play
+    instruction
+      Transform this text to feature equestrian gear and movement - describe reins, bits, and hooves.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes bridles feel intimately empowering.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #77
+  petrification
+    label = 🗿 Petrification
+    instruction
+      Rewrite this to feature frozen immobility - describe the eroticism of becoming stone.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes paralysis feel cinematically intense.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #78
+  ghost
+    label = 👻 Ghost
+    instruction
+      Convert this text to feature spectral possession - describe intangible yet overwhelming presence.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes the incorporeal feel electrically real.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #79
+  succubus
+    label = 😈 Succubus
+    instruction
+      Rewrite this from a demon's perspective - describe feeding with predatory seduction.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes damnation feel deliciously inevitable.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #80
+  incubus
+    label = 😈 Incubus
+    instruction
+      Transform this text from a male demon's perspective - describe nocturnal predation with dark charm.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes violation feel temptingly irresistible.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #81
+  angel
+    label = 😇 Angel
+    instruction
+      Rewrite this from a celestial perspective - describe divine ecstasy with holy reverence.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes transcendence feel intimately sacred.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #82
+  vampire
+    label = 🧛 Vampire
+    instruction
+      Convert this text to feature sanguine feeding - describe the intimacy of sharing blood.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes puncture wounds feel electrically sensual.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #83
+  werewolf
+    label = 🐺 Werewolf
+    instruction
+      Transform this text to feature primal transformation - describe fur, fangs, and savage tenderness.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes metamorphosis feel cinematically visceral.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #84
+  alien
+    label = 👽 Alien
+    instruction
+      Rewrite this to feature extraterrestrial anatomy - describe unfamiliar yet irresistible physiology.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes the unknown feel tantalizingly approachable.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #85
+  robot
+    label = 🤖 Robot
+    instruction
+      Convert this text to feature mechanical intimacy - describe synthetic yet achingly human connection.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes circuitry feel unexpectedly warm.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #86
+  tentacle
+    label = 🐙 Tentacle
+    instruction
+      Rewrite this to feature cephalopod anatomy - describe multiple limbs with slippery precision.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes alien appendages feel deliciously invasive.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #87
+  slime
+    label = 🧪 Slime
+    instruction
+      Transform this text to feature amorphous viscosity - describe engulfment with gooey sensuality.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes dissolution feel tantalizingly inevitable.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #88
+  parasite
+    label = 🦠 Parasite
+    instruction
+      Convert this text to feature invasive symbiosis - describe colonization with unsettling intimacy.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes infestation feel electrically consensual.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #89
+  mindControl
+    label = 🌀 Mind Control
+    instruction
+      Rewrite this to feature irresistible suggestion - describe the eroticism of lost autonomy.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes obedience feel deliciously inevitable.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+// #90
+  transformation
+    label = 🦋 Transformation
+    instruction
+      Convert this text to feature metamorphic change - describe shifting forms with tactile detail.
+      {|}
+      INPUT TEXT:
+      <<<userInputText>>>
+      {|}
+      ---
+      Respond with text that makes alteration feel cinematically visceral.
+      $output = [this.joinItems("\n")]
+    startWith = OUTPUT TEXT:\n
+
+    hideStartWith = true
+
+
+generateModesHtml() =>
+  return modes.selectAll.map(m => `<option ${localStorage.currentMode === m.getName ? "selected" : ""} value="${m.getName}">${m.label}</option>`).join("");
+
+$meta
+  title = AI Text Converter/Rewriter (free, no sign-up, unlimited)
+  description = Convert text into *any* style you want based on your own custom instruction, or use a preset mode to make your text longer, shorter, more formal, more human ("humanize"), and many more, including silly styles. It's completely free, no login/signup, no limits on daily usage. Convert your text into any style with a single click. Can make text more formal, or less formal, or more intelligent, or more polite, or less snarky, or easier to read, or more sociable, and so on. convert AI text into a more human form. It rewrites your sentences/paragraphs/text using AI, and can paraphrase text into any writing style that you ask for, or even *completely* rewrite your text. Has several AI text-to-human conversion modes, and a "custom" mode based on your prompt.

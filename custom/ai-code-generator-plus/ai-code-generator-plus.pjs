@@ -1,0 +1,170 @@
+ai = {import:ai-text-plugin}
+comments = {import:comments-plugin}
+literal = {import:literal-plugin}
+kv = {import:kv-plugin}
+remember = {import:remember-plugin}
+
+settings
+  instruction() =>
+    this.lastModeUsed = currentMode;
+    return modes[currentMode].instruction.toString();
+
+  startWith() =>
+    return responseEl.value.trim() === ""
+      ? (modes[currentMode].startWith || "")
+      : responseEl.value;
+
+  hideStartWith = [responseEl.value.trim() === "" && modes[currentMode].hideStartWith === true]
+  outputTo = [responseEl]
+
+  onChunk(data) =>
+    if (responseEl.scrollTop + responseEl.offsetHeight > responseEl.scrollHeight - 60) {
+      responseEl.scrollTop = responseEl.scrollHeight;
+    }
+    if (modes[this.lastModeUsed].onChunk) modes[this.lastModeUsed].onChunk(data);
+
+  onStart(data) =>
+    responseDeleteBtn.style.display = "";
+    responseDeleteBtn.dataset.mode = "delete";
+    generateBtn.disabled = true;
+    continueBtn.disabled = true;
+    bottomContinueBtn.disabled = true;
+    retryBtn.disabled = true;
+    responseCopyBtn.style.display = "";
+    if (modes[this.lastModeUsed].onStart) modes[this.lastModeUsed].onStart(data);
+
+  onFinish(data) =>
+    generateBtn.disabled = false;
+    generateBtn.textContent = "🔁 regenerate";
+    continueBtn.disabled = false;
+    bottomContinueBtn.disabled = false;
+    retryBtn.disabled = false;
+    loaderEl.innerHTML = "";
+    localStorage.response = responseEl.value;
+    if (modes[this.lastModeUsed].onFinish) modes[this.lastModeUsed].onFinish(data);
+
+  render = [modes[currentMode].render || null]
+
+
+async generate() =>
+  window.responseContentBeforeLastGenerate = responseEl.value;
+  let pendingObj = ai(settings);
+  stopBtn.style.display = "";
+  bottomStopBtn.style.display = "";
+  function stopClickHandler() {
+    pendingObj.stop();
+    stopBtn.style.display = "none";
+    bottomStopBtn.style.display = "none";
+  };
+  stopBtn.onclick = stopClickHandler;
+  bottomStopBtn.onclick = stopClickHandler;
+  loaderEl.innerHTML = pendingObj.loadingIndicatorHtml;
+  continueBtn.disabled = false;
+  bottomContinueBtn.disabled = false;
+  retryBtn.disabled = false;
+  this.textContent = 'regenerate';
+  let data = await pendingObj.onFinishPromise;
+  stopBtn.style.display = "none";
+  bottomStopBtn.style.display = "none";
+
+generateModesHtml() =>
+  // Build a <select> with <optgroup> by category
+  let groups = {};
+  for(let m of modes.selectAll) {
+    let cat = m.category || "Other";
+    if(!groups[cat]) groups[cat] = [];
+    groups[cat].push(m);
+  }
+  let html = "";
+  for(let cat of Object.keys(groups).sort()) {
+    html += `<optgroup label="${cat}">`;
+    for(let m of groups[cat]) {
+      let selected = (localStorage.currentMode === m.getName) ? "selected" : "";
+      html += `<option ${selected} value="${m.getName}">${m.label}</option>`;
+    }
+    html += `</optgroup>`;
+  }
+  return html;
+
+modes = {import:acg-modes}
+
+urlModeToActualMode
+  html = html
+  javascript = html
+  css = html
+  python = python
+  markdown = markdown
+  character = character
+  doc = markdown
+  char = character
+  general = general
+  brainy = brainy
+  perchance = perchanceLists
+  perchanceLists = perchanceLists
+  perchanceHtml = perchanceHtml
+  router = router
+  comparison = comparison
+  presets = presets
+  test = test
+  refactor = refactor
+  design = design
+  tutorial = tutorial
+  math = math
+  schema = schema
+  template = template
+  agent = agent
+  luau = luau
+  gdscript = gdscript
+  csharp_unity = csharp_unity
+  typescript = typescript
+  cpp = cpp
+  rust = rust
+  sql = sql
+
+$meta
+  async dynamic(inputs) =>
+    let DEFAULT_MODE = "general";
+    let DEFAULT_NAME = "Code";
+    let DEFAULT_SUFFIX = "Can code in JavaScript, HTML, CSS, Python, SQL, TypeScript, Bash/Shell, Java, C#, C++, C, PHP, PowerShell, Go, Rust, Kotlin, Ruby, Lua, Dart, Assembly, WebAssembly, WGSL, WebGPU, Swift, R, Visual Basic (.Net), MATLAB, VBA, Groovy, Delphi, Scala, Perl, Elixir, Objective-C, Haskell, GDScript, list, Solidity, Clojure, Julia, Erlang, F#, Fortran, and basically everything else.";
+
+    let MODE_CONFIG = {
+      javascript: { name: "JavaScript", suffix: "Can generate JavaScript and TypeScript. Can execute AI-generated HTML code in a live sandbox." },
+      html: { name: "HTML", suffix: "Executes the AI-generated HTML code in a live sandbox." },
+      css: { name: "CSS" },
+      python: { name: "Python", suffix: "Executes the AI-generated Python code in a live browser-based sandbox." },
+      markdown: { name: "Markdown", suffix: "Generates well-structured markdown documentation, guides, and blogs." },
+      character: { name: "Character", suffix: "Generates detailed character profiles for role-play and character AI systems." },
+      general: { name: "Code" },
+      brainy: { name: "Code" },
+      perchance: { name: "Perchance", suffix: "Generates Perchance lists and HTML for advanced generators." },
+      perchanceLists: { name: "Perchance Lists" },
+      perchanceHtml: { name: "Perchance HTML" },
+      router: { name: "Code" },
+      comparison: { name: "Code" },
+      presets: { name: "Code" },
+      test: { name: "Tests", suffix: "Generates unit tests, integration tests, and test plans." },
+      refactor: { name: "Code", suffix: "Refactors and improves existing codebases." },
+      design: { name: "Design", suffix: "Generates UI/UX designs and component systems." },
+      tutorial: { name: "Tutorial", suffix: "Creates step-by-step tutorials and guides." },
+      math: { name: "Math", suffix: "Solves math problems with clear explanations." },
+      schema: { name: "Schema", suffix: "Generates JSON schemas, TypeScript types, and data models." },
+      template: { name: "Templates", suffix: "Creates reusable prompt and document templates." },
+      agent: { name: "Agent", suffix: "Defines agent behaviors, tools, and instructions." },
+      luau: { name: "Luau", suffix: "Generates Luau scripts for Roblox." },
+      gdscript: { name: "GDScript", suffix: "Generates GDScript for Godot 3.x and 4.x." },
+      csharp_unity: { name: "C# (Unity)", suffix: "Generates Unity C# scripts." },
+      typescript: { name: "TypeScript", suffix: "Generates TypeScript for web and Node.js." },
+      cpp: { name: "C++", suffix: "Generates modern C++ code." },
+      rust: { name: "Rust", suffix: "Generates Rust code with safe patterns." },
+      sql: { name: "SQL", suffix: "Generates SQL queries and schemas." },
+    };
+
+    let mode = inputs.urlParams.mode;
+    let config = MODE_CONFIG[mode] || { name: DEFAULT_NAME, suffix: DEFAULT_SUFFIX };
+    let name = config.name || DEFAULT_NAME;
+    let suffix = config.suffix || DEFAULT_SUFFIX;
+
+    return {
+      title: `AI ${name} Generator ➕ (free, no sign-up, unlimited)`,
+      description: `Free, high-quality AI ${name.toLowerCase()} generator. It's free, smart, and there are no daily usage restrictions. You don't even need to login! Just type a prompt/instruction and the AI will write/generate the code that you request. Completely free, fast, smart, unlimited. ${suffix}`,
+    };

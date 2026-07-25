@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>mos-ai-img — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="appCtn"></div>
+<div id="toastEl" style="position:fixed; bottom:20px; right:20px; padding:10px 16px; background:#222; color:#fff; border-radius:8px; opacity:0; pointer-events:none; transition:opacity 0.3s; z-index:9999;"></div>
+
+<script>
+// ---------- PERCHANCE / SANDBOX SHIMS ----------
+let sandboxGenerateImage = typeof generateImage === "function" ? generateImage : null;
+let sandboxTextToImage = typeof text_to_image === "function" ? text_to_image : null;
+
+if (typeof remember !== "function") remember = (k,v) => { try { localStorage[k]=v; }catch(e){} };
+if (typeof recall !== "function") recall = (k) => { try { return localStorage[k]; }catch(e){ return null; } };
+if (typeof download !== "function") download = (url) => { let a=document.createElement("a"); a.href=url; a.download="image.png"; a.click(); };
+if (typeof copyText !== "function") copyText = async (t) => { try { await navigator.clipboard.writeText(t); showToast("Copied!"); }catch(e){ showToast("Copy failed"); } };
+
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.className = "show";
+  clearTimeout(showToast.t);
+  showToast.t = setTimeout(() => toastEl.className = "", 2500);
+}
+
+// ---------- GLOBAL STATE ----------
+let state = {
+  ui: {
+    section: "prompt",
+    theme: "dark",
+    generating: false,
+  },
+  prompt: {
+    base: "",
+    enhanced: "",
+    negative: "",
+    mode: "enhance",
+    length: "long",
+  },
+  gen: {
+    model: "SDXL",
+    ratio: "1:1",
+    width: 1024,
+    height: 1024,
+    steps: 30,
+    cfg: 7,
+    sampler: "DPM++ 2M",
+    seed: "random",
+    batch: 1,
+    face_fix: true,
+    upscale: false,
+    safety: true,
+  },
+  random: {
+    chaos: 0.4,
+    recipe: "cinematic",
+  },
+  gallery: {
+    items: [],
+    selectedId: null,
+  },
+  autosave: {
+    enabled: true,
+    key: "ai_t2i_lab_v1",
+  }
+};
+
+// ---------- PROMPT LISTS ----------
+let subjects = [
+  "mysterious wanderer in a foggy forest",
+  "retro-futuristic city skyline at dusk",
+  "ancient dragon sleeping on a mountain of books",
+  "minimalist product shot of wireless headphones",
+  "cozy nordic cabin in a snowstorm",
+];
+
+let styles = [
+  "hyperrealistic",
+  "studio lighting",
+  "cinematic lighting",
+  "soft natural light",
+  "digital painting",
+  "anime style",
+  "pixel art",
+];
+
+let moods = [
+  "melancholic",
+  "hopeful",
+  "ominous",
+  "serene",
+  "whimsical",
+];
+
+let cameras = [
+  "shot on 35mm film",
+  "shot on DSLR, 50mm lens, f1.8",
+  "macro photography, 100mm lens",
+  "wide angle lens, f4.0",
+];
+
+let compositions = [
+  "rule of thirds",
+  "centered composition",
+  "dramatic close-up",
+  "wide establishing shot",
+];
+
+let negativeBase = [
+  "blurry",
+  "low quality",
+  "distorted",
+  "extra limbs",
+  "bad anatomy",
+  "watermark",
+];
+
+// ---------- UTILITIES ----------
+function randFrom(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function maybe(list, chance) {
+  return Math.random() < chance ? randFrom(list) : "";
+}
+
+function joinNonEmpty(parts, sep) {
+  return parts.filter(p => p && p.trim()).join(sep);
+}
+
+// ---------- RANDOM PROMPT RECIPE ----------
+function buildRandomPrompt(recipe, chaos) {
+  let base = randFrom(subjects);
+  let style = randFrom(styles);
+  let mood = maybe(moods, 0.7 + chaos * 0.3);
+  let camera = maybe(cameras, 0.4 + chaos * 0.4);
+  let comp = maybe(compositions, 0.5);
+
+  if (recipe === "portrait") {
+    camera = "portrait photography, 85mm lens, f1.4";
+    comp = "dramatic close-up";
+  } else if (recipe === "macro") {
+    camera = "macro photography, 100mm lens, f2.8";
+  } else if (recipe === "anime") {
+    style = "highly detailed anime illustration";
+  } else if (recipe === "product") {
+    style = "studio product photography, softbox lighting";
+  }
+
+  return joinNonEmpty([base, style, mood, camera, comp], ", ");
+}
+
+function buildNegativePrompt() {
+  return negativeBase.join(", ");
+}
+
+// ---------- PROMPT ENHANCER ----------
+function enhancePrompt(base, mode, length) {
+  let extraDetail = "";
+  if (mode === "detail") extraDetail = ", ultra-detailed, intricate textures, subtle lighting gradients";
+  else if (mode === "cinematic") extraDetail = ", cinematic atmosphere, volumetric light, film grain";
+  else if (mode === "photo") extraDetail = ", realistic skin tones, natural shadows, lens imperfections";
+
+  let lengthBoost = "";
+  if (length === "ultra") lengthBoost = ", extremely detailed, professional concept art quality";
+  else if (length === "long") lengthBoost = ", highly detailed, artstation trending";
+
+  return base + extraDetail + lengthBoost;
+}
+
+// ---------- AUTOSAVE ----------
+function autosaveState() {
+  if (!state.autosave.enabled) return;
+  try {
+    let json = JSON.stringify(state);
+    remember(state.autosave.key, json);
+  } catch (e) {}
+}
+
+function loadState() {
+  let saved = recall(state.autosave.key);
+  if (!saved) return;
+  try {
+    let obj = JSON.parse(saved);
+    obj.ui.generating = false;
+    state = obj;
+  } catch (e) {}
+}
+
+// ---------- IMAGE GENERATION (async with error handling) ----------
+async function generateImage(prompt, negative) {
+  let cfgSeed = state.gen.seed === "random" ? Math.floor(Math.random() * 999999999) : parseInt(state.gen.seed);
+  let ts = new Date().toISOString();
+  let res;
+
+  try {
+    if (sandboxTextToImage) {
+      res = sandboxTextToImage({
+        prompt: prompt,
+        negative_prompt: negative,
+        model: state.gen.model,
+        width: state.gen.width,
+        height: state.gen.height,
+        steps: state.gen.steps,
+        cfg_scale: state.gen.cfg,
+        sampler: state.gen.sampler,
+        seed: cfgSeed,
+        batch_size: state.gen.batch,
+        face_fix: state.gen.face_fix,
+        upscale: state.gen.upscale,
+        safety_filter: state.gen.safety
+      });
+    } else if (sandboxGenerateImage) {
+      let resMap = {"1:1":"768x768","16:9":"768x512","9:16":"512x768","4:5":"768x768"};
+      let url = await sandboxGenerateImage(prompt, {resolution: resMap[state.gen.ratio] || "768x768"});
+      res = { images: [{url: url}], meta: {} };
+    } else {
+      res = { images: [{url: `https://placehold.co/${state.gen.width}x${state.gen.height}?text=Placeholder`}], meta: {} };
+    }
+  } catch (err) {
+    showToast("Generation failed: " + (err.message || err));
+    throw err;
+  }
+
+  res.images.forEach(img => {
+    let id = ts + "_" + Math.random().toString(36).slice(2);
+    state.gallery.items.unshift({
+      id, url: img.url, prompt, negative,
+      model: state.gen.model, seed: cfgSeed,
+      steps: state.gen.steps, cfg: state.gen.cfg,
+      sampler: state.gen.sampler, ratio: state.gen.ratio, ts
+    });
+  });
+
+  autosaveState();
+  return res;
+}
+
+// ---------- UI RENDERING ----------
+function renderHeader() {
+  return `
+    <div class="lab-header">
+      <div class="lab-title">AI Text-to-Image Lab</div>
+      <div class="lab-tabs">
+        <button onclick="setSection('prompt')" ${state.ui.section === "prompt" ? "class='active'" : ""}>Prompt</button>
+        <button onclick="setSection('enhance')" ${state.ui.section === "enhance" ? "class='active'" : ""}>Enhancer</button>
+        <button onclick="setSection('generate')" ${state.ui.section === "generate" ? "class='active'" : ""}>Generate</button>
+        <button onclick="setSection('gallery')" ${state.ui.section === "gallery" ? "class='active'" : ""}>Gallery</button>
+        <button onclick="setSection('settings')" ${state.ui.section === "settings" ? "class='active'" : ""}>Settings</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderPromptSection() {
+  let randomPrompt = buildRandomPrompt(state.random.recipe, state.random.chaos);
+  return `
+    <div class="section">
+      <h2>Prompt Builder</h2>
+      <textarea onchange="setBasePrompt(this.value)" placeholder="Describe the image you want...">${state.prompt.base}</textarea>
+      <div class="row">
+        <button onclick="useRandomPrompt()">🎲 Random prompt</button>
+        <button onclick="copyPrompt()">Copy prompt</button>
+      </div>
+      <div class="hint">Example random prompt: <em>${randomPrompt}</em></div>
+    </div>
+  `;
+}
+
+function renderEnhanceSection() {
+  let enhancedPreview = enhancePrompt(
+    state.prompt.base || buildRandomPrompt(state.random.recipe, state.random.chaos),
+    state.prompt.mode,
+    state.prompt.length
+  );
+  return `
+    <div class="section">
+      <h2>Prompt Enhancer</h2>
+      <label>Mode:
+        <select onchange="setEnhanceMode(this.value)">
+          <option ${state.prompt.mode === "enhance" ? "selected" : ""} value="enhance">Enhance</option>
+          <option ${state.prompt.mode === "rewrite" ? "selected" : ""} value="rewrite">Rewrite</option>
+          <option ${state.prompt.mode === "detail" ? "selected" : ""} value="detail">Detail Boost</option>
+          <option ${state.prompt.mode === "cinematic" ? "selected" : ""} value="cinematic">Cinematic</option>
+          <option ${state.prompt.mode === "photo" ? "selected" : ""} value="photo">Photographic</option>
+        </select>
+      </label>
+      <label>Length:
+        <select onchange="setEnhanceLength(this.value)">
+          <option ${state.prompt.length === "short" ? "selected" : ""} value="short">Short</option>
+          <option ${state.prompt.length === "medium" ? "selected" : ""} value="medium">Medium</option>
+          <option ${state.prompt.length === "long" ? "selected" : ""} value="long">Long</option>
+          <option ${state.prompt.length === "ultra" ? "selected" : ""} value="ultra">Ultra-detailed</option>
+        </select>
+      </label>
+      <div class="preview">
+        <strong>Enhanced preview:</strong>
+        <p>${enhancedPreview}</p>
+      </div>
+      <button onclick="applyEnhancedPrompt()">Apply to generator</button>
+    </div>
+  `;
+}
+
+function renderGenerateSection() {
+  let effectivePrompt = state.prompt.enhanced || state.prompt.base || buildRandomPrompt(state.random.recipe, state.random.chaos);
+  let negative = state.prompt.negative || buildNegativePrompt();
+  return `
+    <div class="section">
+      <h2>Generate Image</h2>
+      <div class="row">
+        <label>Model:
+          <select onchange="setModel(this.value)">
+            <option ${state.gen.model === "SDXL" ? "selected" : ""} value="SDXL">SDXL</option>
+            <option ${state.gen.model === "Flux" ? "selected" : ""} value="Flux">Flux</option>
+            <option ${state.gen.model === "SD1.5" ? "selected" : ""} value="SD1.5">SD 1.5</option>
+            <option ${state.gen.model === "Anime" ? "selected" : ""} value="Anime">Anime</option>
+          </select>
+        </label>
+        <label>Ratio:
+          <select onchange="setRatio(this.value)">
+            <option ${state.gen.ratio === "1:1" ? "selected" : ""} value="1:1">1:1</option>
+            <option ${state.gen.ratio === "16:9" ? "selected" : ""} value="16:9">16:9</option>
+            <option ${state.gen.ratio === "9:16" ? "selected" : ""} value="9:16">9:16</option>
+            <option ${state.gen.ratio === "4:5" ? "selected" : ""} value="4:5">4:5</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>Steps: <input type="number" min="5" max="60" value="${state.gen.steps}" onchange="setSteps(this.value)" /></label>
+        <label>CFG: <input type="number" min="1" max="15" step="0.5" value="${state.gen.cfg}" onchange="setCfg(this.value)" /></label>
+        <label>Seed:
+          <input type="text" value="${state.gen.seed}" onchange="setSeed(this.value)" placeholder="random or number" />
+        </label>
+        <label>Batch:
+          <input type="number" min="1" max="8" value="${state.gen.batch}" onchange="setBatch(this.value)" />
+        </label>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" ${state.gen.face_fix ? "checked" : ""} onchange="toggleFaceFix(this.checked)" /> Face fix</label>
+        <label><input type="checkbox" ${state.gen.upscale ? "checked" : ""} onchange="toggleUpscale(this.checked)" /> Upscale</label>
+        <label><input type="checkbox" ${state.gen.safety ? "checked" : ""} onchange="toggleSafety(this.checked)" /> Safety filter</label>
+      </div>
+      <div class="preview">
+        <strong>Prompt:</strong>
+        <p>${effectivePrompt}</p>
+        <strong>Negative:</strong>
+        <p>${negative}</p>
+      </div>
+      <button class="generate-btn" onclick="doGenerate()" ${state.ui.generating ? "disabled" : ""}>${state.ui.generating ? "⏳ Generating..." : "🚀 Generate"}</button>
+    </div>
+  `;
+}
+
+function renderGallerySection() {
+  if (!state.gallery.items.length) {
+    return `
+      <div class="section">
+        <h2>Gallery</h2>
+        <p>No images yet. Generate something first.</p>
+      </div>
+    `;
+  }
+  let cards = state.gallery.items.map(item => {
+    let safePrompt = item.prompt.replace(/'/g, "\\'").replace(/`/g, "\\`").replace(/\n/g, " ");
+    return `
+    <div class="card">
+      <img src="${item.url}" loading="lazy" />
+      <div class="meta">
+        <div><strong>Prompt:</strong> ${item.prompt}</div>
+        <div><strong>Model:</strong> ${item.model} | <strong>Seed:</strong> ${item.seed}</div>
+        <div><strong>Steps/CFG:</strong> ${item.steps}/${item.cfg}</div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <button onclick="downloadImage('${item.url}')">Download</button>
+          <button onclick="copyText('${safePrompt}')">Copy prompt</button>
+        </div>
+      </div>
+    </div>
+  `}).join("");
+
+  return `
+    <div class="section">
+      <h2>Gallery <span style="opacity:0.6;font-size:0.85em;">(${state.gallery.items.length})</span></h2>
+      <div class="gallery-grid">
+        ${cards}
+      </div>
+    </div>
+  `;
+}
+
+function renderSettingsSection() {
+  return `
+    <div class="section">
+      <h2>Settings</h2>
+      <label>Theme:
+        <select onchange="setTheme(this.value)">
+          <option ${state.ui.theme === "dark" ? "selected" : ""} value="dark">Dark</option>
+          <option ${state.ui.theme === "light" ? "selected" : ""} value="light">Light</option>
+        </select>
+      </label>
+      <label><input type="checkbox" ${state.autosave.enabled ? "checked" : ""} onchange="toggleAutosave(this.checked)" /> Autosave session</label>
+      <button onclick="resetSession()">Reset session</button>
+    </div>
+  `;
+}
+
+// ---------- UI ACTIONS ----------
+function setSection(sec) { state.ui.section = sec; autosaveState(); renderApp(); }
+function setBasePrompt(v) { state.prompt.base = v; autosaveState(); }
+function useRandomPrompt() { state.prompt.base = buildRandomPrompt(state.random.recipe, state.random.chaos); autosaveState(); renderApp(); }
+function copyPrompt() { copyText(state.prompt.base); }
+function setEnhanceMode(v) { state.prompt.mode = v; autosaveState(); renderApp(); }
+function setEnhanceLength(v) { state.prompt.length = v; autosaveState(); renderApp(); }
+function applyEnhancedPrompt() {
+  state.prompt.enhanced = enhancePrompt(state.prompt.base || buildRandomPrompt(state.random.recipe, state.random.chaos), state.prompt.mode, state.prompt.length);
+  autosaveState(); renderApp(); showToast("Enhanced prompt applied");
+}
+function setModel(v) { state.gen.model = v; autosaveState(); }
+function setRatio(v) {
+  state.gen.ratio = v;
+  if (v === "1:1") { state.gen.width = 1024; state.gen.height = 1024; }
+  else if (v === "16:9") { state.gen.width = 1280; state.gen.height = 720; }
+  else if (v === "9:16") { state.gen.width = 720; state.gen.height = 1280; }
+  else if (v === "4:5") { state.gen.width = 1024; state.gen.height = 1280; }
+  autosaveState();
+}
+function setSteps(v) { state.gen.steps = parseInt(v); autosaveState(); }
+function setCfg(v) { state.gen.cfg = parseFloat(v); autosaveState(); }
+function setSeed(v) { state.gen.seed = v || "random"; autosaveState(); }
+function setBatch(v) { state.gen.batch = parseInt(v); autosaveState(); }
+function toggleFaceFix(b) { state.gen.face_fix = b; autosaveState(); }
+function toggleUpscale(b) { state.gen.upscale = b; autosaveState(); }
+function toggleSafety(b) { state.gen.safety = b; autosaveState(); }
+function setTheme(v) { state.ui.theme = v; autosaveState(); renderApp(); }
+function toggleAutosave(b) { state.autosave.enabled = b; autosaveState(); }
+function resetSession() {
+  state.gallery.items = [];
+  state.prompt.base = "";
+  state.prompt.enhanced = "";
+  autosaveState(); renderApp(); showToast("Session reset");
+}
+async function doGenerate() {
+  state.ui.generating = true; renderApp();
+  try {
+    let prompt = state.prompt.enhanced || state.prompt.base || buildRandomPrompt(state.random.recipe, state.random.chaos);
+    let negative = state.prompt.negative || buildNegativePrompt();
+    await generateImage(prompt, negative);
+    showToast("Image generated");
+  } catch (err) {
+    // error toast already shown inside generateImage
+  } finally {
+    state.ui.generating = false;
+    autosaveState();
+    renderApp();
+  }
+}
+function downloadImage(url) { download(url); showToast("Downloading…"); }
+
+// ---------- MAIN RENDER ----------
+function renderApp() {
+  let html = `
+    <div class="lab lab-${state.ui.theme}">
+      ${renderHeader()}
+      ${state.ui.section === "prompt" ? renderPromptSection() : ""}
+      ${state.ui.section === "enhance" ? renderEnhanceSection() : ""}
+      ${state.ui.section === "generate" ? renderGenerateSection() : ""}
+      ${state.ui.section === "gallery" ? renderGallerySection() : ""}
+      ${state.ui.section === "settings" ? renderSettingsSection() : ""}
+    </div>
+  `;
+  appCtn.innerHTML = html;
+}
+
+loadState();
+renderApp();
+</script>
+
+<style>
+#appCtn { text-align: left; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+.lab { max-width: 900px; margin: 0 auto; padding: 24px; transition: background 0.2s, color 0.2s; min-height: 100vh; box-sizing: border-box; }
+.lab-dark { background: #0b0b10; color: #e5e5eb; }
+.lab-light { background: #f7f7f9; color: #111; }
+
+.lab-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid rgba(128,128,128,0.25); }
+.lab-title { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; }
+
+.lab-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.lab-tabs button { padding: 8px 14px; border-radius: 8px; border: 1px solid transparent; background: #1a1a22; color: #b9b9c6; cursor: pointer; font-size: 0.92rem; }
+.lab-light .lab-tabs button { background: #e2e2e8; color: #222; }
+.lab-tabs button:hover { border-color: #555; }
+.lab-tabs button.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+
+.section h2 { margin: 0 0 14px; font-size: 1.15rem; }
+textarea, input, select { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #2a2a35; background: #13131a; color: inherit; font: inherit; box-sizing: border-box; }
+.lab-light textarea, .lab-light input, .lab-light select { background: #fff; border-color: #ccc; color: #111; }
+textarea { min-height: 120px; resize: vertical; }
+label { display: block; margin-bottom: 10px; font-size: 0.92rem; }
+
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
+.row > * { flex: 1 1 180px; }
+
+button { padding: 10px 14px; border-radius: 8px; border: 1px solid #2a2a35; background: #1a1a22; color: #c5c5d2; cursor: pointer; font: inherit; }
+.lab-light button { background: #e2e2e8; color: #222; border-color: #ccc; }
+button:hover { filter: brightness(1.15); }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.generate-btn { background: #10b981; color: #fff; border-color: #10b981; font-weight: 800; font-size: 1.05rem; width: 100%; }
+.generate-btn:hover { background: #059669; }
+
+.preview { background: rgba(255,255,255,0.03); border: 1px solid #222; padding: 12px; border-radius: 10px; margin: 12px 0; }
+.lab-light .preview { background: rgba(0,0,0,0.02); border-color: #ddd; }
+.preview p { margin: 6px 0 0; font-size: 0.92rem; opacity: 0.85; word-break: break-word; }
+
+.hint { margin-top: 10px; font-size: 0.85rem; opacity: 0.7; }
+
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-top: 12px; }
+.card { background: #14141b; border: 1px solid #222; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.lab-light .card { background: #fff; border-color: #ddd; }
+.card img { width: 100%; height: 220px; object-fit: cover; display: block; background: #0f0f15; }
+.meta { padding: 12px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 6px; }
+.meta button { padding: 6px 10px; font-size: 0.8rem; border-radius: 6px; }
+
+#toastEl { font-size: 0.9rem; }
+#toastEl.show { opacity: 1; }
+</style>
+</body>
+</html>

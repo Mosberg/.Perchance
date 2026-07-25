@@ -1,0 +1,616 @@
+// A Notebook Plugin for Perchance
+// Suggested import:
+//   notebook = {import:a-notebook-plugin}
+// Suggested usage in HTML panel:
+//   [notebook.mount()]
+
+$output = [createNotebookApi()]
+
+createNotebookApi() =>
+  if(!window.__aNotebookPluginV1) {
+    window.__aNotebookPluginV1 = (function () {
+      "use strict";
+
+      const DEFAULTS = {
+        storageKey: typeof kvStorageKey !== "undefined" ? kvStorageKey : "acg_notebook_pages_v2",
+        title: "Scratchpad",
+        defaultPageTitle: "Ideas",
+        emptyPageTitle: "Untitled",
+        exportFileName: "notebook.json",
+        mountButton: true,
+        buttonLabel: "Notebook",
+        buttonPosition: "bottom-right",
+        theme: {
+          backdrop: "rgba(0,0,0,0.6)",
+          panelBg: "#1a1a2e",
+          surface: "#16213e",
+          border: "#0f3460",
+          text: "#eeeeee",
+          muted: "#9aa4b2",
+          accent: "#0f3460"
+        },
+        labels: {
+          close: "close",
+          addPage: "add page",
+          export: "export",
+          import: "import",
+          open: "open",
+          rename: "rename",
+          delete: "delete",
+          save: "save",
+          newPagePlaceholder: "New page title"
+        },
+        confirmDelete: true,
+        autosave: false,
+        autosaveDelay: 500,
+        maxTitleLength: 120,
+        allowImportReplace: true,
+        openOnInit: false,
+        zIndexButton: 9998,
+        zIndexModal: 9999
+      };
+
+      const state = {
+        initialized: false,
+        mounted: false,
+        pages: [],
+        activeId: null,
+        options: null,
+        els: {},
+        autosaveTimer: null,
+        instanceId: "nb_" + Math.random().toString(36).slice(2, 10)
+      };
+
+      function deepMerge(base, extra) {
+        const out = { ...base };
+        for (const key in extra || {}) {
+          const baseVal = out[key];
+          const extraVal = extra[key];
+          if (isPlainObject(baseVal) && isPlainObject(extraVal)) {
+            out[key] = deepMerge(baseVal, extraVal);
+          } else {
+            out[key] = extraVal;
+          }
+        }
+        return out;
+      }
+
+      function isPlainObject(value) {
+        return value && typeof value === "object" && !Array.isArray(value);
+      }
+
+      function genId() {
+        return "p_" + Math.random().toString(36).slice(2, 10);
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function normalizeTitle(value) {
+        const text = String(value ?? "").trim();
+        const sliced = text.slice(0, state.options.maxTitleLength);
+        return sliced || state.options.emptyPageTitle;
+      }
+
+      function defaultPage(title) {
+        return {
+          id: genId(),
+          title: normalizeTitle(title || state.options.defaultPageTitle),
+          content: "",
+          created: Date.now(),
+          modified: Date.now()
+        };
+      }
+
+      function normalizePage(page) {
+        return {
+          id: page?.id || genId(),
+          title: normalizeTitle(page?.title || state.options.emptyPageTitle),
+          content: String(page?.content ?? ""),
+          created: Number(page?.created) || Date.now(),
+          modified: Number(page?.modified) || Number(page?.created) || Date.now()
+        };
+      }
+
+      function getStorageApi() {
+        const key = state.options.storageKey;
+        return {
+          read() {
+            try {
+              if (typeof kv !== "undefined" && kv && typeof kv.get === "function") {
+                return kv.get(key);
+              }
+              return localStorage.getItem(key);
+            } catch (err) {
+              return null;
+            }
+          },
+          write(value) {
+            try {
+              if (typeof kv !== "undefined" && kv && typeof kv.set === "function") {
+                kv.set(key, value);
+                return true;
+              }
+              localStorage.setItem(key, value);
+              return true;
+            } catch (err) {
+              console.error("Notebook save failed:", err);
+              return false;
+            }
+          }
+        };
+      }
+
+      function loadPages() {
+        const storage = getStorageApi();
+        try {
+          const raw = storage.read();
+          if (!raw) return [defaultPage()];
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed) || parsed.length === 0) return [defaultPage()];
+          return parsed.map(normalizePage);
+        } catch (err) {
+          console.error("Notebook load failed:", err);
+          return [defaultPage()];
+        }
+      }
+
+      function savePages() {
+        const storage = getStorageApi();
+        storage.write(JSON.stringify(state.pages, null, 2));
+      }
+
+      function getActivePage() {
+        return state.pages.find((page) => page.id === state.activeId) || null;
+      }
+
+      function setActivePage(id) {
+        const found = state.pages.find((page) => page.id === id);
+        if (!found) return;
+        state.activeId = found.id;
+        renderList();
+        renderEditor(found);
+      }
+
+      function scheduleAutosave() {
+        if (!state.options.autosave) return;
+        clearTimeout(state.autosaveTimer);
+        state.autosaveTimer = setTimeout(() => {
+          persistEditor();
+        }, state.options.autosaveDelay);
+      }
+
+      function persistEditor() {
+        const page = getActivePage();
+        if (!page || !state.els.pageTitleInput || !state.els.pageTextarea) return false;
+        page.title = normalizeTitle(state.els.pageTitleInput.value || page.title);
+        page.content = state.els.pageTextarea.value;
+        page.modified = Date.now();
+        savePages();
+        renderList();
+        return true;
+      }
+
+      function addPage(title) {
+        const page = defaultPage(title || state.options.emptyPageTitle);
+        state.pages.unshift(page);
+        state.activeId = page.id;
+        savePages();
+        renderList();
+        renderEditor(page);
+        return page;
+      }
+
+      function deletePage(id) {
+        const page = state.pages.find((item) => item.id === id);
+        if (!page) return false;
+
+        if (state.options.confirmDelete) {
+          const ok = confirm("Delete \"" + page.title + "\"?");
+          if (!ok) return false;
+        }
+
+        state.pages = state.pages.filter((item) => item.id !== id);
+
+        if (state.pages.length === 0) {
+          const fresh = defaultPage();
+          state.pages.push(fresh);
+          state.activeId = fresh.id;
+        } else if (state.activeId === id) {
+          state.activeId = state.pages[0].id;
+        }
+
+        savePages();
+        renderList();
+        renderEditor(getActivePage());
+        return true;
+      }
+
+      function renamePage(id, nextTitle) {
+        const page = state.pages.find((item) => item.id === id);
+        if (!page) return false;
+
+        let title = nextTitle;
+        if (typeof title !== "string") {
+          title = prompt("New title", page.title);
+        }
+
+        if (title == null) return false;
+        page.title = normalizeTitle(title);
+        page.modified = Date.now();
+        savePages();
+        renderList();
+
+        if (state.activeId === id && state.els.pageTitleInput) {
+          state.els.pageTitleInput.value = page.title;
+        }
+
+        return true;
+      }
+
+      function exportPages() {
+        const blob = new Blob([JSON.stringify(state.pages, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = state.options.exportFileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      function importPages() {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "application/json";
+
+        input.addEventListener("change", (event) => {
+          const file = event.target.files && event.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const parsed = JSON.parse(String(reader.result || "[]"));
+              if (!Array.isArray(parsed)) {
+                alert("Invalid notebook format.");
+                return;
+              }
+
+              const incoming = parsed.map(normalizePage);
+              if (incoming.length === 0) {
+                alert("Imported file is empty.");
+                return;
+              }
+
+              if (state.options.allowImportReplace) {
+                state.pages = incoming;
+              } else {
+                const existingIds = new Set(state.pages.map((p) => p.id));
+                for (const page of incoming) {
+                  if (existingIds.has(page.id)) page.id = genId();
+                }
+                state.pages = incoming.concat(state.pages);
+              }
+
+              state.activeId = state.pages[0].id;
+              savePages();
+              renderList();
+              renderEditor(getActivePage());
+            } catch (err) {
+              alert("Invalid JSON file.");
+            }
+          };
+
+          reader.readAsText(file);
+        });
+
+        input.click();
+      }
+
+      function openModal() {
+        ensureMounted();
+        state.els.backdrop.style.display = "flex";
+        renderList();
+        renderEditor(getActivePage() || state.pages[0]);
+        requestAnimationFrame(() => {
+          state.els.backdrop.setAttribute("data-open", "true");
+          state.els.closeBtn.focus();
+        });
+      }
+
+      function closeModal() {
+        if (!state.els.backdrop) return;
+        state.els.backdrop.removeAttribute("data-open");
+        state.els.backdrop.style.display = "none";
+      }
+
+      function renderList() {
+        const list = state.els.pagesList;
+        if (!list) return;
+
+        list.innerHTML = state.pages
+          .map((page) => {
+            const active = page.id === state.activeId;
+            const stamp = new Date(page.modified || page.created).toLocaleString();
+            return [
+              '<article class="nb__page-card' + (active ? ' is-active' : '') + '" data-page-id="' + escapeHtml(page.id) + '">',
+              '  <div class="nb__page-meta">',
+              '    <strong class="nb__page-title">' + escapeHtml(page.title) + '</strong>',
+              '    <span class="nb__page-date">' + escapeHtml(stamp) + '</span>',
+              '  </div>',
+              '  <div class="nb__page-actions">',
+              '    <button type="button" class="nb__action-btn" data-action="open" data-id="' + escapeHtml(page.id) + '">' + escapeHtml(state.options.labels.open) + '</button>',
+              '    <button type="button" class="nb__action-btn" data-action="rename" data-id="' + escapeHtml(page.id) + '">' + escapeHtml(state.options.labels.rename) + '</button>',
+              '    <button type="button" class="nb__action-btn" data-action="delete" data-id="' + escapeHtml(page.id) + '">' + escapeHtml(state.options.labels.delete) + '</button>',
+              '  </div>',
+              '</article>'
+            ].join("\n");
+          })
+          .join("\n");
+      }
+
+      function renderEditor(page) {
+        const editor = state.els.editor;
+        if (!editor || !page) return;
+
+        editor.innerHTML = [
+          '<div class="nb__editor-top">',
+          '  <label class="nb__field">',
+          '    <span class="nb__sr-only">Page title</span>',
+          '    <input id="' + state.instanceId + '_pageTitleInput" class="nb__input" type="text" maxlength="' + state.options.maxTitleLength + '" value="' + escapeHtml(page.title) + '" />',
+          '  </label>',
+          '  <button type="button" id="' + state.instanceId + '_savePageBtn" class="nb__btn nb__btn--primary">' + escapeHtml(state.options.labels.save) + '</button>',
+          '</div>',
+          '<label class="nb__field nb__field--textarea">',
+          '  <span class="nb__sr-only">Page content</span>',
+          '  <textarea id="' + state.instanceId + '_pageTextarea" class="nb__textarea">' + escapeHtml(page.content) + '</textarea>',
+          '</label>'
+        ].join("\n");
+
+        state.els.pageTitleInput = editor.querySelector("#" + state.instanceId + "_pageTitleInput");
+        state.els.pageTextarea = editor.querySelector("#" + state.instanceId + "_pageTextarea");
+        state.els.saveBtn = editor.querySelector("#" + state.instanceId + "_savePageBtn");
+
+        state.els.saveBtn.addEventListener("click", () => {
+          persistEditor();
+        });
+
+        state.els.pageTitleInput.addEventListener("input", scheduleAutosave);
+        state.els.pageTextarea.addEventListener("input", scheduleAutosave);
+      }
+
+      function getButtonPositionCss(position) {
+        const map = {
+          "bottom-right": "bottom:1rem;right:1rem;",
+          "bottom-left": "bottom:1rem;left:1rem;",
+          "top-right": "top:1rem;right:1rem;",
+          "top-left": "top:1rem;left:1rem;"
+        };
+        return map[position] || map["bottom-right"];
+      }
+
+      function buildStyles() {
+        const t = state.options.theme;
+        return [
+          ".nb__root, .nb__root * { box-sizing: border-box; }",
+          ".nb__root {",
+          "  --nb-backdrop: " + t.backdrop + ";",
+          "  --nb-panel-bg: " + t.panelBg + ";",
+          "  --nb-surface: " + t.surface + ";",
+          "  --nb-border: " + t.border + ";",
+          "  --nb-text: " + t.text + ";",
+          "  --nb-muted: " + t.muted + ";",
+          "  --nb-accent: " + t.accent + ";",
+          "  --nb-radius-sm: 6px;",
+          "  --nb-radius-md: 8px;",
+          "  --nb-radius-lg: 12px;",
+          "  --nb-gap-1: 0.25rem;",
+          "  --nb-gap-2: 0.5rem;",
+          "  --nb-gap-3: 0.75rem;",
+          "  --nb-gap-4: 1rem;",
+          "  --nb-shadow: 0 10px 40px rgba(0,0,0,0.25);",
+          "  font-family: system-ui, sans-serif;",
+          "  color: var(--nb-text);",
+          "}",
+          ".nb__launcher { position: fixed; " + getButtonPositionCss(state.options.buttonPosition) + " z-index: " + state.options.zIndexButton + "; }",
+          ".nb__btn, .nb__action-btn { border: 1px solid var(--nb-border); background: var(--nb-accent); color: var(--nb-text); border-radius: var(--nb-radius-sm); padding: 0.45rem 0.7rem; cursor: pointer; }",
+          ".nb__btn:hover, .nb__action-btn:hover { filter: brightness(1.08); }",
+          ".nb__backdrop { display: none; position: fixed; inset: 0; z-index: " + state.options.zIndexModal + "; background: var(--nb-backdrop); align-items: center; justify-content: center; padding: 1rem; }",
+          ".nb__dialog { width: min(720px, 100%); max-height: 92vh; overflow: auto; background: var(--nb-panel-bg); border: 1px solid var(--nb-border); border-radius: var(--nb-radius-lg); padding: 1rem; box-shadow: var(--nb-shadow); }",
+          ".nb__header, .nb__toolbar, .nb__editor-top, .nb__page-card { display: flex; gap: var(--nb-gap-2); align-items: center; justify-content: space-between; }",
+          ".nb__toolbar { flex-wrap: wrap; margin-top: var(--nb-gap-2); }",
+          ".nb__pages { margin-top: var(--nb-gap-3); display: flex; flex-direction: column; gap: var(--nb-gap-2); }",
+          ".nb__page-card { align-items: stretch; background: var(--nb-surface); border: 1px solid var(--nb-border); border-radius: var(--nb-radius-md); padding: var(--nb-gap-2); }",
+          ".nb__page-card.is-active { outline: 2px solid rgba(255,255,255,0.12); }",
+          ".nb__page-meta { min-width: 0; flex: 1; }",
+          ".nb__page-title { display: block; overflow-wrap: anywhere; }",
+          ".nb__page-date { display: block; margin-top: 0.2rem; font-size: 0.85rem; color: var(--nb-muted); }",
+          ".nb__page-actions { display: flex; gap: var(--nb-gap-1); flex-wrap: wrap; }",
+          ".nb__editor { margin-top: var(--nb-gap-3); }",
+          ".nb__field { display: block; flex: 1; }",
+          ".nb__input, .nb__textarea { width: 100%; border: 1px solid var(--nb-border); border-radius: var(--nb-radius-sm); background: var(--nb-surface); color: var(--nb-text); padding: 0.55rem 0.7rem; }",
+          ".nb__textarea { min-height: 30vh; margin-top: var(--nb-gap-2); resize: vertical; }",
+          ".nb__sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }",
+          "@media (max-width: 640px) { .nb__page-card, .nb__header, .nb__toolbar, .nb__editor-top { flex-direction: column; align-items: stretch; } .nb__page-actions { justify-content: flex-start; } }"
+        ].join("\n");
+      }
+
+      function buildMarkup() {
+        const labels = state.options.labels;
+        const launcher = state.options.mountButton
+          ? ['<div class="nb__launcher">', '  <button type="button" class="nb__btn nb__btn--primary" data-notebook-open>' + escapeHtml(state.options.buttonLabel) + '</button>', '</div>'].join("\n"): "";
+
+        return [
+          '<div class="nb__root" data-notebook-instance="' + escapeHtml(state.instanceId) + '">',
+          launcher,
+          '  <div class="nb__backdrop" data-notebook-backdrop>',
+          '    <div class="nb__dialog" role="dialog" aria-modal="true" aria-label="' + escapeHtml(state.options.title) + '">',
+          '      <div class="nb__header">',
+          '        <h2>' + escapeHtml(state.options.title) + '</h2>',
+          '        <button type="button" class="nb__btn" data-notebook-close>' + escapeHtml(labels.close) + '</button>',
+          '      </div>',
+          '      <div class="nb__toolbar">',
+          '        <input type="text" class="nb__input" data-notebook-new-title placeholder="' + escapeHtml(labels.newPagePlaceholder) + '" />',
+          '        <button type="button" class="nb__btn" data-notebook-add>' + escapeHtml(labels.addPage) + '</button>',
+          '        <button type="button" class="nb__btn" data-notebook-export>' + escapeHtml(labels.export) + '</button>',
+          '        <button type="button" class="nb__btn" data-notebook-import>' + escapeHtml(labels.import) + '</button>',
+          '      </div>',
+          '      <div class="nb__pages" data-notebook-pages></div>',
+          '      <div class="nb__editor" data-notebook-editor></div>',
+          '    </div>',
+          '  </div>',
+          '</div>'
+        ].join("\n");
+      }
+
+      function bindEvents(root) {
+        state.els.root = root;
+        state.els.openBtn = root.querySelector("[data-notebook-open]");
+        state.els.closeBtn = root.querySelector("[data-notebook-close]");
+        state.els.backdrop = root.querySelector("[data-notebook-backdrop]");
+        state.els.newTitleInput = root.querySelector("[data-notebook-new-title]");
+        state.els.addBtn = root.querySelector("[data-notebook-add]");
+        state.els.exportBtn = root.querySelector("[data-notebook-export]");
+        state.els.importBtn = root.querySelector("[data-notebook-import]");
+        state.els.pagesList = root.querySelector("[data-notebook-pages]");
+        state.els.editor = root.querySelector("[data-notebook-editor]");
+
+        if (state.els.openBtn) {
+          state.els.openBtn.addEventListener("click", openModal);
+        }
+
+        state.els.closeBtn.addEventListener("click", closeModal);
+
+        state.els.backdrop.addEventListener("click", (event) => {
+          if (event.target === state.els.backdrop) closeModal();
+        });
+
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" && state.els.backdrop.style.display === "flex") {
+            closeModal();
+          }
+        });
+
+        state.els.addBtn.addEventListener("click", () => {
+          const value = state.els.newTitleInput.value;
+          addPage(value);
+          state.els.newTitleInput.value = "";
+        });
+
+        state.els.exportBtn.addEventListener("click", exportPages);
+        state.els.importBtn.addEventListener("click", importPages);
+
+        state.els.pagesList.addEventListener("click", (event) => {
+          const button = event.target.closest("button[data-action]");
+          if (!button) return;
+
+          const action = button.dataset.action;
+          const id = button.dataset.id;
+
+          if (action === "open") setActivePage(id);
+          if (action === "rename") renamePage(id);
+          if (action === "delete") deletePage(id);
+        });
+      }
+
+      function ensureMounted(target) {
+        if (state.mounted) return state.els.root;
+
+        const requestedTarget =
+          typeof target === "string"
+            ? document.querySelector(target)
+            : target instanceof Element
+            ? target
+            : document.body;
+        const mountTarget = requestedTarget || document.body;
+
+        const holder = document.createElement("div");
+        holder.innerHTML = "<style>" + buildStyles() + "</style>" + buildMarkup();
+        mountTarget.appendChild(holder.firstElementChild);
+        mountTarget.appendChild(holder.firstElementChild);
+
+        const root = mountTarget.querySelector('[data-notebook-instance="' + state.instanceId + '"]');
+        bindEvents(root);
+        state.mounted = true;
+
+        renderList();
+        renderEditor(getActivePage());
+        return root;
+      }
+
+      function init(options = {}) {
+        if (state.initialized) return api;
+        state.options = deepMerge(DEFAULTS, options);
+        state.pages = loadPages();
+        state.activeId = state.pages[0] ? state.pages[0].id : null;
+        state.initialized = true;
+        if (state.options.openOnInit) {
+          ensureMounted();
+          openModal();
+        }
+        return api;
+      }
+
+      function mount(target, options = {}) {
+        if (!state.initialized) init(options);
+        else if (options && Object.keys(options).length) {
+          state.options = deepMerge(state.options, options);
+        }
+        ensureMounted(target);
+        return "";
+      }
+
+      function listPages() {
+        return state.pages.map((page) => ({ ...page }));
+      }
+
+      function getPage(id) {
+        const page = state.pages.find((item) => item.id === id);
+        return page ? { ...page } : null;
+      }
+
+      function updatePage(id, updates = {}) {
+        const page = state.pages.find((item) => item.id === id);
+        if (!page) return false;
+        if ("title" in updates) page.title = normalizeTitle(updates.title);
+        if ("content" in updates) page.content = String(updates.content ?? "");
+        page.modified = Date.now();
+        savePages();
+        renderList();
+        if (state.activeId === id) renderEditor(page);
+        return true;
+      }
+
+      const api = {
+        init,
+        mount,
+        open: openModal,
+        close: closeModal,
+        add: addPage,
+        remove: deletePage,
+        rename: renamePage,
+        update: updatePage,
+        getPage,
+        listPages,
+        exportPages,
+        importPages,
+        save: persistEditor,
+        config(nextOptions = {}) {
+          state.options = deepMerge(state.options || DEFAULTS, nextOptions);
+          return api;
+        }
+      };
+
+      return api.init();
+    })();
+  }
+
+  return window.__aNotebookPluginV1;

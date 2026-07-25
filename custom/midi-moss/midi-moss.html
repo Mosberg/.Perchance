@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>midi-moss — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MIDI → Minecraft Note Block (WebMIDI)</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b0f14; --panel:#121a24; --text:#e8eef6; --muted:#a8b3c2; --accent:#6aa9ff; }
+    body { margin:0; font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 980px; margin: 24px auto; padding: 0 16px; display: grid; gap: 16px; }
+    .row { display:flex; gap:12px; flex-wrap: wrap; align-items:center; }
+    .panel { background:var(--panel); border:1px solid #223044; border-radius: 14px; padding: 14px; }
+    label { display:block; font-size: 12px; color:var(--muted); margin-bottom:6px; }
+    select, button, input[type="range"] {
+      background:#0e1520; color:var(--text); border:1px solid #2a3b55; border-radius: 10px; padding: 10px 12px;
+    }
+    button { cursor:pointer; }
+    button.primary { border-color: var(--accent); }
+    .kv { display:grid; grid-template-columns: 180px 1fr; gap: 8px 12px; align-items:center; }
+    .kv div { padding: 6px 0; border-bottom: 1px solid #1e2a3c; }
+    .kv div:nth-last-child(-n+2) { border-bottom: none; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .keys { display:grid; grid-template-columns: repeat(25, 1fr); gap: 4px; margin-top: 10px; }
+    .key { height: 30px; border-radius: 6px; background:#0e1520; border:1px solid #223044; }
+    .key.on { background: #1f4b92; border-color: #3f77d6; }
+    .hint { color: var(--muted); font-size: 13px; line-height: 1.35; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="row">
+        <button id="btnEnable" class="primary">Enable MIDI</button>
+        <div>
+          <label>MIDI input</label>
+          <select id="selIn"></select>
+        </div>
+        <div>
+          <label>Waveform (rough “instrument”)</label>
+          <select id="selWave">
+            <option value="triangle">Harp-ish (triangle)</option>
+            <option value="sine">Sine</option>
+            <option value="square">Bit-ish (square)</option>
+            <option value="sawtooth">Saw</option>
+          </select>
+        </div>
+        <div style="min-width:240px; flex:1;">
+          <label>Master volume</label>
+          <input id="rngVol" type="range" min="0" max="1" step="0.01" value="0.35" />
+        </div>
+      </div>
+      <p class="hint">
+        This maps MIDI notes into Minecraft note-block “use count” 0–24 (F♯3..F♯5) and applies the Minecraft pitch multiplier formula (2 ^ ((useCount - 12) / 12)). [page:2]
+      </p>
+    </div>
+
+    <div class="panel">
+      <div class="kv">
+        <div class="mono">Status</div><div id="txtStatus">MIDI not enabled.</div>
+        <div class="mono">Last MIDI</div><div id="txtLast" class="mono">—</div>
+        <div class="mono">MIDI note → useCount</div><div id="txtMap" class="mono">—</div>
+        <div class="mono">Pitch multiplier</div><div id="txtPitch" class="mono">—</div>
+      </div>
+
+      <div class="keys" id="grid"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const btnEnable = document.getElementById("btnEnable");
+  const selIn = document.getElementById("selIn");
+  const selWave = document.getElementById("selWave");
+  const rngVol = document.getElementById("rngVol");
+  const txtStatus = document.getElementById("txtStatus");
+  const txtLast = document.getElementById("txtLast");
+  const txtMap = document.getElementById("txtMap");
+  const txtPitch = document.getElementById("txtPitch");
+  const grid = document.getElementById("grid");
+
+  // Build 25-step grid (useCount 0..24)
+  const cells = [];
+  for (let i = 0; i < 25; i++) {
+    const d = document.createElement("div");
+    d.className = "key";
+    d.title = `useCount ${i}`;
+    grid.appendChild(d);
+    cells.push(d);
+  }
+
+  // --- Audio setup ---
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const ac = new AudioCtx();
+  const master = ac.createGain();
+  master.gain.value = Number(rngVol.value);
+  master.connect(ac.destination);
+
+  rngVol.addEventListener("input", () => master.gain.value = Number(rngVol.value));
+
+  // Active voices keyed by MIDI note number
+  const voices = new Map();
+
+  function midiToUseCount(midiNote) {
+    // Minecraft standard note-block range for harp/pling is F#3..F#5 (25 semitones). [page:2]
+    // MIDI note for F#3 is 54 => map 54..78 to useCount 0..24
+    const use = midiNote - 54;
+    return Math.max(0, Math.min(24, use));
+  }
+
+  function useCountToPitchMultiplier(useCount) {
+    // Minecraft wiki formula: 2 ^ ((use count - 12) / 12). [page:2]
+    return Math.pow(2, (useCount - 12) / 12);
+  }
+
+  function fSharp3Hz() {
+    // 54 is F#3 in MIDI; compute its Hz from A4=440.
+    const A4 = 69, A4Hz = 440;
+    return A4Hz * Math.pow(2, (54 - A4) / 12);
+  }
+
+  function startVoice(midiNote, velocity) {
+    const useCount = midiToUseCount(midiNote);
+    const mult = useCountToPitchMultiplier(useCount);
+
+    // Base frequency = F#3, then apply MC pitch multiplier
+    const freq = fSharp3Hz() * mult;
+
+    // Simple synth voice
+    const osc = ac.createOscillator();
+    osc.type = selWave.value;
+
+    const g = ac.createGain();
+    const v = Math.max(0, Math.min(1, velocity / 127));
+    const attack = 0.005, decay = 0.08, sustain = 0.45;
+    const now = ac.currentTime;
+
+    osc.frequency.setValueAtTime(freq, now);
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(v, now + attack);
+    g.gain.linearRampToValueAtTime(v * sustain, now + attack + decay);
+
+    osc.connect(g);
+    g.connect(master);
+    osc.start(now);
+
+    voices.set(midiNote, { osc, g, useCount });
+
+    // UI
+    cells.forEach(c => c.classList.remove("on"));
+    cells[useCount].classList.add("on");
+    txtMap.textContent = `${midiNote} → useCount ${useCount}`;
+    txtPitch.textContent = mult.toFixed(6);
+  }
+
+  function stopVoice(midiNote) {
+    const voice = voices.get(midiNote);
+    if (!voice) return;
+
+    const now = ac.currentTime;
+    voice.g.gain.cancelScheduledValues(now);
+    voice.g.gain.setValueAtTime(voice.g.gain.value, now);
+    voice.g.gain.linearRampToValueAtTime(0, now + 0.06);
+
+    voice.osc.stop(now + 0.08);
+    voices.delete(midiNote);
+
+    // UI
+    if (voices.size === 0) cells.forEach(c => c.classList.remove("on"));
+  }
+
+  // --- MIDI setup ---
+  let midiAccess = null;
+
+  function setStatus(s) { txtStatus.textContent = s; }
+
+  function attachInput(input) {
+    input.onmidimessage = (message) => {
+      const [status, note, vel] = message.data;
+      const cmd = status & 0xF0;
+
+      txtLast.textContent = `[${status}, ${note}, ${vel}]`;
+
+      // 0x90 note on (vel 0 == off), 0x80 note off
+      if (cmd === 0x90 && vel > 0) startVoice(note, vel);
+      else if (cmd === 0x80 || (cmd === 0x90 && vel === 0)) stopVoice(note);
+    };
+  }
+
+  function refreshInputs() {
+    selIn.innerHTML = "";
+    const inputs = [...midiAccess.inputs.values()];
+    if (inputs.length === 0) {
+      const opt = document.createElement("option");
+      opt.textContent = "No MIDI inputs found";
+      opt.value = "";
+      selIn.appendChild(opt);
+      return;
+    }
+    inputs.forEach((inp, idx) => {
+      const opt = document.createElement("option");
+      opt.value = inp.id;
+      opt.textContent = inp.name || `MIDI Input ${idx+1}`;
+      selIn.appendChild(opt);
+    });
+    selIn.value = inputs[0].id;
+    attachInput(inputs[0]);
+  }
+
+  selIn.addEventListener("change", () => {
+    const input = midiAccess.inputs.get(selIn.value);
+    if (input) attachInput(input);
+  });
+
+  btnEnable.addEventListener("click", async () => {
+    try {
+      // Must be user gesture; secure context recommended/required in many browsers. [page:1]
+      await ac.resume();
+      if (!navigator.requestMIDIAccess) {
+        setStatus("Web MIDI API not available in this browser.");
+        return;
+      }
+      midiAccess = await navigator.requestMIDIAccess();
+      setStatus("MIDI enabled. Select your keyboard input.");
+      refreshInputs();
+
+      midiAccess.onstatechange = () => refreshInputs();
+    } catch (e) {
+      setStatus(`Failed to enable MIDI: ${e?.message ?? e}`);
+    }
+  });
+})();
+</script>
+</body>
+</html>
+</body>
+</html>

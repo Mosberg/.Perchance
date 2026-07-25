@@ -1,0 +1,214 @@
+// https://perchance.org/jsonx-everything-showcase
+
+jsonX = {import:jsonx}
+
+$meta
+  title = jsonX Everything Showcase
+  description = Demonstrates every jsonX plugin method in one generator.
+
+pageTitle
+  jsonX Everything Showcase
+
+pageIntro
+  This generator imports jsonX and exercises every available helper once. The full report below is generated live from plugin calls.
+
+resolveJsonX(imported) =>
+  if(imported && typeof imported.parse === "function") return imported
+  if(imported && imported.jsonX && typeof imported.jsonX.parse === "function") return imported.jsonX
+  return imported
+
+encodeForHtml(text) =>
+  text = String(text || "")
+  text = text.replace(/&/g, "&amp;")
+  text = text.replace(/</g, "&lt;")
+  text = text.replace(/>/g, "&gt;")
+  text = text.replace(/\{/g, "&#123;")
+  text = text.replace(/\}/g, "&#125;")
+  text = text.replace(/\[/g, "&#91;")
+  text = text.replace(/\]/g, "&#93;")
+  return text
+
+runAll() =>
+  let sourceLines = [
+    "{",
+    "  " + "/" + "/ profile",
+    "  \"name\": \"Mosberg\",",
+    "  \"age\": 31,",
+    "  \"active\": \"yes\",",
+    "  \"tags\": [\"red\", \"green\", \"green\"],",
+    "  \"scores\": [4, 1, 9],",
+    "  \"nested\": {\"one\": {\"two\": \"value\"}}",
+    "}"
+  ]
+  let source = sourceLines.join("\n")
+
+  let api = resolveJsonX(jsonX)
+  if(!api || typeof api.parse !== "function") {
+    let details = {
+      error: "jsonX import is not exposing parse()",
+      importType: typeof jsonX
+    }
+    if(jsonX && typeof jsonX === "object") details.importKeys = Object.keys(jsonX)
+    return {importError: details}
+  }
+
+  let parsed = api.parse(source, {})
+
+  let strippedText = api.stripJsonc(source)
+  let strippedObject = {}
+  try {
+    strippedObject = api.parseStrict(strippedText)
+  } catch(e) {
+    strippedObject = {}
+  }
+
+  let stringifyText = api.stringify(parsed, 2)
+  let stringifyObject = {}
+  try {
+    stringifyObject = api.parseStrict(stringifyText)
+  } catch(e) {
+    stringifyObject = {}
+  }
+
+  let strictName = ""
+  try {
+    strictName = api.parseStrict(source).name
+  } catch(e) {
+    strictName = "parseStrict error"
+  }
+
+  let forSet = {profile: {name: "old"}}
+  api.set(forSet, "profile.nickname", "Mosberg")
+
+  let forDel = {profile: {temp: "delete-me", keep: "yes"}}
+  api.del(forDel, "profile.temp")
+
+  let assignTarget = {a: 1}
+  let assignSource = {b: 2, c: 3}
+
+  let mergeTarget = {name: "Ari", meta: {rank: 1, tags: ["seed"]}, arr: [1, 2]}
+  let mergeSource = {meta: {rank: 2, tags: ["patch"]}, arr: [3, 4], extra: true}
+
+  let listData = [
+    {id: 2, score: 12, active: true},
+    {id: 1, score: 2, active: false},
+    {id: 2, score: 30, active: true}
+  ]
+
+  let htmlRaw = api.html("<b>unsafe name</b>")
+  let htmlEscaped = api.escapeHtml("<b>unsafe name</b>")
+  let htmlBlock = api.htmlBlock("Card body", "demo-card")
+  let htmlAttr = api.htmlAttr("title", "\"quote\" <text>")
+  let htmlTag = api.htmlTag("a", {href: "https://perchance.org", target: "_blank", rel: "noopener"}, "Open Perchance")
+
+  let report = {
+    jsoncCore: {
+      stripJsonc: strippedObject,
+      parse: parsed,
+      parseStrictName: strictName,
+      stringify: stringifyObject,
+      clone: api.clone(parsed)
+    },
+    typeHelpers: {
+      typeOfNull: api.typeOf(null),
+      typeOfArray: api.typeOf([1, 2]),
+      isArray: api.isArray(parsed.tags),
+      isObject: api.isObject(parsed.nested),
+      isString: api.isString(parsed.name),
+      isNumber: api.isNumber(parsed.age),
+      isBoolean: api.isBoolean(false),
+      isNull: api.isNull(null),
+      isUndefined: api.isUndefined(undefined),
+      ensureArrayNull: api.ensureArray(null),
+      ensureArrayValue: api.ensureArray("solo"),
+      ensureObjectFallback: api.ensureObject("not-object"),
+      toNumberOk: api.toNumber("42", 0),
+      toNumberFallback: api.toNumber("not-a-number", 99),
+      toBooleanTrue: api.toBoolean("yes", false),
+      toBooleanFalse: api.toBoolean("off", true),
+      toBooleanFallback: api.toBoolean("maybe", "fallback")
+    },
+    pathHelpers: {
+      splitPath: api.splitPath("nested.one.two"),
+      getHit: api.get(parsed, "nested.one.two", "none"),
+      getMiss: api.get(parsed, "nested.one.none", "fallback"),
+      hasHit: api.has(parsed, "nested.one.two"),
+      hasMiss: api.has(parsed, "nested.none"),
+      setResult: forSet,
+      delResult: forDel
+    },
+    mergePatch: {
+      assign: api.assign(assignTarget, assignSource),
+      mergeDeep: api.mergeDeep(mergeTarget, mergeSource)
+    },
+    objectUtilities: {
+      keys: api.keys(parsed),
+      valuesFirst3: api.values(parsed).slice(0, 3),
+      entriesFirst2: api.entries(parsed).slice(0, 2),
+      pick: api.pick(parsed, ["name", "age", "missing"]),
+      omit: api.omit(parsed, ["scores", "active"])
+    },
+    arrayUtilities: {
+      listLength: api.listLength(listData),
+      listGetHit: api.listGet(listData, 1, null),
+      listGetMiss: api.listGet(listData, 30, "fallback"),
+      listRandom: api.listRandom(listData, null),
+      listMap: api.listMap([1, 2, 3], n => n * 10),
+      listFilter: api.listFilter(listData, item => item.active),
+      listFind: api.listFind(listData, item => item.score > 10, "none"),
+      listSortBy: api.listSortBy(listData, item => item.score),
+      listUniquePlain: api.listUnique(["a", "b", "a", "c"]),
+      listUniqueByKey: api.listUnique(listData, item => item.id)
+    },
+    validation: {
+      requireKeys: api.requireKeys(parsed, ["name", "age", "missing"]),
+      validateShape: api.validateShape(parsed, {
+        name: "string",
+        age: "number",
+        active: "string",
+        tags: "array",
+        missing: "any"
+      })
+    },
+    htmlHelpers: {
+      html: htmlRaw,
+      escapeHtml: htmlEscaped,
+      htmlBlock: htmlBlock,
+      htmlAttr: htmlAttr,
+      htmlTag: htmlTag
+    }
+  }
+
+  return report
+
+reportText() =>
+  let report = runAll()
+  let api = resolveJsonX(jsonX)
+  let raw = ""
+  if(api && typeof api.stringify === "function")
+    raw = api.stringify(report, 2)
+  else
+    try { raw = JSON.stringify(report, null, 2) } catch(e) { raw = String(report) }
+  return encodeForHtml(raw)
+
+previewBlock() =>
+  let report = runAll()
+  let api = resolveJsonX(jsonX)
+  if(report && report.importError)
+    return "<div style=\"padding:10px;border:1px solid #f0c2c2;border-radius:10px;background:#fff6f6;color:#8b2a2a;\">jsonX import error: " + (report.importError.error || "unknown") + "</div>"
+  if(!api || typeof api.htmlTag !== "function")
+    return "<div style=\"padding:10px;border:1px solid #f0c2c2;border-radius:10px;background:#fff6f6;color:#8b2a2a;\">jsonX import is missing htmlTag().</div>"
+  return api.htmlTag("div", {style: "padding:10px;border:1px solid #cfd6df;border-radius:10px;background:#ffffff;"},
+    "<div style=\"font-weight:700;margin-bottom:6px;\">HTML Helpers Preview</div>"
+    + "<div style=\"margin-bottom:6px;\">Raw html(): " + report.htmlHelpers.html + "</div>"
+    + "<div style=\"margin-bottom:6px;\">escapeHtml(): " + report.htmlHelpers.escapeHtml + "</div>"
+    + "<div style=\"margin-bottom:6px;\">htmlBlock(): " + report.htmlHelpers.htmlBlock + "</div>"
+    + "<div style=\"margin-bottom:6px;\">htmlAttr(): <span" + report.htmlHelpers.htmlAttr + ">hover me</span></div>"
+    + "<div>htmlTag(): " + report.htmlHelpers.htmlTag + "</div>"
+  )
+
+previewOutput
+  [previewBlock()]
+
+fullReport
+  [reportText()]

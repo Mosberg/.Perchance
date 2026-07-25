@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>build-a-dude — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="app">
+<style>
+  * { box-sizing:border-box; }
+  :root {
+    --bg:#111; --surface:#1e1e1e; --surface2:#1a1a1a; --surface3:#161616;
+    --border:#333; --border2:#444;
+    --text:#eee; --muted:#999; --dim:#777;
+    --accent:#2a6; --accent2:#4a4; --danger:#a33; --warn:#a73;
+    --gold:#fd6; --purple:#f6f; --teal:#aec;
+  }
+  html,body { margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,sans-serif; }
+  #app { min-height:100vh; text-align:left; }
+
+  .topbar {
+    display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px;
+    padding:8px 12px; background:var(--surface2);
+    border-bottom:1px solid var(--border); position:sticky; top:0; z-index:10;
+  }
+  #tickerEl { font-size:12px; color:var(--gold); flex:1 1 100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; order:-1; }
+  .topbar .stat { font-size:14px; white-space:nowrap; }
+  .topbar .stat b { color:var(--gold); }
+  .topbar label { font-size:13px; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
+  .topbar .spacer { flex:1; }
+
+  .tabs {
+    display:flex; gap:0; padding:0 8px; background:var(--surface3);
+    overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
+    position:sticky; top:0; z-index:9; border-bottom:1px solid var(--border);
+  }
+  .tabs::-webkit-scrollbar { display:none; }
+  .tabs button {
+    flex-shrink:0; padding:10px 16px; background:transparent; color:var(--muted);
+    border:none; border-bottom:2px solid transparent; border-radius:0; font-size:14px; min-height:auto;
+  }
+  .tabs button.active { color:var(--text); border-bottom-color:var(--accent); }
+
+  .tab-panel { padding:12px; }
+  .cols-2 { display:grid; grid-template-columns:1fr; gap:12px; }
+  @media(min-width:820px){ .cols-2 { grid-template-columns:1fr 1fr; } }
+  @media(min-width:820px){ .cols-2-wide { grid-template-columns:2fr 1fr; } }
+
+  .grid-auto { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; }
+  .grid-auto-lg { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+
+  .card {
+    background:var(--surface); padding:10px; border-radius:8px; border:1px solid var(--border);
+    overflow:hidden;
+  }
+  .card img { width:100%; border-radius:4px; display:block; }
+  .card.clickable { cursor:pointer; }
+  .card.clickable:hover { border-color:var(--accent); }
+
+  .tag {
+    display:inline-block; background:#333; padding:4px 10px; border-radius:12px;
+    font-size:12px; margin:2px; cursor:pointer; border:1px solid var(--border2);
+    user-select:none;
+  }
+  .tag.selected { background:var(--accent2); border-color:#5c5; }
+  .tag.disabled { opacity:0.35; cursor:not-allowed; }
+
+  input,textarea,select { background:#222; color:var(--text); border:1px solid var(--border2); padding:8px; border-radius:4px; font-size:14px; max-width:100%; }
+  input[type=checkbox] { width:18px; height:18px; vertical-align:middle; accent-color:var(--accent); }
+  button { cursor:pointer; padding:8px 16px; border:none; background:var(--accent); color:#fff; border-radius:4px; font-size:14px; min-height:36px; }
+  button:disabled { background:#555; cursor:not-allowed; }
+  button.danger { background:var(--danger); }
+  button.secondary { background:#444; }
+  button.sm { padding:4px 10px; font-size:12px; min-height:28px; }
+
+  h3 { font-size:16px; margin:0 0 8px; }
+  h4 { font-size:14px; margin:0 0 6px; }
+  .panel { background:var(--surface); padding:12px; border-radius:8px; border:1px solid var(--border); margin-bottom:12px; }
+  .sub-panel { background:var(--surface2); padding:10px; border-radius:6px; border:1px solid var(--border); margin-top:10px; }
+  .loading { color:var(--muted); font-style:italic; }
+  .muted { color:var(--muted); }
+  .dim { color:var(--dim); }
+  .gold { color:var(--gold); }
+  .scroll-y { max-height:300px; overflow:auto; }
+  .scroll-y-sm { max-height:150px; overflow:auto; }
+  .flex { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .flex-between { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .w100 { width:100%; }
+  .pre-wrap { white-space:pre-wrap; }
+  .biome-group { margin-bottom:12px; border:1px solid var(--border); border-radius:6px; padding:8px; }
+</style>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div id="tickerEl"></div>
+  <label><input type="checkbox" id="nsfwToggleEl" checked onchange="state.nsfw=this.checked;save()"> NSFW</label>
+  <label><input type="checkbox" id="fantasyToggleEl" onchange="state.fantasy=this.checked;save()"> Fantasy</label>
+  <div class="spacer"></div>
+  <span class="stat">💰 <b id="moneyEl">100</b></span>
+  <span class="stat">🧍 <b id="menCountEl">0</b>/20</span>
+</div>
+
+<!-- Tabs -->
+<div class="tabs" id="tabsEl">
+  <button data-tab="creation" class="active">⚒️ Creation</button>
+  <button data-tab="market">💹 Market</button>
+  <button data-tab="inventory">🎒 Inventory</button>
+  <button data-tab="explore">🌍 Explore</button>
+  <button data-tab="archive">📚 Archive</button>
+  <button data-tab="settings">⚙️ Settings</button>
+</div>
+
+<!-- CREATION -->
+<div id="creationCtn" class="tab-panel">
+  <div class="cols-2">
+    <div>
+      <div class="flex-between" style="margin-bottom:8px;">
+        <h3 style="margin:0;">Sources (<span id="sourceCountEl">0</span>)</h3>
+        <button onclick="dismantleAll()" class="danger sm">Dismantle All</button>
+      </div>
+      <div id="sourceGridEl" class="scroll-y" style="margin-bottom:12px;"></div>
+
+      <div class="flex-between" style="margin-bottom:8px;">
+        <h3 style="margin:0;">Trait Pool (<span id="traitCountEl">0</span>)</h3>
+        <button onclick="clearAllTraits()" class="danger sm">Clear</button>
+      </div>
+      <input type="text" id="traitSearchEl" placeholder="Search traits..." oninput="renderTraitPool()" class="w100" style="margin-bottom:8px;">
+      <div id="traitPoolEl" class="scroll-y"></div>
+    </div>
+    <div>
+      <h3>Forging Station</h3>
+      <p class="muted" style="font-size:13px; margin:0 0 8px;">Select at least 3 traits, then forge.</p>
+      <div id="selectedTraitsEl" style="min-height:40px; background:var(--surface3); padding:8px; border-radius:4px; border:1px solid var(--border); margin-bottom:8px;"></div>
+      <button id="generateBtn" onclick="generateMan()" disabled>Forge Man</button>
+      <div id="forgeOutputEl" style="margin-top:12px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MARKET -->
+<div id="marketCtn" class="tab-panel" hidden>
+  <div class="cols-2-wide cols-2">
+    <div>
+      <h3>Men for Sale</h3>
+      <div id="marketMenEl" class="grid-auto-lg"></div>
+      <h3 style="margin-top:16px;">Transaction Log</h3>
+      <div id="transactionLogEl" class="scroll-y-sm pre-wrap" style="background:var(--surface3); padding:8px; font-size:12px; border:1px solid var(--border); border-radius:4px;"></div>
+    </div>
+    <div>
+      <div class="panel">
+        <h4>🔥 Trending Traits</h4>
+        <div id="topTraitsEl"></div>
+      </div>
+      <div class="panel">
+        <h4>📢 Active Request</h4>
+        <div id="activeRequestEl" style="margin-top:6px;"></div>
+        <button onclick="rotateRequest();renderMarket()" class="secondary sm" style="margin-top:8px;">New Request</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INVENTORY -->
+<div id="inventoryCtn" class="tab-panel" hidden>
+  <div class="flex-between" style="margin-bottom:8px;">
+    <h3 style="margin:0;">Men (<span id="invMenCountEl">0</span>)</h3>
+    <select id="sortMenSelectEl" onchange="renderMen()" style="font-size:13px;">
+      <option value="newest">Newest</option>
+      <option value="name">Name</option>
+      <option value="value">Value</option>
+    </select>
+  </div>
+  <div id="menGridEl" class="grid-auto-lg" style="margin-bottom:16px;"></div>
+  <div id="manDetailEl" hidden>
+    <div class="cols-2 cols-2-wide">
+      <div class="card">
+        <img id="detailImgEl" style="border-radius:6px; margin-bottom:8px;">
+        <h3 id="detailNameEl" style="margin:0 0 6px;"></h3>
+        <p style="margin:4px 0; font-size:13px;"><b>Visual:</b> <span id="detailVisualEl"></span></p>
+        <p style="margin:4px 0; font-size:13px;"><b>Personality:</b> <span id="detailPersonalityEl"></span></p>
+        <div id="detailTraitsEl" style="margin-top:6px;"></div>
+      </div>
+      <div>
+        <div class="flex" style="margin-bottom:8px;">
+          <button onclick="talkToMan()">💬 Talk</button>
+          <button onclick="togglePanel(activityCtn)" class="secondary">🎭 Scene</button>
+          <button onclick="togglePanel(imgEditCtn)" class="secondary">🖼️ Edit</button>
+          <button onclick="sellSelectedMan()">💰 Sell</button>
+          <button onclick="releaseSelectedMan()" class="danger">Release</button>
+        </div>
+        <div id="talkOutputEl" class="pre-wrap" style="font-style:italic; color:var(--teal); margin-bottom:8px;"></div>
+
+        <div id="activityCtn" class="sub-panel" hidden>
+          <p class="muted" style="margin:0 0 6px; font-size:12px;">Freeform scene prompt:</p>
+          <textarea id="activityInputEl" rows="3" class="w100" placeholder="Describe a scenario..."></textarea>
+          <button onclick="doActivity()" style="margin-top:6px;">Generate Scene</button>
+          <div id="activityOutputEl" style="margin-top:8px;"></div>
+        </div>
+
+        <div id="imgEditCtn" class="sub-panel" hidden>
+          <p class="muted" style="margin:0 0 4px; font-size:12px;">Image prompt:</p>
+          <textarea id="imgPromptInputEl" rows="3" class="w100"></textarea>
+          <button id="regenerateManImgBtn" onclick="regenerateManImage()" style="margin-top:6px;">Regenerate Image</button>
+        </div>
+
+        <div class="sub-panel">
+          <h4 style="margin:0 0 6px;">Body Descriptions</h4>
+          <div id="descLogEl" class="scroll-y-sm" style="font-size:12px; background:var(--surface3); padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+          <div class="flex" style="margin-top:6px;">
+            <select id="bodyPartSelectEl" style="flex:1; min-width:100px;"></select>
+            <button id="genBodyPartBtn" onclick="generateBodyPartDesc()">✨ Describe</button>
+            <button id="illustratePartBtn" onclick="generatePartImage()" hidden class="secondary">🖼️ Illustrate</button>
+          </div>
+        </div>
+
+        <div class="sub-panel">
+          <h4 style="margin:0 0 6px;">Gallery</h4>
+          <div id="manGalleryEl" class="grid-auto" style="max-height:240px; overflow:auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPLORE -->
+<div id="exploreCtn" class="tab-panel" hidden>
+  <h3>Biomes</h3>
+  <div id="biomeListEl" class="flex" style="margin-bottom:12px;"></div>
+  <div id="biomeInfoEl" hidden class="panel" style="max-width:700px;">
+    <h4 id="biomeNameEl"></h4>
+    <p class="muted" style="font-size:13px; margin:4px 0 10px;">Possible finds:</p>
+    <div id="biomeAllCapturesEl" class="grid-auto" style="margin-bottom:12px;"></div>
+    <button onclick="startEncounter()">Search Area</button>
+    <div id="encounterEl" hidden class="sub-panel" style="max-width:500px;">
+      <h4 id="encounterNameEl"></h4>
+      <div id="encounterTraitsEl"></div>
+      <div id="encounterResultEl" style="margin-top:10px; font-size:13px; color:#6f6;"></div>
+    </div>
+  </div>
+
+  <div class="panel" style="max-width:700px; margin-top:16px;">
+    <h3>Shop <span class="muted" style="font-size:13px;" id="shopStatusEl"></span></h3>
+    <div id="shopGridEl" class="grid-auto"></div>
+  </div>
+</div>
+
+<!-- ARCHIVE -->
+<div id="archiveCtn" class="tab-panel" hidden>
+  <h3>Discovery Archive</h3>
+  <p class="muted" style="font-size:13px; margin:0 0 10px;"><span id="archiveCountEl"></span> Filter by trait:</p>
+  <div id="archiveFilterEl" style="margin-bottom:12px;"></div>
+  <div id="archiveGridEl" class="grid-auto"></div>
+</div>
+
+<!-- SETTINGS -->
+<div id="settingsCtn" class="tab-panel" hidden>
+  <div class="cols-2 cols-2-wide">
+    <div>
+      <h3>Trait Diagnosis</h3>
+      <p class="muted" style="font-size:13px; margin:0 0 10px;">All traits and where to find them. <span style="color:#f55;">Red</span> = unobtainable.</p>
+      <div id="diagnosisGridEl" class="grid-auto-lg" style="max-height:600px; overflow:auto; align-items:flex-start;"></div>
+    </div>
+    <div>
+      <div class="panel">
+        <h3>Image Defaults</h3>
+        <label style="display:block; margin-bottom:8px; font-size:13px;">Style suffix:
+          <input type="text" id="settingsStyleInputEl" onchange="state.imgSettings.style=this.value;save()" class="w100" placeholder="e.g. anime, oil painting...">
+        </label>
+        <label style="display:block; margin-bottom:8px; font-size:13px;">Negative prompt:
+          <input type="text" id="settingsNegInputEl" onchange="state.imgSettings.negativePrompt=this.value;save()" class="w100" placeholder="e.g. blurry, deformed...">
+        </label>
+        <div class="flex" style="margin-bottom:8px;">
+          <label style="font-size:13px;">Resolution:
+            <select id="settingsResSelectEl" onchange="state.imgSettings.resolution=this.value;save()">
+              <option value="512x768">512x768</option>
+              <option value="768x768">768x768</option>
+              <option value="512x512">512x512</option>
+              <option value="768x512">768x512</option>
+            </select>
+          </label>
+          <label style="font-size:13px;">Guidance:
+            <input type="number" id="settingsGuidanceInputEl" min="1" max="20" onchange="state.imgSettings.guidanceScale=parseInt(this.value)||7;save()" style="width:60px;">
+          </label>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Wallpaper</h3>
+        <p class="muted" style="font-size:13px; margin:0 0 8px;">Describe a scene to generate a background:</p>
+        <div class="flex">
+          <input id="bgPromptInputEl" placeholder="misty forest at twilight..." style="flex:1; min-width:120px;">
+          <button id="genBgBtn" onclick="generateAreaBg()">Generate</button>
+        </div>
+        <div id="bgImgCtn" style="margin-top:10px;"></div>
+        <div id="wallpaperGalleryCtn" class="grid-auto" style="margin-top:12px; max-height:400px; overflow:auto; align-items:flex-start;"></div>
+        <button onclick="clearWallpaper()" class="secondary sm" style="margin-top:8px;">Clear Wallpaper</button>
+      </div>
+      <div class="panel">
+        <h3>Help</h3>
+        <details>
+          <summary style="cursor:pointer; font-size:14px;">What does NSFW mode do?</summary>
+          <p style="font-size:13px; color:var(--muted); margin-top:8px; line-height:1.4;">NSFW mode enables explicit adult content in activity scenes and body part descriptions, and artistic nudity in image generation. Toggle off for SFW romantic content.</p>
+        </details>
+        <details style="margin-top:8px;">
+          <summary style="cursor:pointer; font-size:14px;">How to play</summary>
+          <p style="font-size:13px; color:var(--muted); margin-top:8px; line-height:1.5;">
+            1. <b>Explore</b> biomes to find sources.<br>
+            2. <b>Dismantle</b> sources in the Creation tab to extract traits.<br>
+            3. Select 3+ traits and <b>Forge</b> a man (generates profile + image).<br>
+            4. <b>Sell</b> men on the Market — prices depend on trait popularity.<br>
+            5. Watch the <b>trending traits</b> and <b>active requests</b> for bonus payouts.
+          </p>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // --- Helpers ---
+  function stringColor(str){
+    let h=0; for(let i=0;i<str.length;i++) h=((h<<5)-h)+str.charCodeAt(i);
+    return `hsl(${Math.abs(h)%360},70%,60%)`;
+  }
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  function togglePanel(el){ el.hidden=!el.hidden; }
+
+  // --- Data ---
+  let physicalTraits = ["androgynous","angular","armored","athletic","bald","bearded","bony","broad shouldered","button nosed","charged","chiseled","clean shaven","clumsy","colorful","cool","curvy","cleft chin","damp","dark skinned","delicate","dimpled","dripping","freckled","feminine","flushed","full lipped","ginger","gleaming","golden","graceful","hairy","hunchbacked","jagged","keen eared","keen eyed","large nosed","luminescent","masculine","massive","middle aged","muscular","pale","pierced","protruding ears","scarred","short","silver haired","smooth","smoldering","soft bellied","soft featured","sparkling","stiff","stocky","stone skinned","straight backed","striped","sunken cheeked","supple","swift","tall","tattooed","tanned","thick haired","thin lipped","violet hued","washboard abs","weightless","wrinkled","youthful","aged","rugged","slender"];
+  let personalityTraits = ["stoic","flirtatious","anxious","dominant","submissive","playful","serious","melancholic","cheerful","brooding","witty","sardonic","gentle","rough","caring","cold","passionate","detached","loyal","fickle","ambitious","lazy","curious","oblivious","protective","possessive","jealous","calm","temperamental","shy","bold","brash","cunning","naive","mysterious","charming","adoring","haughty","humble","vindictive","whimsical","earnest","apathetic","zealous","rebellious","obedient","manipulative","stubborn","obsessive","independent","cooperative","flamboyant","hostile","amiable","suspicious","trusting","proud","ashamed","fragrant","romantic","defensive","sweet","intoxicating","primal","elusive","ominous","fiery","fierce","wise","exotic","worn"];
+
+  let sourceItems = {
+    "Acorn":["cleft chin","stiff","earnest"],
+    "Amber":["golden","smooth","aged"],
+    "Amethyst":["violet hued","luminescent","wise"],
+    "Ancient Coin":["worn","middle aged","serious"],
+    "Apple":["freckled","flushed","smooth"],
+    "Ash Cloud":["pale","smooth","apathetic"],
+    "Bamboo":["straight backed","tall","stiff"],
+    "Bat":["dark skinned","keen eared","ominous"],
+    "Bear":["stocky","protective","hairy"],
+    "Battered Sword":["scarred","worn","rough"],
+    "Breeze":["weightless","cool","playful"],
+    "Butterfly":["fickle","colorful","whimsical"],
+    "Candle":["luminescent","calm","golden"],
+    "Cat":["curious","independent","mysterious"],
+    "Cactus":["pierced","stiff","defensive"],
+    "Cheetah":["athletic","swift","smooth"],
+    "Cherry":["dimpled","youthful","sweet"],
+    "Coconut":["tanned","smooth","hairy"],
+    "Coral":["colorful","bony","rough"],
+    "Cracked Pot":["ashamed","humble","worn"],
+    "Crystal Ball":["charming","mysterious","manipulative"],
+    "Crow":["suspicious","cunning","ominous"],
+    "Deer":["slender","graceful","anxious"],
+    "Desert Rose":["delicate","romantic","passionate"],
+    "Dog":["submissive","obedient","adoring"],
+    "Dove":["androgynous","graceful","calm"],
+    "Dragon":["possessive","jealous","fierce"],
+    "Dusty Tome":["wise","fragrant","curious"],
+    "Elephant":["large nosed","massive","wrinkled"],
+    "Ember":["smoldering","fiery","passionate"],
+    "Fawn":["youthful","graceful","anxious"],
+    "Fox":["cunning","playful","mysterious"],
+    "Frost Lily":["pale","delicate","stoic"],
+    "Giraffe":["tall","smooth","graceful"],
+    "Ginger Root":["ginger","rough","aged"],
+    "Glow Worm":["luminescent","delicate","shy"],
+    "Goat":["bearded","stubborn","rough"],
+    "Gargoyle":["stone skinned","hunchbacked","brooding"],
+    "Greek Statue":["washboard abs","chiseled","smooth"],
+    "Hawk":["keen eyed","angular","dominant"],
+    "Highland Cow":["thick haired","stocky","calm"],
+    "Honey Jar":["sweet","smooth","golden"],
+    "Iron Ingot":["chiseled","stubborn","rugged"],
+    "Jewel":["obsessive","possessive","mysterious"],
+    "Lamb":["naive","trusting","gentle"],
+    "Leather Strap":["rugged","masculine","supple"],
+    "Leviathan Scale":["armored","dark skinned","massive"],
+    "Lily":["pale","delicate","calm"],
+    "Lion":["bold","brash","passionate"],
+    "Marble Statue":["clean shaven","smooth","cold"],
+    "Mirror Shard":["gleaming","pale","mysterious"],
+    "Moonstone":["pale","luminescent","mysterious"],
+    "Mossy Brick":["damp","rough","melancholic"],
+    "Mother Hen":["caring","protective","anxious"],
+    "Mouse":["button nosed","short","anxious"],
+    "Noble's Crest":["haughty","proud","flamboyant"],
+    "Oak":["broad shouldered","stoic","middle aged"],
+    "Obsidian":["dark skinned","angular","jagged"],
+    "Orchid":["exotic","fragrant","delicate"],
+    "Panda":["clumsy","soft bellied","playful"],
+    "Parrot":["colorful","playful","witty"],
+    "Pearl":["smooth","pale","feminine"],
+    "Pear":["curvy","flushed","sweet"],
+    "Peacock":["flirtatious","colorful","proud"],
+    "Quartz":["smooth","sparkling","stiff"],
+    "Rabbit":["protruding ears","gentle","anxious"],
+    "Rain Drop":["damp","cool","calm"],
+    "Raven":["sardonic","mysterious","ominous"],
+    "Rose":["delicate","fragrant","romantic"],
+    "Rune Stone":["charged","massive","zealous"],
+    "Salt Crystal":["sparkling","rough","aged"],
+    "Scorpion":["vindictive","fierce","cold"],
+    "Seaweed":["slender","supple","dripping"],
+    "Shadow":["submissive","obedient","gentle"],
+    "Shadow Essence":["dark skinned","elusive","brooding"],
+    "Sheep":["oblivious","trusting","calm"],
+    "Silk Cloth":["smooth","supple","delicate"],
+    "Silver Birch":["silver haired","pale","stiff"],
+    "Simple Pot":["humble","worn","cooperative"],
+    "Sky Whale Essence":["massive","gentle","independent"],
+    "Sloth":["lazy","calm","apathetic"],
+    "Smoke Wisp":["slender","elusive","ominous"],
+    "Snake":["smooth","cold","detached"],
+    "Snow Owl":["soft featured","keen eyed","wise"],
+    "Stalactite":["jagged","stiff","cold"],
+    "Storm":["rebellious","temperamental","passionate"],
+    "Sunbeam":["golden","cheerful","passionate"],
+    "Sunflower":["amiable","tall","golden"],
+    "Sunstone":["golden","passionate","gleaming"],
+    "Thorn Bush":["defensive","temperamental","hostile"],
+    "Thunder Feather":["charged","jagged","fierce"],
+    "Tiger":["striped","muscular","fierce"],
+    "Tribal Mask":["tattooed","colorful","fierce"],
+    "Tulip":["full lipped","delicate","romantic"],
+    "Vine":["slender","supple","ambitious"],
+    "Vulture":["bald","ominous","thin lipped"],
+    "Wheat":["golden","slender","cooperative"],
+    "Wildflower":["colorful","delicate","whimsical"],
+    "Wine Bottle":["flushed","romantic","intoxicating"],
+    "Wolf":["muscular","loyal","rough"],
+    "Wolf Pelt":["hairy","primal","fierce"],
+    "Wraith":["sunken cheeked","pale","brooding"]
+  };
+
+  let biomes = {
+    "Forest":["Bear","Deer","Fox","Wolf","Raven","Oak","Rose","Lily","Bamboo","Acorn"],
+    "Desert":["Snake","Hawk","Scorpion","Vulture","Desert Rose","Cactus","Obsidian","Silk Cloth","Salt Crystal","Sunstone"],
+    "Tundra":["Snow Owl","Highland Cow","Bear","Frost Lily","Silver Birch","Moonstone","Quartz","Stalactite","Leather Strap","Wolf Pelt"],
+    "Swamp":["Bat","Shadow","Wraith","Cat","Mossy Brick","Dusty Tome","Mirror Shard","Candle","Wine Bottle","Shadow Essence"],
+    "Volcanic":["Dragon","Cheetah","Dog","Ember","Iron Ingot","Ash Cloud","Obsidian","Leviathan Scale","Thunder Feather","Smoke Wisp"],
+    "Ocean":["Coral","Seaweed","Pearl","Salt Crystal","Leviathan Scale","Breeze","Pear","Thorn Bush","Cherry","Mouse"],
+    "Crystal Cave":["Bat","Glow Worm","Panda","Goat","Amethyst","Crystal Ball","Jewel","Marble Statue","Quartz","Stalactite"],
+    "Meadow":["Rabbit","Sheep","Lamb","Butterfly","Wheat","Wildflower","Apple","Tulip","Sunflower","Honey Jar"],
+    "Jungle":["Tiger","Parrot","Elephant","Giraffe","Lion","Sloth","Vine","Orchid","Coconut","Amber"],
+    "Ruins":["Ancient Coin","Gargoyle","Rune Stone","Dusty Tome","Battered Sword","Simple Pot","Cracked Pot","Tribal Mask","Greek Statue","Noble's Crest"],
+    "Sky":["Dove","Peacock","Crow","Mother Hen","Fawn","Rain Drop","Sky Whale Essence","Sunbeam","Storm","Thunder Feather"]
+  };
+
+  let bodyParts = ["Face","Hair","Neck","Chest","Arms","Hands","Armpits","Stomach","Legs","Feet","Ass","Penis","Body Hair","Voice","Overall looks"];
+
+  let itemEmojis = {
+    "Wolf":"🐺","Deer":"🦌","Bear":"🐻","Fox":"🦊","Snake":"🐍","Hawk":"🦅","Rose":"🌹","Oak":"🌳","Lily":"🪷",
+    "Thorn Bush":"🌿","Obsidian":"🖤","Silk Cloth":"🧵","Iron Ingot":"⚙️","Leather Strap":"🪢","Honey Jar":"🍯",
+    "Wine Bottle":"🍷","Candle":"🕯️","Mirror Shard":"🪞","Wolf Pelt":"🐺","Moonstone":"🌙","Shadow Essence":"🌑",
+    "Frost Lily":"❄️","Desert Rose":"🏜️","Snow Owl":"🦉","Smoke Wisp":"💨","Ember":"🔥","Pearl":"⚪","Coral":"🪸",
+    "Seaweed":"🌿","Leviathan Scale":"🐋","Salt Crystal":"🧂","Amethyst":"💜","Bat":"🦇","Stalactite":"🪨",
+    "Glow Worm":"🐛","Quartz":"💎","Wheat":"🌾","Wildflower":"🌼","Rabbit":"🐰","Breeze":"💨","Sunstone":"☀️",
+    "Tiger":"🐯","Parrot":"🦜","Vine":"🌿","Orchid":"🌺","Amber":"🟡","Ancient Coin":"🪙","Gargoyle":"🗿",
+    "Mossy Brick":"🧱","Rune Stone":"🪨","Dusty Tome":"📜","Thunder Feather":"⚡","Sky Whale Essence":"🐋",
+    "Rain Drop":"🌧️","Sunbeam":"☀️","Acorn":"🌰","Apple":"🍎","Bamboo":"🎋","Battered Sword":"🗡️",
+    "Butterfly":"🦋","Cactus":"🌵","Cheetah":"🐆","Cherry":"🍒","Coconut":"🥥","Cracked Pot":"🏺",
+    "Crystal Ball":"🔮","Crow":"🐦‍⬛","Dog":"🐕","Dove":"🕊️","Dragon":"🐉","Elephant":"🐘","Fawn":"🦌",
+    "Ginger Root":"🫚","Giraffe":"🦒","Goat":"🐐","Greek Statue":"🏛️","Highland Cow":"🐮","Jewel":"💎",
+    "Lamb":"🐑","Lion":"🦁","Marble Statue":"🗿","Mother Hen":"🐔","Mouse":"🐭","Noble's Crest":"🛡️",
+    "Panda":"🐼","Pear":"🍐","Peacock":"🦚","Raven":"🐦‍⬛","Scorpion":"🦂","Shadow":"👤","Sheep":"🐑",
+    "Silver Birch":"🌳","Simple Pot":"🏺","Sloth":"🦥","Storm":"⛈️","Sunflower":"🌻","Tribal Mask":"🎭",
+    "Tulip":"🌷","Vulture":"🦅","Wraith":"👻","Cat":"🐱","Ash Cloud":"🌫️"
+  };
+
+  let allTraits = [...new Set([...physicalTraits, ...personalityTraits])].sort((a,b)=>a.localeCompare(b));
+
+  // --- State ---
+  let state = {
+    money:100, playerTraits:[], inventoryItems:[], inventoryMen:[],
+    traitPopularity:{}, currentRequest:{trait:null,bonus:2}, transactionLog:[],
+    nsfw:true, fantasy:false, shopStock:[], lastShopRefresh:0,
+    selectedTraitNames:[], selectedManId:null, caughtNames:[],
+    archiveFilters:[], savedBackgrounds:[], currentWallpaper:null,
+    imgSettings:{resolution:"512x768", style:"", negativePrompt:"", guidanceScale:7}
+  };
+  let currentBiome = null;
+  let lastGeneratedBg = null;
+
+  function load(){
+    let s = localStorage.perchanceSave;
+    if(s){ try{ Object.assign(state, JSON.parse(s)); }catch(e){} }
+    state.nsfw = state.nsfw !== false;
+    state.fantasy = !!state.fantasy;
+    if(!state.imgSettings) state.imgSettings = {resolution:"512x768", style:"", negativePrompt:"", guidanceScale:7};
+    if(!state.imgSettings.negativePrompt) state.imgSettings.negativePrompt = "";
+    if(!state.imgSettings.guidanceScale) state.imgSettings.guidanceScale = 7;
+    if(!state.imgSettings.resolution) state.imgSettings.resolution = "512x768";
+    if(!state.caughtNames) state.caughtNames = [];
+    if(!state.archiveFilters) state.archiveFilters = [];
+    if(!state.savedBackgrounds) state.savedBackgrounds = [];
+    state.inventoryMen.forEach(m => {
+      if(!m.internalDesc) m.internalDesc = "";
+      if(!m.imgPrompt) m.imgPrompt = "";
+      if(!m.gallery) m.gallery = [];
+    });
+    if(state.inventoryItems){
+      state.inventoryItems.forEach(it => {
+        if(it && it.name && !state.caughtNames.includes(it.name)) state.caughtNames.push(it.name);
+        if(!it.biome){
+          for(let b in biomes){ if(biomes[b].includes(it.name)){ it.biome=b; break; } }
+          if(!it.biome) it.biome = "Unknown";
+        }
+      });
+    }
+    allTraits.forEach(t => { if(!state.traitPopularity[t]) state.traitPopularity[t] = 20+Math.floor(Math.random()*80); });
+    if(!state.shopStock.length) maybeRefreshShop();
+    if(state.currentWallpaper) setWallpaper(state.currentWallpaper);
+  }
+  function save(){
+    localStorage.perchanceSave = JSON.stringify({
+      money:state.money, playerTraits:state.playerTraits, inventoryItems:state.inventoryItems,
+      inventoryMen:state.inventoryMen, traitPopularity:state.traitPopularity,
+      currentRequest:state.currentRequest, transactionLog:state.transactionLog,
+      shopStock:state.shopStock, lastShopRefresh:state.lastShopRefresh,
+      nsfw:state.nsfw, fantasy:state.fantasy, caughtNames:state.caughtNames,
+      archiveFilters:state.archiveFilters, savedBackgrounds:state.savedBackgrounds,
+      currentWallpaper:state.currentWallpaper, imgSettings:state.imgSettings
+    });
+  }
+
+  // --- Tab switching ---
+  document.querySelectorAll("#tabsEl button").forEach(btn => {
+    btn.onclick = () => showTab(btn.dataset.tab);
+  });
+  function showTab(t){
+    ["creation","market","inventory","explore","archive","settings"].forEach(name => {
+      document.getElementById(name+"Ctn").hidden = (name !== t);
+    });
+    document.querySelectorAll("#tabsEl button").forEach(b => {
+      b.classList.toggle("active", b.dataset.tab === t);
+    });
+  }
+
+  // --- Image helper ---
+  async function genImage(prompt, resOverride){
+    let opts = {
+      resolution: resOverride || state.imgSettings.resolution || "512x768",
+      guidanceScale: state.imgSettings.guidanceScale || 7
+    };
+    if(state.imgSettings.negativePrompt) opts.negativePrompt = state.imgSettings.negativePrompt;
+    let result = await root.generateImage(prompt, opts);
+    return result.dataUrl || String(result);
+  }
+
+  // --- Market Logic ---
+  function tickMarket(){
+    allTraits.forEach(t => {
+      let v = state.traitPopularity[t] + (Math.random()*40-20);
+      state.traitPopularity[t] = Math.max(5, Math.min(200, Math.floor(v)));
+    });
+    renderMarket(); updateTicker(); save();
+  }
+  function rotateRequest(){
+    state.currentRequest.trait = allTraits[Math.floor(Math.random()*allTraits.length)];
+    state.currentRequest.bonus = 2.0;
+    save();
+  }
+  function calculatePrice(man){
+    let sum = 0; man.traits.forEach(t => sum += (state.traitPopularity[t]||10));
+    let price = Math.floor(sum * Math.pow(1.5, man.traits.length));
+    if(state.currentRequest.trait && man.traits.includes(state.currentRequest.trait))
+      price = Math.floor(price * state.currentRequest.bonus);
+    return price;
+  }
+  function updateTicker(){
+    let sorted = Object.entries(state.traitPopularity).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    tickerEl.textContent = "📈 " + sorted.map(([t,v])=>`${t} ${v}`).join("  |  ");
+  }
+
+  // --- Creation Tab ---
+  function renderSources(){
+    sourceCountEl.textContent = state.inventoryItems.length;
+    let groups = {};
+    state.inventoryItems.forEach(it => {
+      let b = it.biome || "Unknown";
+      if(b === "Unknown" && it.name){
+        for(let bi in biomes){ if(biomes[bi].includes(it.name)){ b=bi; it.biome=b; break; } }
+      }
+      if(!groups[b]) groups[b] = {};
+      groups[b][it.name] = (groups[b][it.name]||0)+1;
+    });
+    let html = "";
+    Object.keys(groups).sort().forEach(biome => {
+      let bc = stringColor(biome);
+      html += `<div class="biome-group"><div style="font-weight:bold; margin-bottom:6px; color:${bc}; font-size:14px;">${esc(biome)}</div><div class="grid-auto">`;
+      Object.entries(groups[biome]).forEach(([name,count]) => {
+        let ic = stringColor(name);
+        let traits = (sourceItems[name]||[]).join(", ");
+        html += `<div class="card" style="border-left:4px solid ${ic};">
+          <b style="color:${ic}; font-size:13px;">${itemEmojis[name]||"❓"} ${esc(name)}</b><br>
+          <span class="dim" style="font-size:11px;">${esc(traits)}</span><br>
+          <span class="gold" style="font-weight:bold; font-size:12px;">x${count}</span><br>
+          <button onclick="dismantleItem('${esc(name)}','${esc(biome)}')" class="sm" style="margin-top:4px;">Dismantle</button>
+        </div>`;
+      });
+      html += `</div></div>`;
+    });
+    sourceGridEl.innerHTML = html || "<em class='dim'>No sources. Go explore!</em>";
+  }
+  function dismantleItem(name, biome){
+    let idx = state.inventoryItems.findIndex(it => it.name===name && (it.biome||"Unknown")===biome);
+    if(idx>-1){
+      let it = state.inventoryItems.splice(idx,1)[0];
+      state.playerTraits.push(...it.traits);
+      save(); renderSources(); renderTraitPool(); renderForge();
+    }
+  }
+  function dismantleAll(){
+    if(!state.inventoryItems.length) return;
+    state.inventoryItems.forEach(it => state.playerTraits.push(...it.traits));
+    state.inventoryItems = [];
+    save(); renderSources(); renderTraitPool(); renderForge();
+  }
+  function clearAllTraits(){
+    if(!state.playerTraits.length) return;
+    if(!confirm("Delete all "+state.playerTraits.length+" traits?")) return;
+    state.playerTraits = []; state.selectedTraitNames = [];
+    save(); renderAll();
+  }
+  function renderTraitPool(){
+    let counts={}, sel={};
+    state.playerTraits.forEach(t=>counts[t]=(counts[t]||0)+1);
+    state.selectedTraitNames.forEach(t=>sel[t]=(sel[t]||0)+1);
+    traitCountEl.textContent = state.playerTraits.length;
+    let search = (traitSearchEl?.value||"").toLowerCase().trim();
+    let entries = Object.entries(counts).sort((a,b)=>a[0].localeCompare(b[0]));
+    if(search) entries = entries.filter(([t])=>t.toLowerCase().includes(search));
+    traitPoolEl.innerHTML = entries.map(([t,c])=>{
+      let used = sel[t]||0;
+      return `<button class="tag ${used?'selected':''} ${used>=c?'disabled':''}" onclick="selectTrait('${esc(t)}')" ${used>=c?'disabled':''}>${esc(t)}${c>1?' x'+c:''}</button>`;
+    }).join("") || "<em class='dim'>No traits yet.</em>";
+  }
+  function selectTrait(t){
+    let counts={}, sel={};
+    state.playerTraits.forEach(x=>counts[x]=(counts[x]||0)+1);
+    state.selectedTraitNames.forEach(x=>sel[x]=(sel[x]||0)+1);
+    if((sel[t]||0) < (counts[t]||0)){ state.selectedTraitNames.push(t); renderForge(); renderTraitPool(); }
+  }
+  function deselectTrait(idx){
+    state.selectedTraitNames.splice(idx,1); renderForge(); renderTraitPool();
+  }
+  function renderForge(){
+    selectedTraitsEl.innerHTML = state.selectedTraitNames.length
+      ? state.selectedTraitNames.map((t,i)=>`<button class="tag selected" onclick="deselectTrait(${i})">${esc(t)} ✕</button>`).join("")
+      : "<span class='dim' style='font-size:13px;'>Click traits from the pool to select them.</span>";
+    generateBtn.disabled = state.selectedTraitNames.length<3 || state.inventoryMen.length>=20;
+    generateBtn.textContent = state.inventoryMen.length>=20 ? "Inventory Full" : "Forge Man";
+  }
+
+  async function generateMan(){
+    if(state.inventoryMen.length>=20 || state.selectedTraitNames.length<3) return;
+    generateBtn.disabled = true;
+    forgeOutputEl.innerHTML = "<div class='loading'>Forging body &amp; soul...</div>";
+    let traits = [...state.selectedTraitNames];
+    let phys = traits.filter(t=>physicalTraits.includes(t)).join(", ");
+    let pers = traits.filter(t=>personalityTraits.includes(t)).join(", ");
+    let fantasy = state.fantasy ? "Fantasy traits are literal (e.g. fiery = actual flames, stone skinned = rock skin)." : "Traits are figurative and realistic.";
+    let prompt = "Create a profile for an AI-crafted man.\nPhysical traits: "+(phys||"average")+".\nPersonality traits: "+(pers||"neutral")+".\n"+fantasy+"\nReply EXACTLY as:\nName: ...\nVisual: ... (one sentence)\nPersonality: ... (one sentence)";
+    let text = await root.generateText({instruction: prompt});
+    let name="Unknown", visual="Mysterious.", personality="Inscrutable.";
+    text.split("\n").forEach(l=>{
+      let s = l.trim();
+      if(s.startsWith("Name:")) name = s.slice(5).trim();
+      else if(s.startsWith("Visual:")) visual = s.slice(7).trim();
+      else if(s.startsWith("Personality:")) personality = s.slice(12).trim();
+    });
+    forgeOutputEl.querySelector(".loading").textContent = "Generating clinical description...";
+    let intPrompt = `Write a concise clinical character sheet for ${name}. Traits: ${traits.join(", ")}. ${fantasy} Include: hair color, length, texture, eye color and shape, skin tone and texture, facial structure, body build, height, weight estimate, posture, distinguishing marks, clothing. Use precise dry clinical language.`;
+    let internalDesc = await root.generateText({instruction: intPrompt});
+    forgeOutputEl.querySelector(".loading").textContent = "Generating image...";
+    let imgPrompt = `Full body anime illustration of a young man named ${name}. ${internalDesc} Standing pose, entire body visible from head to toe, neutral background. Detailed digital art.`;
+    if(state.fantasy) imgPrompt += " Literal fantasy elements.";
+    if(state.nsfw) imgPrompt += " NSFW artistic nude.";
+    if(state.imgSettings.style) imgPrompt += " " + state.imgSettings.style;
+    let img = await genImage(imgPrompt);
+    let man = {id:Date.now()+Math.floor(Math.random()*1000), name, traits, visualDesc:visual, personalityDesc:personality, image:img, imgPrompt, internalDesc, descriptionLog:[], gallery:[]};
+    state.inventoryMen.push(man);
+    let pool = [...state.playerTraits];
+    traits.forEach(t=>{ let i=pool.indexOf(t); if(i>-1) pool.splice(i,1); });
+    state.playerTraits = pool;
+    state.selectedTraitNames = [];
+    save(); renderAll();
+    forgeOutputEl.innerHTML = `<div class="card">
+      <h4 style="margin:0 0 8px;">${esc(name)} Forged!</h4>
+      <img src="${img}" style="max-width:180px; border-radius:6px; margin-bottom:8px;">
+      <b>Visual:</b> ${esc(visual)}<br>
+      <b>Personality:</b> ${esc(personality)}
+    </div>`;
+  }
+
+  // --- Inventory ---
+  function renderMen(){
+    menCountEl.textContent = state.inventoryMen.length;
+    invMenCountEl.textContent = state.inventoryMen.length;
+    let men = [...state.inventoryMen];
+    let sort = sortMenSelectEl?.value || "newest";
+    if(sort === "name") men.sort((a,b)=>a.name.localeCompare(b.name));
+    else if(sort === "value") men.sort((a,b)=>calculatePrice(b)-calculatePrice(a));
+    else men.sort((a,b)=>b.id-a.id);
+    menGridEl.innerHTML = men.map(m=>`
+      <div class="card clickable" onclick="selectMan(${m.id})">
+        <img src="${m.image||''}" style="margin-bottom:6px;" onerror="this.src='https://placehold.co/120x180/222/888?text=?'">
+        <b style="font-size:13px;">${esc(m.name)}</b>
+        <div class="dim" style="font-size:10px; margin-top:4px;">${esc(m.traits.slice(0,4).join(", "))}</div>
+        <div class="gold" style="font-size:12px; margin-top:2px;">💰${calculatePrice(m)}</div>
+      </div>
+    `).join("") || "<em class='dim'>No men forged yet.</em>";
+  }
+  function selectMan(id){
+    state.selectedManId = id;
+    manDetailEl.hidden = false;
+    renderDetail();
+  }
+  function renderDetail(){
+    let m = state.inventoryMen.find(x=>x.id===state.selectedManId);
+    if(!m){ manDetailEl.hidden=true; return; }
+    detailImgEl.src = m.image || "";
+    detailImgEl.onerror = function(){ this.src="https://placehold.co/200x300/222/888?text=?"; };
+    detailNameEl.textContent = m.name;
+    detailVisualEl.textContent = m.visualDesc;
+    detailPersonalityEl.textContent = m.personalityDesc;
+    detailTraitsEl.innerHTML = m.traits.map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+    imgPromptInputEl.value = m.imgPrompt || "";
+    descLogEl.innerHTML = m.descriptionLog.length ? m.descriptionLog.map(d=>
+      `<div><b style="color:var(--teal);">${esc(d.part)}:</b> ${esc(d.text)}</div>`
+    ).join("") : "<em class='dim'>No descriptions yet.</em>";
+    talkOutputEl.textContent = "";
+    activityOutputEl.innerHTML = "";
+    activityCtn.hidden = true;
+    imgEditCtn.hidden = true;
+    illustratePartBtn.hidden = true;
+    renderGallery();
+  }
+  function renderGallery(){
+    let m = state.inventoryMen.find(x=>x.id===state.selectedManId);
+    if(!m || !m.gallery.length){
+      manGalleryEl.innerHTML = "<em class='dim' style='font-size:12px;'>No gallery images.</em>";
+      return;
+    }
+    manGalleryEl.innerHTML = m.gallery.map((g,i)=>`
+      <div class="card" style="font-size:11px;">
+        <img src="${g.image}">
+        <div class="muted">${g.type==="interaction"?"🎭 Scene":("🫁 "+esc(g.part))}</div>
+        <button onclick="deleteGalleryItem(${i})" class="danger sm">Del</button>
+      </div>
+    `).join("");
+  }
+  function deleteGalleryItem(i){
+    let m = state.inventoryMen.find(x=>x.id===state.selectedManId);
+    if(m){ m.gallery.splice(i,1); save(); renderGallery(); }
+  }
+  async function regenerateManImage(){
+    let m = state.inventoryMen.find(x=>x.id===state.selectedManId);
+    if(!m) return;
+    regenerateManImgBtn.disabled = true;
+    regenerateManImgBtn.textContent = "Generating...";
+    let prompt = imgPromptInputEl.value.trim() || m.imgPrompt;
+    if(state.imgSettings.style) prompt += " " + state.imgSettings.style;
+    let img = await genImage(prompt);
+    m.image = img; m.imgPrompt = prompt;
+    save(); renderDetail(); renderMen();
+    regenerateManImgBtn.disabled = false;
+    regenerateManImgBtn.textContent = "Regenerate Image";
+  }
+  function talkToMan(){
+    let m = state.inventoryMen.find(x=>x.id===state.selectedManId);
+    if(!m) return;
+    talkOutputEl.innerHTML = "<span class='loading'>...</span>";
+    let prompt = "Write one line of dialogue for "+m.name+", who is "+m.personalityDesc+". Traits: "+m.traits.join(", ")+".";
+    talkOutputEl.innerHTML = root.generateText({instruction: prompt});
+  }
+  async function doActivity(){
+    let m = state.inventoryMen.find(x=>x.id===state.selectedManId);
+    if(!m) return;
+    let mode = state.nsfw ? "NSFW explicit erotic" : "romantic SFW";
+    let fantasy = state.fantasy ? "Fantasy traits are literal." : "Traits are figurative/realistic.";
+    let prompt = "Write a "+mode+" scene featuring "+m.name+" ("+m.traits.join(", ")+"). "+fantasy+" Prompt: "+activityInputEl.value+". Two paragraphs.";
+    activityOutputEl.innerHTML = "<div class='loading'>Generating scene...</div>";
+    let text = "";
+    activityOutputEl.innerHTML = `<div class="pre-wrap" id="activityTextEl"></div><button id="illustrateSceneBtn" onclick="generateSceneImage()" class="secondary" style="margin-top:8px;" hidden>🖼️ Illustrate Scene</button>`;
+    await root.generateText({
+      instruction: prompt,
+      onChunk: (data) => { text += data.textChunk; activityTextEl.textContent = text; }
+    });
+    state._lastActivityText = text;
+    illustrateSceneBtn.hidden = false;
+  }
+  async function generateSceneImage(){
+    let m = state.inventoryMen.find(x=>x.id===state.selectedManId);
+    if(!m || !state._lastActivityText) return;
+    let btn = illustrateSceneBtn;
+    btn.disabled = true; btn.textContent = "Illustrating...";
+    let scenePrompt = `Anime scene illustration: ${m.name} in this scenario: ${state._lastActivityText} Full body. ${m.internalDesc}`;
+    if(state.fantasy) scenePrompt += " Literal fantasy elements.";
+    if(state.nsfw) scenePrompt += " NSFW.";
+    if(state.imgSettings.style) scenePrompt += " " + state.imgSettings.style;
+    let img = await genImage(scenePrompt, "768x512");
+    m.gallery.push({type:"interaction", text:state._lastActivityText, image:img});
+    save(); renderGallery();
+    btn.disabled = false; btn.textContent = "🖼️ Illustrate Scene";
+  }
+  async function generateBodyPartDesc(){
+    let m = state.inventoryMen.find(x=>x.id===state.selectedManId);
+    let part = bodyPartSelectEl.value;
+    if(!m || !part) return;
+    genBodyPartBtn.disabled = true; genBodyPartBtn.textContent = "Describing...";
+    let nsfw = state.nsfw ? " Explicit adult NSFW erotic detail." : " Keep tasteful and non-explicit.";
+    let fantasy = state.fantasy ? " Fantasy traits are literal." : " Realistic interpretation.";
+    let prompt = `Describe ${m.name}'s ${part} with intense sensory detail and physical specificity. ${fantasy} Focus on exact texture, shape, color, size, and distinguishing marks inspired by their traits (${m.traits.join(", ")}).${nsfw} Avoid narrative; write a concentrated, evocative portrait in isolation. 2-3 sentences.`;
+    let text = "";
+    descLogEl.innerHTML = "<em class='loading'>Generating...</em>";
+    await root.generateText({
+      instruction: prompt,
+      onChunk: (data) => { text += data.textChunk; descLogEl.innerHTML = `<div><b style="color:var(--teal);">${esc(part)}:</b> ${esc(text)}</div>`; }
+    });
+    text = text.trim();
+    m.descriptionLog.push({part, text});
+    state._lastBodyDesc = text;
+    state._lastBodyPart = part;
+    save(); renderDetail();
+    genBodyPartBtn.disabled = false; genBodyPartBtn.textContent = "✨ Describe";
+    illustratePartBtn.hidden = false;
+  }
+  async function generatePartImage(){
+    let m = state.inventoryMen.find(x=>x.id===state.selectedManId);
+    if(!m || !state._lastBodyDesc) return;
+    illustratePartBtn.disabled = true; illustratePartBtn.textContent = "Generating...";
+    let imgPrompt = `Anime study of ${m.name}'s ${state._lastBodyPart}: ${state._lastBodyDesc}. Detailed digital art.`;
+    if(state.fantasy) imgPrompt += " Literal fantasy details.";
+    if(state.nsfw) imgPrompt += " NSFW.";
+    if(state.imgSettings.style) imgPrompt += " " + state.imgSettings.style;
+    let img = await genImage(imgPrompt);
+    m.gallery.push({type:"body", part:state._lastBodyPart, text:state._lastBodyDesc, image:img});
+    save(); renderGallery();
+    illustratePartBtn.disabled = false; illustratePartBtn.textContent = "🖼️ Illustrate";
+  }
+  function sellSelectedMan(){ if(state.selectedManId) sellManId(state.selectedManId); }
+  function releaseSelectedMan(){
+    let idx = state.inventoryMen.findIndex(x=>x.id===state.selectedManId);
+    if(idx>-1){ state.inventoryMen.splice(idx,1); state.selectedManId=null; manDetailEl.hidden=true; save(); renderAll(); }
+  }
+
+  // --- Market ---
+  function renderMarket(){
+    let sorted = Object.entries(state.traitPopularity).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    topTraitsEl.innerHTML = sorted.map(([t,v],i)=>
+      `<div class="flex-between" style="font-size:13px; padding:2px 0;"><span>${i+1}. ${esc(t)}</span><span style="color:#6f6;">${v}</span></div>`
+    ).join("");
+    activeRequestEl.innerHTML = state.currentRequest.trait
+      ? `Wanted: <b>${esc(state.currentRequest.trait)}</b> <span style="color:var(--purple);">(x${state.currentRequest.bonus})</span>`
+      : "None";
+    marketMenEl.innerHTML = state.inventoryMen.map(m=>{
+      let p = calculatePrice(m);
+      let bonus = state.currentRequest.trait && m.traits.includes(state.currentRequest.trait) ? '<span style="color:var(--purple); font-size:11px;"> +REQ</span>' : "";
+      return `<div class="card" style="font-size:12px;">
+        <b>${esc(m.name)}</b> ${bonus}<br>
+        <div class="dim" style="margin:4px 0;">${esc(m.traits.join(", "))}</div>
+        <div class="gold" style="font-weight:bold;">💰${p}</div>
+        <button onclick="sellManId(${m.id})" class="sm" style="margin-top:4px;">Sell</button>
+      </div>`;
+    }).join("") || "<em class='dim'>No men to sell.</em>";
+    transactionLogEl.innerHTML = state.transactionLog.length
+      ? state.transactionLog.slice().reverse().map(l=>esc(l)).join("<br>")
+      : "<em class='dim'>No sales yet.</em>";
+  }
+  function sellManId(id){
+    let idx = state.inventoryMen.findIndex(x=>x.id===id);
+    if(idx===-1) return;
+    let m = state.inventoryMen[idx];
+    let price = calculatePrice(m);
+    state.money += price;
+    state.inventoryMen.splice(idx,1);
+    state.transactionLog.push(`Sold ${m.name} for ${price} [${m.traits.join(", ")}]`);
+    if(state.selectedManId===id){ state.selectedManId=null; manDetailEl.hidden=true; }
+    save(); renderAll();
+  }
+
+  // --- Explore ---
+  function renderBiomeList(){
+    biomeListEl.innerHTML = "";
+    Object.keys(biomes).forEach(b=>{
+      let col = stringColor(b);
+      let btn = document.createElement("button");
+      btn.textContent = b;
+      btn.className = "secondary";
+      btn.style.cssText = `border:2px solid ${col}; color:${col}; font-weight:bold;`;
+      btn.onclick = ()=>showBiomeInfo(b);
+      biomeListEl.appendChild(btn);
+    });
+  }
+  function showBiomeInfo(b){
+    currentBiome = b;
+    biomeInfoEl.hidden = false;
+    let col = stringColor(b);
+    biomeNameEl.textContent = b;
+    biomeNameEl.style.color = col;
+    let sources = biomes[b] || [];
+    biomeAllCapturesEl.innerHTML = sources.map(name=>{
+      let traits = (sourceItems[name]||[]).join(", ");
+      let ic = stringColor(name);
+      return `<div class="card" style="border-left:3px solid ${ic}; font-size:12px;">
+        <b style="color:${ic};">${itemEmojis[name]||"❓"} ${esc(name)}</b><br>
+        <span class="dim">${esc(traits)}</span>
+      </div>`;
+    }).join("");
+    encounterEl.hidden = true;
+  }
+  function startEncounter(){
+    if(!currentBiome) return;
+    encounterEl.hidden = false;
+    let opts = biomes[currentBiome];
+    let name = opts[Math.floor(Math.random()*opts.length)];
+    let traits = sourceItems[name];
+    state.inventoryItems.push({name, traits:[...traits], biome:currentBiome});
+    if(!state.caughtNames.includes(name)) state.caughtNames.push(name);
+    let ic = stringColor(name);
+    encounterNameEl.textContent = `${itemEmojis[name]||"❓"} Found: ${name}`;
+    encounterNameEl.style.color = ic;
+    encounterTraitsEl.innerHTML = traits.map(t=>`<span class="tag">${esc(t)}</span>`).join(" ");
+    encounterResultEl.textContent = `Added ${name} to your inventory.`;
+    save(); renderSources(); renderArchive();
+  }
+
+  // --- Shop ---
+  function maybeRefreshShop(){
+    if((Date.now()-state.lastShopRefresh > 120000) || !state.shopStock.length){
+      let keys = Object.keys(sourceItems);
+      state.shopStock = [];
+      for(let i=0;i<5;i++) state.shopStock.push({name:keys[Math.floor(Math.random()*keys.length)], price:20+Math.floor(Math.random()*40)});
+      state.lastShopRefresh = Date.now();
+    }
+  }
+  function renderShop(){
+    maybeRefreshShop();
+    let secs = Math.max(0, Math.ceil((state.lastShopRefresh+120000-Date.now())/1000));
+    shopStatusEl.textContent = "(refreshes in "+secs+"s)";
+    shopGridEl.innerHTML = state.shopStock.map((s,i)=>{
+      let ic = stringColor(s.name);
+      return `<div class="card" style="border-left:3px solid ${ic}; font-size:12px;">
+        <b style="color:${ic};">${itemEmojis[s.name]||"❓"} ${esc(s.name)}</b><br>
+        <span class="gold">💰${s.price}</span><br>
+        <button onclick="buyItem(${i})" class="sm" style="margin-top:4px;" ${state.money<s.price?'disabled':''}>Buy</button>
+      </div>`;
+    }).join("");
+  }
+  function buyItem(i){
+    let s = state.shopStock[i];
+    if(!s || state.money<s.price) return;
+    state.money -= s.price;
+    state.inventoryItems.push({name:s.name, traits:[...sourceItems[s.name]], biome:"Shop"});
+    save(); renderAll();
+  }
+
+  function populateBodyParts(){
+    bodyPartSelectEl.innerHTML = bodyParts.map(p=>`<option value="${p}">${p}</option>`).join("");
+  }
+
+  // --- Archive ---
+  function renderArchive(){
+    let caught = state.caughtNames || [];
+    archiveCountEl.textContent = caught.length + " unique.";
+    archiveFilterEl.innerHTML = allTraits.map(t=>{
+      let on = state.archiveFilters.includes(t);
+      return `<button class="tag ${on?'selected':''}" onclick="toggleArchiveFilter('${esc(t)}')">${esc(t)}</button>`;
+    }).join("");
+    let items = caught.map(name => ({name, traits:sourceItems[name]||[]}));
+    if(state.archiveFilters.length){
+      items = items.filter(it => it.traits.some(t => state.archiveFilters.includes(t)));
+    }
+    archiveGridEl.innerHTML = items.length ? items.map(it=>{
+      let col = stringColor(it.name);
+      return `<div class="card" style="border-left:3px solid ${col}; font-size:12px;">
+        <b style="color:${col};">${itemEmojis[it.name]||"❓"} ${esc(it.name)}</b><br>
+        <span class="dim">${esc(it.traits.join(", "))}</span>
+      </div>`;
+    }).join("") : `<em class='dim'>${caught.length?'No matches.':'No discoveries yet.'}</em>`;
+  }
+  function toggleArchiveFilter(t){
+    let i = state.archiveFilters.indexOf(t);
+    if(i>-1) state.archiveFilters.splice(i,1); else state.archiveFilters.push(t);
+    renderArchive(); save();
+  }
+
+  // --- Settings / Diagnosis ---
+  function renderDiagnosis(){
+    let traitSources = {};
+    for(let t of allTraits) traitSources[t] = [];
+    for(let [source, traits] of Object.entries(sourceItems)){
+      for(let t of traits){ if(traitSources[t]) traitSources[t].push(source); }
+    }
+    let sourceBiomes = {};
+    for(let [biome, sources] of Object.entries(biomes)){
+      for(let s of sources){ if(!sourceBiomes[s]) sourceBiomes[s]=[]; sourceBiomes[s].push(biome); }
+    }
+    diagnosisGridEl.innerHTML = allTraits.map(t=>{
+      let sources = traitSources[t];
+      let has = sources.length>0;
+      let bset = new Set();
+      sources.forEach(s => (sourceBiomes[s]||[]).forEach(b => bset.add(b)));
+      let biomeTxt = has ? [...bset].sort().join(", ") : "—";
+      return `<div class="card" style="font-size:12px; ${has?'':'color:#f55; border-color:#633;'}">
+        <b>${esc(t)}</b><br>
+        <span class="dim">Sources:</span> <span style="color:#ccc;">${has?sources.map(esc).join(", "):"Unobtainable"}</span><br>
+        <span class="dim">Biomes:</span> <span style="color:#ccc;">${esc(biomeTxt)}</span>
+      </div>`;
+    }).join("");
+  }
+
+  // --- Wallpaper ---
+  async function generateAreaBg(){
+    let prompt = bgPromptInputEl.value.trim();
+    if(!prompt) return;
+    bgImgCtn.innerHTML = "<div class='loading'>Generating...</div>";
+    let fullPrompt = "Fantasy background scene: " + prompt;
+    if(state.imgSettings.style) fullPrompt += " " + state.imgSettings.style;
+    let img = await genImage(fullPrompt, "768x512");
+    lastGeneratedBg = img;
+    bgImgCtn.innerHTML = `<img src="${img}" style="max-width:100%; border-radius:6px; border:1px solid var(--border); display:block; margin-bottom:8px;">
+      <div class="flex">
+        <button onclick="saveCurrentBg()" class="sm">Save</button>
+        <button onclick="setWallpaper(lastGeneratedBg)" class="sm">Set as Wallpaper</button>
+      </div>`;
+  }
+  function saveCurrentBg(){
+    if(!lastGeneratedBg) return;
+    if(!state.savedBackgrounds.includes(lastGeneratedBg)){
+      state.savedBackgrounds.push(lastGeneratedBg);
+      save(); renderWallpaperGallery();
+    }
+  }
+  function setWallpaper(url){
+    state.currentWallpaper = url;
+    if(url){
+      app.style.backgroundImage = `url('${url}')`;
+      app.style.backgroundSize = "cover";
+      app.style.backgroundAttachment = "fixed";
+      app.style.backgroundPosition = "center";
+    } else {
+      app.style.backgroundImage = "";
+      app.style.backgroundColor = "var(--bg)";
+    }
+    save();
+  }
+  function clearWallpaper(){ setWallpaper(null); }
+  function deleteWallpaper(i){
+    let url = state.savedBackgrounds[i];
+    state.savedBackgrounds.splice(i,1);
+    if(state.currentWallpaper === url) clearWallpaper();
+    save(); renderWallpaperGallery();
+  }
+  function renderWallpaperGallery(){
+    if(!state.savedBackgrounds.length){
+      wallpaperGalleryCtn.innerHTML = "<em class='dim' style='font-size:12px;'>No saved backgrounds.</em>";
+      return;
+    }
+    wallpaperGalleryCtn.innerHTML = state.savedBackgrounds.map((url,i)=>`
+      <div class="card" style="font-size:12px;">
+        <img src="${url}" style="cursor:pointer;" onclick="setWallpaper('${url}')">
+        <div class="flex" style="justify-content:center; margin-top:4px;">
+          <button onclick="setWallpaper('${url}')" class="sm">Set</button>
+          <button onclick="deleteWallpaper(${i})" class="danger sm">Del</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  // --- Render All ---
+  function renderAll(){
+    updateTicker();
+    renderSources();
+    renderTraitPool();
+    renderForge();
+    renderMen();
+    renderDetail();
+    renderMarket();
+    renderShop();
+    renderArchive();
+    renderDiagnosis();
+    renderWallpaperGallery();
+    moneyEl.textContent = state.money;
+    nsfwToggleEl.checked = state.nsfw;
+    fantasyToggleEl.checked = state.fantasy;
+    settingsStyleInputEl.value = state.imgSettings.style || "";
+    settingsNegInputEl.value = state.imgSettings.negativePrompt || "";
+    settingsResSelectEl.value = state.imgSettings.resolution || "512x768";
+    settingsGuidanceInputEl.value = state.imgSettings.guidanceScale || 7;
+  }
+
+  // --- Init ---
+  renderBiomeList();
+  populateBodyParts();
+  load();
+  if(!state.currentRequest.trait) rotateRequest();
+  renderAll();
+  setInterval(tickMarket, 30000);
+  setInterval(()=>{ rotateRequest(); renderMarket(); }, 120000);
+  setInterval(renderShop, 5000);
+
+  // expose for inline handlers
+  window.state = state;
+  window.dismantleAll = dismantleAll;
+  window.clearAllTraits = clearAllTraits;
+  window.generateMan = generateMan;
+  window.dismantleItem = dismantleItem;
+  window.selectTrait = selectTrait;
+  window.deselectTrait = deselectTrait;
+  window.showTab = showTab;
+  window.rotateRequest = rotateRequest;
+  window.renderMarket = renderMarket;
+  window.talkToMan = talkToMan;
+  window.togglePanel = togglePanel;
+  window.doActivity = doActivity;
+  window.regenerateManImage = regenerateManImage;
+  window.sellSelectedMan = sellSelectedMan;
+  window.releaseSelectedMan = releaseSelectedMan;
+  window.sellManId = sellManId;
+  window.generateBodyPartDesc = generateBodyPartDesc;
+  window.generatePartImage = generatePartImage;
+  window.generateSceneImage = generateSceneImage;
+  window.startEncounter = startEncounter;
+  window.buyItem = buyItem;
+  window.toggleArchiveFilter = toggleArchiveFilter;
+  window.renderMen = renderMen;
+  window.generateAreaBg = generateAreaBg;
+  window.saveCurrentBg = saveCurrentBg;
+  window.setWallpaper = setWallpaper;
+  window.clearWallpaper = clearWallpaper;
+  window.deleteWallpaper = deleteWallpaper;
+</script>
+</div>
+
+</body>
+</html>

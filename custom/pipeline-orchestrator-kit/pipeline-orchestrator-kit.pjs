@@ -1,0 +1,201 @@
+$meta
+  title = Pipeline Orchestrator Kit
+  description = Composable step pipelines with run reports, step toggles, and controlled data flow.
+  image = https://user.uploads.dev/file/8c7563d0ece7c9ed36c8a83f8361a7a7.webp
+  tags = pipeline, orchestration, flow control, modular processing
+
+ensurePipelineStore() =>
+  if(!window.__pipelineOrchestratorKitV1) {
+    window.__pipelineOrchestratorKitV1 = {};
+  }
+  return window.__pipelineOrchestratorKitV1;
+
+normalizePipelineName(name) =>
+  const raw = name === undefined || name === null ? "default" : String(name).trim();
+  return raw === "" ? "default" : raw;
+
+normalizeStepId(stepId) =>
+  const raw = stepId === undefined || stepId === null ? "" : String(stepId).trim();
+  return raw;
+
+ensurePipeline(name) =>
+  const pipelineName = normalizePipelineName(name);
+  const store = ensurePipelineStore();
+
+  if(!store[pipelineName]) {
+    store[pipelineName] = {
+      steps: [],
+      runs: 0
+    };
+  }
+
+  return store[pipelineName];
+
+findStepIndex(pipeline, stepId) =>
+  for(let i = 0; i < pipeline.steps.length; i += 1) {
+    if(pipeline.steps[i].id === stepId) {
+      return i;
+    }
+  }
+  return -1;
+
+create(name, mode) =>
+  const pipelineName = normalizePipelineName(name);
+  const store = ensurePipelineStore();
+
+  if(store[pipelineName] && mode !== "replace") {
+    return "error: pipeline exists";
+  }
+
+  store[pipelineName] = {
+    steps: [],
+    runs: 0
+  };
+
+  return pipelineName;
+
+addStep(name, stepId, handler, options, mode) =>
+  const id = normalizeStepId(stepId);
+  if(id === "") return "error: empty step id";
+
+  if(typeof handler !== "function") {
+    return "error: handler must be a function";
+  }
+
+  const pipeline = ensurePipeline(name);
+  const index = findStepIndex(pipeline, id);
+
+  if(index !== -1 && mode !== "replace") {
+    return "error: step exists";
+  }
+
+  const step = {
+    id: id,
+    enabled: true,
+    type: "transform",
+    handler: handler
+  };
+
+  if(options && typeof options === "object") {
+    if(options.enabled !== undefined) {
+      step.enabled = Boolean(options.enabled);
+    }
+    if(options.type !== undefined) {
+      step.type = String(options.type);
+    }
+  }
+
+  if(index !== -1) {
+    pipeline.steps[index] = step;
+  } else {
+    pipeline.steps.push(step);
+  }
+
+  return id;
+
+setEnabled(name, stepId, enabled) =>
+  const pipeline = ensurePipeline(name);
+  const id = normalizeStepId(stepId);
+  const index = findStepIndex(pipeline, id);
+  if(index === -1) return false;
+
+  pipeline.steps[index].enabled = Boolean(enabled);
+  return true;
+
+removeStep(name, stepId) =>
+  const pipeline = ensurePipeline(name);
+  const id = normalizeStepId(stepId);
+  const index = findStepIndex(pipeline, id);
+  if(index === -1) return false;
+
+  pipeline.steps.splice(index, 1);
+  return true;
+
+listPipelines(separator) =>
+  const sep = separator === undefined ? "," : String(separator);
+  return Object.keys(ensurePipelineStore()).join(sep);
+
+listSteps(name, separator) =>
+  const sep = separator === undefined ? "," : String(separator);
+  const pipeline = ensurePipeline(name);
+  return pipeline.steps.map(step => step.id).join(sep);
+
+run(name, input, context, mode) =>
+  const report = runReport(name, input, context, mode);
+  return report.value;
+
+runReport(name, input, context, mode) =>
+  const pipeline = ensurePipeline(name);
+  const ctx = context === undefined ? {} : context;
+  const stopOnError = mode === "stop-on-error";
+
+  let value = input;
+  const steps = [];
+  const errors = [];
+
+  for(let i = 0; i < pipeline.steps.length; i += 1) {
+    const step = pipeline.steps[i];
+    if(step.enabled !== true) {
+      steps.push({ id: step.id, skipped: true });
+      continue;
+    }
+
+    try {
+      if(step.type === "tap") {
+        step.handler(value, ctx, step.id);
+        steps.push({ id: step.id, skipped: false, tap: true });
+        continue;
+      }
+
+      const nextValue = step.handler(value, ctx, step.id);
+      if(nextValue !== undefined) {
+        value = nextValue;
+      }
+
+      steps.push({ id: step.id, skipped: false });
+    } catch(error) {
+      const message = String(error && error.message ? error.message : error);
+      errors.push({ id: step.id, error: message });
+      steps.push({ id: step.id, skipped: false, error: message });
+
+      if(stopOnError) {
+        break;
+      }
+    }
+  }
+
+  pipeline.runs += 1;
+
+  return {
+    ok: errors.length === 0,
+    pipeline: normalizePipelineName(name),
+    value: value,
+    steps: steps,
+    errors: errors,
+    runCount: pipeline.runs
+  };
+
+clear(name) =>
+  const pipelineName = normalizePipelineName(name);
+  const store = ensurePipelineStore();
+
+  if(!store[pipelineName]) {
+    return false;
+  }
+
+  delete store[pipelineName];
+  return true;
+
+clearAll() =>
+  const count = Object.keys(ensurePipelineStore()).length;
+  window.__pipelineOrchestratorKitV1 = {};
+  return count;
+
+describe(name) =>
+  const pipeline = ensurePipeline(name);
+  return {
+    name: normalizePipelineName(name),
+    stepCount: pipeline.steps.length,
+    enabledCount: pipeline.steps.filter(step => step.enabled === true).length,
+    runCount: pipeline.runs
+  };

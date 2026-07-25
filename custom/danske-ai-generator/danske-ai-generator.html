@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>danske-ai-generator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- Danish AI Text and Character Chat Generator
+
+A fully-featured, interactive tool for generating Danish text, characters, and immersive chat conversations. Features a sleek dark-mode UI with glowing accents, live preview updates, and an integrated session manager.
+
+Architecture:
+1. State Machine: Controls the active generation mode (text, character, chat).
+2. Event System: Delegated click handlers bind to the mode switcher, generator buttons, and chat submit button.
+3. AI Integration: Uses the `generateText` global with Danish-specific instructions. For chat, it passes the full message history to maintain context.
+4. Streaming UI: The `onChunk` callback updates the DOM in real-time as the AI generates text.
+5. Session Storage: Uses a global JS array to hold current chat sessions and generated characters, allowing for clearing and resetting.
+6. Styling: Highly stylized with glassmorphism effects, CSS animations, and dynamic color variables.
+-->
+<div style="min-height:100vh; background:radial-gradient(circle at 10% 20%, #1a0b2e 0%, #0f0518 40%, #000000 100%); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; color:#e0e0e0; display:flex; flex-direction:column; align-items:center; padding:20px; box-sizing:border-box; overflow-x:hidden;">
+  
+  <!-- Header -->
+  <div style="text-align:center; margin-bottom:24px; max-width:700px; width:100%;">
+    <div style="font-size:42px; font-weight:800; color:#ffffff; text-shadow:0 0 20px rgba(167, 139, 250, 0.6); letter-spacing:-0.5px; margin-bottom:4px;">
+      Danske AI Generator
+    </div>
+    <div style="font-size:15px; color:#a78bfa; font-weight:500; letter-spacing:0.5px;">
+      Skriv, skab og chat på dansk
+    </div>
+  </div>
+
+  <!-- Main App Container -->
+  <div id="appCtn" style="width:100%; max-width:1100px; display:grid; grid-template-columns: minmax(300px, 1fr) 2fr; gap:20px; align-items:start;">
+    
+    <!-- Left Panel: Controls -->
+    <div id="leftPanelEl" style="background:rgba(30, 20, 50, 0.6); backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.1); border-radius:16px; padding:24px; display:flex; flex-direction:column; gap:16px; box-shadow:0 8px 32px rgba(0,0,0,0.4);">
+      
+      <div style="font-size:18px; font-weight:700; color:#fff; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:12px;">
+        Indstillinger
+      </div>
+
+      <!-- Mode Switcher -->
+      <div style="display:flex; gap:8px; background:rgba(0,0,0,0.2); padding:4px; border-radius:12px;">
+        <button id="modeTextBtn" class="mode-btn active" onclick="switchMode('text')" style="flex:1; background:transparent; border:none; color:#bbb; padding:8px 0; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; transition:all 0.2s;">
+          Tekst
+        </button>
+        <button id="modeCharBtn" class="mode-btn" onclick="switchMode('char')" style="flex:1; background:transparent; border:none; color:#bbb; padding:8px 0; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; transition:all 0.2s;">
+          Karakter
+        </button>
+        <button id="modeChatBtn" class="mode-btn" onclick="switchMode('chat')" style="flex:1; background:transparent; border:none; color:#bbb; padding:8px 0; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; transition:all 0.2s;">
+          Chat
+        </button>
+      </div>
+
+      <!-- Text Mode Inputs -->
+      <div id="textInputCtn" style="display:flex; flex-direction:column; gap:12px;">
+        <label style="font-size:12px; text-transform:uppercase; color:#a78bfa; font-weight:700; letter-spacing:1px;">Emne / Stikord</label>
+        <input id="textTopicInput" placeholder="F.eks. en fantasy-horror historie om skovene..." style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:12px; color:#fff; font-size:14px; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(255,255,255,0.15)'">
+        
+        <label style="font-size:12px; text-transform:uppercase; color:#a78bfa; font-weight:700; letter-spacing:1px; margin-top:4px;">Genre / Tone</label>
+        <input id="textToneInput" placeholder="F.eks. humoristisk, dystert, romantisk..." style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:12px; color:#fff; font-size:14px; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(255,255,255,0.15)'">
+      </div>
+
+      <!-- Character Mode Inputs -->
+      <div id="charInputCtn" hidden style="display:flex; flex-direction:column; gap:12px;">
+        <label style="font-size:12px; text-transform:uppercase; color:#a78bfa; font-weight:700; letter-spacing:1px;">Beskrivelse</label>
+        <textarea id="charDescInput" rows="3" placeholder="F.eks. en ældre, vis fisker fra Fanø..." style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:12px; color:#fff; font-size:14px; outline:none; resize:vertical; transition:border-color 0.2s; font-family:inherit;" onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(255,255,255,0.15)'"></textarea>
+      </div>
+
+      <!-- Chat Mode Inputs -->
+      <div id="chatInputCtn" hidden style="display:flex; flex-direction:column; gap:12px;">
+        <label style="font-size:12px; text-transform:uppercase; color:#a78bfa; font-weight:700; letter-spacing:1px;">Karaktér Type</label>
+        <input id="chatCharTypeInput" placeholder="F.eks. Vikingekriger, Prinsesse, Alien..." style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:12px; color:#fff; font-size:14px; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(255,255,255,0.15)'">
+        
+        <div style="display:flex; gap:8px; align-items:center; margin-top:4px;">
+          <input type="checkbox" id="chatGenerateImgCheck" checked style="width:16px; height:16px; accent-color:#a78bfa;">
+          <label for="chatGenerateImgCheck" style="font-size:13px; color:#ccc; cursor:pointer;">Generér avatar</label>
+        </div>
+      </div>
+
+      <!-- Generate Button -->
+      <button id="generateBtn" onclick="startGeneration()" style="background:linear-gradient(135deg, #8b5cf6, #ec4899); border:none; border-radius:12px; padding:14px; color:#fff; font-size:15px; font-weight:700; cursor:pointer; box-shadow:0 4px 20px rgba(139, 92, 246, 0.3); transition:transform 0.1s, box-shadow 0.2s; margin-top:8px;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 24px rgba(139, 92, 246, 0.5)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 20px rgba(139, 92, 246, 0.3)'" onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='translateY(-2px)'">
+        ✨ Generér
+      </button>
+
+      <!-- Stats / Info -->
+      <div id="statusEl" style="font-size:12px; color:#888; text-align:center; min-height:18px; margin-top:-4px;">
+        Klar til at generere
+      </div>
+    </div>
+
+    <!-- Right Panel: Output -->
+    <div id="rightPanelEl" style="display:flex; flex-direction:column; gap:20px;">
+      
+      <!-- Output Display -->
+      <div id="outputCtn" style="background:rgba(30, 20, 50, 0.6); backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.1); border-radius:16px; padding:24px; min-height:300px; box-shadow:0 8px 32px rgba(0,0,0,0.4); flex:1; display:flex; flex-direction:column;">
+        
+        <!-- Text Output Header -->
+        <div id="outputHeaderEl" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:12px;">
+          <div style="font-size:16px; font-weight:700; color:#fff;">Output</div>
+          <div style="display:flex; gap:8px;">
+            <button onclick="clearOutput()" style="background:rgba(255,255,255,0.1); border:none; border-radius:6px; padding:6px 10px; color:#ccc; font-size:11px; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+              Ryd
+            </button>
+            <button onclick="copyOutput()" style="background:rgba(255,255,255,0.1); border:none; border-radius:6px; padding:6px 10px; color:#ccc; font-size:11px; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+              Kopiér
+            </button>
+          </div>
+        </div>
+
+        <!-- Text Output Area -->
+        <div id="textOutputEl" style="white-space:pre-wrap; line-height:1.6; color:#e0e0e0; font-size:14px; flex:1; overflow-y:auto; max-height:500px; padding-right:8px;"></div>
+
+        <!-- Character Output Area -->
+        <div id="charOutputEl" hidden style="display:flex; flex-direction:column; gap:16px; align-items:center; text-align:center;">
+          <img id="charImgEl" src="https://placehold.co/300x300/2a1b3d/FFFFFF?text=?" style="width:220px; height:220px; border-radius:50%; object-fit:cover; border:3px solid rgba(167, 139, 250, 0.5); box-shadow:0 0 30px rgba(167, 139, 250, 0.2);">
+          <div id="charNameEl" style="font-size:22px; font-weight:800; color:#fff;"></div>
+          <div id="charDescOutputEl" style="font-size:14px; color:#ccc; line-height:1.5; max-width:400px;"></div>
+          <div id="charTraitsEl" style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:400px;"></div>
+        </div>
+
+        <!-- Chat Output Area -->
+        <div id="chatOutputEl" hidden style="display:flex; flex-direction:column; height:500px;">
+          <div id="chatMessagesCtn" style="flex:1; overflow-y:auto; padding-right:8px; display:flex; flex-direction:column; gap:12px; margin-bottom:12px;"></div>
+          <div style="display:flex; gap:8px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.1);">
+            <input id="chatMessageInput" placeholder="Skriv en besked..." style="flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:10px 14px; color:#fff; font-size:14px; outline:none;" onkeydown="if(event.key==='Enter') sendChatMessage()">
+            <button onclick="sendChatMessage()" style="background:#8b5cf6; border:none; border-radius:10px; padding:10px 18px; color:#fff; font-weight:600; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='#7c3aed'" onmouseout="this.style.background='#8b5cf6'">
+              Send
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Saved Characters / Sessions -->
+      <div style="background:rgba(30, 20, 50, 0.6); backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.1); border-radius:16px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.4);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div style="font-size:14px; font-weight:700; color:#fff;">Gemte Sessioner</div>
+          <button onclick="clearSessions()" style="background:transparent; border:none; color:#ff6b6b; font-size:12px; cursor:pointer;">Ryd alle</button>
+        </div>
+        <div id="sessionsListEl" style="display:flex; flex-direction:column; gap:8px; max-height:200px; overflow-y:auto; padding-right:4px;">
+          <!-- Sessions injected here -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <style>
+    /* Global Scrollbar Styling */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(167, 139, 250, 0.3); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(167, 139, 250, 0.5); }
+    
+    /* Mode Button Active State (Dynamic via JS, but base styles here for specificity) */
+    .mode-btn.active { background: rgba(139, 92, 246, 0.2) !important; color: #fff !important; box-shadow: 0 0 10px rgba(139, 92, 246, 0.2); }
+    
+    /* Animation for new messages */
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .msg-anim { animation: slideIn 0.3s ease-out forwards; }
+
+    /* Loading dots */
+    @keyframes blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+    .loading-dot { animation: blink 1.4s infinite both; display: inline-block; width: 6px; height: 6px; background: #a78bfa; border-radius: 50%; margin: 0 2px; }
+    .loading-dot:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dot:nth-child(3) { animation-delay: 0.4s; }
+  </style>
+
+  <script>
+    // --- State ---
+    let currentMode = 'text';
+    let chatHistory = []; // Array of { sender: 'user'|'bot', text: string }
+    let sessions = [];
+    let currentStreamPromise = null;
+
+    // --- Mode Switching ---
+    function switchMode(mode) {
+      currentMode = mode;
+      // Reset UI
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('mode' + (mode.charAt(0).toUpperCase() + mode.slice(1)) + 'Btn').classList.add('active');
+      
+      // Show/Hide inputs
+      textInputCtn.hidden = true;
+      charInputCtn.hidden = true;
+      chatInputCtn.hidden = true;
+      document.getElementById(mode + 'InputCtn').hidden = false;
+
+      // Show/Hide outputs
+      textOutputEl.hidden = true;
+      charOutputEl.hidden = true;
+      chatOutputEl.hidden = true;
+      document.getElementById(mode + 'OutputEl').hidden = false;
+
+      // Update status
+      statusEl.textContent = 'Klar til at generere';
+    }
+
+    // --- Core Generation Logic ---
+    async function startGeneration() {
+      generateBtn.disabled = true;
+      statusEl.innerHTML = 'Genererer<span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>';
+      
+      if (currentMode === 'text') {
+        await generateDanishText();
+      } else if (currentMode === 'char') {
+        await generateDanishCharacter();
+      } else if (currentMode === 'chat') {
+        await startDanishChat();
+      }
+
+      generateBtn.disabled = false;
+      statusEl.textContent = 'Færdig!';
+    }
+
+    async function generateDanishText() {
+      let topic = textTopicInput.value.trim() || "en tilfældig historie";
+      let tone = textToneInput.value.trim() || "neutral";
+      
+      textOutputEl.textContent = ''; // Clear
+      
+      let instruction = `Skriv en kreativ dansk tekst om følgende emne: "${topic}". Tonen skal være ${tone}. Sørg for at teksten er flydende, naturlig og helt på dansk. Skriv ca. 200-400 ord.`;
+      
+      currentStreamPromise = generateText({
+        instruction: instruction,
+        onChunk: (data) => {
+          textOutputEl.textContent += data.textChunk;
+          // Auto scroll
+          textOutputEl.scrollTop = textOutputEl.scrollHeight;
+        }
+      });
+      
+      await currentStreamPromise;
+      addSession('Tekst: ' + topic.substring(0, 20));
+    }
+
+    async function generateDanishCharacter() {
+      let desc = charDescInput.value.trim() || "en interessant person";
+      
+      charNameEl.textContent = "Genererer...";
+      charDescOutputEl.textContent = "";
+      charTraitsEl.innerHTML = "";
+      charImgEl.src = "https://placehold.co/300x300/2a1b3d/FFFFFF?text=Genererer...";
+      
+      // 1. Generate Name & Bio
+      let charPrompt = `Baseret på beskrivelsen: "${desc}", skab en unik dansk karakter. 
+Formatér svaret PRÆCIST sådan her (på dansk):
+NAVN: [Indsæt navn her]
+BIO: [Indsæt en kort biografi på 2-3 sætninger her]
+TRÆK: [Indsæt 3 personlighedstræk adskilt af kommaer her]`;
+
+      let rawText = await generateText(charPrompt);
+      
+      // Parse response
+      let name = "Ukendt Navn";
+      let bio = "Ingen biografi genereret.";
+      let traits = [];
+      
+      let nameMatch = rawText.match(/NAVN:\s*(.+)/i);
+      if (nameMatch) name = nameMatch[1].trim();
+      
+      let bioMatch = rawText.match(/BIO:\s*(.+)/i);
+      if (bioMatch) bio = bioMatch[1].trim();
+      
+      let traitsMatch = rawText.match(/TRÆK:\s*(.+)/i);
+      if (traitsMatch) traits = traitsMatch[1].split(',').map(t => t.trim()).filter(t => t);
+
+      // 2. Generate Image
+      let imgDataUrl = await generateImage(`Portrait of ${name}, ${desc}, detailed digital art, vibrant colors, cinematic lighting, fantasy style`, {resolution:"512x768"});
+      
+      // Update UI
+      charNameEl.textContent = name;
+      charDescOutputEl.textContent = bio;
+      charImgEl.src = imgDataUrl;
+      
+      // Render traits
+      charTraitsEl.innerHTML = traits.map(t => `<span style="background:rgba(139,92,246,0.2); color:#d8b4fe; padding:4px 10px; border-radius:12px; font-size:12px; border:1px solid rgba(139,92,246,0.3);">${t}</span>`).join('');
+      
+      addSession('Karakter: ' + name);
+    }
+
+    async function startDanishChat() {
+      let charType = chatCharTypeInput.value.trim() || "en hjælpsom assistent";
+      
+      // Reset chat
+      chatHistory = [];
+      chatMessagesCtn.innerHTML = '';
+      
+      // Optional Avatar
+      let avatarUrl = null;
+      if (chatGenerateImgCheck.checked) {
+        avatarUrl = await generateImage(`Portrait of ${charType}, friendly expression, soft lighting, clean background`, {resolution:"512x512"});
+      }
+
+      // System / Initial Message
+      let systemMsg = `Du er nu en dansk AI karakter: ${charType}. Du skal ALDRIG svare på andet sprog end dansk. Du er en del af en interaktiv chat. Svar naturligt og venligt.`;
+      
+      // Add welcome message
+      let welcomeText = await generateText({
+        instruction: systemMsg + "\nSkriv en kort velkomstbesked til brugeren (maks 2 sætninger).",
+        maxTokens: 100
+      });
+      
+      addChatMessage('bot', welcomeText.trim(), avatarUrl);
+      addSession('Chat: ' + charType);
+    }
+
+    async function sendChatMessage() {
+      let msg = chatMessageInput.value.trim();
+      if (!msg) return;
+      
+      chatMessageInput.value = '';
+      
+      // Add user message
+      addChatMessage('user', msg, null);
+      
+      // Prepare history for AI
+      let historyText = chatHistory.map(m => `${m.sender === 'user' ? 'Bruger' : 'Bot'}: ${m.text}`).join("\n");
+      
+      let instruction = `Fortsæt denne danske chat som karakteren. Svar KUN på dansk.\n\nChat historik:\n${historyText}\n\nBot:`;
+      
+      // Add loading bubble
+      let loadingId = 'loading_' + Date.now();
+      let loadingEl = document.createElement('div');
+      loadingEl.id = loadingId;
+      loadingEl.className = 'msg-anim';
+      loadingEl.style.cssText = "align-self:flex-start; background:rgba(139,92,246,0.15); border:1px solid rgba(139,92,246,0.3); border-radius:14px 14px 14px 4px; padding:10px 14px; color:#a78bfa; font-size:14px; max-width:80%;";
+      loadingEl.innerHTML = '<span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>';
+      chatMessagesCtn.appendChild(loadingEl);
+      chatMessagesCtn.scrollTop = chatMessagesCtn.scrollHeight;
+
+      // Generate
+      let response = await generateText({
+        instruction: instruction,
+        maxTokens: 400,
+        stopSequences: ["\nBruger:", "\nBot:"]
+      });
+      
+      // Remove loading
+      document.getElementById(loadingId).remove();
+      
+      // Add bot message
+      addChatMessage('bot', response.trim(), null); // Avatar handled by logic inside addChatMessage if existing
+    }
+
+    function addChatMessage(sender, text, imgUrl) {
+      chatHistory.push({ sender, text });
+      
+      let div = document.createElement('div');
+      div.className = 'msg-anim';
+      let isUser = sender === 'user';
+      
+      div.style.cssText = `display:flex; gap:10px; align-items:flex-end; ${isUser ? 'flex-direction:row-reverse; align-self:flex-end;' : 'align-self:flex-start;'}`;
+      
+      let avatarHtml = '';
+      if (!isUser) {
+        let botAvatarUrl = imgUrl || 'https://placehold.co/40x40/2a1b3d/a78bfa?text=AI';
+        // If we already have an avatar in the DOM from a previous turn, try to reuse style but here we just render
+        avatarHtml = `<img src="${botAvatarUrl}" style="width:32px; height:32px; border-radius:50%; object-fit:cover; border:1px solid rgba(139,92,246,0.3); flex-shrink:0;">`;
+      }
+      
+      let bubbleStyle = isUser 
+        ? "background:linear-gradient(135deg, #8b5cf6, #7c3aed); color:#fff; border-radius:14px 14px 4px 14px;" 
+        : "background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#e0e0e0; border-radius:14px 14px 14px 4px;";
+      
+      let bubble = `<div style="${bubbleStyle} padding:10px 14px; font-size:14px; line-height:1.5; max-width:400px; word-wrap:break-word; box-shadow:0 2px 8px rgba(0,0,0,0.2);">${text}</div>`;
+      
+      div.innerHTML = isUser ? bubble + avatarHtml : avatarHtml + bubble; // Avatar logic simplified for user (none)
+      if(isUser) div.innerHTML = bubble; // User has no avatar
+
+      chatMessagesCtn.appendChild(div);
+      chatMessagesCtn.scrollTop = chatMessagesCtn.scrollHeight;
+    }
+
+    // --- Session Management ---
+    function addSession(title) {
+      let id = Date.now();
+      sessions.unshift({ id, title, time: new Date().toLocaleTimeString('da-DK', {hour: '2-digit', minute:'2-digit'}) });
+      renderSessions();
+    }
+
+    function renderSessions() {
+      if (sessions.length === 0) {
+        sessionsListEl.innerHTML = '<div style="font-size:12px; color:#666; text-align:center; padding:12px;">Ingen sessioner gemt endnu</div>';
+        return;
+      }
+      sessionsListEl.innerHTML = sessions.map(s => `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border-radius:8px; padding:8px 12px; border:1px solid rgba(255,255,255,0.05);">
+          <div style="font-size:13px; color:#ccc;">${s.title}</div>
+          <div style="font-size:11px; color:#666;">${s.time}</div>
+        </div>
+      `).join('');
+    }
+
+    function clearSessions() {
+      sessions = [];
+      renderSessions();
+    }
+
+    // --- Utilities ---
+    function clearOutput() {
+      textOutputEl.textContent = '';
+      chatMessagesCtn.innerHTML = '';
+      chatHistory = [];
+      charNameEl.textContent = '';
+      charDescOutputEl.textContent = '';
+      charTraitsEl.innerHTML = '';
+      charImgEl.src = 'https://placehold.co/300x300/2a1b3d/FFFFFF?text=?';
+    }
+
+    function copyOutput() {
+      let text = '';
+      if (currentMode === 'text') text = textOutputEl.textContent;
+      if (currentMode === 'char') text = `Navn: ${charNameEl.textContent}\nBio: ${charDescOutputEl.textContent}`;
+      if (currentMode === 'chat') text = chatHistory.map(m => `${m.sender}: ${m.text}`).join('\n');
+      
+      navigator.clipboard.writeText(text).then(() => {
+        statusEl.textContent = 'Kopieret til udklipsholder!';
+        setTimeout(() => statusEl.textContent = 'Klar', 2000);
+      });
+    }
+
+    // --- Init ---
+    renderSessions();
+    switchMode('text'); // Default
+  </script>
+</div>
+</body>
+</html>

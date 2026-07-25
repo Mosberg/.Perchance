@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>image-hosting-for-devs — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Completed:
+  [x] Fixed 'kv is not defined' error by switching to module script and using root.kv
+  [x] Attached handleFile and copyLink to window object for inline event handlers
+  [x] Updated uploadPlugin to root.uploadPlugin for module context
+  [x] File upload functionality (images/audio/video/others) using uploadPlugin
+  [x] Files stored persistently using kv storage
+  [x] Direct link listed underneath for social media sharing
+  [x] Mobile-friendly vertical layout (max-width: 480px)
+  [x] Loading indicator during upload
+  [x] Error handling for failed uploads
+  [x] Copy link button for easy sharing
+  [x] Download button for files (forces download via blob)
+  [x] Delete button for files (removes from view and storage)
+  [x] Files load in reverse order so latest uploads appear at the top
+  [x] Support for audio files with audio player
+  [x] Support for video files with video player
+  [x] Generic file preview for other file types (pdf, zip, etc)
+  [x] Thumbnail previews stored as Base64 to ensure they are never lost
+  [x] Generate proper resized thumbnails for images
+  [x] Generate thumbnails for existing images that don't have them
+  [x] Flawless auto-compression for ALL file types (images via canvas/quality reduction, others via gzip stream)
+  [x] Added info button in top right corner explaining thumbnail fallback behavior
+  [x] Checkbox to enable/disable compression during upload
+  [x] Daily upload allowance tracker (top left) showing MB used / total in 24h window
+-->
+
+<!-- Usage Display (Top Left) -->
+<!-- Top Status Bar: usage, file count, total stored — evenly distributed -->
+<div style="position:fixed; top:15px; left:10px; right:10px; z-index:1000; display:flex; justify-content:space-between; gap:4px; pointer-events:none;">
+  <div id="usageEl" style="background:rgba(0,0,0,0.75); color:white; padding:6px 10px; border-radius:16px; font-family:sans-serif; font-size:11px; font-weight:bold; box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap;">-- / 30 MB</div>
+  <div id="fileCountEl" style="background:rgba(0,0,0,0.75); color:white; padding:6px 10px; border-radius:16px; font-family:sans-serif; font-size:11px; font-weight:bold; box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap;">0 files</div>
+  <div id="totalStoredEl" style="background:rgba(0,0,0,0.75); color:white; padding:6px 10px; border-radius:16px; font-family:sans-serif; font-size:11px; font-weight:bold; box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap;">0 Bytes stored</div>
+</div>
+
+<!-- Info Button -->
+<style>
+  @keyframes infoBtnGoldFade {
+    0%   { background:#6c757d; box-shadow:0 4px 10px rgba(0,0,0,0.2); }
+    50%  { background:#FFD700; box-shadow:0 4px 18px rgba(255,215,0,0.6); }
+    100% { background:#6c757d; box-shadow:0 4px 10px rgba(0,0,0,0.2); }
+  }
+  #infoBtn {
+    animation: infoBtnGoldFade 3s ease-in-out infinite;
+  }
+</style>
+<button id="infoBtn" onclick="window.toggleInfo()" style="position:fixed; top:60px; right:10px; z-index:1001; width:36px; height:36px; border-radius:50%; background:#6c757d; color:white; border:none; font-size:18px; cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,0.2); transition:background 0.2s; font-family:sans-serif;">ℹ️</button>
+
+<!-- Info Message Box (Hidden by default) -->
+<div id="infoBox" hidden style="position:fixed; top:105px; right:10px; width:300px; background:white; padding:16px; border-radius:8px; box-shadow:0 5px 15px rgba(0,0,0,0.2); z-index:999; text-align:left; font-family:sans-serif; font-size:14px; line-height:1.5; border:1px solid #e9ecef;">
+  <div style="font-weight:bold; margin-bottom:5px; color:#333;">ℹ️ Note</div>
+  Even if the thumbnails disappear, you can still click on the direct link below the file to view the image and share it across the internet.<br><br>
+  <strong>Upload size limit:</strong> ~5.1 MB per file. Check the "Compress files during upload" option to automatically compress larger files before uploading.
+  <div style="text-align:right; margin-top:12px;">
+    <button onclick="window.toggleInfo()" style="padding:6px 12px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer; font-size:13px;">Got it</button>
+  </div>
+</div>
+
+<div style="max-width:480px; margin:0 auto; padding:20px; text-align:left; font-family:sans-serif;">
+  <h1 style="text-align:center;">Storage Pro Magic</h1>
+  
+  <!-- Removed 'accept' attribute to allow any file type -->
+  <input type="file" id="fileInput" style="display:none" onchange="handleFile(this)">
+  
+  <!-- Compression Checkbox -->
+  <div style="margin-bottom: 15px; display: flex; align-items: center;">
+    <input type="checkbox" id="compressCheckInput" style="width: 18px; height: 18px; margin-right: 8px; cursor: pointer; accent-color: #007bff;">
+    <label for="compressCheckInput" style="font-size: 14px; color: #555; cursor: pointer; user-select: none;">Compress files during upload</label>
+  </div>
+
+  <button id="uploadBtn" onclick="fileInput.click()" style="width:100%; padding:15px; font-size:18px; background:#007bff; color:white; border:none; border-radius:8px; cursor:pointer;">📤 Upload File</button>
+  
+  <div id="loadingEl" hidden style="text-align:center; padding:20px;">⏳ Uploading...</div>
+  <div id="errorEl" hidden style="text-align:center; padding:10px; color:red; background:#fee; border-radius:4px;"></div>
+  
+  <div id="galleryCtn" style="margin-top:20px;"></div>
+</div>
+
+<!-- Greeting audio — plays once every time the user returns to the page -->
+<script>
+  (function() {
+    const GREETING_URL = "https://user.uploads.dev/file/342d23d7521847ce597d2e3752cd0c8c.mp3";
+    const greetingAudio = new Audio(GREETING_URL);
+    greetingAudio.preload = "auto";
+    let played = false;
+
+    function playGreeting() {
+      if (played) return;
+      played = true;
+      greetingAudio.play().catch(function() {
+        // Autoplay blocked — play on first user interaction instead
+        played = false;
+        const resume = function() {
+          if (played) return;
+          played = true;
+          greetingAudio.play().catch(function() {});
+          window.removeEventListener('pointerdown', resume);
+          window.removeEventListener('keydown', resume);
+          window.removeEventListener('touchstart', resume);
+        };
+        window.addEventListener('pointerdown', resume);
+        window.addEventListener('keydown', resume);
+        window.addEventListener('touchstart', resume);
+      });
+    }
+
+    playGreeting();
+  })();
+</script>
+
+<script type="module">
+  // Helper to format file size for display
+  function formatBytes(bytes, decimals = 2) {
+    if (!+bytes) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+  }
+
+  // Get timestamp of the most recent midnight UTC (the likely server reset boundary).
+  function getCurrentDayStart() {
+    let now = Date.now();
+    let d = new Date();
+    d.setUTCHours(0, 0, 0, 0); // Midnight UTC today
+    let ts = d.getTime();
+    return now < ts ? ts - 86400000 : ts;
+  }
+
+  // Total size and count of all currently-stored files (separate from daily allowance)
+  // Backfills missing sizes by fetching actual file sizes from the server.
+  async function updateTotalStoredDisplay() {
+    let images = await root.kv.images.get('uploaded') || [];
+    let needsBackfill = images.some(img => !img.size);
+    
+    if (needsBackfill) {
+      let updated = false;
+      for (let i = 0; i < images.length; i++) {
+        if (!images[i].size) {
+          try {
+            let resp = await root.superFetch(String(images[i].url));
+            let len = Number(resp.headers.get('content-length')) || (await resp.blob()).size;
+            if (len > 0) {
+              images[i].size = len;
+              updated = true;
+            }
+          } catch (e) { /* skip on failure */ }
+        }
+      }
+      if (updated) {
+        await root.kv.images.set('uploaded', images);
+      }
+    }
+    
+    let totalBytes = images.reduce((sum, img) => sum + (img.size || 0), 0);
+    totalStoredEl.textContent = formatBytes(totalBytes) + ' stored';
+    fileCountEl.textContent = images.length + (images.length === 1 ? ' file' : ' files');
+  }
+
+  // Daily upload tracker
+  let DAILY_ALLOWANCE_MB = 30;
+
+  async function updateUsageDisplay() {
+    let dayStart = getCurrentDayStart();
+    let log = await root.kv.images.get('uploadLog');
+    
+    // Seed log from existing images if none exists yet (backward compatibility)
+    if(!log) {
+      let images = await root.kv.images.get('uploaded') || [];
+      log = images
+        .filter(img => img.time && img.time >= dayStart)
+        .map(img => ({ time: img.time, size: img.size || 0 }));
+      await root.kv.images.set('uploadLog', log);
+    }
+    
+    // Trim old entries before the current noon-to-noon window
+    let recentLog = log.filter(entry => entry.time && entry.time >= dayStart);
+    let usedBytes = recentLog.reduce((sum, entry) => sum + (entry.size || 0), 0);
+    let usedMB = (usedBytes / (1024 * 1024)).toFixed(1);
+    usageEl.textContent = `${usedMB} / ${DAILY_ALLOWANCE_MB} MB`;
+
+    // Persist trimmed log if needed
+    if(recentLog.length !== log.length) {
+      await root.kv.images.set('uploadLog', recentLog);
+    }
+
+    // Color shift based on usage percentage
+    let pct = usedBytes / (DAILY_ALLOWANCE_MB * 1024 * 1024);
+    if(pct >= 0.9) usageEl.style.background = 'rgba(220,53,69,0.9)';
+    else if(pct >= 0.7) usageEl.style.background = 'rgba(255,193,7,0.85)';
+    else usageEl.style.background = 'rgba(0,0,0,0.75)';
+  }
+
+  // Compress image file to reduce size
+  async function compressImageFile(file, quality, scale) {
+    return await new Promise(resolve => {
+      let img = new Image();
+      let url = URL.createObjectURL(file);
+      img.onload = () => {
+        let canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        let ctx = canvas.getContext('2d');
+        // Draw white background for transparent images (since we output JPEG)
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(url);
+          // Create new file with .jpg extension to ensure compression is effective
+          let newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' });
+          resolve(newFile);
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => resolve(null); // Should not happen since we validated it's an image
+      img.src = url;
+    });
+  }
+
+  // Compress generic file (non-image) using GZIP stream
+  async function compressGenericFile(file) {
+    try {
+      // Use native CompressionStream API to gzip the file
+      const stream = file.stream().pipeThrough(new CompressionStream('gzip'));
+      const compressedResponse = new Response(stream);
+      const blob = await compressedResponse.blob();
+      
+      // If compression didn't actually help (e.g. file already compressed), return null
+      if(blob.size >= file.size) return null;
+      
+      // Return as a .gz file with correct MIME type
+      return new File([blob], file.name + ".gz", { type: "application/gzip" });
+    } catch(e) {
+      console.error("Generic compression failed", e);
+      return null;
+    }
+  }
+
+  // Generate a resized thumbnail from a file
+  async function generateThumbnailFromFile(file) {
+    return await new Promise(resolve => {
+      let reader = new FileReader();
+      reader.onload = (e) => {
+        let imgEl = new Image();
+        imgEl.onload = () => {
+          let canvas = document.createElement('canvas');
+          let maxSize = 300; // Max dimension for thumbnail
+          let scale = Math.min(maxSize / imgEl.width, maxSize / imgEl.height, 1);
+          canvas.width = imgEl.width * scale;
+          canvas.height = imgEl.height * scale;
+          let ctx = canvas.getContext('2d');
+          ctx.drawImage(imgEl, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        imgEl.onerror = () => resolve(null);
+        imgEl.src = e.target.result;
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  }
+  
+  // Generate a thumbnail from a URL (for existing images)
+  async function generateThumbnailFromUrl(url) {
+    try {
+      let response = await root.superFetch(url);
+      let blob = await response.blob();
+      return await new Promise(resolve => {
+        let reader = new FileReader();
+        reader.onload = (e) => {
+          let imgEl = new Image();
+          imgEl.onload = () => {
+            let canvas = document.createElement('canvas');
+            let maxSize = 300;
+            let scale = Math.min(maxSize / imgEl.width, maxSize / imgEl.height, 1);
+            canvas.width = imgEl.width * scale;
+            canvas.height = imgEl.height * scale;
+            let ctx = canvas.getContext('2d');
+            ctx.drawImage(imgEl, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+          };
+          imgEl.onerror = () => resolve(null);
+          imgEl.src = e.target.result;
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch(e) {
+      console.error('Failed to generate thumbnail', e);
+      return null;
+    }
+  }
+  
+  // Load existing files on page load
+  async function loadImages() {
+    let images = await root.kv.images.get('uploaded') || [];
+    let needsUpdate = false;
+    
+    // Iterate backwards so the latest file appears first
+    for(let i = images.length - 1; i >= 0; i--) {
+      let img = images[i];
+      
+      // Generate thumbnail for images that don't have one
+      if(img.type && img.type.startsWith('image/') && !img.thumbnail) {
+        try {
+          loadingEl.textContent = '⏳ Generating thumbnails...';
+          loadingEl.hidden = false;
+          let thumbnail = await generateThumbnailFromUrl(img.url);
+          if(thumbnail) {
+            img.thumbnail = thumbnail;
+            images[i] = img;
+            needsUpdate = true;
+          }
+        } catch(e) {
+          console.error('Failed to generate thumbnail', e);
+        }
+      }
+      
+      addImageToGallery(img.url, img.id, false, img.displayUrl, img.type, img.thumbnail);
+    }
+    
+    // Save if we added thumbnails
+    if(needsUpdate) {
+      await root.kv.images.set('uploaded', images);
+    }
+    
+    loadingEl.hidden = true;
+    await updateUsageDisplay();
+    await updateTotalStoredDisplay();
+    
+    // Check for hash in URL (legacy support)
+    let hash = window.location.hash.slice(1);
+    if(hash) {
+      let imgEl = document.getElementById('img-' + hash);
+      if(imgEl) {
+        imgEl.scrollIntoView({ behavior: 'smooth' });
+        imgEl.style.boxShadow = '0 0 0 4px #007bff, 0 2px 8px rgba(0,0,0,0.1)';
+      }
+    }
+  }
+  
+  async function handleFile(input) {
+    let originalFile = input.files[0];
+    if(!originalFile) return;
+    
+    loadingEl.hidden = false;
+    errorEl.hidden = true;
+    uploadBtn.disabled = true;
+    input.value = '';
+
+    let currentFile = originalFile;
+    let quality = 0.9; // Initial JPEG quality
+    let scale = 1.0;   // Initial dimension scale
+    let isImage = originalFile.type.startsWith('image/');
+    let hasTriedGenericCompression = false; // Flag for non-image compression attempts
+    
+    // Get the checkbox state to determine if compression is allowed
+    let allowCompression = compressCheckInput.checked;
+    
+    // Generate unique ID for this file (for internal tracking/deletion)
+    let imageId = Math.random().toString(36).substr(2, 9);
+    
+    // Generate thumbnail (base64) from ORIGINAL file for best quality preview
+    let thumbnail = null;
+    if(isImage) {
+      thumbnail = await generateThumbnailFromFile(originalFile);
+    }
+
+    // PROACTIVE COMPRESSION: Only compress when the checkbox is checked.
+    // If checked, compress the file once before the first upload attempt.
+    if (allowCompression) {
+      if (isImage) {
+        loadingEl.textContent = '⏳ Compressing image...';
+        await new Promise(r => setTimeout(r, 10));
+        let compressed = await compressImageFile(currentFile, quality, scale);
+        if (compressed) {
+          currentFile = compressed;
+        }
+      } else {
+        loadingEl.textContent = '⏳ Compressing (GZIP)...';
+        await new Promise(r => setTimeout(r, 10));
+        let compressed = await compressGenericFile(currentFile);
+        if (compressed) {
+          currentFile = compressed;
+          hasTriedGenericCompression = true;
+        }
+      }
+    }
+
+    // Upload Loop: Try uploading, if too big, compress further and retry (ONLY if checkbox is checked)
+    while(true) {
+      // Update UI status
+      let sizeText = formatBytes(currentFile.size);
+      if (isImage && currentFile !== originalFile) {
+        loadingEl.textContent = `⏳ Compressing & Uploading (${sizeText}, Quality: ${Math.round(quality*100)}%)...`;
+      } else if (!isImage && hasTriedGenericCompression) {
+        loadingEl.textContent = `⏳ Compressing (GZIP) & Uploading (${sizeText})...`;
+      } else {
+        loadingEl.textContent = `⏳ Uploading (${sizeText})...`;
+      }
+
+      // Attempt upload
+      let { url, size: respSize, error, deletionUrl } = await root.uploadPlugin(currentFile);
+      
+      if(!error) {
+        // --- SUCCESS ---
+        
+        // Use currentFile.type as the final type (it updates if we compressed image to jpeg or file to gzip)
+        let finalType = currentFile.type;
+        
+        let images = await root.kv.images.get('uploaded') || [];
+        images.push({ url, id: imageId, deletionUrl, displayUrl: url, type: finalType, thumbnail, time: Date.now(), size: respSize || currentFile.size });
+        await root.kv.images.set('uploaded', images);
+        
+        // Track upload in persistent log (not decremented on delete)
+        let uploadLog = await root.kv.images.get('uploadLog') || [];
+        uploadLog.push({ time: Date.now(), size: respSize || currentFile.size });
+        await root.kv.images.set('uploadLog', uploadLog);
+        
+        // Add to gallery at top
+        addImageToGallery(url, imageId, true, url, finalType, thumbnail);
+        
+        await updateUsageDisplay();
+    await updateTotalStoredDisplay();
+        
+        loadingEl.hidden = true;
+        uploadBtn.disabled = false;
+        return; // Exit function
+      }
+      
+      // --- FAILURE HANDLING ---
+      if(error === 'file_too_big') {
+        
+        // If compression is NOT enabled, fail immediately
+        if(!allowCompression) {
+          errorEl.textContent = 'Error: File is too large to upload. Check the "Compress files" option to upload large files.';
+          errorEl.hidden = false;
+          loadingEl.hidden = true;
+          uploadBtn.disabled = false;
+          return;
+        }
+
+        // If compression IS enabled, proceed with logic
+        if(isImage) {
+          // Check if we've reached minimum compression limits for images
+          if(quality <= 0.1 && scale <= 0.1) {
+            errorEl.textContent = 'Error: File could not be compressed enough to upload.';
+            errorEl.hidden = false;
+            loadingEl.hidden = true;
+            uploadBtn.disabled = false;
+            return;
+          }
+
+          // Reduce quality first, then size if quality is already low
+          if(quality > 0.1) {
+            quality -= 0.1;
+          } else {
+            scale -= 0.1;
+          }
+
+          // Perform image compression
+          loadingEl.textContent = '⏳ Compressing...';
+          // Let UI render the "Compressing..." text before heavy canvas work
+          await new Promise(r => setTimeout(r, 10)); 
+          
+          let compressed = await compressImageFile(currentFile, quality, scale);
+          if(compressed) {
+            currentFile = compressed;
+          } else {
+            errorEl.textContent = 'Error: Compression failed.';
+            errorEl.hidden = false;
+            loadingEl.hidden = true;
+            uploadBtn.disabled = false;
+            return;
+          }
+
+        } else {
+          // --- GENERIC FILE COMPRESSION ---
+          if(hasTriedGenericCompression) {
+            // We already tried zipping it and it's still too big. Give up.
+            errorEl.textContent = 'Error: File too large and could not be compressed further.';
+            errorEl.hidden = false;
+            loadingEl.hidden = true;
+            uploadBtn.disabled = false;
+            return;
+          }
+
+          // Perform GZIP compression
+          loadingEl.textContent = '⏳ Compressing (GZIP)...';
+          await new Promise(r => setTimeout(r, 10));
+
+          let compressed = await compressGenericFile(currentFile);
+          if(compressed) {
+            currentFile = compressed;
+            hasTriedGenericCompression = true;
+          } else {
+            // Compression didn't reduce size (e.g. already compressed file) or failed
+            errorEl.textContent = 'Error: File too large. Compression did not reduce size.';
+            errorEl.hidden = false;
+            loadingEl.hidden = true;
+            uploadBtn.disabled = false;
+            return;
+          }
+        }
+        // Continue loop to try uploading the compressed file
+        
+      } else {
+        // Other error (not size related)
+        errorEl.textContent = 'Error: ' + error;
+        errorEl.hidden = false;
+        loadingEl.hidden = true;
+        uploadBtn.disabled = false;
+        return;
+      }
+    }
+  }
+  
+  function addImageToGallery(url, id, prepend = false, displayUrl = null, type = null, thumbnail = null) {
+    // Use displayUrl for the link if provided (preserves original link on replace), otherwise use url
+    let imageLink = displayUrl || url;
+    
+    // Determine preview content based on file type
+    let previewContent;
+    if(type && type.startsWith('image/')) {
+      // Render image for image types - use stored thumbnail if available to prevent loss
+      let src = thumbnail || url;
+      previewContent = `<img src="${src}" style="width:100%; height:auto; max-height:300px; object-fit:contain; border-radius:4px; background:#f0f0f0;">`;
+    } else if(type && type.startsWith('audio/')) {
+      // Render audio player for mp3/wav/etc
+      previewContent = `<audio controls src="${url}" style="width:100%; margin-bottom:10px; border-radius:4px; background:#f0f0f0;"></audio>`;
+    } else if(type && type.startsWith('video/')) {
+      // Render video player for mp4/webm/etc
+      previewContent = `<video controls src="${url}" style="width:100%; margin-bottom:10px; border-radius:4px; background:#000;"></video>`;
+    } else {
+      // Render generic file icon for other types (pdf, zip, gzip, etc)
+      previewContent = `<div style="padding:40px; background:#f8f9fa; border-radius:4px; text-align:center; color:#555; font-size:40px;">📄</div>`;
+    }
+    
+    let imgEl = document.createElement('div');
+    imgEl.style.cssText = 'margin-bottom:20px; background:white; padding:15px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);';
+    imgEl.id = 'img-' + id;
+    
+    imgEl.innerHTML = `
+      ${previewContent}
+      <div style="margin-top:10px; word-break:break-all; font-size:12px; color:#666;">
+        🔗 <a href="${imageLink}" target="_blank" style="color:#007bff;">${imageLink}</a>
+      </div>
+      <button onclick="window.copyLink('${imageLink}', this)" style="margin-top:8px; width:100%; padding:8px 15px; background:#28a745; color:white; border:none; border-radius:4px; cursor:pointer; font-size:14px;">📋 Copy Link</button>
+      <div style="margin-top:5px; display:flex; gap:5px;">
+        <button onclick="window.downloadFile('${url}', '${type || ''}')" style="flex:1; padding:8px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer; font-size:14px;">⬇️ Download</button>
+        <button onclick="window.deleteFile('${id}')" style="flex:1; padding:8px; background:#dc3545; color:white; border:none; border-radius:4px; cursor:pointer; font-size:14px;">🗑️ Delete</button>
+      </div>
+    `;
+    
+    if(prepend) {
+      galleryCtn.insertBefore(imgEl, galleryCtn.firstChild);
+    } else {
+      galleryCtn.appendChild(imgEl);
+    }
+  }
+  
+  function copyLink(url, btn) {
+    navigator.clipboard.writeText(url);
+    let originalText = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.textContent = originalText, 1500);
+  }
+
+  async function deleteFile(id) {
+    if(!confirm('Are you sure you want to delete this file?')) return;
+    
+    // Remove from DOM
+    let imgEl = document.getElementById('img-' + id);
+    if(imgEl) imgEl.remove();
+    
+    // Remove from storage
+    let images = await root.kv.images.get('uploaded') || [];
+    let imgObj = images.find(i => i.id === id);
+    
+    // Attempt to delete from server if deletionUrl exists
+    if(imgObj && imgObj.deletionUrl) {
+      try { await fetch(imgObj.deletionUrl); } catch(e) { console.error('Deletion failed', e); }
+    }
+    
+    // Update KV
+    images = images.filter(i => i.id !== id);
+    await root.kv.images.set('uploaded', images);
+    
+    await updateUsageDisplay();
+    await updateTotalStoredDisplay();
+  }
+
+  async function downloadFile(url, type) {
+    try {
+      // Fetch the blob to force download behavior (prevents opening in new tab)
+      let response = await root.superFetch(url);
+      let blob = await response.blob();
+      let blobUrl = URL.createObjectURL(blob);
+      
+      // Determine extension from type parameter (e.g., 'image/jpeg', 'application/gzip')
+      // Fallback to 'bin' if type is missing, or grab from blob type
+      let mime = type || blob.type;
+      let ext = mime.split('/')[1] || 'bin';
+      
+      let a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = 'file.' + ext; 
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      // Revoke object URL to free memory
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+    } catch(e) {
+      console.error("Download failed", e);
+      // Fallback: open in new tab if download fails
+      window.open(url, '_blank');
+    }
+  }
+  
+  // Toggle the info box visibility
+  function toggleInfo() {
+    let infoBox = document.getElementById('infoBox');
+    if(infoBox) {
+      infoBox.hidden = !infoBox.hidden;
+    }
+  }
+
+  // Export functions to window for inline event handlers
+  window.handleFile = handleFile;
+  window.copyLink = copyLink;
+  window.deleteFile = deleteFile;
+  window.downloadFile = downloadFile;
+  window.toggleInfo = toggleInfo;
+  
+  loadImages();
+</script>
+</body>
+</html>

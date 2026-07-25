@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ultra-detailed-character-metadata-generator-from-url — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ultra-Detailed Character Metadata Generator From URL</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 20px; color:#102; }
+    .row { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+    label { font-weight:600; margin-right:8px; }
+    select, input[type="text"], textarea { width:100%; padding:8px; border:1px solid #ccc; border-radius:6px; }
+    textarea { min-height:160px; font-family: monospace; font-size:13px; }
+    button { padding:8px 12px; border-radius:8px; border:0; background:#0d8b78; color:#fff; cursor:pointer; }
+    button:disabled { opacity:0.6; cursor:default; }
+    .controls { display:flex; gap:8px; }
+    .small { width:220px; }
+    .muted { color:#556; font-size:13px; }
+    .top { max-width:1100px; margin:0 auto; }
+    .two-col { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <h1>Ultra-Detailed Character Metadata Generator From URL</h1>
+    <p class="muted">Paste one or more URLs, select a schema, and click Generate. Results are output as <code>\{ "character": \[...\] \}</code>.</p>
+
+    <div class="row">
+      <label for="schemaSelect">Schema Type</label>
+      <select id="schemaSelect">
+        <option value="ultra">Ultra‑Detailed Schema — ultra-detailed-character-metadata-v2.schema.json</option>
+        <option value="nsfw">Ultra‑Detailed NSFW Schema — ultra-detailed-character-metadata-nsfw-v2.schema.json</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom:8px">
+      <label for="urlInput">URL Input</label>
+      <input id="urlInput" type="text" placeholder="https://example.com/character or comma/newline separated list" />
+    </div>
+
+    <div style="margin-bottom:8px">
+      <label for="batchUrls">Or paste multiple URLs (one per line)</label>
+      <textarea id="batchUrls" placeholder="https://example.com/char-a\nhttps://example.com/char-b"></textarea>
+    </div>
+
+    <div class="row">
+      <label for="enableEditor">Enable JSON Editor</label>
+      <input id="enableEditor" type="checkbox" />
+
+      <label for="showValidation" style="margin-left:18px">Show Validation</label>
+      <input id="showValidation" type="checkbox" />
+    </div>
+
+    <div class="controls" style="margin-bottom:14px">
+      <button id="generateBtn">Generate</button>
+      <button id="downloadBtn" disabled>Download JSON</button>
+      <div class="muted" id="status">Idle</div>
+    </div>
+
+    <div class="two-col" style="margin-bottom:12px">
+      <div>
+        <label for="jsonOutput">JSON Output</label>
+        <textarea id="jsonOutput" readonly placeholder="Generated metadata will appear here"></textarea>
+      </div>
+      <div>
+        <label for="validationOutput">Validation Results</label>
+        <textarea id="validationOutput" readonly placeholder="Validation messages will appear here"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const rootRef = window.root || {};
+    const els = {
+      schemaSelect: document.getElementById('schemaSelect'),
+      urlInput: document.getElementById('urlInput'),
+      batchUrls: document.getElementById('batchUrls'),
+      enableEditor: document.getElementById('enableEditor'),
+      showValidation: document.getElementById('showValidation'),
+      generateBtn: document.getElementById('generateBtn'),
+      downloadBtn: document.getElementById('downloadBtn'),
+      jsonOutput: document.getElementById('jsonOutput'),
+      validationOutput: document.getElementById('validationOutput'),
+      status: document.getElementById('status'),
+    };
+
+    // Embedded schema templates (used for prompting). These are stringified examples of the target schema structure.
+    const SCHEMAS = {
+      ultra: `{
+  "$schema": "ultra-detailed-character-metadata-v2.schema.json",
+  "$id": "Enhanced_Ultra_Detailed_Character_Metadata_Schema",
+  "description": "An enhanced schema for ultra-detailed character metadata, version 2.3, with expanded fields for comprehensive character profiling.",
+  "version": "2.3",
+  "character": [
+    {
+      "identity": {
+        "name": "",
+        "aliases": [],
+        "universe": "",
+        "origin": "",
+        "type": "",
+        "pronouns": [],
+        "title": "",
+        "birth_date": "",
+        "death_date": "",
+        "languages": [],
+        "voice_actor": "",
+        "concept_artist": ""
+      },
+      "appearance": {
+        "species": "",
+        "subspecies": "",
+        "gender": "",
+        "sex": "",
+        "age": "",
+        "height": "",
+        "weight": "",
+        "build": "",
+        "posture": "",
+        "hair": {
+          "color": "",
+          "length": "",
+          "style": "",
+          "texture": ""
+        },
+        "eyes": {
+          "color": "",
+          "shape": "",
+          "expression": ""
+        },
+        "skin": {
+          "color": "",
+          "texture": "",
+          "temperature": "",
+          "scars": []
+        },
+        "distinctive_features": [],
+        "markings": [],
+        "mutations": [],
+        "body_modifications": [],
+        "clothing_style": [],
+        "scent": "",
+        "voice": ""
+      },
+      "personality": {
+        "traits_positive": [],
+        "traits_negative": [],
+        "traits_neutral": [],
+        "archetype": "",
+        "temperament": "",
+        "moral_alignment": "",
+        "motivations": [],
+        "fears": [],
+        "values": [],
+        "quirks": [],
+        "cognitive_biases": [],
+        "emotional_triggers": [],
+        "mental_illnesses": [],
+        "coping_mechanisms": []
+      },
+      "background": {
+        "role": "",
+        "alignment": "",
+        "occupation": "",
+        "previous_occupations": [],
+        "education": "",
+        "faction": "",
+        "homeworld": "",
+        "current_residence": "",
+        "economic_status": "",
+        "notable_events": [],
+        "backstory_summary": "",
+        "secrets": []
+      },
+      "skills": {
+        "combat_style": [],
+        "abilities": [],
+        "magic_type": "",
+        "power_level": "",
+        "specializations": [],
+        "weaknesses": [],
+        "training": [],
+        "learning_style": "",
+        "iq": "",
+        "eq": "",
+        "adaptability": ""
+      },
+      "relationships": {
+        "allies": [],
+        "rivals": [],
+        "enemies": [],
+        "family": [],
+        "romantic_history": [],
+        "current_partners": [],
+        "friends": [],
+        "acquaintances": [],
+        "mentors": [],
+        "students": [],
+        "favor_status": "",
+        "trust_level": ""
+      },
+      "equipment": {
+        "weapons": [],
+        "items": [],
+        "armor": [],
+        "signature_item": "",
+        "inventory": [],
+        "wealth": "",
+        "technology_access": ""
+      },
+      "meta": {
+        "genre": [],
+        "tags": [],
+        "inspiration": [],
+        "tropes": [],
+        "archetypes": [],
+        "symbolism": [],
+        "leith_motif": "",
+        "themes": []
+      },
+      "physiology": {
+        "metabolism": "",
+        "sleep_patterns": "",
+        "eating_habits": "",
+        "immune_system": "",
+        "healing_factor": "",
+        "pain_tolerance": "",
+        "drug_resistance": "",
+        "poison_resistance": "",
+        "disease_resistance": "",
+        "temperature_tolerance": "",
+        "radiation_resistance": "",
+        "biological_rhythms": []
+      },
+      "psychology": {
+        "intelligence_type": "",
+        "memory_capacity": "",
+        "attention_span": "",
+        "learning_rate": "",
+        "decision_making_style": "",
+        "problem_solving_approach": "",
+        "creativity_level": "",
+        "empathy_level": "",
+        "psychic_defenses": []
+      },
+      "game_stats": {
+        "charisma": "",
+        "strength": "",
+        "intelligence": "",
+        "dexterity": "",
+        "constitution": "",
+        "wisdom": "",
+        "luck": "",
+        "perception": "",
+        "willpower": ""
+      },
+      "misc": {
+        "theme_song": "",
+        "catchphrase": "",
+        "signature_move": "",
+        "hobbies": [],
+        "pet_peeves": [],
+        "guilty_pleasures": [],
+        "bucket_list": [],
+        "unusual_habits": [],
+        "collection": []
+      }
+    }
+  ]
+}`,
+      nsfw: `{
+  "$schema": "ultra-detailed-character-metadata-nsfw-v2.schema.json",
+  "$id": "Enhanced_Ultra_Detailed_Character_Metadata_NSFW_Schema",
+  "description": "An enhanced schema for ultra-detailed character metadata, version 2.3, with expanded fields for comprehensive character profiling, including NSFW content.",
+  "version": "2.3",
+  "character": [
+    {
+      "identity": {
+        "name": "",
+        "aliases": [],
+        "universe": "",
+        "origin": "",
+        "type": "",
+        "pronouns": [],
+        "title": "",
+        "birth_date": "",
+        "death_date": "",
+        "languages": [],
+        "voice_actor": "",
+        "concept_artist": ""
+      },
+      "appearance": {
+        "species": "",
+        "subspecies": "",
+        "gender": "",
+        "sex": "",
+        "age": "",
+        "height": "",
+        "weight": "",
+        "build": "",
+        "posture": "",
+        "hair": {
+          "color": "",
+          "length": "",
+          "style": "",
+          "texture": ""
+        },
+        "eyes": {
+          "color": "",
+          "shape": "",
+          "expression": ""
+        },
+        "skin": {
+          "color": "",
+          "texture": "",
+          "temperature": "",
+          "scars": []
+        },
+        "distinctive_features": [],
+        "markings": [],
+        "mutations": [],
+        "body_modifications": [],
+        "clothing_style": [],
+        "scent": "",
+        "voice": ""
+      },
+      "personality": {
+        "traits_positive": [],
+        "traits_negative": [],
+        "traits_neutral": [],
+        "archetype": "",
+        "temperament": "",
+        "moral_alignment": "",
+        "motivations": [],
+        "fears": [],
+        "values": [],
+        "quirks": [],
+        "cognitive_biases": [],
+        "emotional_triggers": [],
+        "mental_illnesses": [],
+        "coping_mechanisms": []
+      },
+      "background": {
+        "role": "",
+        "alignment": "",
+        "occupation": "",
+        "previous_occupations": [],
+        "education": "",
+        "faction": "",
+        "homeworld": "",
+        "current_residence": "",
+        "economic_status": "",
+        "notable_events": [],
+        "backstory_summary": "",
+        "secrets": []
+      },
+      "skills": {
+        "combat_style": [],
+        "abilities": [],
+        "magic_type": "",
+        "power_level": "",
+        "specializations": [],
+        "weaknesses": [],
+        "training": [],
+        "learning_style": "",
+        "iq": "",
+        "eq": "",
+        "adaptability": ""
+      },
+      "relationships": {
+        "allies": [],
+        "rivals": [],
+        "enemies": [],
+        "family": [],
+        "romantic_history": [],
+        "current_partners": [],
+        "friends": [],
+        "acquaintances": [],
+        "mentors": [],
+        "students": [],
+        "favor_status": "",
+        "trust_level": ""
+      },
+      "equipment": {
+        "weapons": [],
+        "items": [],
+        "armor": [],
+        "signature_item": "",
+        "inventory": [],
+        "wealth": "",
+        "technology_access": ""
+      },
+      "meta": {
+        "genre": [],
+        "tags": [],
+        "inspiration": [],
+        "tropes": [],
+        "archetypes": [],
+        "symbolism": [],
+        "leith_motif": "",
+        "themes": []
+      },
+      "nsfw": [
+        {
+          "sexual_orientation": "",
+          "relationship_status": "",
+          "partner_preferences": {
+            "gender": [],
+            "species": [],
+            "personality_traits": [],
+            "physical_traits": []
+          },
+          "kinks": [],
+          "fetishes": [],
+          "turn_offs": [],
+          "sexual_experience": "",
+          "libido": "",
+          "attitude_toward_sex": "",
+          "sexual_health": {
+            "std_status": "",
+            "contraception": "",
+            "fertility": ""
+          },
+          "explicit_content": {
+            "allowed_scenarios": [],
+            "limits": [],
+            "aftercare_preferences": []
+          },
+          "bodily_fluids": {
+            "blood": "",
+            "sweat": "",
+            "saliva": "",
+            "semen": "",
+            "vaginal_fluids": "",
+            "urine": "",
+            "feces": ""
+          },
+          "consent_dynamics": {
+            "initiation_style": "",
+            "power_exchange": "",
+            "safeword": ""
+          }
+        }
+      ],
+      "physiology": {
+        "metabolism": "",
+        "sleep_patterns": "",
+        "eating_habits": "",
+        "immune_system": "",
+        "healing_factor": "",
+        "pain_tolerance": "",
+        "drug_resistance": "",
+        "poison_resistance": "",
+        "disease_resistance": "",
+        "temperature_tolerance": "",
+        "radiation_resistance": "",
+        "biological_rhythms": []
+      },
+      "psychology": {
+        "intelligence_type": "",
+        "memory_capacity": "",
+        "attention_span": "",
+        "learning_rate": "",
+        "decision_making_style": "",
+        "problem_solving_approach": "",
+        "creativity_level": "",
+        "empathy_level": "",
+        "psychic_defenses": []
+      },
+      "game_stats": {
+        "charisma": "",
+        "strength": "",
+        "intelligence": "",
+        "dexterity": "",
+        "constitution": "",
+        "wisdom": "",
+        "luck": "",
+        "perception": "",
+        "willpower": ""
+      },
+      "misc": {
+        "theme_song": "",
+        "catchphrase": "",
+        "signature_move": "",
+        "hobbies": [],
+        "pet_peeves": [],
+        "guilty_pleasures": [],
+        "bucket_list": [],
+        "unusual_habits": [],
+        "collection": []
+      }
+    }
+  ]
+}`
+    };
+
+    function setStatus(text) { els.status.textContent = text; }
+
+    function parseUrlTextToList(single, batch) {
+      const parts = [];
+      if (single && single.trim()) {
+        parts.push(...single.split(/\s*,\s*|\s+/).filter(Boolean));
+      }
+      if (batch && batch.trim()) {
+        parts.push(...batch.split(/\r?\n|,|;/).map(s=>s.trim()).filter(Boolean));
+      }
+      return Array.from(new Set(parts.filter(u => /^https?:\/\//i.test(u))));
+    }
+
+    async function fetchTextFromUrl(url) {
+      try {
+        const fetcher = typeof superFetch !== 'undefined' ? superFetch : fetch;
+        const res = await fetcher(url);
+        const contentType = res.headers?.get ? res.headers.get('content-type') : (res.type || 'text/html');
+        if (/pdf/i.test(contentType)) {
+          return '[PDF content omitted]';
+        }
+        let text = await res.text();
+        // If the response looks like HTML, strip tags to get readable text for the AI
+        if (/<html|<!doctype|<body|<head/i.test(text.slice(0, 2000))) {
+          text = text
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+            .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+        }
+        // Truncate if excessively long to avoid blowing context
+        const MAX_LEN = 12000;
+        if (text.length > MAX_LEN) text = text.slice(0, MAX_LEN) + '\n...[truncated]';
+        return text;
+      } catch (error) {
+        console.error('fetch error', error);
+        return `[Failed to fetch ${url}: ${error.message}]`;
+      }
+    }
+
+    async function generateMetadataForUrl(url, schemaChoice, extraContext='') {
+      setStatus(`Fetching ${url}...`);
+      const content = await fetchTextFromUrl(url);
+      setStatus(`Asking AI to extract metadata from ${url}...`);
+
+      const schemaJson = SCHEMAS[schemaChoice] || SCHEMAS.ultra;
+
+      const instruction = `You are a structured-data extractor.\n\nSTRICT REQUIREMENTS:\n- Return ONLY valid JSON and nothing else (no commentary, no markdown, no code fences).\n- The JSON MUST conform exactly to the provided JSON schema. Acceptable outputs: either 1) an object with a top-level "character" key whose value is an array of character objects that match the schema, or 2) a JSON array of character objects that match the schema.\n- All fields in the schema must appear for each character. If a value is unknown, use "" (empty string), [] (empty array), or {} (empty object) as appropriate. Do NOT emit null. Dates must be ISO-8601 strings or "". Keep long text concise (1-3 sentences) when summarizing.\n- For NSFW schema choose and populate the 'nsfw' fields when sexual/consent information is present; otherwise set 'nsfw' to an empty array.\n\nJSON_SCHEMA:\n${schemaJson}\n\nWEBPAGE_CONTENT:\n${content}\n\nADDITIONAL_CONTEXT:\n${extraContext}\n\nNow produce the required JSON output that strictly follows the schema.`;
+
+      try {
+        const response = await generateText({ instruction, startWith: '{' });
+        let raw = (response || '').trim();
+        raw = raw.replace(/```json\s*([\s\S]*?)```/, '$1').trim();
+        try {
+          const parsed = JSON.parse(raw);
+          return parsed;
+        } catch (err) {
+          const first = raw.indexOf('{');
+          const last = raw.lastIndexOf('}');
+          if (first !== -1 && last !== -1 && last > first) {
+            const sub = raw.slice(first, last + 1);
+            try { return JSON.parse(sub); } catch (e) { /* fall through */ }
+          }
+          return { _rawAiResponse: raw, _sourceUrl: url };
+        }
+      } catch (error) {
+        console.error(error);
+        return { _error: String(error), _sourceUrl: url };
+      }
+    }
+
+    function normalizeToCharacterArray(parsed) {
+      if (!parsed) return [];
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed.character && Array.isArray(parsed.character)) return parsed.character;
+      const keys = Object.keys(parsed || {});
+      if (keys.includes('identity') || keys.includes('appearance') || keys.includes('personality')) {
+        return [parsed];
+      }
+      return [];
+    }
+
+    function validateCharacter(c, schemaChoice) {
+      const errors = [];
+      if (!c || typeof c !== 'object') { errors.push('Not an object'); return { valid:false, errors }; }
+      if (!c.identity || typeof c.identity !== 'object') {
+        errors.push('identity is required and must be an object');
+      } else {
+        if (!c.identity.name || String(c.identity.name).trim() === '') errors.push('identity.name is required');
+      }
+      if (!c.appearance || typeof c.appearance !== 'object') {
+        errors.push('appearance is required and must be an object');
+      }
+      if (schemaChoice === 'nsfw') {
+        if (!Array.isArray(c.nsfw)) {
+          errors.push('nsfw should be an array (can be empty) for NSFW schema');
+        }
+      }
+      return { valid: errors.length === 0, errors };
+    }
+
+    async function generateHandler() {
+      const urls = parseUrlTextToList(els.urlInput.value, els.batchUrls.value);
+      if (urls.length === 0) { alert('Please provide at least one http(s) URL.'); return; }
+      els.generateBtn.disabled = true;
+      els.downloadBtn.disabled = true;
+      setStatus('Starting generation...');
+
+      const schemaChoice = els.schemaSelect.value;
+      const allCharacters = [];
+      const validationResults = [];
+
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i];
+        setStatus(`Processing ${i+1}/${urls.length}: ${url}`);
+        const parsed = await generateMetadataForUrl(url, schemaChoice);
+        const chars = normalizeToCharacterArray(parsed);
+        if (chars.length === 0) {
+          allCharacters.push({ _sourceUrl: url, _note: 'No character object extracted', _raw: parsed });
+          validationResults.push({ index: i, valid: false, errors: ['No character object extracted'] });
+        } else {
+          for (const c of chars) {
+            const candidate = (c.identity || c.appearance || c.personality) ? ({ ...c, _sourceUrl: url }) : ({ identity: { name: c.name || '' }, ...c, _sourceUrl: url });
+            allCharacters.push(candidate);
+            const vr = validateCharacter(candidate, schemaChoice);
+            validationResults.push({ index: i, valid: vr.valid, errors: vr.errors });
+          }
+        }
+        await new Promise(r => setTimeout(r, 250));
+      }
+
+      const finalOutput = { character: allCharacters };
+      els.jsonOutput.value = JSON.stringify(finalOutput, null, 2);
+      els.jsonOutput.readOnly = !els.enableEditor.checked;
+
+      // Show validation output if requested
+      if (els.showValidation.checked) {
+        const lines = validationResults.map((r, idx) => {
+          return `URL #${r.index+1} (${urls[r.index]}): ` + (r.valid ? '✔ Valid' : `✖ Invalid\n  - ${r.errors.join('\n  - ')}`);
+        });
+        els.validationOutput.value = lines.join('\n\n');
+      } else {
+        els.validationOutput.value = '';
+      }
+
+      els.downloadBtn.disabled = false;
+      setStatus(`Generated ${allCharacters.length} character(s).`);
+      els.generateBtn.disabled = false;
+      try { if (rootRef.generatorStats) rootRef.generatorStats(null, 'views'); } catch (e) {}
+    }
+
+    function downloadJson() {
+      const text = els.jsonOutput.value || JSON.stringify({ character: [] }, null, 2);
+      const blob = new Blob([text], { type: 'application/json' });
+      const name = `ultra-characters-${new Date().toISOString().slice(0,10)}.json`;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setStatus(`Downloaded ${name}`);
+    }
+
+    els.generateBtn.addEventListener('click', generateHandler);
+    els.downloadBtn.addEventListener('click', downloadJson);
+    els.enableEditor.addEventListener('change', () => {
+      els.jsonOutput.readOnly = !els.enableEditor.checked;
+    });
+  </script>
+</body>
+</html>
+</body>
+</html>

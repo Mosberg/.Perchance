@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>text-to-image-styles-default — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div style="text-align:left;max-width:1400px;margin:0 auto;padding:20px;font-family:system-ui,-apple-system,sans-serif;color:#eee;">
+  <h2 style="margin-top:0;">Text to Image Styles - Default</h2>
+  <h3 style="margin-top:0;">Created by Grand Woods</h3>
+  <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+    <input id="descriptionInput" placeholder="Description (e.g. cyberpunk samurai)" oninput="updateOutput()" style="flex:2;min-width:220px;padding:10px;border-radius:6px;border:1px solid #444;background:#222;color:#fff;">
+    <input id="negativeInput" placeholder="Negative prompt (optional)" oninput="updateOutput()" style="flex:1;min-width:180px;padding:10px;border-radius:6px;border:1px solid #444;background:#222;color:#fff;">
+  </div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+    <div style="flex:2;min-width:300px;">
+      <input id="searchInput" placeholder="Search styles..." oninput="renderStyles()" style="width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid #444;background:#222;color:#fff;">
+      <div id="styleGridCtn"></div>
+    </div>
+    <div id="outputCtn" hidden style="flex:1;min-width:320px;background:#1a1a1a;border:1px solid #333;padding:16px;border-radius:10px;">
+      <h3 id="selectedStyleTitle" style="margin-top:0;color:#0f0;"></h3>
+      <img id="selectedStyleImg" style="width:100%;height:160px;object-fit:cover;border-radius:6px;margin-bottom:10px;display:block;background:#111;">
+      <label style="font-size:12px;color:#aaa;">Generated Prompt</label>
+      <textarea id="promptOutputEl" readonly style="width:100%;height:140px;margin-top:4px;padding:8px;font-family:monospace;font-size:12px;background:#0a0a0a;color:#0f0;border:1px solid #333;border-radius:4px;resize:vertical;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+        <button onclick="copyPrompt()" style="padding:6px 12px;border-radius:4px;border:none;background:#333;color:#fff;cursor:pointer;">Copy Prompt</button>
+        <button id="altBtn" onclick="toggleAlt()" style="padding:6px 12px;border-radius:4px;border:none;background:#333;color:#fff;cursor:pointer;display:none;">Use Alt Prompt</button>
+        <button onclick="generatePreview()" style="padding:6px 12px;border-radius:4px;border:none;background:#205020;color:#fff;cursor:pointer;">Generate Preview</button>
+      </div>
+      <label style="font-size:12px;color:#aaa;margin-top:12px;display:block;">Negative Prompt</label>
+      <textarea id="negativeOutputEl" readonly style="width:100%;height:60px;margin-top:4px;padding:8px;font-family:monospace;font-size:12px;background:#0a0a0a;color:#f55;border:1px solid #333;border-radius:4px;resize:vertical;"></textarea>
+      <button onclick="copyNegative()" style="margin-top:6px;padding:6px 12px;border-radius:4px;border:none;background:#333;color:#fff;cursor:pointer;">Copy Negative</button>
+      <div id="modifiersCtn" style="margin-top:12px;"></div>
+      <div id="loadingEl" hidden style="margin-top:10px;color:#0f0;">⏳ Generating image... (this may take a minute)</div>
+      <div id="previewCtn" hidden style="margin-top:10px;"><img id="previewImg" style="width:100%;border-radius:6px;display:block;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let imgBase="https://mosberg.github.io/src/img/art_styles/";
+let selectedStyle=null,useAlt=false,activeMods=new Set();
+
+let animeMods=[{g:"Style",o:[{n:"Ghibli",v:", Ghibli art style, Spirited Away art style"},{n:"Your Name",v:", Your Name art style"},{n:"Paprika",v:", Paprika art style"},{n:"My Hero Academia",v:", My Hero Academia art style"},{n:"Hunter x Hunter",v:", Hunter x Hunter art style"},{n:"Attack on Titan",v:", Attack on Titan art style"}]},{g:"Effect",o:[{n:"multi-view",v:", multiple views"},{n:"toon",v:", cartoon-style bold line work, vibrant colors, cel shading"},{n:"vintage",v:", cel shading, vintage anime"},{n:"ethereal",v:", glow, god rays, ethereal, dreamy, heavenly, otherworldly, dream-like, breathtaking, captivating, divine"},{n:"outline",v:", outline, white outline"}]}];
+let photoMods=[{g:"Shot",o:[{n:"extreme close-up",v:", extreme close-up"},{n:"low-angle",v:", low-angle shot"},{n:"high-angle",v:", high-angle shot"},{n:"aerial",v:", aerial shot"},{n:"close-up",v:", close-up shot"},{n:"portrait",v:", close-up portrait"},{n:"macro",v:", macro shot"},{n:"wide-angle",v:", wide-angle shot"},{n:"establishing",v:", establishing shot"},{n:"over-the-shoulder",v:", over-the-shoulder shot"},{n:"telephoto",v:", telephoto shot"},{n:"handheld",v:", handheld shot"},{n:"panoramic",v:", panoramic shot"},{n:"dramatic",v:", dramatic angle, extreme angle shot"}]},{g:"Color",o:[{n:"vibrant",v:", vibrant color grading"},{n:"warm",v:", warm color grading"},{n:"cool",v:", cool-toned color grading"},{n:"pastel",v:", pastel color grading"},{n:"bright",v:", bright color grading"},{n:"muted",v:", muted color grading"},{n:"neon",v:", neon color grading"},{n:"duotone",v:", duotone color grading"},{n:"monochrome",v:", monochrome"},{n:"sterile",v:", cool-toned sterile colors"}]},{g:"Effect",o:[{n:"bokeh",v:", bokeh"},{n:"tilt-shift",v:", tilt-shift effect"},{n:"soft focus",v:", soft focus"},{n:"background blur",v:", shallow depth of field"},{n:"chromatic aberrations",v:", chromatic aberrations"},{n:"light leaks",v:", light leaks"},{n:"rear projection",v:", rear projection"},{n:"lens flare",v:", lens flare"},{n:"long exposure",v:", long exposure"},{n:"golden hour",v:", golden hour"},{n:"silhouette",v:", silhouette"}]}];
+let photoShotEffect=[photoMods[0],photoMods[2]];
+let furryMods=[{g:"Effect",o:[{n:"humanoid face",v:", human face, not furry"},{n:"multi-view",v:", multiple views"},{n:"toon",v:", cartoon-style bold line work, vibrant colors, cel shading"},{n:"vintage",v:", cel shading, vintage anime"},{n:"ethereal",v:", glow, god rays, ethereal, dreamy, heavenly, otherworldly, dream-like, breathtaking, captivating, divine"},{n:"outline",v:", outline, white outline"}]}];
+let landMods=[{g:"Shot",o:[{n:"aerial",v:", aerial view"},{n:"low-angle",v:", low-angle view"},{n:"high-angle",v:", high-angle view"},{n:"wide-angle",v:", wide-angle view"}]},{g:"Color",o:[{n:"vibrant",v:", vibrant color tones"},{n:"warm",v:", warm-toned colors"},{n:"cool",v:", cool-toned colors"},{n:"pastel",v:", pastel tones"},{n:"muted",v:", muted color grading"},{n:"sunset",v:", sunset color tones"},{n:"monochrome",v:", monochrome"}]},{g:"Effect",o:[{n:"tilt-shift",v:", tilt-shift effect"},{n:"golden hour",v:", golden hour"},{n:"mist",v:", misty"},{n:"reflection",v:", water reflection"},{n:"sun flare",v:", sun flare"},{n:"starburst",v:", starburst effect"},{n:"light trails",v:", light trails"},{n:"long exposure",v:", long exposure"},{n:"soft focus",v:", soft focus"}]}];
+
+let stylesData=[
+{n:"Painted Anime",p:`[input.description], art by atey ghailan, painterly anime style at pixiv, art by kantoku, in art style of redjuice/necömi/rella/tiv pixiv collab, your name anime art style, masterpiece digital painting, exquisite lighting and composition, inspired by wlop art style, 8k, sharp, very detailed, high resolution, illustration.\n\nOverall, it's an absolute world-class masterpiece painterly anime-inspired digital art. It's an aesthetically pleasing painterly anime-inspired digital artwork with impeccable attention to detail and impressive composition. ^2`,alt:`painterly anime artwork, [input.description], world-class masterpiece, fine details, breathtaking artwork, painterly art style, high quality, 8k, very detailed, high resolution, exquisite composition and lighting.\n\nOverall, it's an absolute world-class masterpiece painterly anime artwork. It's an aesthetically pleasing painterly anime artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"https://thumbs.dreamstime.com/b/digital-painting-weeping-anime-girl-vibrant-purple-pink-hair-close-up-crying-image-portrays-sadness-emotion-364089402.jpg",mods:animeMods},
+{n:"Casual Photo",p:`A casual photo of [input.description]. It's a casual photo.`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoMods},
+{n:"Cinematic",p:`[input.description], cinematic shot, dynamic lighting, 75mm, Technicolor, Panavision, cinemascope, sharp focus, fine details, 8k, HDR, realism, realistic, key visual, film still, cinematic color grading, depth of field.\n\nOverall, it's an absolute world-class cinematic masterpiece. It's an aesthetically pleasing cinematic shot with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoMods.concat([{g:"Genre",o:[{n:"adventure",v:", adventure"},{n:"b-horror",v:", b-horror film screencap"},{n:"epic fantasy",v:", epic fantasy"},{n:"sci-fi",v:", sci-fi"},{n:"film noir",v:", film noir"},{n:"horror",v:", horror"},{n:"indie",v:", indie film screencap"},{n:"western",v:", western, wild west"},{n:"thriller",v:", thriller"}]}])},
+{n:"Digital Painting",p:`[input.description], breathtaking digital art, trending on artstation, by atey ghailan, by greg rutkowski, by greg tocchini, by james gilleard, 8k, high resolution, best quality.\n\nOverall, it's an absolute world-class masterpiece digital painting. It's an aesthetically pleasing digital painting with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Concept Art",p:`[input.description], concept art, digital art, illustration, inspired by wlop style, 8k, fine details, sharp, very detailed, high resolution, world-class masterpiece.\n\nOverall, it's absolute world-class masterpiece concept art. It's an aesthetically pleasing concept art with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg",mods:[{g:"Modifier",o:[{n:"league of legends",v:", league of legends style concept art"},{n:"epic fantasy",v:", epic fantasy concept art by noah bradley"},{n:"sci-fi",v:", sci-fi concept art"},{n:"horror",v:", horror concept art"},{n:"western",v:", western, wild west concept art"}]}]},
+{n:"3D Disney Character",p:`3D cartoon Disney character portrait render. [input.description], bokeh, 4k, highly detailed, Pixar render, CGI Animation, Disney, cute big circular reflective eyes, dof, cinematic film, Disney realism, subtle details, breathtaking Pixar short, fine details, close up, sharp focus, HDR, Disney-style octane render, incredible composition, superb lighting and detail, [input.description].\n\nOverall, it's an absolute world-class masterpiece 3D Disney-inspired Character. It's an aesthetically pleasing 3D Disney-inspired piece with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"2D Disney Character",p:`2D cartoon Disney character digital art of [input.description]. superb linework, classic 2D Disney style art, inspired by the art styles of Glen Keane and Aaron Blaise, Disney-style character concept with a Disney-style face, trending on artstation, Disney-style version of [input.description].\n\nOverall, it's an absolute world-class masterpiece 2D Disney-inspired Character. It's an aesthetically pleasing 2D Disney-inspired piece with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"Disney Sketch",p:`Glen Keane character concept art black and white pencil sketch of [input.description]. rough pencil sketch by Glen Keane, rough pencil sketch, close up, loose Disney-style character concept art sketch, nice sketchy pencil strokes, Disney character design sketch, pencil texture, a concept art pencil sketch of [input.description], by Glen Keane.\n\nOverall, it's an charmingly aesthetic and well-composed Disney-style sketch.`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"Concept Sketch",p:`black and white technical drawing showcasing {a} [input.description], annotation details, world-class masterpiece black and white, pencil strokes, annotated technical concept art sketch, pencil texture.\n\nOverall, it's a charmingly aesthetic and well-composed concept sketch.`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"Painterly",p:`painterly digital painting, [input.description], digital painting by Ilya Kuvshinov with painterly brush strokes, by Ilya Kuvshinov, world-class painterly masterpiece.\n\nOverall, it's an absolute world-class masterpiece painterly digital painting. It's an aesthetically pleasing painterly digital painting with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Oil Painting",p:`breathtaking alla prima oil painting, [input.description], close up, alla prima style, oil on linen, painterly oil on canvas, painterly style, exquisite composition and lighting, modern painterly masterpiece, by alexi zaitsev, award-winning painterly alla prima oil painting.\n\nOverall, it's an absolute world-class masterpiece oil painting. It's an aesthetically pleasing oil painting with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Oil Painting - Realism",p:`breathtaking oil painting, [input.description], photorealistic oil painting, by charlie bowater, fine details, by wlop, trending on artstation, very detailed.\n\nOverall, it's an absolute world-class masterpiece realism oil painting. It's an aesthetically pleasing realism oil painting with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Oil Painting - Old",p:`[input.description], Oil painting by Jean-François Millet and Gustave Courbet and Jules Breton`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Oil Painting - 70s Pulp",p:`1970s vintage pulp art, ultra realistic, fully restored, exquisite lighting and composition, polished, masterpiece, vintage pulp art, by Earle K. Bergey, by Kelly Freas, by Alex Schomburg, by H. J. Ward, glossy pulp art, Amazing Stories, Weird Tales, 8k, high resolution, best quality, hyper-realistic, Mattias Adolfsson style, detailed stylization, [input.description], ultra realistic, wlop-style, exquisite lighting and composition, polished, world-class masterpiece, digitally enhanced, breathtaking shot, subtle details, superb quality, art by Kuvshinov, Kuvshinov style, detailed stylization.\n\nOverall, it's an absolute world-class masterpiece artwork. It's an aesthetically pleasing restored 1970s vintage pulp art with impeccable attention to detail and impressive composition. It has perfect contrast and color balance. Almost photorealism.`,ng:`[input.negative], scratches, faded, washed out, grainy, dirty`,img:"no_style.jpg"},
+{n:"Professional Photo",p:`[input.description], {sharp|soft} focus, depth of field, 8k photo, HDR, professional lighting, taken with Canon EOS R5, DSLR, 75mm lens`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoMods},
+{n:"Anime",p:`anime art of [input.description], world-class masterpiece, 4k, best quality, anime art.\n\nOverall, it's an absolute world-class masterpiece anime-inspired artwork. It's an aesthetically pleasing anime art with impeccable attention to detail and beautiful composition.`,ng:`[input.negative]`,img:"anime.jpg",mods:animeMods},
+{n:"Drawn Anime",p:`anime-style illustration with perfect clean lines, illustration of [input.description], anime drawing/art, bold linework, illustration, cel shaded, anime-style digital illustration. It's an anime-inspired 2D-style anime illustration. Aesthetic high-skill, professional anime illustration, which looks like a screencap from an anime series. It has clean line work and a pleasant, appealing drawn aesthetic style. Overall, it's a world-class illustration with flawless line work, perfect composition, and impeccable attention to detail.`,ng:`[input.negative]`,img:"anime.jpg",mods:animeMods},
+{n:"Anime Screencap",p:`Anime screencap, [input.description]. It's an anime screencap from a popular anime. Beautiful visual quality, remastered, extremely high quality, very aesthetic, high production value, high-skill masterpiece. The image shows impeccable and beautiful composition and contrast. It's an exquisite anime screencap style image.`,ng:`[input.negative], faded, washed out, low quality`,img:"anime.jpg",mods:animeMods},
+{n:"Cute Anime",p:`adorable, cute, kawaii, [input.description], cute moe anime character portrait, adorable, featured on pixiv, kawaii moé masterpiece, cuteness overload, very detailed, sooooo adorable.\n\nOverall, it's an absolute world-class masterpiece anime-inspired artwork. It's an aesthetically pleasing anime art with impeccable attention to detail and beautiful composition.`,ng:`[input.negative]`,img:"anime.jpg",mods:animeMods},
+{n:"Soft Anime",p:`[input.description], anime masterpiece with soft lighting, gentle intricate style, highly detailed, pixiv, anime art, 4k, art from your name anime, garden of words style art, high quality.\n\nOverall, it's an absolute world-class masterpiece soft beautiful anime-inspired artwork. It's an aesthetically pleasing, soft, beautiful anime art with impeccable attention to detail and beautiful composition.`,ng:`[input.negative]`,img:"anime.jpg",mods:animeMods},
+{n:"Fantasy Painting",p:`[input.description], d&d, fantasy, highly detailed, digital painting, artstation, sharp focus, fantasy art, illustration, 8k, in the style of greg rutkowski. It's an absolute world-class masterpiece artwork. It's an aesthetically pleasing artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Fantasy Landscape",p:`[input.description], fantasy matte painting, absolute masterpiece, detailed matte painting by andreas rocha and greg rutkowski, by Brothers Hildebrandt, superb composition, vivid fantasy art, breathtaking fantasy masterpiece. It's an absolute world-class masterpiece artwork. It's an aesthetically pleasing artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg",mods:landMods},
+{n:"Fantasy Portrait",p:`[input.description], d&d, fantasy, highly detailed, digital painting, artstation, sharp focus, fantasy art, character art, illustration, 8k, art by artgerm and greg rutkowski. It's an absolute world-class masterpiece artwork. It's an aesthetically pleasing artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Studio Ghibli",p:`Studio Ghibli style artwork of [input.description], Studio Ghibli style art film still, sharp, very detailed, high resolution, inspired by Hayao Miyazaki, anime, film still from Spirited Away. In the style of Kiki Delivery Service, with a similar art style to Princess Mononoke. Aesthetically similar to My Neighbor Totoro's art style.\n\nOverall, it's an absolute world-class masterpiece Studio Ghibli-inspired artwork. It's an aesthetically pleasing classic Studio Ghibli style artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"anime.jpg"},
+{n:"50s Enamel Sign",p:`50s enamel sign of [input.description], 50s advert enamel sign, masterpiece, authentic vintage enamel sign`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Vintage Comic",p:`comic book style art of [input.description], drawing, by Dave Stevens, by Adam Hughes, 1940's, 1950's, hand-drawn, color, high resolution, best quality, closeup`,ng:`[input.negative]`,img:"cartoon.jpg",mods:[{g:"Effect",o:[{n:"retrofuturism",v:", (retrofuturism, atompunk)"},{n:"gritty noir",v:", (gritty noir)"},{n:"pop art",v:", (pop art style)"},{n:"cyberpunk",v:", (cyberpunk aesthetic)"},{n:"steampunk",v:", (steampunk)"},{n:"watercolor",v:", (watercolor wash)"},{n:"sketchy ink",v:", sketchy ink work"},{n:"manga fusion",v:", (manga fusion)"},{n:"psychedelic",v:", psychedelic imagery"},{n:"pulp magazine",v:", pulp magazine look"},{n:"heroic proportions",v:", heroic proportions"}]}]},
+{n:"Franco-Belgian Comic",p:`franco-belgian color comic about [input.description], bande dessinée, franco-belgian comic panel, masterpiece, breathtaking composition, intricate, detailed, best quality`,ng:`[input.negative]`,img:"cartoon.jpg",mods:[{g:"Modifier",o:[{n:"single-panel",v:", splash panel, full cover image"},{n:"multi-panel",v:", multi-panel comic book page, comic panel layout"},{n:"cyberpunk",v:", (cyberpunk aesthetic)"},{n:"steampunk",v:", (steampunk)"},{n:"manga fusion",v:", (manga fusion)"},{n:"psychedelic",v:", psychedelic imagery"},{n:"pulp magazine",v:", pulp magazine look"},{n:"heroic proportions",v:", heroic proportions"}]}]},
+{n:"Tintin Comic",p:`color comic panel in the style of Hergé about [input.description], by Hergé, tintin style, french comic panel, franco-belgian style, masterpiece, high-resolution Hergé style`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"Medieval",p:`medieval illuminated manuscript picture of [input.description], medieval illuminated manuscript art, masterpiece medieval color illustration, 16th century, 8k high-resolution scan of 16th century illuminated manuscript painting, detailed medieval masterpiece.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Pixel Art",p:`[input.description.length > 40 ? "(pixel art), " : ""][input.description], best pixel art, neo-geo graphical style, retro nostalgic masterpiece, 128px, 16-bit pixel art [input.description.length < 10 ? "of "+input.description : ""], 2D pixel art style, adventure game pixel art, inspired by the art style of hyper light drifter, masterful dithering, superb composition, beautiful palette, exquisite pixel detail`,ng:`[input.negative]`,img:"pixel_art.jpg"},
+{n:"Furry - Oil",p:`[input.description], crisp vibrant detailed soft painterly digital art, volumetric lighting, natural lighting, realistic lighting, vibrant colors, crisp oil painting, painterly realism, depth of field, subtle soft details, vivid, fresh, striking, by chunie, by darkgem, by honovy, by zaush, by anhes, by puinkey, by caraid, by dagasi, by taranfiddler, by atey ghailan, by MilletGustave, by Curbet, Charlie Bowater, lol art.\n\nOverall, it's a world-class painterly masterpiece. It's aesthetically pleasing digitial art with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg",mods:furryMods},
+{n:"Furry - Cinematic",p:`[input.description], cinematic shot, dynamic lighting, 75mm, Technicolor, Panavision, cinemascope, sharp focus, fine details, 8k, HDR, realism, realistic, key visual, film still, cinematic color grading, depth of field.\n\nOverall, it's an absolute world-class masterpiece. It's an aesthetically pleasing image with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoMods.concat(furryMods)},
+{n:"Furry - Painted",p:`anthro [input.description] digital art, masterpiece, 4k, fine details. It's an absolute world-class masterpiece artwork.\n\nOverall, it's an aesthetically pleasing artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg",mods:furryMods},
+{n:"Furry - Drawn",p:`anthro [input.description] illustration, hand-drawn, bold linework, anthro illustration, cel shaded, 4k, fine details, masterpiece.\n\nOverall, it's an absolute world-class masterpiece artwork. It's an aesthetically pleasing artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg",mods:furryMods},
+{n:"Cute Figurine",p:`[input.description], figurine, modern Disney style, octane render, chibi`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"3D Emoji",p:`masterpiece [input.description] cartoon 3D emoji concept render, close-up, facing forward, matte finish, 3D emoji render, app icon, simple design, new iOS 18.4 style [input.description] emoji render, simple background, centered, world-class masterpiece work of art, crisp render, sharp focus, charmingly aesthetic design, 4k, soft lighting, masterpiece emoji-style figurine 3D render, pure white background`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"Illustration",p:`breathtaking illustration of [input.description], illustration, masterpiece, breathtaking illustration.\n\nOverall, it's an absolute world-class masterpiece illustration. It's an aesthetically pleasing illustration with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Cute Illustration",p:`A cute cartoon showing [input.description], in a soft, cute, minimalist, webcomic-style illustration. Line art is somewhat bold but gentle, with clean lines, and subtle variation. Colors are soft, flat, with gentle pastel tones. No shading except for light inner shadows or simple highlights. The background is plain white or contains a light wash of color with subtle textured style. The overall scene is wholesome and endearing like a page from a Liz Climo comic. Composition is centered with space around the character, evoking authentic warmth through the wholesome, soft, web comic style.\n\nIt's an aesthetically pleasing masterpiece, showing high skill in evoking an authentic and beautifully minimalist style.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Flat Illustration",p:`[input.description], illustration, flat, 2D, vector art, masterpiece, made with adobe illustrator, behance competition winner, trending on dribble, 4k, high resolution, crisp lines.\n\nOverall, it's an absolute world-class masterpiece flat-style illustration. It's an aesthetically pleasing flat-style illustration with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Watercolor",p:`[input.description], (watercolor), high resolution, intricate details, 4k, wallpaper, concept art, watercolor on textured paper.\n\nOverall, it's an absolute world-class masterpiece watercolor artwork. It's an aesthetically pleasing watercolor artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"1990s Photo",p:`[input.description], 90s home video, nostalgic 90s photo, taken with kodak disposable camera`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoMods},
+{n:"1980s Photo",p:`famous vintage 80s photo, [input.description], grainy photograph, 80s photo with film grain, Kodacolor II 80s photo with vignetting, retro, r/OldSchoolCool, 80s photo with wear and tear and minor creasing and scratches, vintage color photo`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoShotEffect},
+{n:"1970s Photo",p:`famous vintage 70s photo, [input.description], grainy photograph, 1970s photo with film grain, 70s photo with vignetting, retro, r/OldSchoolCool, 70s photo, vintage photo`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoShotEffect},
+{n:"1960s Photo",p:`famous vintage 60s photo, [input.description], grainy photograph, 1960s photo with film grain, 60s photo with vignetting, retro, r/OldSchoolCool, 60s photo, vintage photo`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoShotEffect},
+{n:"1950s Photo",p:`famous vintage 50s photo, [input.description], grainy photograph, 1950s photo with film grain, 1950s photo with vignetting, retro, r/OldSchoolCool, 1950s photo, vintage photo`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoShotEffect},
+{n:"1940s Photo",p:`famous vintage 1940s photo, [input.description], grainy photograph, 1940s photo with film grain, 1940s photo with vignetting, retro, r/OldSchoolCool, 1940s photo, vintage photo`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoShotEffect},
+{n:"1930s Photo",p:`famous vintage 1930s photo, [input.description], grainy photograph, 1930s photo with film grain, 1930s photo with vignetting, retro, r/OldSchoolCool, 1930s photo, vintage photo`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoShotEffect},
+{n:"1920s Photo",p:`famous vintage 1920s photo, [input.description], 1920s photo, restored photograph, {sepia|black and white}, historical archive photo`,ng:`[input.negative]`,img:"no_style.jpg",mods:photoShotEffect},
+{n:"Vintage Pulp Art",p:`1970s vintage pulp art, [input.description], vintage pulp art, by Earle K. Bergey, by Kelly Freas, by Alex Schomburg, by H. J. Ward, glossy pulp art, Amazing Stories, Weird Tales, 8k, high resolution, best quality`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"50s Infomercial Anime",p:`[input.description], 1950s infomercial style, delicate linework, paprika anime art style, chromatic aberration glow, 2d painted cel animation, soft focus, 2D pixiv 1950s`,ng:`[input.negative]`,img:"anime.jpg"},
+{n:"3D Pokemon",p:`An incredibly perfect high-quality 3D render of a pokemon creature, [input.description], [input.pokemonType ? input.pokemonType+", " : ""]8k render, beautiful pokemon digital art, fakemon, pokemon creature, cryptid, fakemon, masterpiece, soft focus, best quality, high quality. Perfect soft lighting, beautiful composition. It's an impressive CGI image from the upcoming Pokemon Movie (2026).\n\nOverall, it's an absolute world-class masterpiece 3D-rendered Pokemon-inspired creature. It's an aesthetically pleasing 3D Pokemon-inspired piece with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"pokemon.jpg"},
+{n:"Painted Pokemon",p:`Beautiful, very high-quality painterly digital concept art, [input.description], [input.pokemonType ? input.pokemonType+", " : ""]8k digital painting of a pokemon, amazing pokemon creature art by piperdraws, cryptid creations by Piper Thibodeau, by Naoki Saito and {Tokiya|Mitsuhiro Arita}, incredible composition.\n\nOverall, it's an absolute world-class masterpiece painterly Pokemon-inspired artwork. It's an aesthetically pleasing painterly Pokemon-inspired artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"pokemon.jpg"},
+{n:"2D Pokemon",p:`[input.description], [input.pokemonType ? input.pokemonType+", " : ""]pokemon creature concept, superb line art, beautiful colors and composition, 2D art style, beautiful pokemon digital art, fakemon, by Sowsow, pokemon creature, cryptid, fakemon, masterpiece, by Yuu Nishida, 4k. The Pokémon-like creature is centered within this anime-style 2D image. It's from the upcoming Pokemon Movie (2026) which has the classic 2D Pokemon art style.\n\nOverall, it's an absolute world-class masterpiece 2D Pokemon-inspired artwork. It's an aesthetically pleasing 2D Pokemon-inspired artwork with impeccable attention to detail and impressive composition. Clean, perfect linework, impeccable clean 2D anime-inspired art style.`,ng:`[input.negative], messy, garbled, confusing, incoherent, unclear`,img:"pokemon.jpg"},
+{n:"Vintage Anime",p:`[input.description], 1990s anime, vintage anime, 90's anime style, by hajime sorayama, by greg tocchini, anime masterpiece, pixiv, akira-style art, akira anime art, 4k, high quality.\n\nOverall, it's an absolute world-class masterpiece vintage anime artwork. It's an aesthetically pleasing vintage anime artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"anime.jpg"},
+{n:"Neon Vintage Anime",p:`[input.description], neon vintage anime style, 90's anime style, 1990s anime, hajime sorayama, greg tocchini, neon vintage anime masterpiece, anime art, 4k, high quality.\n\nOverall, it's an absolute world-class masterpiece neon vintage anime artwork. It's an aesthetically pleasing neon vintage anime artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"anime.jpg"},
+{n:"Manga",p:`[input.description], incredible hand-drawn manga, black and white, by Takehiko Inoue, by Katsuhiro Otomo and akira toriyama manga, hand-drawn art by rumiko takahashi and Inio Asano, Ken Akamatsu manga art.\n\nOverall, it's an absolute world-class masterpiece black and white manga-style artwork. It's an aesthetically pleasing black and white manga artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"anime.jpg"},
+{n:"Fantasy World Map",p:`beautiful fantasy map of [input.description], beautiful fantasy map inspired by middle earth and azeroth and discworld and westeros and essos and the witcher world and tamriel and faerûn and thedas, 4k, beautiful colors, crisp, high-resolution artistic map, topographic 3D terrain, artistic map.\n\nOverall, it's an absolute world-class masterpiece fantasy world map. It's an aesthetically pleasing fantasy world map artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Fantasy City Map",p:`an aerial view of a city, TTRPG city map showing the full city, [input.description], fantasy art, by senior environment artist, beautiful fantasy map.\n\nOverall, it's an absolute world-class masterpiece fantasy city map. It's an aesthetically pleasing fantasy city map artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Old World Map",p:`fantasy world map of [input.description], fantasy world map, highly detailed digital painting, fantasy art, map illustration, 8k.\n\nOverall, it's an absolute world-class masterpiece old world map. It's an aesthetically pleasing old world style map artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"3D Isometric Icon",p:`[input.description], 3D isometric render of cute [input.description], 3D app icon, clean isometric design, beautiful design, soft gradient background, soft colors, centered, 3D blender render, masterpiece, best quality, high resolution, 8k octane render, beautiful color scheme, soft smooth lighting, physically based rendering, square image, high polycount`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"Flat Style Icon",p:`[input.description], creative icon, flat style icon, masterpiece, high resolution, crisp, beautiful composition and color choice, beautiful flat painted style, behance contest-winner, award winning icon illustration, 8k, best quality`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Flat Style Logo",p:`beautiful flat-style logo design depicting [input.description], creative flat-style logo design, trending on dribbble, featured on behance, portfolio piece, minimal flat design, breathtaking graphic design, 8k, high resolution vector logo, plain background, amazingly beautiful logo design, winner of best logo award`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Game Art Icon",p:`[input.description], a concept art icon for league of legends, a digital art logo, illustration, league of legends style icon, inspired by wlop style, 8k, dota 2 style icon, fine details, sharp, very detailed icon, high resolution rpg ability/spell/item icon`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Digital Painting Icon",p:`[input.description], app logo icon, digital art pictogram icon, trending on artstation, app icon by atey ghailan, app icon by greg rutkowski, app icon by greg tocchini, app icon by james gilleard, 8k, high resolution, best quality`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Concept Art Icon",p:`[input.description], a concept art icon, a digital art logo, illustration, league of legends style concept art logo icon, inspired by wlop style, 8k, fine details, sharp, very detailed, high resolution logo icon`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Cute 3D Icon",p:`[input.description], a cute 3D icon of [input.description], cartoon 3D icon, very cute shape, stylized octane render, 8k, masterpiece, soooo cute, beautiful cute perfection, beautiful soft lighting, soft colors, centered, high resolution, [input.description], soft gradient background`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Cute 3D Icon Set",p:`[input.description], a set of lovely little 3D icons, cute 3D icons, very cute shapes, stylized octane render, 8k, masterpiece, soooo cute, beautiful cute perfection, beautiful soft lighting, soft colors, centered, high resolution, [input.description], cute icon set`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Crayon Drawing",p:`[input.description], crayon drawing`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Pencil",p:`black and white pencil drawing, [input.description], black and white, breathtaking pencil illustration, highly detailed, 4k, textured paper, pencil texture, sketch`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Tattoo Design",p:`amazing tattoo design, [input.description], breathtaking tattoo design, incredible tattoo design`,ng:`[input.negative]`,img:"no_style.jpg"},
+{n:"Waifu",p:`[input.description], waifu character portrait, 1girl, very high resolution, semi-realistic anime art. Intricate and impressive anime artwork with stunningly beautiful composition and style.\n\nOverall, it's an absolute world-class masterpiece anime artwork. It's an aesthetically pleasing waifu artwork with impeccable attention to detail and impressive composition. It's an aesthetically pleasing character portrait. It's an aesthetically pleasing image. It's an aesthetically pleasing image. It's an aesthetically pleasing image. It's an aesthetically pleasing image.`,ng:`[input.negative]`,img:"anime.jpg",mods:animeMods},
+{n:"YuGiOh Art",p:`yugioh card art for [input.description], art by genzoman, by Akina Fujiwara, by rossdraws, yugioh monster, close up, painterly details, breathtaking art, centered, masterpiece, amazing composition, [input.description.length < 30 ? input.description : ""].\n\nOverall, it's an absolute world-class masterpiece "Yu-Gi-Oh!"-inspired artwork. It's an aesthetically pleasing Yu-Gi-Oh inspired artwork with impeccable attention to detail and impressive composition.`,ng:`[input.negative]`,img:"tcg.jpg"},
+{n:"Traditional Japanese",p:`[input.description], in ukiyo-e art style, traditional japanese masterpiece`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"Nihonga Painting",p:`japanese nihonga painting about [input.description], Nihonga, ancient japanese painting, intricate, detailed`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"Claymation",p:`[input.description], claymation, incredible claymation style, kubo and the two strings style art, Missing Link 2019 art style, clay texture, clay animation, stop-motion clay`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"Cartoon",p:`[input.description], cartoon-style art, superb linework, nice colors and composition, bold linework, masterpiece, cute art by Dana Terrace, by Rebecca Sugar, by ry-spirit, amazing and wholesome cartoon-style art, cute art style, (trending on artstation)`,ng:`[input.negative]`,img:"cartoon.jpg"},
+{n:"Cursed Photo",p:`cursed photo of [input.description], creepy and cursed, absolutely cursed photo, nope nope nope nope, what the actual f, unsettling photo, cursed_thing, cursedimages, no context, cursed image, bad photo, weird photo, very strange, color photo, creepy photo, nightmare fuel`,ng:`[input.negative]`,img:"no_style.jpg",mods:[{g:"Modifier",o:[{n:"found footage",v:", found footage"},{n:"cult",v:", photo from a real cult"},{n:"1920s",v:", 1920s photo"},{n:"old phone",v:", old cell phone photo"},{n:"VHS",v:", old VHS footage"},{n:"CCTV",v:", old CCTV footage, high-angle CCTV image"},{n:"trypophobia",v:", trypophobia"},{n:"backrooms",v:", backrooms"},{n:"black & white",v:", black & white"},{n:"grainy",v:", grainy, noisy static effect"},{n:"extreme close-up",v:", extreme close-up"},{n:"low-angle",v:", low-angle shot"},{n:"dramatic",v:", dramatic angle, extreme angle shot"}]}]}
+];
+
+function resolvePrompt(t){
+  let d=descriptionInput.value, n=negativeInput.value, out=t;
+  out=out.replace(/\[input\.description\.length\s*>\s*(\d+)\s*\?\s*"([^"]*)"\s*:\s*"([^"]*)"\]/g,(_,num,a,b)=>d.length>+num?a:b);
+  out=out.replace(/\[input\.description\.length\s*<\s*(\d+)\s*\?\s*"([^"]*)"\s*:\s*"([^"]*)"\]/g,(_,num,a,b)=>d.length<+num?a:b);
+  out=out.replace(/\[input\.description\.length\s*<\s*(\d+)\s*\?\s*input\.description\s*:\s*""\]/g,(_,num)=>d.length<+num?d:"");
+  out=out.replace(/\[input\.pokemonType\s*\?\s*input\.pokemonType\s*\+\s*"\s*,\s*"\s*:\s*""\]/g,"");
+  out=out.replace(/\[input\.description\]/g,d);
+  out=out.replace(/\[input\.negative\]/g,n);
+  out=out.replace(/\{a\}/g,"a ");
+  out=out.replace(/\{([^}]+)\|([^}]+)\}/g,(_,a)=>a.split('|')[0]);
+  return out;
+}
+
+function renderStyles(){
+  let q=(searchInput.value||"").toLowerCase();
+  styleGridCtn.innerHTML="";
+  stylesData.forEach((s,i)=>{
+    if(q && !s.n.toLowerCase().includes(q) && !s.p.toLowerCase().includes(q)) return;
+    let card=document.createElement("div");
+    card.style.cssText="background:#222;border-radius:8px;overflow:hidden;cursor:pointer;transition:transform .1s;";
+    card.onmouseenter=()=>card.style.transform="scale(1.02)";
+    card.onmouseleave=()=>card.style.transform="scale(1)";
+    card.onclick=()=>selectStyle(i);
+    let img=document.createElement("img");
+    img.src=s.img.startsWith("http")?s.img:imgBase+s.img;
+    img.style.cssText="width:100%;height:100px;object-fit:cover;display:block;background:#111;";
+    img.onerror=()=>img.src="https://placehold.co/300x150/111/666?text="+encodeURIComponent(s.n);
+    let lbl=document.createElement("div");
+    lbl.textContent=s.n;
+    lbl.style.cssText="padding:8px;font-size:12px;font-weight:600;text-align:center;";
+    card.appendChild(img); card.appendChild(lbl);
+    styleGridCtn.appendChild(card);
+  });
+}
+function selectStyle(i){
+  selectedStyle=stylesData[i];
+  useAlt=false;
+  activeMods=new Set();
+  selectedStyleTitle.textContent=selectedStyle.n;
+  selectedStyleImg.src=selectedStyle.img.startsWith("http")?selectedStyle.img:imgBase+selectedStyle.img;
+  selectedStyleImg.onerror=()=>selectedStyleImg.src="https://placehold.co/600x300/111/666?text="+encodeURIComponent(selectedStyle.n);
+  outputCtn.hidden=false;
+  altBtn.hidden=!selectedStyle.alt;
+  altBtn.textContent="Use Alt Prompt";
+  renderModifiers();
+  updateOutput();
+}
+function renderModifiers(){
+  modifiersCtn.innerHTML="";
+  if(!selectedStyle||!selectedStyle.mods) return;
+  for(let g of selectedStyle.mods){
+    let w=document.createElement("div"); w.style.marginBottom="8px";
+    let t=document.createElement("div"); t.textContent=g.g; t.style.cssText="font-size:12px;color:#aaa;margin-bottom:4px;";
+    w.appendChild(t);
+    let row=document.createElement("div"); row.style.cssText="display:flex;flex-wrap:wrap;gap:4px;";
+    for(let o of g.o){
+      let chip=document.createElement("button");
+      chip.textContent=o.n;
+      chip.style.cssText="font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid #444;background:#222;color:#ddd;cursor:pointer;";
+      if(activeMods.has(o.v)){chip.style.background="#0f0";chip.style.color="#000";}
+      chip.onclick=()=>{if(activeMods.has(o.v))activeMods.delete(o.v);else activeMods.add(o.v);renderModifiers();updateOutput();};
+      row.appendChild(chip);
+    }
+    w.appendChild(row);
+    modifiersCtn.appendChild(w);
+  }
+}
+function updateOutput(){
+  if(!selectedStyle) return;
+  let t=useAlt&&selectedStyle.alt?selectedStyle.alt:selectedStyle.p;
+  let prompt=resolvePrompt(t);
+  for(let v of activeMods) prompt+=v;
+  let neg=resolvePrompt(selectedStyle.ng);
+  promptOutputEl.value=prompt;
+  negativeOutputEl.value=neg;
+}
+function toggleAlt(){useAlt=!useAlt;altBtn.textContent=useAlt?"Use Main":"Use Alt";updateOutput();}
+function copyPrompt(){navigator.clipboard.writeText(promptOutputEl.value).then(()=>{let b=event.target;b.textContent="Copied!";setTimeout(()=>b.textContent="Copy Prompt",1000);});}
+function copyNegative(){navigator.clipboard.writeText(negativeOutputEl.value).then(()=>{let b=event.target;b.textContent="Copied!";setTimeout(()=>b.textContent="Copy Negative",1000);});}
+async function generatePreview(){
+  loadingEl.hidden=false; previewCtn.hidden=true;
+  try{
+    let url=await generateImage(promptOutputEl.value,{resolution:"768x768"});
+    previewImg.src=url; previewCtn.hidden=false;
+  }catch(e){alert("Image generation failed: "+e);}
+  loadingEl.hidden=true;
+}
+renderStyles();
+</script>
+<style>
+body{background:#0d0d0d;}
+#styleGridCtn{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
+</style>
+</body>
+</html>

@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>xmzrc99qop — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Completed:
+  [x] Fixed commentsPlugin square-bracket crash by checking existence before use
+  [x] Fixed root.kv undefined crash with a localStorage fallback adapter
+  [x] Fixed setPersona unselecting unrelated chips globally
+  [x] Hardened dynamic inline HTML to avoid quote-injection issues
+  [x] Completed Image Forge section with generateImage integration
+  [x] Added Chat Arena using generateText AI + commentsPlugin community chat
+  [x] Added Remember tab using kv-plugin for persistent key-value storage
+  [x] Added Plugin Tools using super-fetch-plugin and copy-text utilities
+  [x] Added text-align:left to body to override platform default centering
+Possible Next Steps:
+  [ ] Export/import saved prompts & images
+  [ ] Prompt library / marketplace feed
+  [ ] Advanced per-plugin preference pane
+-->
+
+<!-- Global styles -->
+<style>
+  :root {
+    --bg-main: #0f1117;
+    --bg-panel: #161922;
+    --bg-hover: #20252e;
+    --border: #2b3040;
+    --text: #e4e6eb;
+    --muted: #9aa0a6;
+    --accent1: #00f0ff;
+    --accent2: #8a6fff;
+    --accent3: #ff4ecd;
+    --accent4: #38ff9c;
+    --radius: 10px;
+    --shadow: 0 8px 30px rgba(0,0,0,.5);
+    --font: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  }
+  body {
+    margin: 0;
+    background: var(--bg-main);
+    color: var(--text);
+    font-family: var(--font);
+    overflow: hidden;
+    text-align: left;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2b3040; border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4055; }
+
+  #nebulaCanvas {
+    position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; opacity: 0.7;
+  }
+
+  .shell {
+    display: grid; grid-template-columns: 240px 1fr; height: 100vh;
+  }
+
+  .sidebar {
+    background: rgba(15, 17, 23, 0.95); backdrop-filter: blur(12px); border-right: 1px solid var(--border);
+    padding: 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; transition: transform .25s ease;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px;
+  }
+  .brand-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent1));
+    display: grid; place-items: center; color: #fff;
+    font-weight: 800; font-size: 15px; box-shadow: 0 0 15px rgba(138,111,255,.3);
+  }
+  .brand-title {
+    font-weight: 700; font-size: 16px; letter-spacing: .5px;
+    background: linear-gradient(90deg, var(--accent1), var(--accent2)); -webkit-background-clip: text; color: transparent;
+  }
+
+  .navItem {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px;
+    cursor: pointer; user-select: none; transition: background .15s, color .15s; color: var(--muted); border: 1px solid transparent;
+  }
+  .navItem:hover { background: var(--bg-hover); color: var(--text); }
+  .navItem.active {
+    background: linear-gradient(90deg, rgba(138,111,255,.15), rgba(0,240,255,.1));
+    color: var(--accent1); border-color: rgba(0,240,255,.2);
+    box-shadow: 0 0 15px rgba(0,240,255,.08) inset;
+  }
+  .navIcon { width: 20px; height: 20px; display: grid; place-items: center; font-size: 14px; }
+
+  .spacer { flex: 1; }
+  .smallHint { color: var(--muted); font-size: 11px; text-align: center; margin-top: 8px; }
+
+  .main { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between; padding: 12px 18px;
+    border-bottom: 1px solid var(--border); background: rgba(15,17,23,0.7); backdrop-filter: blur(10px);
+  }
+  .t-right { display: flex; align-items: center; gap: 10px; }
+
+  h1 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  h1 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px; }
+
+  .status {
+    font-size: 12px; color: var(--muted); background: var(--bg-panel); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border);
+  }
+
+  .content { flex: 1; overflow-y: auto; padding: 16px 18px 80px; }
+
+  .section { display: none; }
+  .section.active { display: block; animation: fade .2s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: translateY(0);} }
+
+  .panel {
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 14px; position: relative; overflow: hidden;
+  }
+  .panel::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    border-radius: inherit; box-shadow: inset 0 0 30px rgba(0,0,0,.3);
+  }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+
+  textarea, input[type="text"] {
+    width: 100%; background: #0b0d13; border: 1px solid var(--border); color: var(--text);
+    padding: 10px 12px; border-radius: 8px; outline: none; resize: vertical; font-family: inherit; font-size: 14px;
+    box-shadow: inset 0 1px 0 rgba(0,0,0,.5);
+  }
+  textarea:focus, input[type="text"]:focus { border-color: var(--accent1); box-shadow: 0 0 0 3px rgba(0,240,255,.1), inset 0 1px 0 rgba(0,0,0,.5); }
+  select {
+    background: #0b0d13; border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 8px; outline: none;
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--bg-hover);
+    color: var(--text); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 13px; transition: transform .1s;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn-primary { background: linear-gradient(135deg, var(--accent2), var(--accent1)); color: #fefefe; border: none; font-weight: 600; }
+  .btn-accent3 { background: linear-gradient(135deg, #ff4ecd, #a64dff); color: #fefefe; border: none; font-weight: 600; }
+
+  .btn-group { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+
+  .output-area {
+    min-height: 160px; background: #0b0d13; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    white-space: pre-wrap; font-size: 14px; line-height: 1.6; color: #dbeafe; box-shadow: inset 0 1px 0 rgba(0,0,0,.5);
+  }
+
+  .img-cell { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: #0b0d13; }
+  .img-cell img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+  .img-cell .overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center; gap: 8px; opacity: 0; transition: opacity .2s;
+  }
+  .img-cell:hover .overlay { opacity: 1; }
+
+  .chatBox {
+    background: #0b0d13; border: 1px solid var(--border); border-radius: 10px; height: 65vh;
+    overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .msg { padding: 8px 10px; border-radius: 8px; max-width: 80%; border: 1px solid var(--border); }
+  .msg-user { align-self: flex-end; background: linear-gradient(135deg, rgba(138,111,255,.18), rgba(0,240,255,.1)); color: #eef; }
+  .msg-bot { align-self: flex-start; background: rgba(255,255,255,.03); color: #e4e6eb; }
+  .msg-name { font-size: 11px; font-weight: 700; opacity: .8; margin-bottom: 2px; }
+  .chatInputRow { display: flex; gap: 8px; margin-top: 10px; }
+  .chatInputRow input { flex: 1; }
+
+  .kv-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .kv-table td, .kv-table th { border: 1px solid var(--border); padding: 8px; text-align: left; font-size: 13px; }
+  .kv-table th { background: rgba(255,255,255,.04); color: var(--muted); }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .tag { display: inline-flex; padding: 3px 10px; border-radius: 999px; background: rgba(0,240,255,.1); color: var(--accent1); border: 1px solid rgba(0,240,255,.15); font-size: 12px; }
+
+  .glow-border { position: relative; }
+  .glow-border::after {
+    content: ""; position: absolute; inset: -1px; border-radius: inherit; z-index: -1;
+    background: linear-gradient(135deg, rgba(0,240,255,.35), rgba(138,111,255,.35), rgba(255,78,205,.25));
+    opacity: 0; transition: opacity .3s ease;
+  }
+  .glow-border:hover::after { opacity: 1; }
+
+  .toast {
+    position: fixed; bottom: 16px; right: 16px; z-index: 9999; background: var(--bg-panel);
+    border: 1px solid var(--border); color: #fff; padding: 10px 14px; border-radius: 10px; box-shadow: var(--shadow);
+    transform: translateY(120%); transition: transform .3s ease; pointer-events: none;
+  }
+  .toast.show { transform: translateY(0); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+    color: var(--muted); padding: 5px 10px; border-radius: 999px; font-size: 12px; cursor: pointer; transition: all .2s;
+  }
+  .chip:hover { border-color: var(--accent1); color: var(--accent1); }
+  .chip.active { background: rgba(0,240,255,.1); color: var(--accent1); border-color: var(--accent1); }
+
+  .badge { padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(0,240,255,.2); background: rgba(0,240,255,.08); color: var(--accent1); font-size: 12px; }
+
+  @media (max-width: 980px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar { display: none; position: absolute; z-index: 10; width: 260px; height: 100vh; box-shadow: 10px 0 40px rgba(0,0,0,.6); }
+    .sidebar.open { display: flex; }
+    #menuBtn { display: inline-flex !important; }
+  }
+</style>
+
+<canvas id="nebulaCanvas"></canvas>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebarEl">
+    <div class="brand">
+      <div class="brand-icon">P</div>
+      <div class="brand-title">Perchance Ultimate</div>
+    </div>
+
+    <div class="navItem active" data-tab="generator" onclick="switchTab('generator')">
+      <div class="navIcon">✍️</div> Generator
+    </div>
+    <div class="navItem" data-tab="story" onclick="switchTab('story')">
+      <div class="navIcon">📖</div> Story Engine
+    </div>
+    <div class="navItem" data-tab="images" onclick="switchTab('images')">
+      <div class="navIcon">🎨</div> Image Forge
+    </div>
+    <div class="navItem" data-tab="chat" onclick="switchTab('chat')">
+      <div class="navIcon">💬</div> Chat Arena
+    </div>
+    <div class="navItem" data-tab="remember" onclick="switchTab('remember')">
+      <div class="navIcon">🧠</div> Remember
+    </div>
+    <div class="navItem" data-tab="plugins" onclick="switchTab('plugins')">
+      <div class="navIcon">🧩</div> Plugin Tools
+    </div>
+
+    <div class="spacer"></div>
+    <div class="smallHint">
+      Shortcuts: 1-6 to switch tabs • Ctrl+Enter to run
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button class="btn" id="menuBtn" onclick="toggleSidebar()" style="display:none;">☰</button>
+        <h1 id="pageTitle"><span class="dot" style="background:var(--accent1);box-shadow:0 0 12px var(--accent1)"></span> Content Generator</h1>
+        <span class="badge" id="verBadge">Ultimate v2.0</span>
+      </div>
+      <div class="t-right">
+        <div class="pill" id="onlinePill">● <span id="onlineCountEl">142</span> online</div>
+        <div class="status" id="queueStatusEl">Queue ready</div>
+      </div>
+    </div>
+
+    <div class="content" id="contentEl">
+
+      <!-- 1. Generator -->
+      <div id="generatorSection" class="section active">
+        <div class="panel">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span class="tag">AI Text</span>
+            <span class="tag" style="color:var(--accent3);background:rgba(255,78,205,.1);border-color:rgba(255,78,205,.15)">Creative Mode</span>
+            <div class="spacer"></div>
+            <span style="color:var(--muted);font-size:12px">Model: default</span>
+          </div>
+
+          <textarea id="genPromptInput" rows="4" placeholder="Enter a creative prompt... (e.g. Write a witty haiku about electric sheep)">Write a funny, slightly surreal haiku about electric sheep dreaming of Wi-Fi passwords.</textarea>
+
+          <div class="grid-3" style="margin-top:8px;">
+            <div>
+              <label style="font-size:12px;color:var(--muted)">Tone</label>
+              <select id="genToneSelect" style="width:100%;margin-top:4px;">
+                <option>Creative</option>
+                <option>Witty</option>
+                <option>Dark</option>
+                <option>Whimsical</option>
+                <option>Technical</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted)">Length</label>
+              <select id="genLengthSelect" style="width:100%;margin-top:4px;">
+                <option>Short</option>
+                <option selected>Medium</option>
+                <option>Long</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted)">Mode</label>
+              <div class="chips" style="margin-top:4px;">
+                <div class="chip active" onclick="toggleChip(this)">Story</div>
+                <div class="chip" onclick="toggleChip(this)">Poem</div>
+                <div class="chip" onclick="toggleChip(this)">Idea</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="btn-group">
+            <button class="btn btn-primary" id="genRunBtn" onclick="generateContent()">
+              ✨ Generate
+            </button>
+            <button class="btn" onclick="copyTextOutput()">📋 Copy Text</button>
+            <button class="btn" onclick="clearOutput()">🗑️ Clear</button>
+          </div>
+
+          <div id="genOutputCtn" class="output-area glow-border" style="margin-top:10px;">Tap “Generate” to create something wonderful.</div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+            <button class="btn" onclick="insertPreset('Write a conspiracy theory about why cats knock things off tables.')">🐱 Cat Theory</button>
+            <button class="btn" onclick="insertPreset('Describe a café where every drink gives a random superpower.')">☕ Café Powers</button>
+            <button class="btn" onclick="insertPreset('Create three fake facts about the lost city of Atlantis.')">🏛 Atlantis Facts</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Story Engine -->
+      <div id="storySection" class="section">
+        <div class="grid-2">
+          <div class="panel">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <span class="tag">Story Setup</span>
+              <div class="spacer"></div>
+              <button class="btn" style="padding:4px 8px" onclick="randomStorySeed()">🎲 Random</button>
+            </div>
+            <input type="text" id="storySetupInput" placeholder="A setting, a conflict, and a twist..." style="margin-bottom:6px;">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <label style="font-size:12px;color:var(--muted)">Hero:</label>
+              <input type="text" id="storyHeroInput" placeholder="A reluctant wizard" style="flex:1;min-width:120px;" value="A reluctant wizard">
+              <label style="font-size:12px;color:var(--muted)">Villain:</label>
+              <input type="text" id="storyVillainInput" placeholder="An emotionless AI" style="flex:1;min-width:120px;" value="An emotionless AI">
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-primary" onclick="generateStory()">📖 Generate Story</button>
+              <button class="btn btn-accent3" onclick="continueStory()">➡ Continue</button>
+              <button class="btn" onclick="exportStory()">💾 Save to Remember</button>
+            </div>
+            <div id="storyOutputCtn" class="output-area" style="margin-top:8px;">Your story will appear here.</div>
+          </div>
+
+          <div class="panel">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <span class="tag" style="color:var(--accent4);background:rgba(56,255,156,.1);border-color:rgba(56,255,156,.15)">Worldbuilding</span>
+            </div>
+            <textarea id="worldPromptInput" rows="3" placeholder="Give me a fantasy world with one weird rule..." style="margin-bottom:6px;">A world where gravity flips every sunset.</textarea>
+            <div class="btn-group">
+              <button class="btn btn-primary" onclick="generateWorld()">🌍 Generate World</button>
+            </div>
+            <div id="worldOutputCtn" class="output-area" style="margin-top:8px;">World data will appear here.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Image Forge -->
+      <div id="imagesSection" class="section">
+        <div class="panel">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span class="tag" style="color:var(--accent3);background:rgba(255,78,205,.1);border-color:rgba(255,78,205,.15)">Text-to-Image</span>
+            <div class="spacer"></div>
+            <label style="font-size:12px;color:var(--muted)">Result count:</label>
+            <select id="imageCountSelect">
+              <option value="1">1</option>
+              <option value="2" selected>2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+            </select>
+            <label style="font-size:12px;color:var(--muted);margin-left:8px;">Resolution:</label>
+            <select id="imgResSelect">
+              <option value="512x512" selected>512x512</option>
+              <option value="512x768">512x768</option>
+              <option value="768x512">768x512</option>
+              <option value="768x768">768x768</option>
+            </select>
+          </div>
+          <input type="text" id="imgPromptInput" placeholder="A cyberpunk samurai standing in the rain, neon reflections, digital art..." style="margin-bottom:8px;">
+          <div class="btn-group">
+            <button class="btn btn-primary" id="imgGenBtn" onclick="generateImages()">🎨 Generate Images</button>
+            <button class="btn" onclick="clearImages()">🗑️ Clear</button>
+          </div>
+          <div id="imgGridCtn" class="grid-4" style="margin-top:10px;"></div>
+        </div>
+      </div>
+
+      <!-- 4. Chat Arena -->
+      <div id="chatSection" class="section">
+        <div class="grid-2">
+          <div class="panel">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <span class="tag">🤖 AI Chat</span>
+              <div class="spacer"></div>
+              <button class="btn" style="padding:4px 8px" onclick="clearChat()">Clear</button>
+            </div>
+            <div id="chatBoxCtn" class="chatBox"></div>
+            <div class="chatInputRow">
+              <input type="text" id="chatInput" placeholder="Ask the AI anything..." onkeydown="if(event.key==='Enter')sendChat()">
+              <button class="btn btn-primary" onclick="sendChat()">Send</button>
+            </div>
+          </div>
+          <div class="panel">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <span class="tag" style="color:var(--accent2);background:rgba(138,111,255,.1);border-color:rgba(138,111,255,.15)">💬 Community Chat</span>
+            </div>
+            <div id="commentsPluginCtn" style="height:70vh;border-radius:10px;overflow:hidden;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Remember -->
+      <div id="rememberSection" class="section">
+        <div class="grid-2">
+          <div class="panel">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span class="tag" style="color:var(--accent4);background:rgba(56,255,156,.1);border-color:rgba(56,255,156,.15)">🧠 Memory Store</span>
+              <div class="spacer"></div>
+            </div>
+            <input type="text" id="kvKeyInput" placeholder="Key (e.g., favoritePrompt)" style="margin-bottom:6px;">
+            <textarea id="kvValueInput" rows="3" placeholder="Value to remember..."></textarea>
+            <div class="btn-group">
+              <button class="btn btn-primary" onclick="saveKv()">💾 Save</button>
+              <button class="btn" onclick="loadKv()">📂 Load</button>
+              <button class="btn" onclick="deleteKv()">🗑️ Delete</button>
+            </div>
+            <div id="kvOutputCtn" class="output-area" style="margin-top:8px;">Saved memories will appear here.</div>
+          </div>
+          <div class="panel">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span class="tag">📋 All Memories</span>
+            </div>
+            <div id="kvAllCtn" class="output-area" style="min-height:200px;">Load all to see stored keys.</div>
+            <div class="btn-group">
+              <button class="btn btn-primary" onclick="loadAllKv()">📂 Load All</button>
+              <button class="btn" onclick="clearAllKv()">🗑️ Clear All</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. Plugin Tools -->
+      <div id="pluginsSection" class="section">
+        <div class="grid-2">
+          <div class="panel">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span class="tag">🌐 Super Fetch</span>
+            </div>
+            <input type="text" id="fetchUrlInput" placeholder="https://example.com" style="margin-bottom:6px;">
+            <div class="btn-group">
+              <button class="btn btn-primary" onclick="superFetchUrl()">🌍 Fetch</button>
+            </div>
+            <div id="fetchOutputCtn" class="output-area" style="margin-top:8px;max-height:300px;overflow:auto;">Fetch result appears here.</div>
+          </div>
+          <div class="panel">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span class="tag" style="color:var(--accent3);background:rgba(255,78,205,.1);border-color:rgba(255,78,205,.15)">🔧 Utilities</span>
+            </div>
+            <div class="btn-group" style="flex-direction:column;align-items:stretch;">
+              <button class="btn" onclick="copyPageUrl()">📋 Copy Page URL</button>
+              <button class="btn" onclick="showToast('Perchance Ultimate Plugins Active!')">✨ Plugin Status</button>
+              <button class="btn" onclick="exportAllData()">📤 Export All Data</button>
+            </div>
+            <div id="pluginStatusCtn" class="output-area" style="margin-top:8px;">Plugin tools ready.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  // --- Plugin & Storage Adapter ---
+  let kvFolder;
+  try {
+    if (typeof kv !== 'undefined' && kv.perchance) {
+      kvFolder = kv.perchance;
+    } else {
+      throw new Error('kv unavailable');
+    }
+  } catch (e) {
+    // Fallback localStorage adapter for root.kv undefined scenarios
+    kvFolder = {
+      async set(k, v) { localStorage['pkv_' + k] = JSON.stringify(v); },
+      async get(k) { let s = localStorage['pkv_' + k]; return s === undefined ? undefined : JSON.parse(s); },
+      async delete(k) { delete localStorage['pkv_' + k]; },
+      async keys() { return Object.keys(localStorage).filter(k => k.startsWith('pkv_')).map(k => k.slice(4)); },
+      async entries() {
+        let e = [];
+        for (let k in localStorage) { if (k.startsWith('pkv_')) e.push([k.slice(4), JSON.parse(localStorage[k])]); }
+        return e;
+      }
+    };
+  }
+
+  // --- UI Helpers ---
+  function switchTab(tab) {
+    document.querySelectorAll('.navItem').forEach(n => n.classList.toggle('active', n.dataset.tab === tab));
+    document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === tab + 'Section'));
+    let titles = {
+      generator: 'Content Generator',
+      story: 'Story Engine',
+      images: 'Image Forge',
+      chat: 'Chat Arena',
+      remember: 'Remember',
+      plugins: 'Plugin Tools'
+    };
+    let colors = {
+      generator: 'var(--accent1)',
+      story: 'var(--accent2)',
+      images: 'var(--accent3)',
+      chat: 'var(--accent4)',
+      remember: '#ffaa00',
+      plugins: '#00f0ff'
+    };
+    pageTitle.innerHTML = `<span class="dot" style="background:${colors[tab]};box-shadow:0 0 12px ${colors[tab]}"></span> ${titles[tab]}`;
+    if (tab === 'chat') initComments();
+    if (tab === 'remember') loadAllKv();
+  }
+
+  function toggleSidebar() { sidebarEl.classList.toggle('open'); }
+
+  function showToast(msg) {
+    let t = document.createElement('div');
+    t.className = 'toast show';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2500);
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // --- Generator ---
+  async function generateContent() {
+    let prompt = genPromptInput.value.trim();
+    if (!prompt) return showToast('Please enter a prompt!');
+    genRunBtn.disabled = true;
+    genRunBtn.textContent = '⏳ Generating...';
+    genOutputCtn.textContent = '';
+    try {
+      let tone = genToneSelect.value;
+      let length = genLengthSelect.value;
+      let mode = document.querySelector('#generatorSection .chip.active')?.textContent || 'Story';
+      let fullPrompt = `Write a ${length.toLowerCase()} ${mode.toLowerCase()} in a ${tone.toLowerCase()} tone based on this prompt: ${prompt}`;
+      let result = await generateText(fullPrompt);
+      genOutputCtn.textContent = result;
+    } catch (e) {
+      genOutputCtn.textContent = 'Error: ' + e.message;
+    }
+    genRunBtn.disabled = false;
+    genRunBtn.textContent = '✨ Generate';
+  }
+
+  function copyTextOutput() {
+    let text = genOutputCtn.textContent;
+    if (!text || text.includes('Tap “Generate”')) return showToast('Nothing to copy!');
+    navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard!'));
+  }
+
+  function clearOutput() { genOutputCtn.textContent = 'Tap “Generate” to create something wonderful.'; }
+
+  function insertPreset(text) { genPromptInput.value = text; }
+
+  function toggleChip(el) {
+    el.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  // --- Story Engine ---
+  async function generateStory() {
+    let setup = storySetupInput.value.trim();
+    let hero = storyHeroInput.value.trim();
+    let villain = storyVillainInput.value.trim();
+    storyOutputCtn.textContent = '⏳ Generating story...';
+    try {
+      let prompt = `Write a creative story. Setup: ${setup || 'A mysterious world'}. Hero: ${hero}. Villain: ${villain}. Make it engaging with dialogue and vivid descriptions.`;
+      let result = await generateText(prompt);
+      storyOutputCtn.textContent = result;
+    } catch (e) { storyOutputCtn.textContent = 'Error: ' + e.message; }
+  }
+
+  async function continueStory() {
+    let current = storyOutputCtn.textContent.trim();
+    if (!current || current.includes('appear here')) return showToast('Generate a story first!');
+    storyOutputCtn.textContent = current + '\n\n⏳ Continuing...\n\n';
+    try {
+      let result = await generateText(`Continue this story from where it left off:\n\n${current}\n\nContinue:`);
+      storyOutputCtn.textContent = current + '\n\n' + result;
+    } catch (e) { showToast('Error: ' + e.message); }
+  }
+
+  async function exportStory() {
+    let text = storyOutputCtn.textContent.trim();
+    if (!text || text.includes('appear here')) return showToast('Nothing to save!');
+    try {
+      await kvFolder.set('lastStory', {text: text, time: Date.now()});
+      showToast('Story saved to Remember!');
+    } catch (e) {
+      localStorage.lastStory = text;
+      showToast('Saved to localStorage fallback.');
+    }
+  }
+
+  function randomStorySeed() {
+    let seeds = [
+      'A library where books rewrite themselves based on the reader.',
+      'A city built inside the corpse of a giant beast.',
+      'A postman who delivers letters to the dead.'
+    ];
+    storySetupInput.value = seeds[Math.floor(Math.random() * seeds.length)];
+  }
+
+  async function generateWorld() {
+    let prompt = worldPromptInput.value.trim();
+    worldOutputCtn.textContent = '⏳ Generating world...';
+    try {
+      let result = await generateText(`Create detailed worldbuilding for this concept: ${prompt}. Include geography, culture, and one weird rule.`);
+      worldOutputCtn.textContent = result;
+    } catch (e) { worldOutputCtn.textContent = 'Error: ' + e.message; }
+  }
+
+  // --- Image Forge ---
+  async function generateImages() {
+    let prompt = imgPromptInput.value.trim();
+    if (!prompt) return showToast('Enter an image prompt!');
+    let count = parseInt(imageCountSelect.value);
+    let res = imgResSelect.value;
+    imgGenBtn.disabled = true;
+    imgGenBtn.textContent = '⏳ Generating...';
+    imgGridCtn.innerHTML = '';
+    try {
+      for (let i = 0; i < count; i++) {
+        let dataUrl = await generateImage(prompt, {resolution: res});
+        let cell = document.createElement('div');
+        cell.className = 'img-cell';
+        let img = document.createElement('img');
+        img.src = dataUrl;
+        img.alt = 'generated';
+        let overlay = document.createElement('div');
+        overlay.className = 'overlay';
+        let btnSave = document.createElement('button');
+        btnSave.className = 'btn';
+        btnSave.textContent = '💾';
+        btnSave.onclick = () => downloadImage(dataUrl);
+        let btnCopy = document.createElement('button');
+        btnCopy.className = 'btn';
+        btnCopy.textContent = '📋';
+        btnCopy.onclick = () => copyImageUrl(dataUrl);
+        overlay.appendChild(btnSave);
+        overlay.appendChild(btnCopy);
+        cell.appendChild(img);
+        cell.appendChild(overlay);
+        imgGridCtn.appendChild(cell);
+      }
+    } catch (e) { showToast('Image error: ' + e.message); }
+    imgGenBtn.disabled = false;
+    imgGenBtn.textContent = '🎨 Generate Images';
+  }
+
+  function clearImages() { imgGridCtn.innerHTML = ''; }
+
+  function downloadImage(url) {
+    let a = document.createElement('a');
+    a.href = url;
+    a.download = 'perchance-image.png';
+    a.click();
+  }
+
+  function copyImageUrl(url) {
+    navigator.clipboard.writeText(url).then(() => showToast('Image URL copied!'));
+  }
+
+  // --- Chat Arena ---
+  let chatHistory = [];
+  async function sendChat() {
+    let text = chatInput.value.trim();
+    if (!text) return;
+    chatInput.value = '';
+    appendChat('You', text, 'msg-user');
+    chatHistory.push({name:'You', content:text});
+    try {
+      let context = chatHistory.map(m => `${m.name}: ${m.content}`).join('\n');
+      let botName = 'PerchanceBot';
+      let result = await generateText({
+        instruction: `You are ${botName}, a helpful AI assistant in a chat. Respond concisely and creatively.\n\nChat history:\n${context}\n${botName}:`,
+        stopSequences: ['\nYou:', '\nPerchanceBot:']
+      });
+      let reply = result.replace(`${botName}:`, '').trim();
+      appendChat(botName, reply, 'msg-bot');
+      chatHistory.push({name:botName, content:reply});
+    } catch (e) { appendChat('System', 'Error: ' + e.message, 'msg-bot'); }
+  }
+
+  function appendChat(name, text, cls) {
+    let div = document.createElement('div');
+    div.className = 'msg ' + cls;
+    div.innerHTML = `<div class="msg-name">${escapeHtml(name)}</div>${escapeHtml(text)}`;
+    chatBoxCtn.appendChild(div);
+    chatBoxCtn.scrollTop = chatBoxCtn.scrollHeight;
+  }
+
+  function clearChat() { chatBoxCtn.innerHTML = ''; chatHistory = []; }
+
+  let commentsInitialized = false;
+  function initComments() {
+    if (commentsInitialized) return;
+    commentsInitialized = true;
+    if (typeof commentsPlugin === 'undefined') {
+      commentsPluginCtn.textContent = 'commentsPlugin not available.';
+      return;
+    }
+    try {
+      commentsPluginCtn.innerHTML = commentsPlugin({channel:'chat-arena', width:'100%', height:'100%'});
+    } catch (e) { commentsPluginCtn.textContent = 'Comments plugin error: ' + e.message; }
+  }
+
+  // --- Remember (kv-plugin) ---
+  async function saveKv() {
+    let k = kvKeyInput.value.trim();
+    let v = kvValueInput.value.trim();
+    if (!k) return showToast('Enter a key!');
+    try {
+      await kvFolder.set(k, v);
+      kvOutputCtn.textContent = `Saved key: ${k}`;
+      showToast('Saved!');
+      loadAllKv();
+    } catch (e) { kvOutputCtn.textContent = 'Error: ' + e.message; }
+  }
+
+  async function loadKv() {
+    let k = kvKeyInput.value.trim();
+    if (!k) return showToast('Enter a key!');
+    try {
+      let v = await kvFolder.get(k);
+      kvValueInput.value = v !== undefined ? v : '';
+      kvOutputCtn.textContent = v !== undefined ? `Loaded: ${k}\n${v}` : 'Key not found.';
+    } catch (e) { kvOutputCtn.textContent = 'Error: ' + e.message; }
+  }
+
+  async function deleteKv() {
+    let k = kvKeyInput.value.trim();
+    if (!k) return showToast('Enter a key!');
+    try {
+      await kvFolder.delete(k);
+      kvOutputCtn.textContent = `Deleted: ${k}`;
+      loadAllKv();
+    } catch (e) { kvOutputCtn.textContent = 'Error: ' + e.message; }
+  }
+
+  async function loadAllKv() {
+    try {
+      let entries = await kvFolder.entries();
+      let html = entries.map(([k, v]) => {
+        let val = typeof v === 'object' ? JSON.stringify(v) : String(v);
+        return `<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border);"><strong style="color:var(--accent1)">${escapeHtml(k)}</strong>: <span style="color:var(--muted)">${escapeHtml(val.substring(0,200))}</span></div>`;
+      }).join('');
+      kvAllCtn.innerHTML = html || '<span style="color:var(--muted)">No memories stored.</span>';
+    } catch (e) { kvAllCtn.textContent = 'Error: ' + e.message; }
+  }
+
+  async function clearAllKv() {
+    if (!confirm('Clear all stored memories?')) return;
+    try {
+      let keys = await kvFolder.keys();
+      for (let k of keys) await kvFolder.delete(k);
+      loadAllKv();
+      showToast('All cleared!');
+    } catch (e) { showToast('Error: ' + e.message); }
+  }
+
+  // --- Plugin Tools ---
+  async function superFetchUrl() {
+    let url = fetchUrlInput.value.trim();
+    if (!url) return showToast('Enter a URL!');
+    fetchOutputCtn.textContent = '⏳ Fetching...';
+    try {
+      let res = await superFetch(url);
+      let text = await res.text();
+      fetchOutputCtn.textContent = text.substring(0, 2000);
+    } catch (e) { fetchOutputCtn.textContent = 'Error: ' + e.message; }
+  }
+
+  function copyPageUrl() {
+    navigator.clipboard.writeText(location.href).then(() => showToast('Page URL copied!'));
+  }
+
+  function exportAllData() {
+    let data = {};
+    for (let k in localStorage) {
+      if (k.startsWith('pkv_')) data[k.slice(4)] = localStorage[k];
+    }
+    let blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+    let a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'perchance-memory.json';
+    a.click();
+  }
+
+  // --- Background Animation ---
+  (function initNebula() {
+    let c = nebulaCanvas, x = c.getContext('2d');
+    let w, h, pts = [];
+    function resize() { w = c.width = innerWidth; h = c.height = innerHeight; }
+    resize();
+    addEventListener('resize', resize);
+    for (let i = 0; i < 60; i++) pts.push({x: Math.random()*w, y: Math.random()*h, r: Math.random()*2+0.5, dx: (Math.random()-0.5)*0.3, dy: (Math.random()-0.5)*0.3});
+    function frame() {
+      x.clearRect(0,0,w,h);
+      for (let p of pts) {
+        p.x += p.dx; p.y += p.dy;
+        if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;
+        if (p.y < 0) p.y = h; if (p.y > h) p.y = 0;
+        x.beginPath(); x.arc(p.x,p.y,p.r,0,Math.PI*2); x.fillStyle = 'rgba(0,240,255,0.15)'; x.fill();
+      }
+      requestAnimationFrame(frame);
+    }
+    frame();
+  })();
+
+  // --- Keyboard Shortcuts ---
+  addEventListener('keydown', e => {
+    if (e.ctrlKey && e.key === 'Enter') {
+      let activeTab = document.querySelector('.navItem.active')?.dataset.tab;
+      if (activeTab === 'generator') generateContent();
+      else if (activeTab === 'story') generateStory();
+      else if (activeTab === 'images') generateImages();
+      else if (activeTab === 'chat') sendChat();
+    }
+    if (!e.ctrlKey && !e.altKey && '123456'.includes(e.key)) {
+      let tabs = ['generator','story','images','chat','remember','plugins'];
+      let idx = parseInt(e.key) - 1;
+      if (tabs[idx]) switchTab(tabs[idx]);
+    }
+  });
+</script>
+</body>
+</html>

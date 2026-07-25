@@ -1,0 +1,124 @@
+$output = [sessionStats]
+
+sessionStats (dataType) =>
+  if(!dataType) dataType = "visits";
+
+  let key = "perchanceSessionStats_" + window.generatorName;
+  let now = Date.now();
+
+  let raw = localStorage.getItem(key);
+  let obj;
+  if(raw) {
+    try {
+      obj = JSON.parse(raw);
+    } catch(e) {
+      obj = null;
+    }
+  }
+
+  if(!obj) {
+    obj = {
+      visits: 0,
+      firstVisit: now,
+      lastVisit: now,
+      totalTimeMs: 0,
+      sessionStart: now
+    };
+  }
+
+  if(!obj.sessionStart) obj.sessionStart = now;
+
+  obj.visits = obj.visits + 1;
+  obj.lastVisit = now;
+
+  localStorage.setItem(key, JSON.stringify(obj));
+
+  if(!window.sessionStatsPluginIntervals) window.sessionStatsPluginIntervals = {};
+  if(!window.sessionStatsPluginIntervals[key]) {
+    window.sessionStatsPluginIntervals[key] = setInterval(() => {
+      let raw2 = localStorage.getItem(key);
+      if(!raw2) return;
+      let o2;
+      try {
+        o2 = JSON.parse(raw2);
+      } catch(e) {
+        return;
+      }
+      if(!o2.sessionStart) o2.sessionStart = Date.now();
+      let now2 = Date.now();
+      let diff = now2 - o2.sessionStart;
+      if(diff < 0) diff = 0;
+      o2.totalTimeMs = (o2.totalTimeMs || 0) + diff;
+      o2.sessionStart = now2;
+      localStorage.setItem(key, JSON.stringify(o2));
+    }, 5000);
+  }
+
+  let display = formatSessionData(obj, dataType);
+
+  return "<span>" + display + "</span>";
+
+
+
+formatSessionData (obj, dataType) =>
+  let now = Date.now();
+  let totalMs = obj.totalTimeMs || 0;
+  let sessionMs = now - (obj.sessionStart || now);
+  if(sessionMs < 0) sessionMs = 0;
+
+  if(dataType === "visits") {
+    return "" + obj.visits;
+  }
+
+  if(dataType === "firstVisitAgo") {
+    return formatAgo(now - obj.firstVisit);
+  }
+
+  if(dataType === "lastVisitAgo") {
+    return formatAgo(now - obj.lastVisit);
+  }
+
+  if(dataType === "totalMinutes") {
+    return (totalMs / 60000).toFixed(1) + " min";
+  }
+
+  if(dataType === "sessionMinutes") {
+    return (sessionMs / 60000).toFixed(1) + " min";
+  }
+
+  if(dataType === "badge") {
+    let visits = obj.visits;
+    let totalMin = (totalMs / 60000).toFixed(1);
+    return visits + " visit" + (visits==1?"":"s") + " • " + totalMin + " min total";
+  }
+
+  if(dataType === "json") {
+    return JSON.stringify(obj);
+  }
+
+  return "(unknown dataType)";
+
+
+
+formatAgo (ms) =>
+  if(ms < 0) ms = 0;
+  let s = Math.round(ms / 1000);
+
+  if(s >= 60*60*24*365) {
+    let t = Math.round(s/(60*60*24*365));
+    return t + " year" + (t==1?"":"s") + " ago";
+  } else if(s >= 60*60*24*30) {
+    let t = Math.round(s/(60*60*24*30));
+    return t + " month" + (t==1?"":"s") + " ago";
+  } else if(s >= 60*60*24) {
+    let t = Math.round(s/(60*60*24));
+    return t + " day" + (t==1?"":"s") + " ago";
+  } else if(s >= 60*60) {
+    let t = Math.round(s/(60*60));
+    return t + " hour" + (t==1?"":"s") + " ago";
+  } else if(s >= 60) {
+    let t = Math.round(s/60);
+    return t + " minute" + (t==1?"":"s") + " ago";
+  } else {
+    return s + " second" + (s==1?"":"s") + " ago";
+  }

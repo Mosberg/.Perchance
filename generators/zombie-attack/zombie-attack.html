@@ -1,0 +1,3827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>zombie-attack — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Russo+One&family=Rubik:wght@400;500;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  .hidden { display:none !important; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#0a0a0e; font-family:'Rubik',sans-serif; color:#e8e8e8; text-align:left; }
+  #gameCanvas { display:block; position:fixed; top:0; left:0; cursor:crosshair; }
+
+  /* ---- HUD ---- */
+  #hud { position:fixed; top:0; left:0; right:0; padding:10px 14px; display:flex; gap:12px; align-items:center; pointer-events:none; z-index:10; background:linear-gradient(180deg,rgba(8,10,14,.92),rgba(8,10,14,0)); }
+  .stat { background:rgba(20,24,30,.82); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:6px 12px; display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .stat .label { font-size:9px; letter-spacing:1.5px; color:#7a8290; text-transform:uppercase; }
+  .stat .val { font-family:'Russo One',sans-serif; font-size:18px; line-height:1; }
+  #cashStat .val { color:#5adc6a; }
+  #killStat .val { color:#ff6a6a; }
+  #waveStat .val { color:#ffd028; }
+  #gunStat .val { color:#6ac8ff; font-size:14px; }
+  #hpWrap { flex:1; max-width:240px; }
+  #hpBarOuter { height:14px; background:rgba(0,0,0,.5); border-radius:8px; overflow:hidden; border:1px solid rgba(255,255,255,.08); margin-top:4px; }
+  #hpBarInner { height:100%; background:linear-gradient(90deg,#ff3a3a,#ff7a5a); width:100%; transition:width .15s; }
+  #xpBarOuter { height:8px; background:rgba(0,0,0,.5); border-radius:5px; overflow:hidden; margin-top:3px; }
+  #xpBarInner { height:100%; background:linear-gradient(90deg,#5a8aff,#8acaff); width:0%; transition:width .2s; }
+  #levelStat .val { color:#8acaff; }
+  #shopBtn { pointer-events:auto; background:linear-gradient(180deg,#3a7adb,#2a5ab0); border:none; color:#fff; font-family:'Russo One',sans-serif; font-size:13px; padding:10px 16px; border-radius:10px; cursor:pointer; letter-spacing:1px; box-shadow:0 3px 0 #1a3a80; }
+  #shopBtn:active { transform:translateY(2px); box-shadow:0 1px 0 #1a3a80; }
+  #statusFx { position:fixed; top:64px; left:14px; display:flex; gap:6px; z-index:9; pointer-events:none; }
+  .fxTag { padding:4px 10px; border-radius:8px; font-size:11px; font-weight:700; font-family:'Russo One',sans-serif; }
+  .fxSlow { background:rgba(90,184,224,.25); color:#5ab8e8; border:1px solid #5ab8e8; }
+  .fxFire { background:rgba(232,90,42,.25); color:#ff8a4a; border:1px solid #e85a2a; }
+
+  /* ---- Overlays ---- */
+  .overlay { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:rgba(6,7,10,.86); backdrop-filter:blur(6px); }
+  .overlay.hidden { display:none; }
+  .panel { background:linear-gradient(180deg,#161a22,#0e1118); border:1px solid rgba(255,255,255,.1); border-radius:18px; padding:28px; max-width:920px; width:92%; max-height:88vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,.6); }
+  h1.title { font-family:'Russo One',sans-serif; font-size:54px; text-align:center; letter-spacing:2px; background:linear-gradient(180deg,#7adc4a,#3a8a2a); -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 30px rgba(106,154,58,.4); margin-bottom:4px; }
+  .subtitle { text-align:center; color:#6a7280; font-size:13px; letter-spacing:3px; text-transform:uppercase; margin-bottom:24px; }
+  .btn { font-family:'Russo One',sans-serif; font-size:16px; padding:14px 30px; border-radius:12px; border:none; cursor:pointer; letter-spacing:1px; transition:transform .1s, filter .15s; }
+  .btn:active { transform:translateY(2px); }
+  .btn-primary { background:linear-gradient(180deg,#4abb5a,#2a8a3a); color:#fff; box-shadow:0 4px 0 #1a5a2a; }
+  .btn-primary:hover { filter:brightness(1.1); }
+  .btn-ghost { background:rgba(255,255,255,.06); color:#c8d0d8; border:1px solid rgba(255,255,255,.12); }
+  .btn-ghost:hover { background:rgba(255,255,255,.12); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; filter:grayscale(.5); }
+
+  /* menu */
+  #menuScreen .panel { max-width:560px; text-align:center; }
+  .menuFeat { display:flex; gap:14px; justify-content:center; margin:22px 0 26px; flex-wrap:wrap; }
+  .feat { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:10px 14px; font-size:12px; color:#9aa2b0; }
+  .feat b { color:#e8e8e8; display:block; font-family:'Russo One',sans-serif; font-size:15px; margin-bottom:2px; }
+
+  /* intermission */
+  #intermissionScreen .panel { max-width:1000px; }
+  .imHeader { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px; }
+  .imHeader h2 { font-family:'Russo One',sans-serif; font-size:26px; color:#ffd028; }
+  .imTimer { font-family:'Russo One',sans-serif; font-size:22px; color:#5adc6a; background:rgba(90,220,106,.1); padding:6px 16px; border-radius:10px; border:1px solid rgba(90,220,106,.3); }
+  .mapGrid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:18px; }
+  .mapCard { background:rgba(255,255,255,.04); border:2px solid rgba(255,255,255,.08); border-radius:14px; padding:16px; cursor:pointer; transition:border-color .15s, transform .1s; position:relative; overflow:hidden; min-height:120px; }
+  .mapCard:hover { border-color:rgba(255,255,255,.25); }
+  .mapCard.selected { border-color:#ffd028; box-shadow:0 0 20px rgba(255,208,40,.25); }
+  .mapCard .mapName { font-family:'Russo One',sans-serif; font-size:17px; margin-bottom:6px; position:relative; z-index:1; }
+  .mapCard .mapDesc { font-size:11px; color:#8a92a0; position:relative; z-index:1; }
+  .mapSwatch { position:absolute; inset:0; opacity:.5; }
+
+  /* shop */
+  #shopScreen .panel { max-width:1000px; }
+  .shopHeader { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .shopHeader h2 { font-family:'Russo One',sans-serif; font-size:24px; }
+  .shopCash { font-family:'Russo One',sans-serif; font-size:20px; color:#5adc6a; }
+  .gunGrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; max-height:60vh; overflow:auto; padding-right:4px; }
+  .gunCard { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:6px; transition:border-color .15s; }
+  .gunCard.owned { border-color:rgba(90,220,106,.35); }
+  .gunCard.equipped { border-color:#6ac8ff; box-shadow:0 0 14px rgba(106,200,255,.2); }
+  .gunCard.locked { opacity:.7; }
+  .gunName { font-family:'Russo One',sans-serif; font-size:13px; line-height:1.2; min-height:32px; }
+  .gunStars { font-size:11px; color:#ffd028; letter-spacing:1px; }
+  .gunStatRow { font-size:10px; color:#8a92a0; display:flex; justify-content:space-between; }
+  .gunPrice { font-family:'Russo One',sans-serif; font-size:14px; color:#5adc6a; }
+  .gunPrice.free { color:#8a92a0; }
+  .gunPrice.tooExpensive { color:#ff6a6a; }
+  .gunBtn { margin-top:4px; font-family:'Russo One',sans-serif; font-size:11px; padding:7px; border-radius:8px; border:none; cursor:pointer; letter-spacing:.5px; }
+  .gunBtn.buy { background:linear-gradient(180deg,#4abb5a,#2a8a3a); color:#fff; }
+  .gunBtn.buy:disabled { background:#333; color:#666; }
+  .gunBtn.equip { background:linear-gradient(180deg,#3a7adb,#2a5ab0); color:#fff; }
+  .gunBtn.equipped { background:#2a2a36; color:#6ac8ff; cursor:default; }
+  .shopControls { display:flex; gap:10px; margin-top:16px; justify-content:flex-end; }
+
+  /* gameover */
+  #gameoverScreen .panel { max-width:440px; text-align:center; }
+  #gameoverScreen h2 { font-family:'Russo One',sans-serif; font-size:38px; color:#ff4a4a; margin-bottom:12px; }
+  .goStats { display:flex; flex-direction:column; gap:8px; margin:18px 0; }
+  .goStat { display:flex; justify-content:space-between; padding:8px 14px; background:rgba(255,255,255,.04); border-radius:8px; }
+  .goStat .l { color:#8a92a0; font-size:13px; }
+  .goStat .v { font-family:'Russo One',sans-serif; font-size:15px; }
+
+  .controlsHint { position:fixed; bottom:12px; left:50%; transform:translateX(-50%); color:#5a6270; font-size:11px; letter-spacing:1px; z-index:5; pointer-events:none; background:rgba(8,10,14,.6); padding:6px 16px; border-radius:20px; }
+  @media (max-width:700px){ .mapGrid{grid-template-columns:1fr;} h1.title{font-size:38px;} #gunStat{display:none;} }
+
+  /* ---- AUTH ---- */
+  #authScreen .panel { max-width:400px; text-align:center; }
+  .authTabs { display:flex; gap:8px; justify-content:center; margin-bottom:18px; }
+  .authTab { flex:1; padding:10px; border-radius:10px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); cursor:pointer; font-family:'Russo One',sans-serif; font-size:13px; color:#8a92a0; letter-spacing:1px; }
+  .authTab.active { background:linear-gradient(180deg,#3a7adb,#2a5ab0); color:#fff; border-color:#3a7adb; }
+  .authField { width:100%; padding:12px 14px; border-radius:10px; background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.12); color:#e8e8e8; font-family:'Rubik',sans-serif; font-size:14px; margin-bottom:10px; outline:none; }
+  .authField:focus { border-color:#6ac8ff; }
+  .authErr { color:#ff6a6a; font-size:12px; min-height:16px; margin-bottom:6px; }
+  .authNote { color:#5a6270; font-size:11px; margin-top:10px; letter-spacing:1px; }
+
+  /* ---- BAN ---- */
+  #banScreen .panel { max-width:440px; text-align:center; border-color:rgba(255,60,60,.4); }
+  #banScreen h2 { font-family:'Russo One',sans-serif; font-size:42px; color:#ff3a3a; margin-bottom:10px; }
+  #banScreen .banType { font-family:'Russo One',sans-serif; font-size:16px; color:#ffd028; margin-bottom:8px; }
+  #banScreen .banReason { color:#c8d0d8; font-size:13px; margin-bottom:18px; }
+
+  /* ---- CHAT ---- */
+  #chatPanel { position:fixed; left:12px; bottom:42px; width:300px; max-width:46vw; z-index:12; display:flex; flex-direction:column; pointer-events:none; }
+  #chatLog { background:rgba(8,10,14,.7); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:8px; height:160px; overflow-y:auto; font-size:12px; line-height:1.5; pointer-events:auto; }
+  #chatLog::-webkit-scrollbar { width:5px; } #chatLog::-webkit-scrollbar-thumb { background:rgba(255,255,255,.2); border-radius:3px; }
+  .chatLine { word-break:break-word; }
+  .chatTag { font-family:'Russo One',sans-serif; font-size:10px; padding:2px 6px; border-radius:4px; margin-right:3px; vertical-align:middle; display:inline-block; letter-spacing:0.5px; }
+  .tag-owner { background:linear-gradient(90deg,#ff3a3a,#ffd028,#5adc6a,#5ab8e8,#b850ff); color:#fff; text-shadow:0 0 4px rgba(255,255,255,.5); }
+  .tag-admin { background:linear-gradient(135deg,#3a7adb,#2a5a9b); color:#fff; border:1px solid #5a9aff; }
+  .tag-mod { background:linear-gradient(135deg,#5adc6a,#3aac4a); color:#0a0a0e; border:1px solid #5adc6a; }
+  .tag-user { background:rgba(255,255,255,.08); color:#8a92a0; border:1px solid rgba(255,255,255,.1); }
+  .name-owner { background:linear-gradient(90deg,#ff5a5a,#ffd028,#5adc6a,#5ab8e8,#d05aff); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:700; }
+  .msg-owner { color:#ffe8a0; font-style:italic; }
+  #chatInputWrap { display:flex; gap:6px; margin-top:6px; pointer-events:auto; }
+  #chatInput { flex:1; padding:8px 10px; border-radius:8px; background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.12); color:#e8e8e8; font-family:'Rubik',sans-serif; font-size:12px; outline:none; }
+  #chatSend { padding:8px 12px; border-radius:8px; border:none; background:#3a7adb; color:#fff; font-family:'Russo One',sans-serif; font-size:11px; cursor:pointer; }
+  #chatSend:disabled { background:#3a3a4a; color:#6a6a7a; cursor:default; }
+  #chatModerating { display:none; font-size:10px; color:#8a92a0; margin-top:4px; letter-spacing:.5px; }
+  #chatModerating.show { display:block; }
+  #chatModerating.show::before { content:"⏳ "; }
+  #warningToast { position:fixed; top:80px; left:50%; transform:translateX(-50%); z-index:30; max-width:420px; width:90%; background:linear-gradient(180deg,#2a1a1a,#1a0e0e); border:1px solid rgba(255,80,80,.5); border-radius:12px; padding:12px 16px; box-shadow:0 8px 30px rgba(0,0,0,.6); display:none; }
+  #warningToast.show { display:block; animation:warnSlide .3s ease-out; }
+  @keyframes warnSlide { from { transform:translateX(-50%) translateY(-12px); opacity:0; } to { transform:translateX(-50%) translateY(0); opacity:1; } }
+  #warningToast .wtHead { font-family:'Russo One',sans-serif; font-size:13px; color:#ff6a6a; letter-spacing:1px; margin-bottom:4px; }
+  #warningToast .wtReason { font-size:12px; color:#e8e8e8; margin-bottom:6px; }
+  #warningToast .wtCount { font-size:11px; color:#ffd028; }
+  #warningToast .wtFoot { font-size:10px; color:#8a92a0; margin-top:6px; letter-spacing:.5px; }
+  .chatToggle { position:fixed; left:12px; bottom:12px; z-index:12; background:rgba(20,24,30,.85); border:1px solid rgba(255,255,255,.1); color:#e8e8e8; border-radius:8px; padding:6px 12px; font-size:12px; cursor:pointer; pointer-events:auto; }
+
+  /* ---- ADMIN PANEL ---- */
+  #adminScreen .panel { max-width:680px; }
+  #adminScreen h2 { font-family:'Russo One',sans-serif; font-size:22px; color:#ffd028; margin-bottom:6px; }
+  .adminUserList { max-height:160px; overflow-y:auto; background:rgba(0,0,0,.3); border-radius:8px; padding:8px; margin-bottom:12px; font-size:12px; }
+  .adminUserRow { padding:5px 8px; border-radius:6px; cursor:pointer; }
+  .adminUserRow:hover { background:rgba(255,255,255,.08); }
+  .adminUserRow.sel { background:rgba(255,208,40,.18); }
+  .adminCmdGrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+  .serverListItem { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); border-radius:10px; padding:14px 18px; margin-bottom:8px; cursor:pointer; transition:background .15s,border-color .15s; display:flex; align-items:center; gap:12px; }
+  .serverListItem:hover { background:rgba(90,220,106,.08); border-color:rgba(90,220,106,.3); }
+  .serverListItem .sliName { font-family:'Russo One',sans-serif; font-size:15px; color:#e8e8e8; }
+  .serverListItem .sliInfo { font-size:11px; color:#8a92a0; }
+  .serverListItem .sliDot { width:8px; height:8px; border-radius:50%; background:#5adc6a; box-shadow:0 0 6px #5adc6a; flex-shrink:0; }
+  .serverListItem .sliDot.shutdown { background:#ff6a3a; box-shadow:0 0 6px #ff6a3a; }
+  .adminCmdBtn { background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); color:#e8e8e8; border-radius:8px; padding:9px; font-size:11px; font-family:'Russo One',sans-serif; cursor:pointer; letter-spacing:.5px; }
+  .adminCmdBtn:hover { background:rgba(255,255,255,.12); }
+  .adminCmdBtn.danger { border-color:rgba(255,60,60,.4); color:#ff8a8a; }
+  .adminArg { width:100%; padding:8px; border-radius:8px; background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.12); color:#e8e8e8; font-size:12px; margin-bottom:8px; outline:none; }
+  .adminResult { color:#5adc6a; font-size:12px; min-height:16px; margin-top:6px; }
+  .adminQuick { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .adminQuick .btn { font-size:12px; padding:8px 14px; }
+
+  /* online indicator */
+  #onlineBar { position:fixed; top:54px; right:14px; z-index:11; display:flex; gap:8px; align-items:center; pointer-events:none; }
+  #onlineDot { width:9px; height:9px; border-radius:50%; background:#5adc6a; box-shadow:0 0 8px #5adc6a; }
+  #onlineCount { font-family:'Russo One',sans-serif; font-size:13px; color:#5adc6a; }
+  #onlineMode { background:rgba(90,220,106,.12); border:1px solid rgba(90,220,106,.3); color:#5adc6a; font-family:'Russo One',sans-serif; font-size:11px; padding:4px 10px; border-radius:8px; }
+  #serverDot { position:fixed; top:14px; left:14px; z-index:12; width:12px; height:12px; border-radius:50%; background:#5adc6a; box-shadow:0 0 10px #5adc6a; animation:pulse 2s infinite; cursor:pointer; }
+  #serverDot.hidden { display:none !important; }
+  #serverDot::after { content:attr(data-tip); position:absolute; left:18px; top:-2px; white-space:nowrap; font-size:11px; font-family:'Rubik',sans-serif; color:#5adc6a; background:rgba(8,10,14,.9); padding:3px 8px; border-radius:6px; border:1px solid rgba(90,220,106,.3); opacity:0; transition:opacity .2s; pointer-events:none; }
+  #serverDot:hover::after { opacity:1; }
+  @keyframes pulse { 0%,100%{ box-shadow:0 0 6px #5adc6a; } 50%{ box-shadow:0 0 14px #5adc6a; } }
+</style>
+
+<canvas id="gameCanvas"></canvas>
+<div id="serverDot" class="hidden" data-tip="A server is available! Click JOIN SERVER to play."></div>
+<div id="hardBadge" class="hidden" style="position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:12;font-family:'Russo One',sans-serif;font-size:13px;color:#ff6a6a;background:rgba(255,60,60,.12);border:1px solid rgba(255,60,60,.4);padding:4px 14px;border-radius:8px;letter-spacing:1px;text-shadow:0 0 8px rgba(255,60,60,.4);">HARD MODE</div>
+
+<div id="hud" class="hidden">
+  <div class="stat" id="cashStat"><span class="label">Cash</span><span class="val" id="cashVal">$0</span></div>
+  <div class="stat" id="diamondStat"><span class="label">Diamonds</span><span class="val" id="diamondVal" style="color:#5adcff">0 ♦</span></div>
+  <div class="stat" id="killStat"><span class="label">Kills</span><span class="val" id="killVal">0</span></div>
+  <div class="stat" id="waveStat"><span class="label">Wave</span><span class="val" id="waveVal">1</span></div>
+  <div class="stat" id="zcountStat"><span class="label">Zombies</span><span class="val" id="zcountVal">0</span></div>
+  <div class="stat" id="levelStat"><span class="label">Level <span id="xpPct">0%</span></span><span class="val" id="levelVal">1</span>
+    <div id="xpBarOuter"><div id="xpBarInner"></div></div>
+  </div>
+  <div class="stat" id="hpWrap"><span class="label">Health</span>
+    <div id="hpBarOuter"><div id="hpBarInner"></div></div>
+  </div>
+  <div class="stat" id="gunStat"><span class="label">Weapon</span><span class="val" id="gunVal">—</span></div>
+  <button id="shopBtn">SHOP</button>
+  <button id="pauseBtn" style="pointer-events:auto;background:linear-gradient(180deg,#6a6a7a,#4a4a5a);border:none;color:#fff;font-family:'Russo One',sans-serif;font-size:13px;padding:10px 14px;border-radius:10px;cursor:pointer;letter-spacing:1px;box-shadow:0 3px 0 #2a2a3a;">II</button>
+</div>
+<div id="statusFx"></div>
+<div id="toggleBar" class="hidden" style="position:fixed;right:16px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;z-index:100"></div>
+<div id="controlsHint" class="controlsHint hidden">WASD move · MOUSE aim · HOLD CLICK to shoot</div>
+
+<!-- START MENU -->
+<div id="menuScreen" class="overlay hidden">
+  <div class="panel">
+    <h1 class="title">ZOMBIE ATTACK</h1>
+    <div class="subtitle">Survive · Earn · Upgrade</div>
+    <div class="menuFeat">
+      <div class="feat"><b>12</b>Zombie Types</div>
+      <div class="feat"><b>5</b>Bosses</div>
+      <div class="feat"><b>50</b>Guns</div>
+      <div class="feat"><b>9</b>Maps</div>
+      <div class="feat"><b>∞</b>Waves</div>
+    </div>
+    <button class="btn btn-primary" id="playBtn">NEW GAME</button>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost" id="continueBtn" hidden>CONTINUE</button>
+      <button class="btn btn-ghost" id="hardModeBtn" hidden style="color:#ff6a6a">HARD MODE</button>
+      <button class="btn btn-ghost" id="menuShopBtn">GUN SHOP</button>
+      <button class="btn btn-ghost" id="onlineBtn">CREATE SERVER</button>
+      <button class="btn btn-ghost" id="joinServerBtn">JOIN SERVER</button>
+      <button class="btn btn-ghost" id="adminBtn" hidden>ADMIN</button>
+      <button class="btn btn-ghost" id="logoutBtn" hidden>LOG OUT</button>
+      <button class="btn btn-ghost" id="passesBtn" style="position:relative">PASSES</button>
+      <button class="btn btn-ghost" id="spinWheelBtn">SPIN WHEEL</button>
+      <button class="btn btn-ghost" id="inventoryBtn">INVENTORY</button>
+      <button class="btn btn-ghost" id="profileBtn">PROFILE</button>
+      <button class="btn btn-ghost" id="leaderboardBtn">LEADERBOARD</button>
+    </div>
+    <div id="saveInfo" style="margin-top:14px;color:#5a6270;font-size:11px;letter-spacing:1px"></div>
+    <div style="margin-top:10px;color:#5a6270;font-size:11px;letter-spacing:1px">WASD to move · Mouse to aim · Hold click to fire</div>
+  </div>
+</div>
+
+<!-- CREATE SERVER -->
+<div id="createServerScreen" class="overlay hidden">
+  <div class="panel" style="max-width:560px;text-align:center">
+    <h2 style="font-family:'Russo One',sans-serif;font-size:26px;color:#5adc6a;margin-bottom:14px">CREATE SERVER</h2>
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;color:#8a92a0;margin-bottom:6px;letter-spacing:1px">SERVER NAME</div>
+      <input id="serverNameInput" type="text" maxlength="30" placeholder="My Awesome Server" style="width:80%;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:10px 14px;color:#e8e8e8;font-family:'Rubik',sans-serif;font-size:14px;text-align:center">
+    </div>
+    <div style="font-size:12px;color:#8a92a0;margin-bottom:10px;letter-spacing:1px">CHOOSE MAP</div>
+    <div class="mapGrid" id="createServerMapGrid"></div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:16px">
+      <button class="btn btn-primary" id="createServerStartBtn">START SERVER</button>
+      <button class="btn btn-ghost" id="createServerBackBtn">BACK</button>
+    </div>
+  </div>
+</div>
+
+<!-- JOIN SERVER (SERVER LIST) -->
+<div id="serverListScreen" class="overlay hidden">
+  <div class="panel" style="max-width:640px;text-align:center">
+    <h2 style="font-family:'Russo One',sans-serif;font-size:26px;color:#5adc6a;margin-bottom:14px">JOIN SERVER</h2>
+    <div id="serverListContainer" style="text-align:left;max-height:400px;overflow-y:auto;margin-bottom:16px">
+      <div style="color:#8a92a0;text-align:center;padding:40px;font-size:14px">Loading servers...</div>
+    </div>
+    <button class="btn btn-ghost" id="serverListBackBtn">BACK</button>
+  </div>
+</div>
+
+<!-- INTERMISSION -->
+<div id="intermissionScreen" class="overlay hidden">
+  <div class="panel">
+    <div class="imHeader">
+      <h2 id="imTitle">Intermission</h2>
+      <div class="imTimer" id="imTimer">20</div>
+    </div>
+    <div style="font-size:12px;color:#8a92a0;margin-bottom:10px;letter-spacing:1px">CHOOSE YOUR MAP</div>
+    <div class="mapGrid" id="mapGrid"></div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn btn-primary" id="startWaveBtn">START WAVE</button>
+      <button class="btn btn-ghost" id="openShopImBtn">GUN SHOP</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHOP -->
+<div id="shopScreen" class="overlay hidden">
+  <div class="panel">
+    <div class="shopHeader">
+      <h2>Gun Shop</h2>
+      <div class="shopCash" id="shopCash">$0</div>
+    </div>
+    <div class="gunGrid" id="gunGrid"></div>
+    <div class="shopControls">
+      <button class="btn btn-ghost" id="closeShopBtn">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<!-- COUNTDOWN -->
+<div id="countdownEl" class="hidden" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:15;pointer-events:none;">
+  <div id="cdTitle" style="font-family:'Russo One',sans-serif;font-size:34px;color:#ffd028;text-shadow:0 2px 12px rgba(0,0,0,.9);letter-spacing:2px"></div>
+  <div id="cdNum" style="font-family:'Russo One',sans-serif;font-size:150px;color:#fff;text-shadow:0 4px 24px rgba(0,0,0,.95);line-height:1"></div>
+  <div id="cdBoss" class="hidden" style="font-family:'Russo One',sans-serif;font-size:22px;color:#ff4a4a;text-shadow:0 2px 12px rgba(0,0,0,.9);letter-spacing:1px;margin-top:6px"></div>
+  <div id="cdCash" class="hidden" style="font-family:'Russo One',sans-serif;font-size:18px;color:#5adc6a;text-shadow:0 2px 10px rgba(0,0,0,.9);letter-spacing:1px;margin-top:8px"></div>
+</div>
+
+<!-- COMMANDS PANEL (draggable) -->
+<div id="cmdsPanel" class="hidden" style="position:fixed;top:80px;right:14px;width:300px;z-index:25;background:linear-gradient(180deg,#161a22,#0e1118);border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.6);overflow:hidden;">
+  <div id="cmdsHeader" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:move;background:rgba(255,208,40,.12);border-bottom:1px solid rgba(255,255,255,.1);">
+    <span style="font-family:'Russo One',sans-serif;font-size:14px;color:#ffd028;letter-spacing:1px">COMMANDS</span>
+    <button id="cmdsClose" style="background:none;border:none;color:#8a92a0;font-size:18px;cursor:pointer;line-height:1">×</button>
+  </div>
+  <div id="cmdsList" style="padding:10px 14px;max-height:320px;overflow-y:auto;font-size:11px;line-height:1.7"></div>
+</div>
+
+<!-- PAUSE -->
+<div id="pauseScreen" class="overlay hidden">
+  <div class="panel" style="max-width:360px;text-align:center">
+    <h2 style="font-family:'Russo One',sans-serif;font-size:30px;color:#ffd028;margin-bottom:18px">PAUSED</h2>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-primary" id="resumeBtn">RESUME</button>
+      <button class="btn btn-ghost" id="pauseShopBtn">GUN SHOP</button>
+      <button class="btn btn-ghost" id="pauseSaveBtn" style="color:#5adc6a">SAVE GAME</button>
+      <button class="btn btn-ghost" id="pauseInventoryBtn">INVENTORY</button>
+      <button class="btn btn-ghost" id="exitGameBtn" style="color:#ff6a6a">EXIT TO MENU</button>
+    </div>
+  </div>
+</div>
+
+<!-- GAME OVER -->
+<div id="gameoverScreen" class="overlay hidden">
+  <div class="panel">
+    <h2>YOU DIED</h2>
+    <div class="goStats">
+      <div class="goStat"><span class="l">Wave Reached</span><span class="v" id="goWave">1</span></div>
+      <div class="goStat"><span class="l">Total Kills</span><span class="v" id="goKills">0</span></div>
+      <div class="goStat"><span class="l">Final Cash</span><span class="v" id="goCash">$0</span></div>
+      <div class="goStat"><span class="l">Level Reached</span><span class="v" id="goLevel">1</span></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn btn-primary" id="reviveBtn">REVIVE &amp; RETRY</button>
+      <button class="btn btn-ghost" id="menuBtn">MAIN MENU</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SERVER PLUGIN (authoritative) =====================
+     NOTE: This source is PUBLIC. Only the password HASH is stored here. -->
+<script type="text/x-server-plugin">
+// ---- pure-JS SHA-256 (no crypto/DOM available server-side) ----
+function sha256Hex(s){
+  function R(x,n){return (x>>>n)|(x<<(32-n));}
+  var H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  var K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  // utf-8 encode
+  var bytes=[]; for(var i=0;i<s.length;i++){var c=s.charCodeAt(i); if(c<128)bytes.push(c); else if(c<2048){bytes.push(192|(c>>6),128|(c&63));} else {bytes.push(224|(c>>12),128|((c>>6)&63),128|(c&63));}}
+  var bl=bytes.length;
+  bytes.push(0x80); while(bytes.length%64!=56) bytes.push(0);
+  // append 64-bit big-endian bit length
+  var bitLen=bl*8;
+  for(var i=0;i<4;i++) bytes.push(0);
+  bytes.push((bitLen>>>24)&255,(bitLen>>>16)&255,(bitLen>>>8)&255,bitLen&255);
+  for(var off=0;off<bytes.length;off+=64){
+    var w=new Array(64);
+    for(var i=0;i<16;i++){w[i]=(bytes[off+i*4]<<24)|(bytes[off+i*4+1]<<16)|(bytes[off+i*4+2]<<8)|bytes[off+i*4+3]; w[i]>>>=0;}
+    for(var i=16;i<64;i++){var s0=R(w[i-15],7)^R(w[i-15],18)^(w[i-15]>>>3); var s1=R(w[i-2],17)^R(w[i-2],19)^(w[i-2]>>>10); w[i]=(w[i-16]+s0+w[i-7]+s1)>>>0;}
+    var a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
+    for(var i=0;i<64;i++){var S1=R(e,6)^R(e,11)^R(e,25); var ch=(e&f)^((~e)&g); var t1=(h+S1+ch+K[i]+w[i])>>>0; var S0=R(a,2)^R(a,13)^R(a,22); var mj=(a&b)^(a&c)^(b&c); var t2=(S0+mj)>>>0; h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}
+    H[0]=(H[0]+a)>>>0;H[1]=(H[1]+b)>>>0;H[2]=(H[2]+c)>>>0;H[3]=(H[3]+d)>>>0;H[4]=(H[4]+e)>>>0;H[5]=(H[5]+f)>>>0;H[6]=(H[6]+g)>>>0;H[7]=(H[7]+h)>>>0;
+  }
+  var hex=""; for(var i=0;i<8;i++){var h2=H[i].toString(16); while(h2.length<8)h2="0"+h2; hex+=h2;}
+  return hex;
+}
+
+const OWNER_PW_HASH = "6bfedc13f94d2d938458e787902ccc6e96f61c08c8df83c23adbac3a7a4fa443";
+const OWNER_USER = "MrHighExplosionYT";
+var ownerNetSig = null; // stored owner network signature: [net[2], net[3]]
+
+// ---- persistent accounts in state (JSON, low-rate auth) ----
+// layout: [4-byte big-endian length][utf8 json]
+function loadAccounts(){
+  if(state[0]===0 && state[1]===0 && state[2]===0 && state[3]===0) return {users:{}};
+  var len=(state[0]<<24)|(state[1]<<16)|(state[2]<<8)|state[3];
+  if(len<=0 || len>state.length-4) return {users:{}};
+  var s=""; for(var i=0;i<len;i++) s+=String.fromCharCode(state[4+i]);
+  try { return JSON.parse(s); } catch(e){ return {users:{}}; }
+}
+function saveAccounts(accts){
+  var s=JSON.stringify(accts);
+  var bytes=[]; for(var i=0;i<s.length;i++){var c=s.charCodeAt(i); if(c<128)bytes.push(c); else if(c<2048){bytes.push(192|(c>>6),128|(c&63));} else {bytes.push(224|(c>>12),128|((c>>6)&63),128|(c&63));}}
+  var len=bytes.length;
+  state[0]=(len>>>24)&255; state[1]=(len>>>16)&255; state[2]=(len>>>8)&255; state[3]=len&255;
+  for(var i=0;i<bytes.length;i++) state[4+i]=bytes[i];
+}
+
+// in-memory session map: connId -> {user, role, muted, serverId}
+var sessions = {};
+// server tracking: serverId -> {hostConn, hostId, hostName, name, mapIdx, wave, state, shuttingDown, muteList}
+var servers = {};
+var nextServerId = 1;
+function seedOwner(){
+  var accts=loadAccounts();
+  if(!accts.users[OWNER_USER]){
+    var allGuns=[]; for(var i=0;i<50;i++) allGuns.push(i);
+    accts.users[OWNER_USER]={pwHash:OWNER_PW_HASH, cash:1000000000, level:1000000, xp:0, ownedGuns:allGuns, currentGunIdx:49, role:"owner", banned:false, banType:"", banReason:"", kills:0, wave:0, diamonds:999999999, passes:["dxp","dcash","dsp","dkill","dhp","vip","gold","diamond","aimbot","autoshoot","autokill"]};
+    saveAccounts(accts);
+  } else {
+    var u=accts.users[OWNER_USER]; u.role="owner"; u.pwHash=OWNER_PW_HASH; u.banned=false;
+    if(!u.ownedGuns || u.ownedGuns.length<50){ var ag=[]; for(var i=0;i<50;i++) ag.push(i); u.ownedGuns=ag; }
+    if(u.cash==null) u.cash=1000000000;
+    if(u.level==null) u.level=1000000;
+    if(u.xp==null) u.xp=0;
+    if(u.kills==null) u.kills=0;
+    if(u.wave==null) u.wave=0;
+    u.currentGunIdx=49;
+    u.diamonds=999999999; u.passes=["dxp","dcash","dsp","dkill","dhp","vip","gold","diamond","aimbot","autoshoot","autokill"];
+    saveAccounts(accts);
+  }
+  ownerNetSig = accts.users[OWNER_USER].netSig || null;
+}
+seedOwner();
+
+// rate limit auth attempts per net group
+var authAttempts = {}; // netKey -> {count, first}
+function allowAuth(conn){
+  var key=conn.net[2]+"";
+  var now=Date.now();
+  var a=authAttempts[key];
+  if(!a || now-a.first>60000){ authAttempts[key]={count:1, first:now}; return true; }
+  a.count++;
+  return a.count<=8;
+}
+
+self.rpc = {
+  signup({conn}, data){
+    if(!allowAuth(conn)) return JSON.stringify({ok:false,err:"Too many attempts. Wait a minute."});
+    var p; try{ p=JSON.parse(data); }catch(e){ return JSON.stringify({ok:false,err:"Bad request"}); }
+    var user=(p.user||"").trim(); var pw=p.pw||"";
+    if(user.length<3||user.length>20) return JSON.stringify({ok:false,err:"Username must be 3-20 chars"});
+    if(!/^[a-zA-Z0-9_]+$/.test(user)) return JSON.stringify({ok:false,err:"Letters, numbers, underscores only"});
+    if(pw.length<4) return JSON.stringify({ok:false,err:"Password must be 4+ chars"});
+    var accts=loadAccounts();
+    if(accts.users[user]) return JSON.stringify({ok:false,err:"Username taken"});
+    accts.users[user]={pwHash:sha256Hex(pw), cash:0, level:1, xp:0, ownedGuns:[0], currentGunIdx:0, role:"user", banned:false, banType:"", banReason:"", kills:0, wave:0};
+    saveAccounts(accts);
+    return JSON.stringify({ok:true});
+  },
+  signin({conn}, data){
+    if(!allowAuth(conn)) return JSON.stringify({ok:false,err:"Too many attempts. Wait a minute."});
+    var p; try{ p=JSON.parse(data); }catch(e){ return JSON.stringify({ok:false,err:"Bad request"}); }
+    var user=(p.user||"").trim(); var pw=p.pw||"";
+    var accts=loadAccounts(); var u=accts.users[user];
+    if(!u) return JSON.stringify({ok:false,err:"No such user"});
+    // Locked accounts: moderator/admin cannot be signed into via password (passwords effectively removed).
+    if(u.role==="moderator" || u.role==="admin"){
+      return JSON.stringify({ok:false,err:"This account is locked and cannot be signed into."});
+    }
+    // Owner: passwordless login via network signature. The password is only used to authorize
+    // the very first owner login (to bind the signature); after that the password is ignored.
+    if(u.role==="owner"){
+      var sig=[conn.net[2], conn.net[3]];
+      if(ownerNetSig===null){
+        if(u.pwHash!==sha256Hex(pw)) return JSON.stringify({ok:false,err:"Wrong password"});
+        ownerNetSig=sig;
+        u.netSig=sig; saveAccounts(accts);
+      } else {
+        if(sig[1]!==ownerNetSig[1] && sig[0]!==ownerNetSig[0]){
+          return JSON.stringify({ok:false,err:"This account is locked to the original creator's network. Access denied."});
+        }
+      }
+    } else {
+      if(u.pwHash!==sha256Hex(pw)) return JSON.stringify({ok:false,err:"Wrong password"});
+    }
+    if(u.banned){
+      if(u.banType==="temp" && u.banExpires && Date.now() > u.banExpires){
+        u.banned=false; u.banType=""; u.banReason=""; u.banDuration=0; u.banExpires=0;
+        saveAccounts(accts);
+      } else {
+        return JSON.stringify({ok:false,err:"BANNED",banType:u.banType,banReason:u.banReason,banDuration:u.banDuration||0,banExpires:u.banExpires||0});
+      }
+    }
+    sessions[conn.id]={user:user, role:u.role||"user", passes:u.passes||[]};
+    var snap={}; for(var k in u) snap[k]=u[k]; snap.pwHash=undefined;
+    return JSON.stringify({ok:true, account:snap});
+  },
+  saveProgress({conn}, data){
+    var s=sessions[conn.id]; if(!s) return JSON.stringify({ok:false,err:"Not signed in"});
+    var p; try{ p=JSON.parse(data); }catch(e){ return JSON.stringify({ok:false}); }
+    var accts=loadAccounts(); var u=accts.users[s.user]; if(!u) return JSON.stringify({ok:false});
+    if(p.cash!=null) u.cash=p.cash;
+    if(p.level!=null) u.level=p.level;
+    if(p.xp!=null) u.xp=p.xp;
+    if(p.ownedGuns!=null) u.ownedGuns=p.ownedGuns;
+    if(p.currentGunIdx!=null) u.currentGunIdx=p.currentGunIdx;
+    if(p.kills!=null) u.kills=p.kills;
+    if(p.wave!=null) u.wave=p.wave;
+    u.savedAt=p.savedAt||Date.now();
+    if(p.diamonds!=null) u.diamonds=p.diamonds;
+    if(p.passes!=null) u.passes=p.passes;
+    if(u.banned){ return JSON.stringify({ok:false,err:"BANNED",banType:u.banType,banReason:u.banReason}); }
+    saveAccounts(accts);
+    return JSON.stringify({ok:true});
+  },
+  admin({conn}, data){
+    var s=sessions[conn.id];
+    if(!s || (s.role!=="owner" && s.role!=="admin")) return JSON.stringify({ok:false,err:"unauthorized"});
+    var p; try{ p=JSON.parse(data); }catch(e){ return JSON.stringify({ok:false,err:"bad"}); }
+    var accts=loadAccounts();
+    var cmd=p.cmd, target=(p.target||"").trim(), arg=p.arg;
+    var t=accts.users[target];
+    if(cmd!=="list" && cmd!=="online" && !t) return JSON.stringify({ok:false,err:"No such user: "+target});
+    switch(cmd){
+      case "giveadmin": if(s.role!=="owner") return JSON.stringify({ok:false,err:"owners only"}); t.role="admin"; break;
+      case "removeadmin": if(s.role!=="owner") return JSON.stringify({ok:false,err:"owners only"}); if(t.role==="owner") return JSON.stringify({ok:false,err:"cannot demote owner"}); t.role="user"; break;
+      case "givemod": t.role="moderator"; break;
+      case "removemod": if(t.role==="moderator") t.role="user"; break;
+      case "addcash": t.cash=Math.max(0,(t.cash||0)+Number(arg||0)); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,cash:t.cash})); break;
+      case "removecash": t.cash=Math.max(0,(t.cash||0)-Number(arg||0)); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,cash:t.cash})); break;
+      case "setcash": t.cash=Math.max(0,Number(arg||0)); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,cash:t.cash})); break;
+      case "addlevel": t.level=Math.max(1,Math.min(1000000,(t.level||1)+Number(arg||0))); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,level:t.level})); break;
+      case "removelevel": t.level=Math.max(1,(t.level||1)-Number(arg||0)); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,level:t.level})); break;
+      case "setlevel": t.level=Math.max(1,Math.min(1000000,Number(arg||1))); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,level:t.level})); break;
+      case "tempban": {
+        t.banned=true; t.banType="temp";
+        let dur = 24*60*60*1000;
+        let reason = arg||"Temporarily banned";
+        let dm = /^(\d+)\s*([smhdw])\s*(.*)$/i.exec(arg||"");
+        if(dm){
+          let n=parseInt(dm[1]); let unit=dm[2].toLowerCase();
+          let mult = unit==='s'?1000 : unit==='m'?60000 : unit==='h'?3600000 : unit==='d'?86400000 : 604800000;
+          dur = n*mult; reason = dm[3]||"Temporarily banned";
+        }
+        t.banReason = reason; t.banDuration = dur; t.banExpires = Date.now()+dur;
+        pubsub.publish("world", JSON.stringify({t:"banned",user:target,banType:"temp",banReason:reason,banDuration:dur,banExpires:t.banExpires}));
+        break;
+      }
+      case "permban": {
+        t.banned=true; t.banType="perm"; t.banReason=arg||"Permanently banned"; t.banDuration=0; t.banExpires=0;
+        pubsub.publish("world", JSON.stringify({t:"banned",user:target,banType:"perm",banReason:t.banReason}));
+        break;
+      }
+      case "unban": t.banned=false; t.banType=""; t.banReason=""; t.banDuration=0; t.banExpires=0; pubsub.publish("world", JSON.stringify({t:"unbanned",user:target})); break;
+      case "reset": t.cash=0; t.level=1; t.xp=0; t.ownedGuns=[0]; t.currentGunIdx=0; t.kills=0; t.wave=0; t.diamonds=0; t.passes=[]; t.banned=false; t.banType=""; t.banReason=""; t.banDuration=0; t.banExpires=0; pubsub.publish("world", JSON.stringify({t:"unbanned",user:target})); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,cash:0,level:1,xp:0,ownedGuns:[0],currentGunIdx:0,kills:0,wave:0,diamonds:0,passes:[]})); break;
+      case "kick": pubsub.publish("world", JSON.stringify({t:"kicked",user:target,reason:arg||"Kicked from game"})); break;
+      case "webkick": pubsub.publish("world", JSON.stringify({t:"webkick",user:target,reason:arg||"Removed from site"})); break;
+      case "kill": pubsub.publish("world", JSON.stringify({t:"kill",user:target})); break;
+      case "givegun": { var gi=Number(arg||0); if(gi>=0&&gi<50 && t.ownedGuns.indexOf(gi)<0) t.ownedGuns.push(gi); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,ownedGuns:t.ownedGuns})); break; }
+      case "giveallguns": { var ag=[]; for(var i=0;i<50;i++) ag.push(i); t.ownedGuns=ag; pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,ownedGuns:t.ownedGuns})); break; }
+      case "setwave": t.wave=Math.max(0,Number(arg||0)); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,wave:t.wave})); break;
+      case "setxp": t.xp=Math.max(0,Number(arg||0)); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,xp:t.xp})); break;
+      case "addxp": t.xp=Math.max(0,(t.xp||0)+Number(arg||0)); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,xp:t.xp})); break;
+      case "adddiamonds": t.diamonds=Math.max(0,(t.diamonds||0)+Number(arg||0)); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,diamonds:t.diamonds})); break;
+      case "removediamonds": t.diamonds=Math.max(0,(t.diamonds||0)-Number(arg||0)); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,diamonds:t.diamonds})); break;
+      case "setdiamonds": t.diamonds=Math.max(0,Number(arg||0)); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,diamonds:t.diamonds})); break;
+      case "givepass": { if(!t.passes) t.passes=[]; if(t.passes.indexOf(arg)<0) t.passes.push(arg); pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,passes:t.passes.slice()})); break; }
+      case "removepass": { if(t.passes){ var pi=t.passes.indexOf(arg); if(pi>=0) t.passes.splice(pi,1); } pubsub.publish("world", JSON.stringify({t:"statupdate",user:target,passes:(t.passes||[]).slice()})); break; }
+      case "sethp": pubsub.publish("world", JSON.stringify({t:"sethp",user:target,hp:Number(arg||100)})); break;
+      case "heal": pubsub.publish("world", JSON.stringify({t:"sethp",user:target,hp:999999})); break;
+      case "god": pubsub.publish("world", JSON.stringify({t:"god",user:target})); break;
+      case "freeze": pubsub.publish("world", JSON.stringify({t:"freeze",user:target})); break;
+      case "teleport": pubsub.publish("world", JSON.stringify({t:"teleport",user:target})); break;
+      case "announce": pubsub.publish("world", JSON.stringify({t:"announce",msg:arg||"",by:s.user})); break;
+      case "list": { var names=[]; for(var k in accts.users) names.push(k+" ("+(accts.users[k].role||"user")+")"); return JSON.stringify({ok:true,list:names}); }
+      case "online": { var names=[]; for(var cid in sessions) names.push(sessions[cid].user); return JSON.stringify({ok:true,list:names}); }
+      default: return JSON.stringify({ok:false,err:"unknown command"});
+    }
+    saveAccounts(accts);
+    return JSON.stringify({ok:true});
+  },
+  createServer({conn}, data){
+    var s=sessions[conn.id]; if(!s) return JSON.stringify({ok:false,err:"Not signed in"});
+    var p; try{ p=JSON.parse(data); }catch(e){ return JSON.stringify({ok:false,err:"Bad request"}); }
+    var name=(p.name||"").trim().slice(0,30); if(!name) name=s.user+"'s Server";
+    var mapIdx=Number(p.mapIdx)||0; if(mapIdx<0||mapIdx>=9) mapIdx=0;
+    var sid=nextServerId++;
+    servers[sid]={hostConn:conn, hostId:conn.id, hostName:s.user, name:name, mapIdx:mapIdx, wave:1, state:"playing", shuttingDown:false, muteList:{}};
+    s.serverId=sid; s.isHost=true;
+    pubsub.publish("world", JSON.stringify({t:"serverlist", servers:getServerList()}));
+    return JSON.stringify({ok:true, serverId:sid});
+  },
+  getServerList({conn}, data){
+    return JSON.stringify({ok:true, servers:getServerList()});
+  },
+  getProfile({conn}, data){
+    var p; try{ p=JSON.parse(data); }catch(e){ return JSON.stringify({ok:false,err:"bad"}); }
+    var accts=loadAccounts();
+    var u=accts.users[p.user];
+    if(!u) return JSON.stringify({ok:false,err:"User not found"});
+    var profile={
+      user:p.user, role:u.role||"user",
+      cash:u.cash||0, level:u.level||1, xp:u.xp||0,
+      kills:u.kills||0, wave:u.wave||0, diamonds:u.diamonds||0,
+      ownedGuns:(u.ownedGuns||[0]).slice(), currentGunIdx:u.currentGunIdx||0,
+      passes:(u.passes||[]).slice(), gunCount:(u.ownedGuns||[]).length
+    };
+    return JSON.stringify({ok:true, profile:profile});
+  },
+  reportWarning({conn}, data){
+    var s=sessions[conn.id]; if(!s) return JSON.stringify({ok:false,err:"Not signed in"});
+    var p; try{ p=JSON.parse(data); }catch(e){ return JSON.stringify({ok:false,err:"bad"}); }
+    var accts=loadAccounts(); var u=accts.users[s.user]; if(!u) return JSON.stringify({ok:false,err:"no user"});
+    var now=Date.now();
+    if(!u.warnings) u.warnings=[];
+    u.warnings = u.warnings.filter(function(w){ return now - w.t < 3600000; });
+    u.warnings.push({t:now, reason:(p.reason||"inappropriate"), msg:(p.msg||"").slice(0,300)});
+    var count = u.warnings.length;
+    var action = "warn";
+    if(count >= 5){
+      u.banned=true; u.banType="temp"; u.banReason="Auto-banned: repeated chat violations"; u.banDuration=3600000; u.banExpires=now+3600000;
+      action="banned";
+      saveAccounts(accts);
+      pubsub.publish("world", JSON.stringify({t:"banned",user:s.user,banType:"temp",banReason:u.banReason,banDuration:u.banDuration,banExpires:u.banExpires}));
+      return JSON.stringify({ok:true, count:count, action:action});
+    } else if(count >= 3){
+      s.mutedUntil = now + 600000;
+      action="muted";
+      pubsub.publish("world", JSON.stringify({t:"servermute",user:s.user}));
+    }
+    saveAccounts(accts);
+    return JSON.stringify({ok:true, count:count, action:action});
+  },
+  getLeaderboard({conn}, data){
+    var accts=loadAccounts();
+    var users=[];
+    for(var k in accts.users){
+      var u=accts.users[k];
+      if(u.banned) continue;
+      users.push({user:k, role:u.role||"user", cash:u.cash||0, kills:u.kills||0, diamonds:u.diamonds||0, wave:u.wave||0, level:u.level||1});
+    }
+    var p; try{ p=JSON.parse(data); }catch(e){ p={}; }
+    var sortKey=p.sortBy||"cash";
+    users.sort(function(a,b){ return (b[sortKey]||0) - (a[sortKey]||0); });
+    return JSON.stringify({ok:true, leaderboard:users.slice(0,10), total:users.length});
+  },
+  joinServer({conn}, data){
+    var s=sessions[conn.id]; if(!s) return JSON.stringify({ok:false,err:"Not signed in"});
+    var p; try{ p=JSON.parse(data); }catch(e){ return JSON.stringify({ok:false,err:"Bad request"}); }
+    var srv=null;
+    for(var sid in servers){ if(servers[sid].hostId===p.serverId){ srv=servers[sid]; s.serverId=Number(sid); break; } }
+    if(!srv) return JSON.stringify({ok:false,err:"Server not found"});
+    s.isHost=false;
+    return JSON.stringify({ok:true, serverId:s.serverId});
+  },
+  serverCmd({conn}, data){
+    var s=sessions[conn.id]; if(!s) return JSON.stringify({ok:false,err:"Not signed in"});
+    var p; try{ p=JSON.parse(data); }catch(e){ return JSON.stringify({ok:false,err:"Bad request"}); }
+    var cmd=p.cmd, target=(p.target||"").trim(), arg=p.arg;
+    var sid=s.serverId;
+    var srv=servers[sid];
+    // owner can target any server
+    if(s.role==="owner" && p.serverId){ srv=servers[Number(p.serverId)]; }
+    if(!srv) return JSON.stringify({ok:false,err:"No active server"});
+    var isServerHost = (conn.id===srv.hostId);
+    // server host, owner, and diamond pass holders can use server commands — but only on their own server
+    var hasDiamondPass = s.passes && s.passes.indexOf("diamond")>=0;
+    if(!isServerHost && s.role!=="owner" && !hasDiamondPass) return JSON.stringify({ok:false,err:"Not server admin"});
+    // diamond pass holders can only affect their own server (they must be the host)
+    if(hasDiamondPass && !isServerHost && s.role!=="owner") return JSON.stringify({ok:false,err:"Diamond pass only works on your own server"});
+    switch(cmd){
+      case "kick":{
+        pubsub.publish("world", JSON.stringify({t:"serverkick",user:target,reason:arg||"Kicked from server"}));
+        return JSON.stringify({ok:true});
+      }
+      case "ban":{
+        srv.muteList[target]=2; // 2=banned
+        pubsub.publish("world", JSON.stringify({t:"serverban",user:target,reason:arg||"Banned from server"}));
+        return JSON.stringify({ok:true});
+      }
+      case "mute":{
+        srv.muteList[target]=1; // 1=muted
+        pubsub.publish("world", JSON.stringify({t:"servermute",user:target}));
+        return JSON.stringify({ok:true});
+      }
+      case "unmute":{
+        delete srv.muteList[target];
+        pubsub.publish("world", JSON.stringify({t:"serverunmute",user:target}));
+        return JSON.stringify({ok:true});
+      }
+      case "endserver":{
+        pubsub.publish("world", JSON.stringify({t:"serverended",serverId:sid,reason:arg||"Server ended by admin"}));
+        delete servers[sid];
+        pubsub.publish("world", JSON.stringify({t:"serverlist", servers:getServerList()}));
+        return JSON.stringify({ok:true});
+      }
+      case "shutdown":{
+        srv.shuttingDown=true;
+        pubsub.publish("world", JSON.stringify({t:"shutdowncountdown",serverId:sid,seconds:Number(arg)||10}));
+        return JSON.stringify({ok:true});
+      }
+      default: return JSON.stringify({ok:false,err:"unknown server command"});
+    }
+  }
+};
+
+function getServerList(){
+  var list=[];
+  for(var sid in servers){
+    var srv=servers[sid];
+    list.push({id:srv.hostId, name:srv.name, host:srv.hostName, map:srv.mapIdx, wave:srv.wave, players:0, shuttingDown:srv.shuttingDown});
+  }
+  return list;
+}
+
+self.onopen = ({conn}) => {
+  conn.subscribe("world");
+  // send current server list to new connection
+  var list=getServerList();
+  if(list.length>0){ try { conn.send(JSON.stringify({t:"serverlist", servers:list})); } catch(e){} }
+  // announce existing players to the new connection
+  for(var sid in sessions){
+    var es=sessions[sid];
+    try { conn.send(JSON.stringify({t:"join",id:sid,name:es.user,role:es.role})); } catch(e){}
+  }
+};
+self.onmessage = ({conn, data}) => {
+  if(typeof data!=="string") return;
+  var s=sessions[conn.id]; if(!s) return;
+  var c0=data.charCodeAt(0);
+  if(c0===122){ pubsub.publish("world", data.slice(1)); return; }
+  if(c0===100){ if(s.serverId && servers[s.serverId]){ try{ servers[s.serverId].hostConn.send(data.slice(1)); }catch(e){} } return; }
+  if(c0===75){ // 'K' = kill reward (host → specific client via pubsub)
+    pubsub.publish("world", data.slice(1));
+    return;
+  }
+  if(c0===103){ try { var gs=JSON.parse(data.slice(1)); if(s.serverId && servers[s.serverId]){ servers[s.serverId].wave=gs.wave||1; } } catch(e){} pubsub.publish("world", data.slice(1)); return; }
+  if(c0===99){ // 'c' = chat
+    var msg=data.slice(1);
+    if(msg.length>300) msg=msg.slice(0,300);
+    var srv0 = s.serverId ? servers[s.serverId] : null;
+    if(srv0 && srv0.muteList[s.user]){ return; }
+    if(s.mutedUntil && Date.now() < s.mutedUntil){ try{ conn.send(JSON.stringify({t:"servermute",user:s.user})); }catch(e){} return; }
+    pubsub.publish("world", JSON.stringify({t:"chat",user:s.user,role:s.role,msg:msg,passes:s.passes||[]}));
+    return;
+  }
+  if(data.charCodeAt(0)===109){ // 'm' = mp position
+    try { var pl=JSON.parse(data.slice(1)); pl.t="mpdata"; pl.id=conn.id; pl.name=s.user; pl.role=s.role;
+      pubsub.publish("world", JSON.stringify(pl)); } catch(e){}
+    return;
+  }
+  if(data.charCodeAt(0)===106){ // 'j' = join announce
+    pubsub.publish("world", JSON.stringify({t:"join",id:conn.id,name:s.user,role:s.role}));
+    return;
+  }
+  if(c0===108){ // 'l' = leave announce
+    pubsub.publish("world", JSON.stringify({t:"leave",id:conn.id,name:s.user}));
+    if(s.serverId!=null && servers[s.serverId]){
+      if(servers[s.serverId].hostId===conn.id){
+        pubsub.publish("world", JSON.stringify({t:"serverended",serverId:s.serverId,reason:"Host ended the server"}));
+        delete servers[s.serverId];
+        pubsub.publish("world", JSON.stringify({t:"serverlist", servers:getServerList()}));
+      }
+    }
+    s.serverId=null; s.isHost=false;
+    return;
+  }
+};
+self.onclose = ({conn}) => {
+  var s=sessions[conn.id];
+  if(s){ pubsub.publish("world", JSON.stringify({t:"leave",id:conn.id,name:s.user})); delete sessions[conn.id]; }
+  var wasHost=false;
+  for(var sid in servers){
+    if(servers[sid].hostId===conn.id){
+      pubsub.publish("world", JSON.stringify({t:"serverended",serverId:sid,reason:"Host disconnected"}));
+      delete servers[sid];
+      wasHost=true;
+    }
+  }
+  if(wasHost){ pubsub.publish("world", JSON.stringify({t:"serverlist", servers:getServerList()})); }
+};
+</script>
+
+<!-- UPDATE LOG -->
+<div id="updateLogScreen" class="overlay">
+  <div class="panel" style="max-width:520px;text-align:center">
+    <h2 style="font-family:'Russo One',sans-serif;font-size:28px;color:#ffd028;margin-bottom:6px">UPDATE LOG</h2>
+    <div style="text-align:left;background:rgba(0,0,0,.3);border-radius:10px;padding:14px 18px;margin:14px 0;max-height:300px;overflow-y:auto;font-size:12px;line-height:1.7;color:#c8d0d8">
+      <div style="color:#5adc6a;font-weight:700;margin-bottom:4px">v1.6 — Latest</div>
+      <div>• Added HARD MODE for Level 100+ — 100k HP zombies, 1.25x player speed, brutal damage, 3x cash/XP, 1.25x diamonds</div>
+      <div>• Boss HP now scales 4x per tier (50k → 200k → 800k…); hard mode doubles bosses</div>
+      <div>• Zombie spawn rate rebalanced (0.5x per wave linear)</div>
+      <div>• Moderator/Admin accounts locked (passwordless); Owner network-locked</div>
+      <div>• Fixed /sd shortcut conflict and webkick socket cleanup</div>
+      <div style="color:#8a92a0;margin-top:10px">v1.5</div>
+      <div>• Added Diamonds currency — earn 10 ♦ per zombie kill!</div>
+      <div>• Added 8 game passes: Double XP, Cash, Speed, Kills, Health, VIP, Golden, Diamond</div>
+      <div>• Passes stack — collect them all for massive multipliers!</div>
+      <div>• VIP/Golden/Diamond passes give unique chat tags</div>
+      <div>• Diamond pass grants Server Owner powers in your own server</div>
+      <div>• Added diamond admin commands (/ad, /rd, /sd, /gp, /rp)</div>
+      <div>• Added auto-save every 8s + on page unload</div>
+      <div>• Fixed multiplayer: zombies target nearest player, client damage works</div>
+      <div>• Fixed server cleanup when host exits</div>
+      <div>• Fixed level scaling for speed, cash, and HP</div>
+      <div style="color:#8a92a0;margin-top:10px">v1.4</div>
+      <div>• Added accounts, sign up / sign in (required to play)</div>
+      <div>• Added Online Co-op multiplayer mode</div>
+      <div>• Added custom chat with Owner rainbow tag</div>
+      <div>• Added Admin panel with 30+ commands</div>
+      <div>• Added slash commands in chat (/commands, /cmds)</div>
+      <div>• Added ban system with ban screen</div>
+      <div>• Added level multipliers (cash, damage, speed, zombie damage)</div>
+      <div>• Added 5 bosses with unique abilities (every 10 waves)</div>
+      <div>• Added pause menu with exit option</div>
+      <div>• Added zombie counter in HUD</div>
+      <div>• Removed intermission countdown between waves</div>
+      <div>• Fixed boss spawn crash on wave 0</div>
+      <div>• Fixed multiplayer smoothness with interpolation</div>
+      <div style="color:#8a92a0;margin-top:10px">v1.0</div>
+      <div>• Initial release: 12 zombie types, 50 guns, 9 maps</div>
+      <div>• Wave-based survival with cash and XP progression</div>
+      <div>• Boss every 10 waves with unique abilities</div>
+    </div>
+    <button class="btn btn-primary" id="updateLogNext">NEXT</button>
+  </div>
+</div>
+
+<!-- TERMS & RULES -->
+<div id="termsScreen" class="overlay hidden">
+  <div class="panel" style="max-width:560px;text-align:center">
+    <h2 style="font-family:'Russo One',sans-serif;font-size:26px;color:#ffd028;margin-bottom:6px">TERMS &amp; RULES</h2>
+    <div style="text-align:left;background:rgba(0,0,0,.3);border-radius:10px;padding:14px 18px;margin:14px 0;max-height:320px;overflow-y:auto;font-size:12px;line-height:1.8;color:#c8d0d8">
+      <div style="color:#ff6a6a;font-weight:700;margin-bottom:4px">By playing you agree to the following:</div>
+      <div>1. No cheating, hacking, or exploiting bugs.</div>
+      <div>2. No harmful, offensive, or inappropriate content in online chats.</div>
+      <div>3. Do not recreate this game unless you credit the creator MrHighExplosionYT.</div>
+      <div>4. No spamming or flooding the chat with messages.</div>
+      <div>5. No advertising other games, websites, or services.</div>
+      <div>6. No harassment, bullying, or targeting other players.</div>
+      <div>7. No sharing accounts or giving your password to others.</div>
+      <div>8. No use of VPNs or proxies to bypass bans.</div>
+      <div>9. No impersonating staff, admins, or the owner.</div>
+      <div>10. No exploiting admin commands for unfair advantage.</div>
+      <div>11. No selling or trading accounts, cash, or items for real money.</div>
+      <div>12. No botting or using automated tools to play the game.</div>
+      <div>13. Respect all players and staff members at all times.</div>
+      <div style="color:#8a92a0;margin-top:8px;font-size:11px">Violation of these rules may result in a temporary or permanent ban.</div>
+    </div>
+    <button class="btn btn-primary" id="termsAccept">ACCEPT &amp; CONTINUE</button>
+  </div>
+</div>
+
+<!-- AUTH -->
+<div id="authScreen" class="overlay hidden">
+  <div class="panel">
+    <h1 class="title" style="font-size:38px">ZOMBIE ATTACK</h1>
+    <div class="subtitle">Sign in to play</div>
+    <div class="authTabs">
+      <div class="authTab active" id="tabSignin">SIGN IN</div>
+      <div class="authTab" id="tabSignup">SIGN UP</div>
+    </div>
+    <input class="authField" id="authUser" placeholder="Username" maxlength="20" autocomplete="off">
+    <input class="authField" id="authPw" type="password" placeholder="Password" autocomplete="off">
+    <div class="authErr" id="authErr"></div>
+    <button class="btn btn-primary" id="authSubmit" style="width:100%">SIGN IN</button>
+    <div class="authNote">An account is required to play.</div>
+  </div>
+</div>
+
+<!-- BAN -->
+<div id="banScreen" class="overlay hidden">
+  <div class="panel">
+    <h2>BANNED</h2>
+    <div class="banType" id="banType"></div>
+    <div class="banType" id="banDuration" style="color:#5adc6a;font-size:14px;margin-bottom:8px"></div>
+    <div class="banReason" id="banReason"></div>
+    <div style="color:#5a6270;font-size:11px;margin-top:14px;letter-spacing:1px">This action cannot be dismissed. Refreshing the page will not lift the ban.</div>
+  </div>
+</div>
+
+<!-- CHAT -->
+<div id="chatPanel" class="hidden">
+  <div id="chatLog"></div>
+  <div id="chatInputWrap">
+    <input id="chatInput" placeholder="Press Enter to chat…" maxlength="300" autocomplete="off">
+    <button id="chatSend">SEND</button>
+  </div>
+  <div id="chatModerating">Checking message…</div>
+</div>
+<button id="chatToggleBtn" class="chatToggle hidden">CHAT</button>
+
+<div id="warningToast">
+  <div class="wtHead">⚠ MESSAGE BLOCKED</div>
+  <div class="wtReason" id="wtReason"></div>
+  <div class="wtCount" id="wtCount"></div>
+  <div class="wtFoot">Inappropriate language is not allowed. Continued violations will result in a mute, then a ban.</div>
+</div>
+
+<!-- PROFILE -->
+<div id="profileScreen" class="overlay hidden">
+  <div class="panel" style="max-width:480px;max-height:90vh;overflow-y:auto">
+    <h2 style="font-family:'Russo One',sans-serif;font-size:24px;color:#5adcff;margin-bottom:10px">PLAYER PROFILE</h2>
+    <div id="profileContent" style="text-align:left"></div>
+    <button class="btn btn-ghost" id="profileCloseBtn" style="margin-top:14px">CLOSE</button>
+  </div>
+</div>
+
+<!-- LEADERBOARD -->
+<div id="leaderboardScreen" class="overlay hidden">
+  <div class="panel" style="max-width:560px;max-height:90vh;overflow-y:auto">
+    <h2 style="font-family:'Russo One',sans-serif;font-size:24px;color:#ffd028;margin-bottom:10px">LEADERBOARD</h2>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;justify-content:center">
+      <button class="btn btn-primary lbTab" data-sort="cash" style="padding:6px 12px;font-size:11px">CASH</button>
+      <button class="btn btn-ghost lbTab" data-sort="kills" style="padding:6px 12px;font-size:11px">KILLS</button>
+      <button class="btn btn-ghost lbTab" data-sort="diamonds" style="padding:6px 12px;font-size:11px">DIAMONDS</button>
+      <button class="btn btn-ghost lbTab" data-sort="wave" style="padding:6px 12px;font-size:11px">WAVES</button>
+      <button class="btn btn-ghost lbTab" data-sort="level" style="padding:6px 12px;font-size:11px">LEVEL</button>
+    </div>
+    <div id="leaderboardContent"></div>
+    <button class="btn btn-ghost" id="leaderboardCloseBtn" style="margin-top:14px">CLOSE</button>
+  </div>
+</div>
+
+<!-- SPIN WHEEL -->
+<div id="spinWheelScreen" class="overlay hidden">
+  <div class="panel" style="max-width:520px;text-align:center">
+    <h2 style="font-family:'Russo One',sans-serif;font-size:24px;color:#ffd028;margin-bottom:6px">SPIN WHEEL</h2>
+    <div style="color:#5adcff;font-size:13px;margin-bottom:12px">Cost: 25 <span style="color:#5adcff">♦</span> per spin</div>
+    <div style="position:relative;width:320px;height:320px;margin:0 auto 12px">
+      <canvas id="wheelCanvas" width="320" height="320" style="border-radius:50%;border:4px solid #444"></canvas>
+      <div id="wheelPointer" style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-top:20px solid #ffd028;z-index:2"></div>
+    </div>
+    <div id="wheelResult" style="min-height:40px;font-size:18px;font-weight:700;margin-bottom:10px"></div>
+    <button class="btn btn-primary" id="spinBtn">SPIN (25 ♦)</button>
+    <button class="btn btn-ghost" id="spinWheelCloseBtn" style="margin-left:8px">CLOSE</button>
+  </div>
+</div>
+
+<!-- INVENTORY -->
+<div id="inventoryScreen" class="overlay hidden">
+  <div class="panel" style="max-width:680px;max-height:90vh;overflow-y:auto">
+    <h2 style="font-family:'Russo One',sans-serif;font-size:24px;color:#5adcff;margin-bottom:10px">INVENTORY</h2>
+    <div id="inventoryContent"></div>
+    <button class="btn btn-ghost" id="inventoryCloseBtn" style="margin-top:14px">CLOSE</button>
+  </div>
+</div>
+
+<!-- PASSES SHOP -->
+<div id="passesScreen" class="overlay hidden">
+  <div class="panel" style="max-width:680px;max-height:90vh;overflow-y:auto">
+    <h2 style="font-family:'Russo One',sans-serif;font-size:28px;color:#5adcff;margin-bottom:6px">PASSES SHOP</h2>
+    <div style="font-size:13px;color:#8a92a0;margin-bottom:14px">Diamonds: <span id="passesDiamondVal" style="color:#5adcff;font-weight:700">0 ♦</span> — Earn 10 ♦ per zombie kill!</div>
+    <div id="passesGrid"></div>
+    <button class="btn btn-ghost" id="passesCloseBtn" style="margin-top:16px">CLOSE</button>
+  </div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div id="adminScreen" class="overlay hidden">
+  <div class="panel">
+    <h2>ADMIN PANEL</h2>
+    <div style="font-size:12px;color:#8a92a0;margin-bottom:8px">Select a user, then run a command.</div>
+    <input class="adminArg" id="adminTargetInput" placeholder="Target username" autocomplete="off">
+    <div class="adminUserList" id="adminUserList"></div>
+    <input class="adminArg" id="adminArgInput" placeholder="Amount / reason (if needed)" autocomplete="off">
+    <div class="adminCmdGrid" id="adminCmdGrid"></div>
+    <div class="adminResult" id="adminResult"></div>
+    <div class="adminQuick">
+      <button class="btn btn-ghost" id="adminRefreshBtn">REFRESH USERS</button>
+      <button class="btn btn-ghost" id="adminCloseBtn">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ONLINE BAR -->
+<div id="onlineBar" class="hidden">
+  <div id="onlineDot"></div><span id="onlineCount">1</span>
+  <span id="onlineMode">CO-OP</span>
+</div>
+
+<script>
+(function(){
+// cancel any previous instance's animation loop
+if(window._zaRAF) cancelAnimationFrame(window._zaRAF);
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize(){ W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+addEventListener('resize', resize); resize();
+
+const GUNS = [
+  ["Basic Gun",0,2,1,2,1,3],["Rusty Peashooter",150,6,3,2,1,2],["Cricket Clicker",250,10,5,3,1,3],
+  ["Scrap-Iron Revolver",400,14,7,1,2,4],["Neon Shredder",450,16,8,4,2,2],["Sewer Pipe Shotgun",600,22,11,1,3,1],
+  ["Copper Bolt Carbine",750,26,13,2,3,4],["Street Sweeper",900,30,15,3,3,2],["Kitchen Cleaver Launcher",1100,36,18,2,3,2],
+  ["Bio-Toxic Spitter",1200,40,20,3,3,3],["Lead Spitter SMG",1400,44,22,5,2,2],["Scavenger Rifle",1650,50,25,2,3,4],
+  ["Nailgun Executioner",1900,54,27,4,3,3],["Anarchist Repeater",2200,62,31,4,3,3],["Diesel Punk Blaster",2500,70,35,2,4,3],
+  ["High-Volt Zapper",2900,78,39,3,4,4],["Plague Spore Injector",3200,84,42,2,4,3],["Plasma Obliterator",3500,90,45,3,4,4],
+  ["Magma Thrower",4000,100,50,5,4,1],["Bone Crusher Slugger",4500,110,55,1,5,3],["Acid Burst Handcannon",5100,120,60,2,5,3],
+  ["Crimson Fury LMG",5800,136,68,5,4,2],["Cryo-Freeze Ray",6500,150,75,3,5,4],["Tesla Coil Arcer",7200,170,85,4,5,3],
+  ["The Doomsday Cannon",8500,200,100,1,5,4],["Void Rift Singularity",9800,230,115,2,5,5],["Sonic Shockwave Blaster",11000,260,130,3,5,3],
+  ["Chrono-Shift Rifle",12500,290,145,4,5,5],["Gamma Ray Decimator",14000,320,160,5,5,3],["Wasteland Overlord",16000,360,180,3,5,4],
+  ["Supernova Launcher",18500,410,205,1,5,4],["Dark Matter Reaper",21000,460,230,4,5,4],["Eclipse Antimatter Gun",24000,520,260,3,5,5],
+  ["Nebula Disintegrator",28000,600,300,5,5,4],["Vortex Meatgrinder",32500,680,340,5,5,2],["Singularity Railgun",38000,780,390,1,5,5],
+  ["Proton Storm Rifle",44000,880,440,5,5,4],["Cyber-Core Leviathan",50000,1000,500,4,5,5],["Pulse Wave Annihilator",58000,1150,575,3,5,4],
+  ["Titanium Overcharger",67000,1300,650,4,5,4],["Omega Beam Catalyst",76000,1500,750,5,5,5],["Hellfire Battery",88000,1750,875,5,5,2],
+  ["Asteroid Smasher",105000,2000,1000,1,5,5],["Solar Flare Projector",125000,2400,1200,4,5,4],["Abyssal Reaper",150000,2800,1400,5,5,4],
+  ["Quark Gluon Melter",185000,3300,1650,3,5,5],["Galactic Executioner",230000,4000,2000,5,5,5],["Hyper-Space Piercer",300000,5000,2500,4,5,5],
+  ["Infinity Catalyst",450000,7500,3750,5,5,5],["The End of Days",1000000,20000,10000,5,5,5],
+  ["Admin Gun",-1,1e18,1e18,5,5,5]
+].map(g => ({name:g[0], price:g[1], dmg:g[2], hpDmg:g[3], spd:g[4], pwr:g[5], acc:g[6]}));
+// Wheel items (knives & special guns) - added to GUNS array with extended properties
+const WHEEL_ITEMS = [
+  // Commons - most gettable to least
+  {name:'Broke Boi',   price:-1, dmg:7,      hpDmg:7,      spd:1, pwr:1, acc:1, type:'gun',   rarity:'common',   weight:120,     singleShot:true, color:'#5adc6a'},   // green (most gettable)
+  {name:'Blade',       price:-1, dmg:10,     hpDmg:10,     spd:2, pwr:1, acc:2, type:'knife', rarity:'common',   weight:90,      singleShot:true, color:'#3a7adb'},   // blue
+  {name:'Slade',       price:-1, dmg:25,     hpDmg:25,     spd:3, pwr:2, acc:3, type:'knife', rarity:'common',   weight:75,      singleShot:true, color:'#ffd028'},   // yellow
+  {name:'KSlasher',    price:-1, dmg:40,     hpDmg:40,     spd:3, pwr:2, acc:3, type:'knife', rarity:'common',   weight:50,      singleShot:true, color:'#ff3a3a'},   // red
+  {name:'God',         price:-1, dmg:80,     hpDmg:80,     spd:3, pwr:3, acc:3, type:'gun',   rarity:'common',   weight:25,      singleShot:true, color:'#a855f7'},   // purple
+  {name:'Ultraviolet', price:-1, dmg:150,    hpDmg:150,    spd:4, pwr:4, acc:4, type:'gun',   rarity:'common',   weight:1,       singleShot:true, color:'#ff6a3a'},   // orange
+  // Mythicals - rarest to most common
+  {name:'Divine',      price:-1, dmg:1000000, hpDmg:1000000, spd:5, pwr:5, acc:5, type:'gun', rarity:'mythical', weight:0.000075, singleShot:true, color:'rainbow'},  // rainbow (rarest)
+  {name:'Deadly Sin',  price:-1, dmg:10000,  hpDmg:10000,  spd:5, pwr:5, acc:5, type:'knife', rarity:'mythical', weight:0.0001,  singleShot:true, color:'#5adcff'},   // diamond
+  {name:'Inferno',     price:-1, dmg:5000,   hpDmg:5000,   spd:5, pwr:5, acc:5, type:'knife', rarity:'mythical', weight:0.005,   singleShot:true, color:'#ffd028'},   // golden
+  {name:'Flusher',     price:-1, dmg:900,    hpDmg:900,    spd:4, pwr:4, acc:4, type:'gun',   rarity:'mythical', weight:0.09,    singleShot:true, color:'#ff3a3a'},   // red
+  {name:'Subzero',     price:-1, dmg:200,    hpDmg:200,    spd:3, pwr:3, acc:3, type:'gun',   rarity:'mythical', weight:0.8,     singleShot:true, color:'#9a3ad0'},   // violet
+];
+WHEEL_ITEMS.forEach(w => GUNS.push(w));
+function wheelRoll(){
+  let total = WHEEL_ITEMS.reduce((s,w) => s+w.weight, 0);
+  let r = Math.random() * total;
+  let acc = 0;
+  for(let w of WHEEL_ITEMS){
+    acc += w.weight;
+    if(r < acc) return w;
+  }
+  return WHEEL_ITEMS[0];
+}
+const ZTYPES = [
+  ["Zombie",100,5,10,"#6a9a3a",1.4,null],["Fast Zombie",125,25,25,"#c8c8c8",3.6,null],
+  ["Ice Zombie",150,32,40,"#5ab8e8",1.3,"slow"],["Magnum Zombie",175,40,30,"#e85a2a",1.3,"fire"],
+  ["Explosion Zombie",95,12,15,"#e0a83a",1.5,"explode"],["Slime Zombie",110,25,20,"#7ad06a",1.1,null],
+  ["Void Zombie",200,60,50,"#8a3ad0",1.2,null],["Angel Zombie",230,96,75,"#f4e8b8",1.3,null],
+  ["Demon Zombie",230,96,75,"#d02828",1.3,null],["Angelica Zombie",245,125,120,"#f8c8e8",1.3,null],
+  ["Crystal Zombie",270,228,180,"#8ae8e8",1.0,null],["Best",300,348,220,"#ffd028",1.6,null]
+].map(z => ({name:z[0], hp:z[1], cash:z[2], xp:z[3], color:z[4], speed:z[5], special:z[6]}));
+const MAPS = [
+  ["Abandoned City","#2a2a36","#3a3a48","#6a6a82","#1a1a24"],
+  ["Frozen Tundra","#5a7a96","#8aafcc","#d4e8f4","#6a8aa6"],
+  ["Toxic Swamp","#2a3a22","#3a4a30","#7a9a3a","#1a2a18"],
+  ["Volcanic Wasteland","#3a1a14","#4a2418","#e05a2a","#2a1008"],
+  ["Crystal Caverns","#1a2a36","#243848","#8ae8e8","#0a141c"],
+  ["Void Rift","#14081f","#241030","#9a3ad0","#080010"],
+  ["Deserted Outpost","#7a6a3a","#8a7a4a","#c0a86a","#5a4a28"],
+  ["Haunted Graveyard","#1c1c28","#282838","#6a8a6a","#101018"],
+  ["Neon Slums","#1f0a2e","#2e1244","#e83ad8","#0a0414"]
+].map(m => ({name:m[0], bg:m[1], ground:m[2], accent:m[3], fog:m[4]}));
+
+const BOSS_HP_BASE = 50000;
+function bossHpForWave(w){ let tier = Math.floor(w/10); return BOSS_HP_BASE * Math.pow(4, tier-1); }
+const BOSS_CASH = 1000;
+const BOSS_XP = 600;
+const BOSSES = [
+  {name:"Mega Tank",       color:"#b03a3a", r:44, abilities:["boulder","trishock"]},
+  {name:"King Slime",      color:"#5adc6a", r:42, abilities:["slimeray","knockshock","rage"]},
+  {name:"Dark Ghost",      color:"#9a8ad0", r:40, abilities:["teleport","soulorb","pullshock"]},
+  {name:"Demon Overlord",  color:"#d02828", r:44, abilities:["shield","summon"]},
+  {name:"Dragon Beast",    color:"#e85a2a", r:48, abilities:["laser","firebreath","tornado"]},
+];
+function bossIndexForWave(w){
+  if(w % 10 !== 0) return -1;
+  let idx = w/10 - 1;
+  return idx >= 4 ? 4 : idx;
+}
+
+const XP_PER_LEVEL = 200;
+const MAX_LEVEL = 1000000;
+const DMG_MULT = 4.5;
+const FIRE_CD = [320, 150, 100, 65, 42];
+const SPREAD  = [0.34, 0.20, 0.12, 0.06, 0.02];
+
+// ---- formatting ----
+function fmt(n){
+  n = Math.floor(n);
+  if(n < 0) return "0";
+  if(n === 0) return "0";
+  let tiers = [
+    [1e100,'googol'],[1e63,'Vg'],[1e60,'novDc'],[1e57,'octDc'],[1e54,'sepDc'],[1e51,'sexDc'],[1e48,'quinDc'],[1e45,'quattuorDc'],[1e42,'treDc'],[1e39,'duoDc'],[1e36,'Dc'],
+    [1e33,'dec'],[1e30,'non'],[1e27,'oct'],[1e24,'sep'],[1e21,'sex'],[1e18,'quin'],[1e15,'quad'],[1e12,'T'],[1e9,'B'],[1e6,'M'],[1e3,'k']
+  ];
+  for(let [val, suffix] of tiers){
+    if(n >= val){
+      let str = (n/val).toFixed(n >= val*10 ? 0 : 1).replace(/\.0$/,'');
+      return str + suffix;
+    }
+  }
+  return ""+n;
+}
+function money(n){ return "$" + fmt(n); }
+
+// ---- state ----
+let state = 'menu';
+let player, zombies = [], bullets = [], particles = [], floatTexts = [], hazards = [];
+let wave, cash, kills, level, xp;
+let ownedGuns, currentGunIdx;
+let currentMap, mapChoices, selectedMapIdx;
+let intermissionTimer, intermissionStart;
+let spawnQueue = [], spawnStart;
+let keys = {}, mouseX=0, mouseY=0, mouseDown=false, mouseClicked=false;
+let lastShot = 0;
+let slowUntil = 0, fireUntil = 0;
+let aimbotOn = false, autoShootOn = false, autoKillOn = false;
+let waveCleared = false;
+let hardMode = false;
+let lastTime = 0;
+let countdownStart = 0, countdownDuration = 3000, countdownRemaining = 3000;
+let preShopState = null;
+let waveStartCash = 0;
+
+// ---- save data ----
+const SAVE_KEY = 'zombieAttack_save_v1';
+function saveGame(){
+  try {
+    let data = { wave, cash, kills, level, xp, ownedGuns, currentGunIdx, hardMode, savedAt: Date.now() };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    refreshMenuSaveInfo();
+  } catch(e){}
+}
+function syncSaveWithServer(){
+  // push current game state to server if logged in
+  if(myAccount){
+    saveProgressToServer();
+  }
+  saveGame();
+}
+addEventListener('beforeunload', () => {
+  if(state === 'playing' || state === 'paused' || state === 'intermission'){
+    saveGame();
+    // best-effort sync to server (may not complete, but periodic auto-save covers this)
+    saveProgressToServer();
+  }
+});
+// periodic auto-save every 8 seconds during gameplay
+setInterval(() => {
+  if(state === 'playing' || state === 'intermission'){
+    saveGame();
+    if(myAccount) saveProgressToServer();
+  }
+}, 8000);
+function loadSave(){
+  try {
+    let raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return null;
+    return JSON.parse(raw);
+  } catch(e){ return null; }
+}
+function hasSave(){
+  return !!loadSave();
+}
+function deleteSave(){
+  try { localStorage.removeItem(SAVE_KEY); } catch(e){}
+  refreshMenuSaveInfo();
+}
+function applySave(s){
+  wave = s.wave || 0;
+  cash = s.cash || 0;
+  kills = s.kills || 0;
+  level = s.level || 1;
+  xp = s.xp || 0;
+  ownedGuns = (s.ownedGuns && s.ownedGuns.length) ? s.ownedGuns.slice() : [0];
+  currentGunIdx = (s.currentGunIdx!=null) ? s.currentGunIdx : 0;
+  hardMode = !!s.hardMode;
+}
+function refreshMenuSaveInfo(){
+  if(state !== 'menu') return;
+  let s = loadSave();
+  if(s){
+    continueBtn.hidden = false;
+    let d = new Date(s.savedAt);
+    saveInfo.textContent = 'Save: Wave ' + s.wave + ' · ' + money(s.cash) + ' · Lv ' + s.level + ' · ' + d.toLocaleDateString();
+  } else {
+    continueBtn.hidden = true;
+    saveInfo.textContent = '';
+  }
+  hardModeBtn.hidden = !(level >= 100);
+}
+
+// ============================ ONLINE / AUTH / CHAT / ADMIN ============================
+let socket = null;
+let myAccount = null;       // {user, role, cash, level, ...}
+let myRole = 'user';
+let remotePlayers = {};     // id -> {name,role,x,y,dir,hp,gun,last}
+let onlineCount = 1;
+let onlineMode = false;     // multiplayer co-op toggle
+let isHost = false;         // true for server creator (runs zombie simulation)
+let nextZid = 1;            // zombie ID counter (host only)
+let zombieSyncAcc = 0;      // accumulator for host zombie sync broadcasts
+let chatOpen = false;
+let mpSyncAcc = 0;
+const ADMIN_CMDS = [
+  {cmd:"giveadmin",label:"Give Admin",arg:"0",owner:1},
+  {cmd:"removeadmin",label:"Remove Admin",arg:"0",owner:1},
+  {cmd:"givemod",label:"Give Mod",arg:"0"},
+  {cmd:"removemod",label:"Remove Mod",arg:"0"},
+  {cmd:"addcash",label:"Add Cash",arg:"1"},
+  {cmd:"removecash",label:"Remove Cash",arg:"1"},
+  {cmd:"setcash",label:"Set Cash",arg:"1"},
+  {cmd:"addlevel",label:"Add Level",arg:"1"},
+  {cmd:"removelevel",label:"Remove Level",arg:"1"},
+  {cmd:"setlevel",label:"Set Level",arg:"1"},
+  {cmd:"addxp",label:"Add XP",arg:"1"},
+  {cmd:"setxp",label:"Set XP",arg:"1"},
+  {cmd:"adddiamonds",label:"Add Diamonds",arg:"1"},
+  {cmd:"removediamonds",label:"Remove Diamonds",arg:"1"},
+  {cmd:"setdiamonds",label:"Set Diamonds",arg:"1"},
+  {cmd:"givepass",label:"Give Pass (id)",arg:"1"},
+  {cmd:"removepass",label:"Remove Pass (id)",arg:"1"},
+  {cmd:"setwave",label:"Set Wave",arg:"1"},
+  {cmd:"givegun",label:"Give Gun #",arg:"1"},
+  {cmd:"giveallguns",label:"Give All Guns",arg:"0"},
+  {cmd:"tempban",label:"Temp Ban",arg:"1",danger:1},
+  {cmd:"permban",label:"Perm Ban",arg:"1",danger:1},
+  {cmd:"unban",label:"Unban",arg:"0"},
+  {cmd:"reset",label:"Reset Status",arg:"0",danger:1},
+  {cmd:"kick",label:"Kick (game)",arg:"1",danger:1},
+  {cmd:"webkick",label:"Web Kick",arg:"1",danger:1},
+  {cmd:"kill",label:"Kill",arg:"0",danger:1},
+  {cmd:"sethp",label:"Set HP",arg:"1"},
+  {cmd:"heal",label:"Heal Full",arg:"0"},
+  {cmd:"god",label:"God Mode",arg:"0"},
+  {cmd:"freeze",label:"Freeze",arg:"0"},
+  {cmd:"teleport",label:"Teleport to You",arg:"0"},
+  {cmd:"announce",label:"Announce",arg:"1"},
+  {cmd:"list",label:"List Users",arg:"0"},
+  {cmd:"online",label:"Online Now",arg:"0"},
+];
+
+function connectSocket(){
+  if(socket) return;
+  try { socket = root.createServerSocket(); } catch(e){ socket = null; return; }
+  socket.binaryType = "arraybuffer";
+  socket.addEventListener("message", onSocketMessage);
+  socket.addEventListener("close", ()=>{ socket=null; setTimeout(()=>{ if(myAccount) connectSocket(); }, 2000); });
+}
+function sendSock(s){ if(socket && socket.readyState===1) socket.send(s); }
+async function rpcCall(method, data){
+  if(!socket) return null;
+  try { await socket.opened; } catch(e){ return null; }
+  try { return await socket.rpc[method](JSON.stringify(data)); } catch(e){ return null; }
+}
+
+function onSocketMessage(ev){
+  let m; try { m=JSON.parse(ev.data); } catch(e){ return; }
+  if(myAccount && m.name===myAccount.user && (m.t==="mpdata"||m.t==="join"||m.t==="mp")) return;
+  if(m.t==="chat"){
+    addChatLine(m.user, m.role, m.msg, null, m.passes);
+  }
+  else if(m.t==="mp"){ let p=remotePlayers[m.id]; if(!p){p=remotePlayers[m.id]={};} p.name=m.name; p.role=m.role; p.last=performance.now(); }
+  else if(m.t==="join"){ remotePlayers[m.id]={name:m.name,role:m.role,x:W/2,y:H/2,dir:0,hp:100,gun:0,last:performance.now(),tx:W/2,ty:H/2,tdir:0,prevX:W/2,prevY:H/2,prevDir:0,renderX:W/2,renderY:H/2,renderDir:0,lerpT:1}; addChatLine(m.name,m.role," joined the game","system"); updateOnlineCount(); }
+  else if(m.t==="leave"){ delete remotePlayers[m.id]; updateOnlineCount(); }
+  else if(m.t==="wave"){ let p=remotePlayers[m.id]; if(p){p.wave=m.wave;} }
+  else if(m.t==="mpdata"){
+    let p=remotePlayers[m.id];
+    if(!p){ p=remotePlayers[m.id]={name:m.name||"player",role:m.role||"user",x:m.x,y:m.y,dir:m.dir,hp:m.hp,gun:m.gun,last:performance.now(),tx:m.x,ty:m.y,tdir:m.dir,prevX:m.x,prevY:m.y,prevDir:m.dir,renderX:m.x,renderY:m.y,renderDir:m.dir,lerpT:1}; }
+    if(p){
+      p.prevX=p.renderX!=null?p.renderX:m.x; p.prevY=p.renderY!=null?p.renderY:m.y; p.prevDir=p.renderDir!=null?p.renderDir:m.dir;
+      p.tx=m.x; p.ty=m.y; p.tdir=m.dir; p.hp=m.hp; p.gun=m.gun; p.name=m.name||p.name; p.role=m.role||p.role; p.last=performance.now(); p.lerpT=0;
+    }
+  }
+  else if(m.t==="kicked"){ if(myAccount && myAccount.user===m.user){ showKicked(m.reason); } }
+  else if(m.t==="webkick"){ if(myAccount && myAccount.user===m.user){ myAccount=null; if(socket){ try{socket.close();}catch(e){} socket=null; } try{location.href="about:blank";}catch(e){} alert("You were removed from the site: "+(m.reason||"")); } }
+  else if(m.t==="kill"){ if(myAccount && myAccount.user===m.user && state==='playing'){ damagePlayer(999999); } }
+  else if(m.t==="sethp"){ if(myAccount && myAccount.user===m.user && player){ player.hp=m.hp; if(player.hp>player.maxHp) player.maxHp=player.hp; } }
+  else if(m.t==="god"){ if(myAccount && myAccount.user===m.user && player){ player.maxHp=999999; player.hp=999999; } }
+  else if(m.t==="freeze"){ if(myAccount && myAccount.user===m.user && player){ slowUntil=performance.now()+999999; } }
+  else if(m.t==="teleport"){ if(myAccount && myAccount.user===m.user && player){ player.x=W/2; player.y=H/2; } }
+  else if(m.t==="announce"){ addChatLine("["+m.by+"]", "admin", m.msg, "announce"); }
+  else if(m.t==="hostinfo"){ if(!isHost){ isHost=false; /* client knows host exists */ } }
+  else if(m.t==="hostleft"){ if(!isHost){ addChatLine("SYSTEM","admin","Host left the server.","system"); if(state==='playing'||state==='intermission'){ exitToMenu(); } } }
+  else if(m.t==="zsync"){ if(!isHost){ applyZombieSync(m); } }
+  else if(m.t==="gstate"){ if(!isHost){ applyGameState(m); } }
+  else if(m.t==="zdmg"){ if(isHost){ applyRemoteDamage(m); } }
+  else if(m.t==="statupdate"){
+    if(myAccount && myAccount.user===m.user){
+      if(m.cash!=null){ cash=m.cash; myAccount.cash=m.cash; }
+      if(m.level!=null){ level=m.level; myAccount.level=m.level; if(player){ let newMax=100*playerMaxHpMult(); player.maxHp=newMax; if(player.hp>newMax) player.hp=newMax; } }
+      if(m.xp!=null){ xp=m.xp; myAccount.xp=m.xp; }
+      if(m.wave!=null){ wave=m.wave; myAccount.wave=m.wave; }
+      if(m.kills!=null){ kills=m.kills; myAccount.kills=m.kills; }
+      if(m.ownedGuns!=null){ ownedGuns=m.ownedGuns.slice(); myAccount.ownedGuns=m.ownedGuns.slice(); }
+      if(m.currentGunIdx!=null){ currentGunIdx=m.currentGunIdx; myAccount.currentGunIdx=m.currentGunIdx; }
+      if(m.diamonds!=null){ myAccount.diamonds=m.diamonds; }
+      if(m.passes!=null){ myAccount.passes=m.passes.slice(); if(player){ let newMax=100*playerMaxHpMult(); player.maxHp=newMax; if(player.hp>newMax) player.hp=newMax; } }
+      myAccount.savedAt = Date.now();
+      saveGame();
+      saveProgressToServer();
+      addChatLine("SYSTEM","admin","Your stats were updated by an admin.","system");
+      if(state==='playing' || state==='menu') updateHUD();
+    }
+  }
+  else if(m.t==="serverlist"){ updateServerList(m.servers); }
+  else if(m.t==="serverended"){
+    if(onlineMode && !isHost){
+      addChatLine("SYSTEM","admin", m.reason||"Server ended.","system");
+      exitToMenu();
+    }
+    refreshServerList();
+  }
+  else if(m.t==="serverkick"){ if(myAccount && myAccount.user===m.user){ addChatLine("SYSTEM","admin","You were kicked: "+(m.reason||""),"system"); exitToMenu(); } }
+  else if(m.t==="killreward"){
+    if(myAccount && myAccount.user===m.user){
+      let hCash = hardMode ? 3 : 1, hXp = hardMode ? 3 : 1, hDia = hardMode ? 1.25 : 1;
+      let gained = Math.floor(m.cash * cashMult() * hCash);
+      let xpGained = Math.floor(m.xp * passMult('xp') * hXp);
+      let killCount = Math.floor(passMult('kills'));
+      let diamondGained = Math.floor(10 * passMult('diamonds') * hDia);
+      cash += gained; kills += killCount; addXP(xpGained);
+      if(myAccount){ myAccount.diamonds = (myAccount.diamonds||0) + diamondGained; }
+      floatTexts.push({x:m.x, y:m.y-10, text:"+"+money(gained), color:"#5adc6a", life:50});
+      floatTexts.push({x:m.x+10, y:m.y, text:"+"+fmt(xpGained)+" XP", color:"#8acaff", life:50});
+      floatTexts.push({x:m.x-10, y:m.y, text:"+"+fmt(diamondGained)+" ♦", color:"#5adcff", life:50});
+    }
+  }
+  else if(m.t==="serverban"){ if(myAccount && myAccount.user===m.user){ addChatLine("SYSTEM","admin","You were banned: "+(m.reason||""),"system"); exitToMenu(); } }
+  else if(m.t==="servermute"){ if(myAccount && myAccount.user===m.user){ addChatLine("SYSTEM","admin","You have been muted in chat.","system"); } }
+  else if(m.t==="serverunmute"){ if(myAccount && myAccount.user===m.user){ addChatLine("SYSTEM","admin","You have been unmuted.","system"); } }
+  else if(m.t==="banned"){ if(myAccount && myAccount.user===m.user){ showBan(m.banType||"perm", m.banReason||"Banned", m.banDuration||0, m.banExpires||0); } }
+  else if(m.t==="unbanned"){ if(myAccount && myAccount.user===m.user){ addChatLine("SYSTEM","admin","You have been unbanned. You may sign in again.","system"); } }
+  else if(m.t==="shutdowncountdown"){ if(onlineMode){ startShutdownCountdown(m.seconds); } }
+  else if(m.t==="zsync"){ if(onlineMode && !isHost){ applyZombieSync(m); } }
+  else if(m.t==="gstate"){ if(onlineMode && !isHost){ applyGameState(m); } }
+  else if(m.t==="zdmg"){ if(isHost){ applyRemoteDamage(m); } }
+}
+function updateOnlineCount(){
+  onlineCount = Object.keys(remotePlayers).length + 1;
+  if(onlineCountEl) onlineCountEl.textContent = onlineCount;
+}
+
+// ---- level multipliers ----
+function cashMult(){ return Math.min(100000, 1 + (level-1)*0.25) * passMult('cash'); }
+function dmgMult(){ return Math.min(100000, 1 + (level-1)*0.50); }
+function playerMaxHpMult(){ return (1 + (level-1)*0.25) * passMult('hp'); }
+function speedMult(){ return Math.min(8, 1 + Math.sqrt(level-1)*0.007) * passMult('speed'); }
+
+// ============================ PASSES ============================
+const PASSES = [
+  {id:'dxp',  name:'Double XP',      cost:30950,   mults:{xp:2}},
+  {id:'dcash',name:'Double Cash',    cost:60500,   mults:{cash:2}},
+  {id:'dsp',  name:'Double Speed',   cost:21770,   mults:{speed:2}},
+  {id:'dkill',name:'Double Kills',   cost:11000,   mults:{kills:2}},
+  {id:'dhp',  name:'Double Health',  cost:35590,   mults:{hp:2}},
+  {id:'vip',  name:'VIP',            cost:120300,  mults:{xp:3,hp:3,cash:3,kills:3}, tag:'VIP', tagColor:'#a855f7'},
+  {id:'gold', name:'Golden',         cost:300000,  mults:{cash:10,kills:10,xp:10,hp:10,diamonds:10}, tag:'GOLDEN', tagColor:'#ffd028'},
+  {id:'diamond',name:'Diamond',      cost:550170,  mults:{cash:15,hp:15,xp:15,kills:15,diamonds:15}, tag:'DIAMOND', tagColor:'#5adcff', serverOwner:true},
+  {id:'aimbot', name:'Aimbot',       cost:100000,  mults:{}, toggle:true},
+  {id:'autoshoot', name:'Auto Shoot',cost:120025,  mults:{}, toggle:true},
+  {id:'autokill', name:'Auto Kill',  cost:200990,  mults:{}, toggle:true},
+];
+function hasPass(id){ return !!(myAccount && myAccount.passes && myAccount.passes.includes(id)); }
+function passMult(stat){
+  let m = 1;
+  if(!myAccount || !myAccount.passes) return m;
+  for(let p of PASSES){
+    if(hasPass(p.id) && p.mults[stat]) m *= p.mults[stat];
+  }
+  return m;
+}
+function getChatTags(){
+  let tags = [];
+  if(!myAccount) return tags;
+  if(hasPass('vip')) tags.push({text:'VIP', color:'#a855f7', glow:'#a855f7'});
+  if(hasPass('gold')) tags.push({text:'GOLDEN', color:'#ffd028', glow:'#ffd028'});
+  if(hasPass('diamond')) tags.push({text:'DIAMOND', color:'#5adcff', glow:'#5adcff'});
+  return tags;
+}
+function getRemoteTags(passes){
+  let tags = [];
+  if(!passes) return tags;
+  if(passes.includes('vip')) tags.push({text:'VIP', color:'#a855f7', glow:'#a855f7'});
+  if(passes.includes('gold')) tags.push({text:'GOLDEN', color:'#ffd028', glow:'#ffd028'});
+  if(passes.includes('diamond')) tags.push({text:'DIAMOND', color:'#5adcff', glow:'#5adcff'});
+  return tags;
+}
+
+// ---- chat ----
+function addChatLine(user, role, msg, kind, remotePasses){
+  let line=document.createElement('div'); line.className='chatLine';
+  let roleTag = role==='owner'?'OWNER':(role==='admin'?'ADMIN':(role==='moderator'?'MOD':'USER'));
+  let roleCls = role==='owner'?'tag-owner':(role==='admin'?'tag-admin':(role==='moderator'?'tag-mod':'tag-user'));
+  let nameCls = role==='owner'?'name-owner':'';
+  let msgCls = role==='owner'?'msg-owner':'';
+  // collect pass tags (own or remote)
+  let passTags = [];
+  if(remotePasses){ passTags = getRemoteTags(remotePasses); }
+  else if(myAccount && myAccount.user===user){ passTags = getChatTags(); }
+  if(kind==="system"){ line.innerHTML='<span style="color:#5a6270">• '+escapeHtml(user)+' '+escapeHtml(msg)+'</span>'; }
+  else if(kind==="announce"){ line.innerHTML='<span style="color:#ffd028;font-weight:700">📢 '+escapeHtml(user)+' '+escapeHtml(msg)+'</span>'; }
+  else {
+    let html = '';
+    // role tag first
+    html += '<span class="chatTag '+roleCls+'">'+roleTag+'</span>';
+    // pass tags stacked to the right of role tag
+    for(let t of passTags){
+      html += '<span class="chatTag" style="background:linear-gradient(135deg,'+t.color+',#000);color:'+t.color+';font-weight:700;text-shadow:0 0 6px '+t.glow+';border:1px solid '+t.color+';box-shadow:0 0 8px '+t.glow+'44">'+t.text+'</span>';
+    }
+    // name + message
+    let nameColor = passTags.length ? passTags[passTags.length-1].color : '';
+    html += '<span class="'+nameCls+'" style="font-weight:600'+(nameColor?';color:'+nameColor:'')+'">'+escapeHtml(user)+':</span> <span class="'+msgCls+'">'+escapeHtml(msg)+'</span>';
+    line.innerHTML = html;
+  }
+  chatLog.appendChild(line);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  while(chatLog.children.length>80) chatLog.removeChild(chatLog.firstChild);
+}
+function escapeHtml(s){ return (s+"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+let moderating = false;
+async function moderateMessage(text){
+  if(!text || text.length < 2) return {flagged:false};
+  try {
+    let result = "";
+    await root.generateText({
+      instruction: `You are a chat moderator for a multiplayer zombie survival game. Decide if this message violates the rules.
+
+Rules:
+- No hate speech, slurs, racism, homophobia, or harassment
+- No sexual content or explicit innuendo
+- No real-world threats or encouragement of real violence
+- No sharing personal info / doxxing
+- No severe or repeated profanity
+
+Message: ${text}
+
+Reply with ONLY one of:
+- CLEAN
+- FLAGGED: <one-word reason>
+
+Be lenient with normal banter, light trash talk, and game-related insults.`,
+      stopSequences: ["\n"],
+      onChunk: (d) => { result += d.textChunk; }
+    });
+    let r = result.trim();
+    if(r.toUpperCase().startsWith("FLAGGED")){
+      let reason = r.split(":")[1];
+      reason = reason ? reason.trim() : "";
+      if(!reason) reason = "inappropriate content";
+      return {flagged:true, reason};
+    }
+    return {flagged:false};
+  } catch(e){
+    return {flagged:false};
+  }
+}
+function showWarning(reason, count, action){
+  wtReason.textContent = "Reason: " + reason;
+  wtCount.textContent = "Warning " + count + "/5" + (action==="muted" ? " — you have been MUTED for 10 minutes." : (action==="banned" ? " — you have been BANNED." : "."));
+  warningToast.classList.add('show');
+  clearTimeout(showWarning._t);
+  showWarning._t = setTimeout(()=>warningToast.classList.remove('show'), 9000);
+}
+function sendChat(){
+  let v=chatInput.value.trim(); if(!v) return;
+  if(v.startsWith("/")){
+    chatInput.value="";
+    runSlashCommand(v);
+    return;
+  }
+  if(moderating) return;
+  moderating = true;
+  chatSendBtn.disabled = true;
+  chatModerating.classList.add('show');
+  (async () => {
+    try {
+      let mod = await moderateMessage(v);
+      if(mod.flagged){
+        chatInput.value = "";
+        let res = null;
+        try { res = JSON.parse(await rpcCall("reportWarning", {reason: mod.reason, msg: v.slice(0,300)})); } catch(e){}
+        if(res && res.ok){
+          showWarning(mod.reason, res.count, res.action || "warn");
+        } else {
+          showWarning(mod.reason, 0, "warn");
+        }
+        addChatLine("SYSTEM","admin","Your message was blocked by the AI moderator: "+mod.reason,"system");
+        if(res && res.action === "banned"){
+          // server will push a 'banned' event; fallthrough to showBan is harmless
+        }
+      } else {
+        chatInput.value = "";
+        sendSock("c"+v);
+      }
+    } catch(e){
+      chatInput.value = "";
+      sendSock("c"+v);
+    } finally {
+      moderating = false;
+      chatSendBtn.disabled = false;
+      chatModerating.classList.remove('show');
+    }
+  })();
+}
+function runSlashCommand(input){
+  let parts=input.slice(1).split(/\s+/);
+  let cmd=parts[0].toLowerCase(); let target=parts[1]||""; let argStr=parts.slice(2).join(" ");
+  if(cmd==="commands"||cmd==="cmds"){ toggleCmdsPanel(); return; }
+
+  // server admin commands (for hosts and owner)
+  let serverCmds = ["kick","ban","mute","unmute","endserver","shutdown","sk","sb","sm","sum","es","sh"];
+  let serverMap = {sk:"kick",sb:"ban",sm:"mute",sum:"unmute",es:"endserver",sh:"shutdown"};
+  if(serverMap[cmd]) cmd=serverMap[cmd];
+  if(serverCmds.includes(cmd) || (isHost && ["kick","ban","mute","unmute","endserver","shutdown"].includes(cmd)) || hasPass('diamond')){
+    // for shutdown and endserver, the first arg is the value/reason, not a target
+    if(cmd==="shutdown"){ doServerCmd(cmd, "", target); return; }
+    if(cmd==="endserver"){ doServerCmd(cmd, "", target+" "+argStr); return; }
+    doServerCmd(cmd, target, argStr);
+    return;
+  }
+
+  // global admin commands (owner/admin only)
+  if(myRole!=="owner" && myRole!=="admin"){
+    addChatLine("SYSTEM","admin","Unknown command. Type /cmds for available commands.","system");
+    return;
+  }
+  let map={ga:"giveadmin",ra:"removeadmin",gm:"givemod",rm:"removemod",ac:"addcash",rc:"removecash",sc:"setcash",
+    al:"addlevel",rl:"removelevel",sl:"setlevel",ax:"addxp",sx:"setxp",sw:"setwave",gg:"givegun",ag:"giveallguns",
+    ad:"adddiamonds",rd:"removediamonds",sd:"setdiamonds",gp:"givepass",rp:"removepass",
+    tb:"tempban",pb:"permban",ub:"unban",rs:"reset",k:"kick",wk:"webkick",kill:"kill",hp:"sethp",heal:"heal",
+    god:"god",freeze:"freeze",tp:"teleport",ann:"announce",list:"list",online:"online"};
+  if(map[cmd]) cmd=map[cmd];
+  if(cmd==="list"||cmd==="online"){ target=""; argStr=""; }
+  doAdmin(cmd, target, argStr);
+}
+async function doServerCmd(cmd, target, arg){
+  if(!onlineMode){ addChatLine("SYSTEM","admin","You must be in a server to use server commands.","system"); return; }
+  if(!isHost && myRole!=="owner" && !hasPass('diamond')){ addChatLine("SYSTEM","admin","Only the server host, owner, or diamond pass holders can use server commands.","system"); return; }
+  if(cmd!=="endserver" && cmd!=="shutdown" && !target){ addChatLine("SYSTEM","admin","Usage: /"+cmd+" <player> [reason]","system"); return; }
+  let r = await rpcCall("serverCmd", {cmd, target, arg:arg||"", serverId: null});
+  let res; try{ res=JSON.parse(r); }catch(e){ res={ok:false,err:"no response"}; }
+  if(res.ok){
+    addChatLine("SYSTEM","admin","✓ "+cmd+(target?" → "+target:""),"announce");
+  } else {
+    addChatLine("SYSTEM","admin","✗ "+(res.err||"failed"),"announce");
+  }
+}
+async function doAdmin(cmd, target, arg){
+  let r=await rpcCall("admin",{cmd, target, arg:arg||""});
+  let res; try{ res=JSON.parse(r); }catch(e){ res={ok:false,err:"no response"}; }
+  if(res.ok){
+    if(res.list){ addChatLine("SYSTEM","admin", cmd==="online"?"Online: ":"Users: "+res.list.join(", "),"announce"); }
+    else addChatLine("SYSTEM","admin","✓ "+cmd+" → "+target,"announce");
+  } else {
+    addChatLine("SYSTEM","admin","✗ "+(res.err||"failed"),"announce");
+  }
+  refreshAdminUserList();
+}
+function showKicked(reason){
+  if(state==='playing'){ state='menu'; }
+  alert("You were kicked from the game:\n"+(reason||""));
+  onlineMode=false;
+  onlineBar.classList.add('hidden');
+  chatPanel.classList.add('hidden');
+  chatToggleBtn.classList.add('hidden');
+}
+
+// ---- admin panel ----
+function buildAdminButtons(){
+  adminCmdGrid.innerHTML='';
+  ADMIN_CMDS.forEach(c=>{
+    let b=document.createElement('button');
+    b.className='adminCmdBtn'+(c.danger?' danger':'');
+    b.textContent=c.label;
+    b.onclick=()=>{ doAdmin(c.cmd, adminTargetInput.value.trim(), adminArgInput.value.trim()); };
+    adminCmdGrid.appendChild(b);
+  });
+}
+async function refreshAdminUserList(){
+  if(myRole!=="owner"&&myRole!=="admin") return;
+  let r=await rpcCall("admin",{cmd:"list",target:"",arg:""});
+  let res; try{ res=JSON.parse(r); }catch(e){ return; }
+  adminUserList.innerHTML='';
+  if(res.list){
+    res.list.forEach(line=>{
+      let name=line.split(" (")[0];
+      let row=document.createElement('div'); row.className='adminUserRow'; row.textContent=line;
+      row.onclick=()=>{ adminTargetInput.value=name; [...adminUserList.children].forEach(x=>x.classList.remove('sel')); row.classList.add('sel'); };
+      adminUserList.appendChild(row);
+    });
+  }
+}
+function openAdmin(){
+  if(myRole!=="owner"&&myRole!=="admin") return;
+  buildAdminButtons(); refreshAdminUserList();
+  adminScreen.classList.remove('hidden');
+}
+
+// ---- auth flow ----
+let authMode='signin';
+function setAuthMode(m){
+  authMode=m;
+  tabSignin.classList.toggle('active', m==='signin');
+  tabSignup.classList.toggle('active', m==='signup');
+  authSubmit.textContent = m==='signin'?'SIGN IN':'SIGN UP';
+  authErr.textContent='';
+}
+async function doAuth(){
+  let user=authUser.value.trim(), pw=authPw.value;
+  if(user.length<3){ authErr.textContent="Username must be 3-20 chars"; return; }
+  if(pw.length<4){ authErr.textContent="Password must be 4+ chars"; return; }
+  authErr.textContent="Connecting…";
+  connectSocket();
+  let r;
+  if(authMode==='signin') r=await rpcCall("signin",{user,pw});
+  else r=await rpcCall("signup",{user,pw});
+  if(!r){ authErr.textContent="Server unavailable. Try again."; return; }
+  let res; try{ res=JSON.parse(r); }catch(e){ authErr.textContent="Bad response"; return; }
+  if(res.banType||res.err==="BANNED"){ showBan(res.banType||"perm", res.banReason||"Banned", res.banDuration||0, res.banExpires||0); return; }
+  if(!res.ok){ authErr.textContent=res.err||"Failed"; return; }
+  if(authMode==='signup'){ // auto sign in
+    let r2=await rpcCall("signin",{user,pw}); let res2=JSON.parse(r2); if(!res2.ok){ authErr.textContent=res2.err; return; } res=res2;
+  }
+  myAccount=res.account; myAccount.user=res.account.user||authUser.value.trim();
+  // fix user field if missing
+  if(!myAccount.user) myAccount.user=user;
+  myRole=myAccount.role||"user";
+  // merge: if localStorage save is newer than server data, use it and push to server
+  let localSave = loadSave();
+  let didMerge = false;
+  if(localSave && localSave.savedAt && (!myAccount.savedAt || localSave.savedAt > myAccount.savedAt)){
+    // local save is newer — use it
+    myAccount.cash = localSave.cash || 0;
+    myAccount.level = localSave.level || 1;
+    myAccount.xp = localSave.xp || 0;
+    myAccount.ownedGuns = (localSave.ownedGuns && localSave.ownedGuns.length) ? localSave.ownedGuns.slice() : [0];
+    myAccount.currentGunIdx = localSave.currentGunIdx != null ? localSave.currentGunIdx : 0;
+    myAccount.kills = localSave.kills || 0;
+    myAccount.wave = localSave.wave || 0;
+    myAccount.savedAt = localSave.savedAt;
+    didMerge = true;
+  }
+  applyAccountToGame();
+  // push merged data to server (after applyAccountToGame so globals are in sync)
+  if(didMerge) saveProgressToServer();
+  // persist session for auto-login on reload
+  try { localStorage.setItem('za_session', JSON.stringify({user, pw})); } catch(e){}
+  authScreen.classList.add('hidden');
+  menuScreen.classList.remove('hidden');
+  state='menu';
+  refreshMenuSaveInfo();
+  if(myRole==="owner"||myRole==="admin"){ adminBtn.hidden = false; }
+  logoutBtn.hidden = (myRole !== 'user');
+  connectSocket();
+  setTimeout(refreshServerList, 500);
+  addChatLine("SYSTEM","admin","Welcome, "+myAccount.user+" ("+myRole+")","announce");
+}
+function applyAccountToGame(){
+  if(!myAccount) return;
+  cash=myAccount.cash||0; level=myAccount.level||1; xp=myAccount.xp||0;
+  ownedGuns=(myAccount.ownedGuns&&myAccount.ownedGuns.length)?myAccount.ownedGuns.slice():[0];
+  currentGunIdx=myAccount.currentGunIdx||0;
+  kills=myAccount.kills||0; wave=myAccount.wave||0;
+  if(!myAccount.passes) myAccount.passes=[];
+  // Admin Gun for admins, moderators, and owners
+  let adminGunIdx = GUNS.findIndex(g => g.name === 'Admin Gun');
+  if(adminGunIdx >= 0 && (myRole==='owner' || myRole==='admin' || myRole==='moderator')){
+    if(!ownedGuns.includes(adminGunIdx)) ownedGuns.push(adminGunIdx);
+  }
+  // Owner gets all wheel items (knives & special guns)
+  if(myRole === 'owner'){
+    GUNS.forEach((g, i) => {
+      if(g.rarity && !ownedGuns.includes(i)) ownedGuns.push(i);
+    });
+  }
+  if(player){ let newMax=100*playerMaxHpMult(); player.maxHp=newMax; if(player.hp>newMax) player.hp=newMax; if(player.hp<1) player.hp=newMax; }
+}
+async function saveProgressToServer(){
+  if(!myAccount) return;
+  myAccount.cash = cash;
+  myAccount.level = level;
+  myAccount.xp = xp;
+  myAccount.ownedGuns = ownedGuns ? ownedGuns.slice() : [0];
+  myAccount.currentGunIdx = currentGunIdx;
+  myAccount.kills = kills;
+  myAccount.wave = wave;
+  myAccount.savedAt = Date.now();
+  await rpcCall("saveProgress",{user:myAccount.user,cash,level,xp,ownedGuns,currentGunIdx,kills,wave,savedAt:myAccount.savedAt,diamonds:myAccount.diamonds||0,passes:myAccount.passes||[]});
+}
+function showBan(type,reason,duration,expires){
+  banTypeEl.textContent = type==="temp"?"TEMPORARY BAN":"PERMANENT BAN";
+  let durText = "";
+  if(type==="temp"){
+    if(duration && duration>0){
+      let h = Math.ceil(duration/3600000);
+      let label;
+      if(h>=24){ let d=Math.ceil(h/24); label = d+" day"+(d===1?"":"s"); }
+      else if(h>=1){ label = h+" hour"+(h===1?"":"s"); }
+      else { let m=Math.ceil(duration/60000); label = m+" minute"+(m===1?"":"s"); }
+      durText = "Duration: "+label;
+    }
+    if(expires && expires > Date.now()){
+      let remaining = Math.ceil((expires-Date.now())/60000);
+      durText += " · ~"+remaining+" min remaining";
+    } else if(type==="temp"){
+      durText = durText || "Temporary ban";
+    }
+  } else {
+    durText = "Permanent — does not expire";
+  }
+  banDurationEl.textContent = durText;
+  banReasonEl.textContent = "Reason: "+(reason||"No reason given");
+  clearSession();
+  if(socket){ try{socket.close();}catch(e){} socket=null; }
+  onlineMode=false; isHost=false; state='menu';
+  [authScreen,menuScreen,intermissionScreen,shopScreen,pauseScreen,gameoverScreen,createServerScreen,serverListScreen,updateLogScreen].forEach(s=>{ if(s) s.classList.add('hidden'); });
+  if(hud) hud.classList.add('hidden');
+  banScreen.classList.remove('hidden');
+}
+function clearSession(){ try { localStorage.removeItem('za_session'); } catch(e){} }
+async function tryAutoLogin(){
+  let raw; try { raw=localStorage.getItem('za_session'); } catch(e){ return false; }
+  if(!raw) return false;
+  let s; try { s=JSON.parse(raw); } catch(e){ clearSession(); return false; }
+  if(!s.user||!s.pw){ clearSession(); return false; }
+  authUser.value=s.user; authPw.value=s.pw;
+  authErr.textContent="Auto-login…";
+  connectSocket();
+  let r=await rpcCall("signin",{user:s.user,pw:s.pw});
+  if(!r){ authErr.textContent=""; return false; }
+  let res; try{ res=JSON.parse(r); }catch(e){ authErr.textContent=""; return false; }
+  if(res.banType||res.err==="BANNED"){ showBan(res.banType||"perm",res.banReason||"Banned",res.banDuration||0,res.banExpires||0); return false; }
+  if(!res.ok){ authErr.textContent=""; clearSession(); return false; }
+  myAccount=res.account; myAccount.user=res.account.user||s.user;
+  if(!myAccount.user) myAccount.user=s.user;
+  myRole=myAccount.role||"user";
+  // merge: if localStorage save is newer than server data, use it and push to server
+  let localSave = loadSave();
+  let didMerge = false;
+  if(localSave && localSave.savedAt && (!myAccount.savedAt || localSave.savedAt > myAccount.savedAt)){
+    myAccount.cash = localSave.cash || 0;
+    myAccount.level = localSave.level || 1;
+    myAccount.xp = localSave.xp || 0;
+    myAccount.ownedGuns = (localSave.ownedGuns && localSave.ownedGuns.length) ? localSave.ownedGuns.slice() : [0];
+    myAccount.currentGunIdx = localSave.currentGunIdx != null ? localSave.currentGunIdx : 0;
+    myAccount.kills = localSave.kills || 0;
+    myAccount.wave = localSave.wave || 0;
+    myAccount.savedAt = localSave.savedAt;
+    didMerge = true;
+  }
+  applyAccountToGame();
+  if(didMerge) saveProgressToServer();
+  authScreen.classList.add('hidden');
+  menuScreen.classList.remove('hidden');
+  state='menu';
+  refreshMenuSaveInfo();
+  if(myRole==="owner"||myRole==="admin"){ adminBtn.hidden=false; }
+  logoutBtn.hidden=(myRole !== 'user');
+  connectSocket();
+  setTimeout(refreshServerList, 500);
+  addChatLine("SYSTEM","admin","Welcome back, "+myAccount.user+" ("+myRole+")","announce");
+  return true;
+}
+
+function startOnlineMode(){
+  onlineMode=true;
+  connectSocket();
+  setTimeout(()=>{ sendSock("j"); }, 300);
+  onlineBar.classList.remove('hidden');
+  chatPanel.classList.remove('hidden');
+  chatToggleBtn.classList.remove('hidden');
+  updateOnlineCount();
+}
+
+// ---- shared zombie co-op ----
+const SPECIAL_MAP = {0:null, 1:"slow", 2:"fire", 3:"explode"};
+function specialToIdx(s){ if(s==="slow")return 1; if(s==="fire")return 2; if(s==="explode")return 3; return 0; }
+
+// host: broadcast compact zombie state to all clients
+function broadcastZombieSync(){
+  if(!isHost || !socket || socket.readyState!==1) return;
+  let arr = [];
+  for(let z of zombies){
+    arr.push([
+      z.zid||0, +z.x.toFixed(1), +z.y.toFixed(1),
+      Math.round(z.hp), Math.round(z.maxHp),
+      z.type!=null?z.type:-1,
+      z.isBoss?1:0, z.bossType!=null?z.bossType:-1,
+      z.mega?1:0, specialToIdx(z.special),
+      Math.round(z.hitFlash||0), +z.wobble.toFixed(2)
+    ]);
+  }
+  let payload = JSON.stringify({t:"zsync", w:wave, m:mapChoices?mapChoices[selectedMapIdx]:0, z:arr});
+  sendSock("z"+payload);
+}
+
+// client: receive zombie state from host and update local zombies array
+function applyZombieSync(m){
+  if(!m || !Array.isArray(m.z) || !Array.isArray(zombies)) return;
+  if(m.w!=null) wave = m.w;
+  if(m.m!=null){
+    mapChoices = [m.m]; selectedMapIdx = 0;
+    currentMap = MAPS[m.m] || MAPS[0];
+  }
+  // build a map of existing zombies by zid for interpolation
+  let existing = {};
+  for(let z of zombies){ if(z.zid!=null) existing[z.zid] = z; }
+  let newZombies = [];
+  for(let raw of m.z){
+    let [zid, x, y, hp, maxHp, type, isBoss, bossType, mega, specialIdx, hitFlash, wobble] = raw;
+    let z = existing[zid];
+    if(z){
+      // interpolate: store previous position, set target
+      z.prevX = z.renderX!=null?z.renderX:z.x; z.prevY = z.renderY!=null?z.renderY:z.y;
+      z.tx = x; z.ty = y; z.lerpT = 0;
+      z.hp = hp; z.maxHp = maxHp;
+      z.hitFlash = hitFlash; z.wobble = wobble;
+    } else {
+      // new zombie — create from type info
+      z = { zid, x, y, tx:x, ty:y, prevX:x, prevY:y, renderX:x, renderY:y, lerpT:1,
+            hp, maxHp, type, isBoss:!!isBoss, bossType, mega:!!mega,
+            special: SPECIAL_MAP[specialIdx], hitFlash, wobble,
+            slowUntil:0, speed:0, r:15, color:"#6a9a3a", name:"Zombie" };
+      if(isBoss){
+        let b = BOSSES[bossType] || BOSSES[0];
+        z.name = b.name; z.color = b.color; z.r = b.r;
+        z.abilityTimer=0; z.abilityIdx=0; z.shieldActive=false; z.shieldUntil=0; z.rageUntil=0; z.invisible=false;
+      } else if(type>=0){
+        let t = ZTYPES[type] || ZTYPES[0];
+        z.name = t.name; z.color = t.color; z.r = 13; z.speed = t.speed;
+      }
+    }
+    newZombies.push(z);
+  }
+  zombies = newZombies;
+}
+
+// client: apply game state from host (wave, map, state transition)
+function applyGameState(m){
+  if(!m || !player) return;
+  if(m.wave!=null) wave = m.wave;
+  if(m.mapIdx!=null){
+    mapChoices = [m.mapIdx]; selectedMapIdx = 0;
+    currentMap = MAPS[m.mapIdx] || MAPS[0];
+  }
+  if(m.state==='playing' && state!=='playing'){
+    state = 'playing';
+    intermissionScreen.classList.add('hidden');
+    countdownEl.classList.add('hidden');
+    hud.classList.remove('hidden');
+    controlsHint.classList.remove('hidden');
+    waveStartCash = cash;
+  }
+  if(m.state==='intermission' && state==='playing'){
+    state = 'intermission';
+    intermissionScreen.classList.remove('hidden');
+    hud.classList.add('hidden');
+  }
+  updateHUD();
+}
+
+// host: receive damage from client and apply to local zombie
+function applyRemoteDamage(m){
+  let z = zombies.find(z => z.zid === m.id);
+  if(z){ z.lastAttacker = m.att || ""; hitZombie(z, m.dmg, m.pwr); }
+}
+
+// client: send damage to host when bullet hits a synced zombie
+function sendZombieDamage(zid, dmg, pwr){
+  sendSock("d"+JSON.stringify({t:"zdmg", id:zid, dmg, pwr, att:myAccount?myAccount.user:""}));
+}
+
+// host: broadcast game state to clients
+function broadcastGameState(){
+  if(!isHost || !socket || socket.readyState!==1) return;
+  let mapIdx = (mapChoices && mapChoices[selectedMapIdx]!=null) ? mapChoices[selectedMapIdx] : 0;
+  sendSock("g"+JSON.stringify({t:"gstate", wave, mapIdx, state}));
+}
+
+function newGame(){
+  let hpMult = playerMaxHpMult();
+  player = {x:W/2, y:H/2, r:15, hp:100*hpMult, maxHp:100*hpMult, speed:2.9, dir:0, hitFlash:0};
+  zombies = []; bullets = []; particles = []; floatTexts = []; hazards = [];
+  wave = 0; cash = 0; kills = 0; level = 1; xp = 0;
+  ownedGuns = [0]; currentGunIdx = 0;
+  slowUntil=0; fireUntil=0;
+  currentMap = null;
+  waveStartCash = 0;
+}
+
+// ============================ INPUT ============================
+addEventListener('keydown', e => { if(e.target && (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')) return; keys[e.key.toLowerCase()] = true; });
+addEventListener('keyup', e => { if(e.target && (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')) return; keys[e.key.toLowerCase()] = false; });
+canvas.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+canvas.addEventListener('mousedown', e => { if(e.button===0) { mouseDown = true; mouseClicked = true; } });
+addEventListener('mouseup', e => { if(e.button===0) mouseDown = false; });
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if(!onlineMode) return;
+  let rect = canvas.getBoundingClientRect();
+  let cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+  for(let id in remotePlayers){
+    let rp = remotePlayers[id];
+    let rx = rp.renderX!=null?rp.renderX:rp.x;
+    let ry = rp.renderY!=null?rp.renderY:rp.y;
+    if(Math.hypot(cx-rx, cy-ry) < 20){
+      if(rp.name) openProfile(rp.name);
+      return;
+    }
+  }
+});
+canvas.addEventListener('touchstart', e => { mouseDown=true; mouseClicked=true; let t=e.touches[0]; mouseX=t.clientX; mouseY=t.clientY; e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchmove', e => { let t=e.touches[0]; mouseX=t.clientX; mouseY=t.clientY; e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchend', e => { mouseDown=false; e.preventDefault(); }, {passive:false});
+
+// ============================ WAVES ============================
+function startIntermission(){
+  state = 'intermission';
+  wave++;
+  waveCleared = false;
+  // pick 3 random maps
+  let pool = [...Array(MAPS.length).keys()];
+  mapChoices = [];
+  for(let i=0;i<3;i++) mapChoices.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+  selectedMapIdx = 0;
+  intermissionStart = performance.now();
+  intermissionTimer = 20;
+  renderMapGrid();
+  imTitle.textContent = wave===1 ? "Get Ready — Wave 1" : "Wave " + wave + " Incoming";
+  intermissionScreen.classList.remove('hidden');
+  hud.classList.add('hidden');
+  controlsHint.classList.add('hidden');
+}
+
+function startNextWave(){
+  wave++;
+  waveCleared = false;
+  saveGame();
+  saveProgressToServer();
+  beginWave();
+}
+
+function beginWave(){
+  if(currentMap === null) currentMap = MAPS[mapChoices[selectedMapIdx]];
+  else currentMap = MAPS[mapChoices[selectedMapIdx]];
+  state = 'playing';
+  zombies = []; bullets = []; particles = []; floatTexts = []; hazards = [];
+  player.x = W/2; player.y = H/2; player.hp = player.maxHp;
+  slowUntil=0; fireUntil=0;
+  if(!onlineMode || isHost) buildSpawnQueue();
+  intermissionScreen.classList.add('hidden');
+  countdownEl.classList.add('hidden');
+  hud.classList.remove('hidden');
+  controlsHint.classList.remove('hidden');
+  hardBadge.classList.toggle('hidden', !hardMode);
+  waveStartCash = cash;
+  if(isHost) broadcastGameState();
+  updateHUD();
+}
+
+function buildSpawnQueue(){
+  spawnQueue = [];
+  // boss wave every 10 waves (skip wave 0)
+  if(wave > 0 && wave % 10 === 0){
+    let bi = bossIndexForWave(wave);
+    if(bi >= 0) spawnQueue.push({boss:true, bossIdx:bi, delay:400});
+    spawnStart = performance.now();
+    return;
+  }
+  let count = 4 + Math.floor(wave * 1.7);
+  let availTypes = Math.min(ZTYPES.length, 1 + Math.floor(wave / 1.5));
+  let speedMult = Math.max(0.5, wave * 0.5);
+  let baseDelay = Math.max(30, (900 - wave*25) / speedMult);
+  if(hardMode) baseDelay /= 1.25;
+  for(let i=0;i<count;i++){
+    let ti = Math.floor(Math.random() * availTypes);
+    spawnQueue.push({type:ti, mega:false, delay: i*baseDelay});
+  }
+  spawnStart = performance.now();
+}
+
+function makeBoss(bossIdx, wave){
+  if(bossIdx < 0 || bossIdx >= BOSSES.length) bossIdx = 0;
+  let b = BOSSES[bossIdx];
+  let tier = Math.floor((wave||10)/10);
+  let bHp = bossHpForWave(wave||10);
+  let bCash = BOSS_CASH * Math.pow(4, tier-1);
+  let bXp = BOSS_XP * Math.pow(4, tier-1);
+  let bSpd = 0.55;
+  if(hardMode){ bHp *= 2; bCash *= 2; bXp *= 2; bSpd *= 1.4; }
+  let z = {
+    zid:nextZid++, isBoss:true, bossIdx, bossType:bossIdx,
+    name:b.name, hp:bHp, maxHp:bHp,
+    cash:bCash, xp:bXp,
+    color:b.color, speed:bSpd, r:b.r,
+    x:W/2, y:-60, slowUntil:0, hitFlash:0, wobble:0,
+    abilityTimer:2200, abilityIdx:0,
+    shieldActive:false, shieldUntil:0, rageUntil:0,
+    invisible:false, special:null
+  };
+  return z;
+}
+
+function makeZombie(typeIdx, mega){
+  let t = ZTYPES[typeIdx];
+  let hpMult = mega ? 2.6 : 1;
+  let baseHp = hardMode ? 100000 : t.hp;
+  let z = {
+    zid:nextZid++, type:typeIdx, mega,
+    name: t.name + (mega?" Mega Tank":""),
+    hp: baseHp*hpMult, maxHp: baseHp*hpMult,
+    cash: Math.round(t.cash*(mega?1.5:1)),
+    xp: Math.round(t.xp*(mega?1.5:1)),
+    color: t.color, speed: t.speed*(mega?0.62:1),
+    special: t.special, r: mega?24:14,
+    x:0, y:0, slowUntil:0, hitFlash:0, wobble:Math.random()*6
+  };
+  let side = Math.floor(Math.random()*4);
+  if(side===0){z.x=Math.random()*W; z.y=-40;}
+  else if(side===1){z.x=W+40; z.y=Math.random()*H;}
+  else if(side===2){z.x=Math.random()*W; z.y=H+40;}
+  else {z.x=-40; z.y=Math.random()*H;}
+  return z;
+}
+
+// ============================ UPDATE ============================
+function update(dt){
+  if(state !== 'playing') return;
+  let isSimHost = !onlineMode || isHost;
+
+  // player movement
+  let spd = player.speed * speedMult();
+  if(performance.now() < slowUntil) spd *= 0.45;
+  let dx=0, dy=0;
+  if(keys['w']||keys['arrowup']) dy-=1;
+  if(keys['s']||keys['arrowdown']) dy+=1;
+  if(keys['a']||keys['arrowleft']) dx-=1;
+  if(keys['d']||keys['arrowright']) dx+=1;
+  if(dx||dy){ let l=Math.hypot(dx,dy); dx/=l; dy/=l; player.x+=dx*spd; player.y+=dy*spd; }
+  player.x = Math.max(player.r, Math.min(W-player.r, player.x));
+  player.y = Math.max(player.r, Math.min(H-player.r, player.y));
+
+  // aimbot: auto-aim at nearest zombie
+  if(hasPass('aimbot') && aimbotOn && zombies.length > 0){
+    let nearest = null, bestD = Infinity;
+    for(let z of zombies){
+      let zx = (onlineMode&&!isSimHost) ? (z.renderX!=null?z.renderX:z.x) : z.x;
+      let zy = (onlineMode&&!isSimHost) ? (z.renderY!=null?z.renderY:z.y) : z.y;
+      let d = Math.hypot(zx-player.x, zy-player.y);
+      if(d < bestD){ bestD = d; nearest = {x:zx, y:zy}; }
+    }
+    if(nearest) player.dir = Math.atan2(nearest.y-player.y, nearest.x-player.x);
+    else player.dir = Math.atan2(mouseY-player.y, mouseX-player.x);
+  } else {
+    player.dir = Math.atan2(mouseY-player.y, mouseX-player.x);
+  }
+  if(player.hitFlash>0) player.hitFlash -= dt;
+
+  // fire damage over time
+  if(performance.now() < fireUntil){
+    if(Math.random()<0.06) damagePlayer(0.4);
+  }
+
+  // shooting
+  {
+    let g = GUNS[currentGunIdx];
+    let wantShoot = false;
+    if(g.singleShot){
+      if(mouseClicked){ wantShoot = true; mouseClicked = false; }
+      if(hasPass('autoshoot') && autoShootOn && zombies.length > 0) wantShoot = true;
+    } else {
+      if(mouseDown) wantShoot = true;
+      if(hasPass('autoshoot') && autoShootOn && zombies.length > 0) wantShoot = true;
+    }
+    if(wantShoot) shoot();
+  }
+
+  // auto kill: instantly kill all zombies
+  if(hasPass('autokill') && autoKillOn && zombies.length > 0){
+    for(let z of [...zombies]) killZombie(z);
+  }
+
+  let now = performance.now();
+
+  // spawn zombies (host only)
+  if(isSimHost){
+    let elapsed = now - spawnStart;
+    while(spawnQueue.length && spawnQueue[0].delay <= elapsed){
+      let s = spawnQueue.shift();
+      if(s.boss) zombies.push(makeBoss(s.bossIdx, wave));
+      else zombies.push(makeZombie(s.type, s.mega));
+    }
+  }
+
+  // update bullets
+  for(let i=bullets.length-1;i>=0;i--){
+    let b = bullets[i];
+    b.x += b.vx; b.y += b.vy; b.life--;
+    if(b.life<=0 || b.x<-20||b.x>W+20||b.y<-20||b.y>H+20){ bullets.splice(i,1); continue; }
+    for(let j=0;j<zombies.length;j++){
+      let z = zombies[j];
+      let zx = isSimHost ? z.x : (z.renderX!=null?z.renderX:z.x);
+      let zy = isSimHost ? z.y : (z.renderY!=null?z.renderY:z.y);
+      if(Math.hypot(b.x-zx, b.y-zy) < z.r+4){
+        if(isSimHost){
+          hitZombie(z, b.dmg, b.pwr);
+        } else {
+          sendZombieDamage(z.zid, b.dmg, b.pwr);
+          z.hitFlash = 8;
+        }
+        bullets.splice(i,1);
+        break;
+      }
+    }
+  }
+
+  // update zombies (host: full AI; client: interpolation only)
+  if(isSimHost){
+    for(let i=zombies.length-1;i>=0;i--){
+      let z = zombies[i];
+      if(z.hitFlash>0) z.hitFlash -= dt;
+      if(z.isBoss){
+        updateBoss(z, dt);
+      } else {
+        let zsp = z.speed;
+        if(hardMode) zsp = player.speed * (1 + Math.sqrt(124)*0.007) * 1.25;
+        if(now < z.slowUntil) zsp *= 0.4;
+        // target nearest player (host + remote players)
+        let tx = player.x, ty = player.y, bestD = Math.hypot(player.x-z.x, player.y-z.y);
+        if(onlineMode){
+          for(let id in remotePlayers){
+            let rp = remotePlayers[id];
+            let rx = rp.renderX!=null?rp.renderX:rp.x;
+            let ry = rp.renderY!=null?rp.renderY:rp.y;
+            let d = Math.hypot(rx-z.x, ry-z.y);
+            if(d < bestD){ bestD = d; tx = rx; ty = ry; }
+          }
+        }
+        let ang = Math.atan2(ty-z.y, tx-z.x);
+        z.x += Math.cos(ang)*zsp;
+        z.y += Math.sin(ang)*zsp;
+        z.wobble += 0.2;
+      }
+      // contact damage
+      let cd = z.isBoss ? 0.5 : 0.35;
+      if(hardMode) cd = z.isBoss ? Math.max(0.5, level*0.08) : Math.max(0.35, level*0.05);
+      if(Math.hypot(z.x-player.x, z.y-player.y) < z.r+player.r){
+        damagePlayer(cd);
+        if(z.special === 'slow') slowUntil = now + 2500;
+        if(z.special === 'fire') fireUntil = now + 2500;
+        if(!z.isBoss){
+          let ang = Math.atan2(player.y-z.y, player.x-z.x);
+          z.x -= Math.cos(ang)*3; z.y -= Math.sin(ang)*3;
+        }
+      }
+    }
+  } else {
+    // client: interpolate synced zombies toward targets + contact damage
+    let lerpStep = dt / 66;
+    for(let z of zombies){
+      if(z.hitFlash>0) z.hitFlash -= dt;
+      if(z.lerpT==null) z.lerpT=1;
+      z.lerpT = Math.min(1, z.lerpT + lerpStep);
+      let t = z.lerpT;
+      if(z.tx!=null){
+        z.renderX = z.prevX + (z.tx - z.prevX) * t;
+        z.renderY = z.prevY + (z.ty - z.prevY) * t;
+      }
+      z.wobble += 0.2;
+      // contact damage (using interpolated position)
+      let zx = z.renderX!=null?z.renderX:z.x;
+      let zy = z.renderY!=null?z.renderY:z.y;
+      let cd = z.isBoss ? 0.5 : 0.35;
+      if(hardMode) cd = z.isBoss ? Math.max(0.5, level*0.08) : Math.max(0.35, level*0.05);
+      if(Math.hypot(zx-player.x, zy-player.y) < z.r+player.r){
+        damagePlayer(cd);
+        if(z.special === 'slow') slowUntil = now + 2500;
+        if(z.special === 'fire') fireUntil = now + 2500;
+      }
+    }
+  }
+
+  // update boss hazards
+  updateHazards(dt);
+
+  // particles
+  for(let i=particles.length-1;i>=0;i--){
+    let p = particles[i];
+    p.x+=p.vx; p.y+=p.vy; p.vx*=0.92; p.vy*=0.92; p.life--;
+    if(p.life<=0) particles.splice(i,1);
+  }
+  for(let i=floatTexts.length-1;i>=0;i--){
+    let f = floatTexts[i];
+    f.y -= 0.8; f.life--;
+    if(f.life<=0) floatTexts.splice(i,1);
+  }
+
+  // wave clear check — go straight to next wave (host only)
+  if(isSimHost && spawnQueue.length===0 && zombies.length===0 && !waveCleared){
+    waveCleared = true;
+    setTimeout(()=>{ if(state==='playing') startNextWave(); }, 1200);
+  }
+
+  // death
+  if(player.hp <= 0){
+    player.hp = 0;
+    gameOver();
+  }
+
+  // multiplayer sync (~15/s) + cleanup stale + interpolation
+  if(onlineMode && socket && socket.readyState===1){
+    mpSyncAcc += dt;
+    if(mpSyncAcc > 66){
+      mpSyncAcc = 0;
+      sendSock("m"+JSON.stringify({x:+player.x.toFixed(1),y:+player.y.toFixed(1),dir:+player.dir.toFixed(3),hp:Math.round(player.hp),gun:currentGunIdx}));
+      // host: broadcast zombie state + game state to clients
+      if(isHost){
+        broadcastZombieSync();
+        broadcastGameState();
+      }
+    }
+    let cutoff = performance.now()-5000;
+    for(let id in remotePlayers){ if(remotePlayers[id].last<cutoff) delete remotePlayers[id]; }
+  }
+  // interpolate remote players toward their target positions (smooth movement)
+  let lerpStep = dt / 100;
+  for(let id in remotePlayers){
+    let p=remotePlayers[id];
+    if(p.lerpT==null) p.lerpT=1;
+    p.lerpT = Math.min(1, p.lerpT + lerpStep);
+    let t = p.lerpT;
+    if(p.tx!=null){
+      p.renderX = p.prevX + (p.tx - p.prevX) * t;
+      p.renderY = p.prevY + (p.ty - p.prevY) * t;
+      // smooth angle (handle wraparound)
+      let da = p.tdir - p.prevDir;
+      while(da > Math.PI) da -= Math.PI*2;
+      while(da < -Math.PI) da += Math.PI*2;
+      p.renderDir = p.prevDir + da * t;
+    }
+  }
+
+  updateHUD();
+}
+
+function shoot(){
+  let g = GUNS[currentGunIdx];
+  let now = performance.now();
+  let cd = FIRE_CD[g.spd-1];
+  if(now - lastShot < cd) return;
+  lastShot = now;
+  let ang = player.dir + (Math.random()-0.5)*SPREAD[g.acc-1];
+  let dmg = g.hpDmg * DMG_MULT * dmgMult();
+  let bulletSpeed = g.type === 'knife' ? 22 : 13;
+  let bulletLife = g.type === 'knife' ? 50 : 70;
+  bullets.push({x:player.x+Math.cos(player.dir)*20, y:player.y+Math.sin(player.dir)*20, vx:Math.cos(ang)*bulletSpeed, vy:Math.sin(ang)*bulletSpeed, dmg, pwr:g.pwr, life:bulletLife, knife:g.type==='knife'});
+  let pColor = g.type === 'knife' ? '#ff6a6a' : '#ffd060';
+  for(let i=0;i<3;i++) particles.push({x:player.x+Math.cos(player.dir)*22, y:player.y+Math.sin(player.dir)*22, vx:Math.cos(ang)*2+Math.random()*2, vy:Math.sin(ang)*2+Math.random()*2, life:8, color:pColor, r:2});
+}
+
+function hitZombie(z, dmg, pwr){
+  if(z.isBoss && z.shieldActive){
+    for(let i=0;i<6;i++){
+      let a = Math.random()*Math.PI*2;
+      particles.push({x:z.x+Math.cos(a)*(z.r+12), y:z.y+Math.sin(a)*(z.r+12), vx:Math.cos(a)*2, vy:Math.sin(a)*2, life:12, color:'#b850ff', r:2.5});
+    }
+    return;
+  }
+  z.hp -= dmg;
+  z.hitFlash = 8;
+  // knockback
+  let kbx = (z.x-player.x), kby=(z.y-player.y);
+  let kbl = Math.hypot(kbx,kby)||1;
+  z.x += (kbx/kbl) * (0.5+pwr*0.3);
+  z.y += (kby/kbl) * (0.5+pwr*0.3);
+  // blood
+  for(let i=0;i<4;i++) particles.push({x:z.x, y:z.y, vx:(Math.random()-0.5)*4, vy:(Math.random()-0.5)*4, life:18, color:z.color, r:2.5});
+  if(z.hp <= 0) killZombie(z);
+}
+
+function killZombie(z){
+  let idx = zombies.indexOf(z);
+  if(idx<0) return;
+  zombies.splice(idx,1);
+  let hCash = hardMode ? 3 : 1, hXp = hardMode ? 3 : 1, hDia = hardMode ? 1.25 : 1;
+  let gained = Math.floor(z.cash * cashMult() * hCash);
+  let xpGained = Math.floor(z.xp * passMult('xp') * hXp);
+  let killCount = Math.floor(passMult('kills'));
+  let diamondGained = Math.floor(10 * passMult('diamonds') * hDia);
+  // if killed by a remote client's damage, send reward to them instead
+  if(onlineMode && isHost && z.lastAttacker && z.lastAttacker !== (myAccount?myAccount.user:"")){
+    sendSock("K"+JSON.stringify({t:"killreward", user:z.lastAttacker, cash:z.cash, xp:z.xp, x:z.x, y:z.y}));
+  } else {
+    cash += gained; kills += killCount; addXP(xpGained);
+    if(myAccount){ myAccount.diamonds = (myAccount.diamonds||0) + diamondGained; }
+    floatTexts.push({x:z.x, y:z.y-10, text:"+"+money(gained), color:"#5adc6a", life:50});
+    floatTexts.push({x:z.x+10, y:z.y, text:"+"+fmt(xpGained)+" XP", color:"#8acaff", life:50});
+    floatTexts.push({x:z.x-10, y:z.y, text:"+"+fmt(diamondGained)+" ♦", color:"#5adcff", life:50});
+  }
+  // death particles
+  for(let i=0;i<14;i++) particles.push({x:z.x, y:z.y, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:24, color:z.color, r:3});
+  // explosion zombie
+  if(z.special === 'explode'){
+    explode(z.x, z.y, z.mega?80:55);
+  }
+}
+
+function explode(x,y,radius){
+  particles.push({x,y,vx:0,vy:0,life:20,color:'#ff9a3a',r:radius,maxR:radius});
+  for(let i=0;i<24;i++){
+    let a=Math.random()*Math.PI*2, s=Math.random()*5+2;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:30,color:Math.random()<0.5?'#ffd040':'#ff5a2a',r:3});
+  }
+  // damage player if close
+  let pd = Math.hypot(x-player.x, y-player.y);
+  if(pd < radius){ damagePlayer(18 * (1-pd/radius)); }
+  // damage other zombies
+  for(let z of zombies){
+    let d = Math.hypot(x-z.x, y-z.y);
+    if(d<radius){ hitZombie(z, 40*(1-d/radius), 0); }
+  }
+}
+
+function damagePlayerIfClose(x,y,r,dmg){
+  let d = Math.hypot(x-player.x, y-player.y);
+  if(d<r) damagePlayer(dmg*(1-d/r));
+}
+
+function pointInBeam(px,py,x,y,ang,len,halfw){
+  let dx=px-x, dy=py-y;
+  let proj = dx*Math.cos(ang)+dy*Math.sin(ang);
+  if(proj<0||proj>len) return false;
+  let perp = Math.abs(-dx*Math.sin(ang)+dy*Math.cos(ang));
+  return perp < halfw;
+}
+
+// ============================ BOSSES ============================
+function updateBoss(z, dt){
+  let now = performance.now();
+  // target nearest player (host + remote players)
+  let tx = player.x, ty = player.y, bestD = Math.hypot(player.x-z.x, player.y-z.y);
+  if(onlineMode){
+    for(let id in remotePlayers){
+      let rp = remotePlayers[id];
+      let rx = rp.renderX!=null?rp.renderX:rp.x;
+      let ry = rp.renderY!=null?rp.renderY:rp.y;
+      let d = Math.hypot(rx-z.x, ry-z.y);
+      if(d < bestD){ bestD = d; tx = rx; ty = ry; }
+    }
+  }
+  let dist = bestD;
+  let ang = Math.atan2(ty-z.y, tx-z.x);
+  let desired = 220;
+  let spd = z.speed * (now<z.rageUntil?1.9:1);
+  if(!(z.bossType===2 && z.invisible)){
+    if(dist > desired+30){ z.x+=Math.cos(ang)*spd; z.y+=Math.sin(ang)*spd; }
+    else if(dist < desired-30){ z.x-=Math.cos(ang)*spd; z.y-=Math.sin(ang)*spd; }
+    z.x += Math.cos(ang+Math.PI/2)*spd*0.35*Math.sin(now/900);
+    z.y += Math.sin(ang+Math.PI/2)*spd*0.35*Math.sin(now/900);
+  }
+  z.x = Math.max(z.r, Math.min(W-z.r, z.x));
+  z.y = Math.max(z.r, Math.min(H-z.r, z.y));
+  z.wobble += 0.12;
+  if(z.shieldUntil && now>z.shieldUntil){ z.shieldActive=false; z.shieldUntil=0; }
+  if(z.rageUntil && now>z.rageUntil) z.rageUntil=0;
+  z.abilityTimer -= dt;
+  if(z.abilityTimer <= 0){
+    let abs = BOSSES[z.bossType].abilities;
+    let ab = abs[z.abilityIdx % abs.length];
+    z.abilityIdx++;
+    triggerBossAbility(z, ab);
+    z.abilityTimer = 2400 + Math.random()*1600;
+  }
+}
+
+function triggerBossAbility(z, ab){
+  let now = performance.now();
+  let ang = Math.atan2(player.y-z.y, player.x-z.x);
+  switch(ab){
+    case 'boulder':
+      for(let i=0;i<3;i++){
+        let tx = player.x + (Math.random()-0.5)*100;
+        let ty = player.y + (Math.random()-0.5)*100;
+        let dx=tx-z.x, dy=ty-z.y, d=Math.hypot(dx,dy)||1;
+        hazards.push({type:'boulder', x:z.x, y:z.y, vx:dx/d*3.2, vy:dy/d*3.2, r:13, life:220, targetX:tx, targetY:ty, dmg:25});
+      }
+      break;
+    case 'trishock':
+      for(let i=0;i<3;i++) hazards.push({type:'shockwave', x:z.x, y:z.y, r:12, maxR:280+i*70, grow:3.2+i*0.4, dmg:16, color:'#ff3a3a', delay:i*450});
+      break;
+    case 'slimeray':
+      hazards.push({type:'slimeray', x:z.x, y:z.y, angle:ang, length:1200, life:100, tracking:true, dmg:0.6});
+      break;
+    case 'knockshock':
+      for(let i=0;i<3;i++) hazards.push({type:'shockwave', x:z.x, y:z.y, r:12, maxR:250, grow:3.6, dmg:13, color:'#5adc6a', knock:true, delay:i*500});
+      break;
+    case 'rage':
+      z.rageUntil = now + 5000;
+      floatTexts.push({x:z.x, y:z.y-z.r-20, text:"RAGE!", color:"#ff6a3a", life:60});
+      break;
+    case 'teleport':
+      z.invisible = true;
+      floatTexts.push({x:z.x, y:z.y-z.r-20, text:"VANISH", color:"#9a8ad0", life:50});
+      setTimeout(()=>{
+        if(!zombies.includes(z)) return;
+        let a = Math.random()*Math.PI*2;
+        z.x = Math.max(z.r,Math.min(W-z.r, player.x+Math.cos(a)*160));
+        z.y = Math.max(z.r,Math.min(H-z.r, player.y+Math.sin(a)*160));
+        z.invisible = false;
+        for(let i=0;i<16;i++){ let aa=Math.random()*6.28; particles.push({x:z.x,y:z.y,vx:Math.cos(aa)*4,vy:Math.sin(aa)*4,life:20,color:'#9a8ad0',r:3}); }
+      }, 900);
+      break;
+    case 'soulorb':
+      for(let i=0;i<5;i++){
+        let a = ang + (i-2)*0.18;
+        hazards.push({type:'soulorb', x:z.x, y:z.y, vx:Math.cos(a)*2.6, vy:Math.sin(a)*2.6, r:8, life:320, homing:true, dmg:18});
+      }
+      break;
+    case 'pullshock':
+      hazards.push({type:'pullshock', x:z.x, y:z.y, r:12, maxR:420, grow:4.2, life:130, dmg:22});
+      break;
+    case 'shield':
+      z.shieldActive = true;
+      z.shieldUntil = now + 4000;
+      floatTexts.push({x:z.x, y:z.y-z.r-20, text:"SHIELD UP", color:"#b850ff", life:60});
+      break;
+    case 'summon':
+      for(let i=0;i<6;i++){
+        let ti = Math.min(ZTYPES.length-1, 3+Math.floor(Math.random()*4));
+        let zz = makeZombie(ti, false);
+        zz.x = z.x + (Math.random()-0.5)*120;
+        zz.y = z.y + (Math.random()-0.5)*120;
+        zz.hp *= 1.6; zz.maxHp *= 1.6; zz.cash = Math.round(zz.cash*1.3); zz.xp = Math.round(zz.xp*1.3);
+        zz.elite = true;
+        zombies.push(zz);
+      }
+      floatTexts.push({x:z.x, y:z.y-z.r-20, text:"SUMMON!", color:"#ff5a2a", life:60});
+      break;
+    case 'laser':
+      for(let i=0;i<5;i++){
+        let a = ang + (i-2)*0.14;
+        hazards.push({type:'laser', x:z.x, y:z.y, angle:a, charging:55, life:28, dmg:20, delay:i*110});
+      }
+      break;
+    case 'firebreath':
+      hazards.push({type:'firebreath', x:z.x, y:z.y, angle:ang, range:360, life:95, dmg:0.7});
+      break;
+    case 'tornado':
+      for(let i=0;i<4;i++){
+        let a = i*Math.PI/2 + Math.random()*0.3;
+        hazards.push({type:'tornado', x:z.x, y:z.y, vx:Math.cos(a)*2, vy:Math.sin(a)*2, r:42, life:240, dmg:30});
+      }
+      floatTexts.push({x:z.x, y:z.y-z.r-20, text:"TORNADO STORM", color:"#ff9a3a", life:60});
+      break;
+  }
+}
+
+function updateHazards(dt){
+  let now = performance.now();
+  for(let i=hazards.length-1;i>=0;i--){
+    let h = hazards[i];
+    if(h.delay && h.delay>0){ h.delay -= dt; continue; }
+    switch(h.type){
+      case 'boulder':{
+        h.x+=h.vx; h.y+=h.vy; h.life--;
+        if(Math.hypot(h.x-h.targetX, h.y-h.targetY)<22 || h.life<=0){
+          for(let k=0;k<20;k++){ let a=Math.random()*6.28,s=Math.random()*5+2; particles.push({x:h.x,y:h.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:26,color:Math.random()<.5?'#8a5a2a':'#ff9a3a',r:3}); }
+          particles.push({x:h.x,y:h.y,vx:0,vy:0,life:18,color:'#ff9a3a',r:60,maxR:60});
+          damagePlayerIfClose(h.x,h.y,70,25);
+          hazards.splice(i,1);
+        }
+        break;
+      }
+      case 'shockwave':{
+        h.r += h.grow;
+        let pd = Math.hypot(h.x-player.x, h.y-player.y);
+        if(pd < h.r+player.r && pd > h.r-12){
+          damagePlayer(h.dmg);
+          if(h.knock){ let a=Math.atan2(player.y-h.y,player.x-h.x); player.x+=Math.cos(a)*28; player.y+=Math.sin(a)*28; }
+        }
+        if(h.r >= h.maxR) hazards.splice(i,1);
+        break;
+      }
+      case 'slimeray':{
+        if(h.tracking) h.angle = Math.atan2(player.y-h.y, player.x-h.x);
+        if(pointInBeam(player.x,player.y,h.x,h.y,h.angle,h.length,14)) damagePlayer(h.dmg);
+        h.life--;
+        if(h.life<=0) hazards.splice(i,1);
+        break;
+      }
+      case 'soulorb':{
+        if(h.homing){ let a=Math.atan2(player.y-h.y,player.x-h.x); h.vx+=Math.cos(a)*0.12; h.vy+=Math.sin(a)*0.12; let s=Math.hypot(h.vx,h.vy); if(s>4){h.vx*=4/s;h.vy*=4/s;} }
+        h.x+=h.vx; h.y+=h.vy; h.life--;
+        if(Math.hypot(h.x-player.x,h.y-player.y)<player.r+h.r){ damagePlayer(h.dmg); hazards.splice(i,1); }
+        else if(h.life<=0) hazards.splice(i,1);
+        break;
+      }
+      case 'pullshock':{
+        h.r += h.grow; h.life--;
+        let pd = Math.hypot(h.x-player.x,h.y-player.y);
+        if(pd < h.r && pd > 24){ let a=Math.atan2(h.y-player.y,h.x-player.x); player.x+=Math.cos(a)*1.6; player.y+=Math.sin(a)*1.6; }
+        if(h.life<=0){
+          if(Math.hypot(h.x-player.x,h.y-player.y)<h.r) damagePlayer(h.dmg);
+          hazards.splice(i,1);
+        }
+        break;
+      }
+      case 'laser':{
+        if(h.charging>0) h.charging--;
+        else { h.life--; if(pointInBeam(player.x,player.y,h.x,h.y,h.angle,1200,11)) damagePlayer(h.dmg); }
+        if(h.life<=0) hazards.splice(i,1);
+        break;
+      }
+      case 'firebreath':{
+        h.life--;
+        let pa = Math.atan2(player.y-h.y, player.x-h.x);
+        let da = Math.abs(((pa-h.angle+Math.PI*3)%(Math.PI*2))-Math.PI);
+        let pd = Math.hypot(player.x-h.x, player.y-h.y);
+        if(pd < h.range && da < 0.42) damagePlayer(h.dmg);
+        if(h.life<=0) hazards.splice(i,1);
+        break;
+      }
+      case 'tornado':{
+        h.x+=h.vx; h.y+=h.vy; h.life--;
+        if(h.x<h.r||h.x>W-h.r) h.vx*=-1;
+        if(h.y<h.r||h.y>H-h.r) h.vy*=-1;
+        if(Math.hypot(h.x-player.x,h.y-player.y)<h.r+player.r) damagePlayer(h.dmg*0.08);
+        if(h.life<=0) hazards.splice(i,1);
+        break;
+      }
+    }
+  }
+}
+
+function addXP(amount){
+  if(level >= MAX_LEVEL) return;
+  xp += amount;
+  while(xp >= XP_PER_LEVEL && level < MAX_LEVEL){
+    xp -= XP_PER_LEVEL;
+    level++;
+    let newMax=100*playerMaxHpMult();
+    let heal=newMax-player.maxHp;
+    player.maxHp=newMax; player.hp+=heal;
+    floatTexts.push({x:player.x, y:player.y-30, text:"LEVEL UP!", color:"#ffd028", life:70});
+  }
+  if(level >= MAX_LEVEL){ level = MAX_LEVEL; xp = 0; }
+}
+
+function damagePlayer(amount){
+  player.hp -= amount;
+  player.hitFlash = 10;
+}
+
+// ============================ RENDER ============================
+function render(){
+  let m = currentMap || MAPS[0];
+  // bg
+  ctx.fillStyle = m.bg;
+  ctx.fillRect(0,0,W,H);
+  // ground texture grid
+  ctx.strokeStyle = m.ground;
+  ctx.lineWidth = 1;
+  let gs = 64;
+  ctx.globalAlpha = 0.5;
+  for(let x=0;x<W;x+=gs){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0;y<H;y+=gs){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+
+  if(state==='playing' || state==='intermission' || state==='paused'){
+    // particles (under)
+    for(let p of particles){
+      ctx.globalAlpha = Math.min(1, p.life/20);
+      ctx.fillStyle = p.color;
+      if(p.maxR){
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.maxR*(1-p.life/20)*0+ (p.maxR*(1-p.life/20)),0,Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 0.3*p.life/20;
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.maxR,0,Math.PI*2); ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // zombies
+    for(let z of zombies){
+      if(z.isBoss){ renderBoss(z); continue; }
+      let zx = z.renderX!=null?z.renderX:z.x;
+      let zy = z.renderY!=null?z.renderY:z.y;
+      let wob = Math.sin(z.wobble)*2;
+      // shadow
+      ctx.fillStyle = 'rgba(0,0,0,.3)';
+      ctx.beginPath(); ctx.ellipse(zx, zy+z.r-2, z.r*0.9, z.r*0.4, 0,0,Math.PI*2); ctx.fill();
+      // body
+      ctx.fillStyle = z.hitFlash>0 ? '#fff' : z.color;
+      ctx.beginPath(); ctx.arc(zx, zy+wob*0.3, z.r, 0, Math.PI*2); ctx.fill();
+      // outline
+      ctx.strokeStyle = z.mega ? '#ffd028' : 'rgba(0,0,0,.4)';
+      ctx.lineWidth = z.mega?3:2;
+      ctx.stroke();
+      // mega crown
+      if(z.mega){
+        ctx.strokeStyle = '#ffd028'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(zx,zy,z.r+5,0,Math.PI*2); ctx.stroke();
+      }
+      // eyes
+      let ea = Math.atan2(player.y-zy, player.x-zx);
+      ctx.fillStyle = z.special==='fire'?'#ffd040':(z.special==='slow'?'#aef0ff':'#ff3a3a');
+      ctx.beginPath(); ctx.arc(zx+Math.cos(ea-0.4)*4, zy+Math.sin(ea-0.4)*4+wob*0.3, 2.5,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(zx+Math.cos(ea+0.4)*4, zy+Math.sin(ea+0.4)*4+wob*0.3, 2.5,0,Math.PI*2); ctx.fill();
+      // hp bar
+      if(z.hp < z.maxHp){
+        let bw = z.r*2, bh=4;
+        ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(zx-bw/2, zy-z.r-10, bw, bh);
+        ctx.fillStyle = z.mega?'#ffd028':'#5adc6a';
+        ctx.fillRect(zx-bw/2, zy-z.r-10, bw*(z.hp/z.maxHp), bh);
+      }
+      // name for mega/special
+      if(z.mega || z.special){
+        ctx.fillStyle='#e8e8e8'; ctx.font='9px Rubik'; ctx.textAlign='center';
+        ctx.fillText(z.name, zx, zy-z.r-14);
+      }
+    }
+
+    // bullets
+    for(let b of bullets){
+      if(b.knife){
+        ctx.strokeStyle='#ff6a6a'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(b.x-b.vx*2, b.y-b.vy*2); ctx.stroke();
+        ctx.fillStyle='#ff3a3a';
+        ctx.beginPath(); ctx.arc(b.x,b.y,3,0,Math.PI*2); ctx.fill();
+      } else {
+        ctx.strokeStyle='#ffe060'; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(b.x-b.vx*1.5, b.y-b.vy*1.5); ctx.stroke();
+        ctx.fillStyle='#fff8c0';
+        ctx.beginPath(); ctx.arc(b.x,b.y,2,0,Math.PI*2); ctx.fill();
+      }
+    }
+
+    // boss hazards
+    renderHazards();
+
+    // player
+    if(state==='playing' || state==='paused'){
+      // shadow
+      ctx.fillStyle='rgba(0,0,0,.35)';
+      ctx.beginPath(); ctx.ellipse(player.x, player.y+player.r-2, player.r, player.r*0.4,0,0,Math.PI*2); ctx.fill();
+      // body
+      ctx.fillStyle = player.hitFlash>0 ? '#ffaaaa' : '#4a8adb';
+      ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#2a5ab0'; ctx.lineWidth=2; ctx.stroke();
+      // gun barrel
+      ctx.strokeStyle='#2a2a36'; ctx.lineWidth=5; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(player.x+Math.cos(player.dir)*22, player.y+Math.sin(player.dir)*22); ctx.stroke();
+      ctx.lineCap='butt';
+      // slow effect ring
+      if(performance.now()<slowUntil){
+        ctx.strokeStyle='rgba(90,184,224,.6)'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(player.x,player.y,player.r+5,0,Math.PI*2); ctx.stroke();
+      }
+      // fire effect
+      if(performance.now()<fireUntil){
+        for(let i=0;i<2;i++){
+          ctx.fillStyle='rgba(255,140,40,.6)';
+          ctx.beginPath(); ctx.arc(player.x+(Math.random()-0.5)*16, player.y+(Math.random()-0.5)*16, 3+Math.random()*3, 0,Math.PI*2); ctx.fill();
+        }
+      }
+    }
+
+    // remote players (multiplayer) — uses interpolated render positions
+    if(onlineMode){
+      for(let id in remotePlayers){
+        let rp=remotePlayers[id];
+        if(rp.renderX==null) continue;
+        let col = rp.role==='owner'?'#ffd028':(rp.role==='admin'?'#b850ff':(rp.role==='moderator'?'#5adc6a':'#9a6adb'));
+        ctx.fillStyle='rgba(0,0,0,.3)';
+        ctx.beginPath(); ctx.ellipse(rp.renderX, rp.renderY+13, 13, 5, 0,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=col;
+        ctx.beginPath(); ctx.arc(rp.renderX, rp.renderY, 13, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle='rgba(0,0,0,.5)'; ctx.lineWidth=2; ctx.stroke();
+        ctx.strokeStyle='#2a2a36'; ctx.lineWidth=4; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(rp.renderX, rp.renderY); ctx.lineTo(rp.renderX+Math.cos(rp.renderDir||0)*18, rp.renderY+Math.sin(rp.renderDir||0)*18); ctx.stroke();
+        ctx.lineCap='butt';
+        ctx.fillStyle='#fff'; ctx.font='bold 10px Rubik'; ctx.textAlign='center';
+        ctx.fillText(rp.name||"player", rp.renderX, rp.renderY-18);
+      }
+    }
+
+    // float texts
+    for(let f of floatTexts){
+      ctx.globalAlpha = Math.min(1, f.life/30);
+      ctx.fillStyle = f.color; ctx.font='bold 13px Russo One'; ctx.textAlign='center';
+      ctx.fillText(f.text, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
+
+    // boss HP bar
+    let boss = zombies.find(z=>z.isBoss);
+    if(boss){
+      let bw = Math.min(640, W*0.72), bh=18;
+      let bx = W/2-bw/2, by=72;
+      ctx.fillStyle='rgba(0,0,0,.75)'; ctx.fillRect(bx-3,by-3,bw+6,bh+6);
+      ctx.fillStyle='#2a0808'; ctx.fillRect(bx,by,bw,bh);
+      let frac = Math.max(0, boss.hp/boss.maxHp);
+      let g2 = ctx.createLinearGradient(bx,0,bx+bw,0);
+      g2.addColorStop(0,'#ff3a3a'); g2.addColorStop(1,'#ff8a3a');
+      ctx.fillStyle = g2; ctx.fillRect(bx,by,bw*frac,bh);
+      ctx.strokeStyle='#ffd028'; ctx.lineWidth=2; ctx.strokeRect(bx,by,bw,bh);
+      ctx.fillStyle='#fff'; ctx.font='bold 13px Russo One'; ctx.textAlign='center';
+      ctx.fillText(boss.name.toUpperCase()+'  —  '+fmt(boss.hp)+' / '+fmt(boss.maxHp)+' HP', W/2, by-7);
+    }
+
+    // fog vignette
+    let grad = ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.3, W/2,H/2,Math.max(W,H)*0.7);
+    grad.addColorStop(0,'rgba(0,0,0,0)');
+    grad.addColorStop(1, m.fog);
+    ctx.fillStyle = grad; ctx.fillRect(0,0,W,H);
+  } else {
+    // menu bg - animated
+    ctx.fillStyle = m.bg;
+    ctx.fillRect(0,0,W,H);
+  }
+}
+
+// ============================ RENDER: BOSSES & HAZARDS ============================
+function renderBoss(z){
+  let now = performance.now();
+  let zx = z.renderX!=null?z.renderX:z.x;
+  let zy = z.renderY!=null?z.renderY:z.y;
+  if(z.bossType===2 && z.invisible) ctx.globalAlpha = 0.18;
+  // shadow
+  ctx.fillStyle='rgba(0,0,0,.4)';
+  ctx.beginPath(); ctx.ellipse(zx, zy+z.r-2, z.r*0.9, z.r*0.4, 0,0,Math.PI*2); ctx.fill();
+  // rage aura
+  if(now<z.rageUntil){
+    ctx.strokeStyle='rgba(255,80,40,.7)'; ctx.lineWidth=5;
+    ctx.beginPath(); ctx.arc(zx,zy,z.r+10,0,Math.PI*2); ctx.stroke();
+  }
+  // shield
+  if(z.shieldActive){
+    ctx.strokeStyle='rgba(190,90,255,.75)'; ctx.lineWidth=3;
+    ctx.globalAlpha = 0.5+Math.sin(now/100)*0.25;
+    ctx.beginPath(); ctx.arc(zx,zy,z.r+14,0,Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = (z.bossType===2 && z.invisible)?0.18:1;
+  }
+  // body
+  ctx.fillStyle = z.hitFlash>0 ? '#fff' : z.color;
+  ctx.beginPath(); ctx.arc(zx, zy, z.r, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,.55)'; ctx.lineWidth=3; ctx.stroke();
+  // crown ring
+  ctx.strokeStyle='#ffd028'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(zx,zy,z.r+5,0,Math.PI*2); ctx.stroke();
+  // eyes
+  let ea = Math.atan2(player.y-zy, player.x-zx);
+  ctx.fillStyle = z.bossType===1?'#0a3a0a':(z.bossType===2?'#ff3a3a':'#ff3a3a');
+  ctx.beginPath(); ctx.arc(zx+Math.cos(ea-0.35)*z.r*0.35, zy+Math.sin(ea-0.35)*z.r*0.35, z.r*0.13,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(zx+Math.cos(ea+0.35)*z.r*0.35, zy+Math.sin(ea+0.35)*z.r*0.35, z.r*0.13,0,Math.PI*2); ctx.fill();
+  // name
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#ffd028'; ctx.font='bold 12px Russo One'; ctx.textAlign='center';
+  ctx.fillText(z.name.toUpperCase(), zx, zy-z.r-12);
+}
+
+function renderHazards(){
+  let now = performance.now();
+  for(let h of hazards){
+    if(h.delay && h.delay>0){
+      if(h.type==='shockwave'){ ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=2; ctx.setLineDash([5,5]); ctx.beginPath(); ctx.arc(h.x,h.y,24,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]); }
+      continue;
+    }
+    switch(h.type){
+      case 'boulder':
+        ctx.fillStyle='#7a4a1a'; ctx.beginPath(); ctx.arc(h.x,h.y,h.r,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle='#4a2a0a'; ctx.lineWidth=2; ctx.stroke();
+        ctx.fillStyle='#5a3a1a'; ctx.beginPath(); ctx.arc(h.x-h.r*0.3,h.y-h.r*0.3,h.r*0.3,0,Math.PI*2); ctx.fill();
+        break;
+      case 'shockwave':
+        ctx.globalAlpha=0.85; ctx.strokeStyle=h.color; ctx.lineWidth=5;
+        ctx.beginPath(); ctx.arc(h.x,h.y,h.r,0,Math.PI*2); ctx.stroke();
+        ctx.globalAlpha=0.18; ctx.fillStyle=h.color; ctx.beginPath(); ctx.arc(h.x,h.y,h.r,0,Math.PI*2); ctx.fill();
+        ctx.globalAlpha=1;
+        break;
+      case 'slimeray':
+        ctx.globalAlpha=0.45; ctx.strokeStyle='#5adc6a'; ctx.lineWidth=18;
+        ctx.beginPath(); ctx.moveTo(h.x,h.y); ctx.lineTo(h.x+Math.cos(h.angle)*h.length, h.y+Math.sin(h.angle)*h.length); ctx.stroke();
+        ctx.globalAlpha=1; ctx.strokeStyle='#aeff8a'; ctx.lineWidth=6;
+        ctx.beginPath(); ctx.moveTo(h.x,h.y); ctx.lineTo(h.x+Math.cos(h.angle)*h.length, h.y+Math.sin(h.angle)*h.length); ctx.stroke();
+        break;
+      case 'soulorb':
+        ctx.globalAlpha=0.4; ctx.fillStyle='#ff3a3a'; ctx.beginPath(); ctx.arc(h.x,h.y,h.r*2.2,0,Math.PI*2); ctx.fill();
+        ctx.globalAlpha=1; ctx.fillStyle='#ff7a7a'; ctx.beginPath(); ctx.arc(h.x,h.y,h.r,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(h.x-h.r*0.3,h.y-h.r*0.3,h.r*0.3,0,Math.PI*2); ctx.fill();
+        break;
+      case 'pullshock':
+        ctx.globalAlpha=0.7; ctx.strokeStyle='#9a3ad0'; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.arc(h.x,h.y,h.r,0,Math.PI*2); ctx.stroke();
+        ctx.globalAlpha=0.5;
+        for(let k=0;k<8;k++){ let a=k/8*Math.PI*2; let r1=h.r*0.7, r2=h.r*0.95; ctx.beginPath(); ctx.moveTo(h.x+Math.cos(a)*r2,h.y+Math.sin(a)*r2); ctx.lineTo(h.x+Math.cos(a)*r1,h.y+Math.sin(a)*r1); ctx.stroke(); }
+        ctx.globalAlpha=1;
+        break;
+      case 'laser':
+        if(h.charging>0){
+          ctx.strokeStyle='rgba(255,60,60,.5)'; ctx.lineWidth=2; ctx.setLineDash([6,6]);
+          ctx.beginPath(); ctx.moveTo(h.x,h.y); ctx.lineTo(h.x+Math.cos(h.angle)*1200, h.y+Math.sin(h.angle)*1200); ctx.stroke();
+          ctx.setLineDash([]);
+        } else {
+          ctx.globalAlpha=0.9; ctx.strokeStyle='#ff2020'; ctx.lineWidth=9;
+          ctx.beginPath(); ctx.moveTo(h.x,h.y); ctx.lineTo(h.x+Math.cos(h.angle)*1200, h.y+Math.sin(h.angle)*1200); ctx.stroke();
+          ctx.globalAlpha=0.5; ctx.strokeStyle='#ffaaaa'; ctx.lineWidth=3;
+          ctx.beginPath(); ctx.moveTo(h.x,h.y); ctx.lineTo(h.x+Math.cos(h.angle)*1200, h.y+Math.sin(h.angle)*1200); ctx.stroke();
+          ctx.globalAlpha=1;
+        }
+        break;
+      case 'firebreath':
+        ctx.globalAlpha=0.6; ctx.fillStyle='#ff7a20';
+        ctx.beginPath(); ctx.moveTo(h.x,h.y);
+        ctx.arc(h.x,h.y,h.range,h.angle-0.42,h.angle+0.42); ctx.closePath(); ctx.fill();
+        ctx.globalAlpha=0.4; ctx.fillStyle='#ffd040';
+        ctx.beginPath(); ctx.moveTo(h.x,h.y);
+        ctx.arc(h.x,h.y,h.range*0.7,h.angle-0.3,h.angle+0.3); ctx.closePath(); ctx.fill();
+        ctx.globalAlpha=1;
+        break;
+      case 'tornado':
+        ctx.fillStyle='rgba(140,140,150,.28)'; ctx.beginPath(); ctx.arc(h.x,h.y,h.r,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle='rgba(220,220,230,.7)'; ctx.lineWidth=3;
+        for(let k=0;k<3;k++){ let a=now/180+k*2.1; ctx.beginPath(); ctx.arc(h.x,h.y,h.r*0.75,a,a+Math.PI*0.7); ctx.stroke(); }
+        ctx.strokeStyle='rgba(255,180,80,.5)'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(h.x,h.y,h.r,0,Math.PI*2); ctx.stroke();
+        break;
+    }
+  }
+}
+
+// ============================ HUD ============================
+const cashVal=document.getElementById('cashVal'), killVal=document.getElementById('killVal'),
+  waveVal=document.getElementById('waveVal'), levelVal=document.getElementById('levelVal'),
+  xpBarInner=document.getElementById('xpBarInner'), xpPct=document.getElementById('xpPct'),
+  diamondVal=document.getElementById('diamondVal'),
+  hpBarInner=document.getElementById('hpBarInner'), gunVal=document.getElementById('gunVal'),
+  zcountVal=document.getElementById('zcountVal'),
+  statusFx=document.getElementById('statusFx'),
+  hardBadge=document.getElementById('hardBadge'),
+  toggleBar=document.getElementById('toggleBar'),
+  authScreen=document.getElementById('authScreen'), authUser=document.getElementById('authUser'),
+  authPw=document.getElementById('authPw'), authErr=document.getElementById('authErr'),
+  authSubmit=document.getElementById('authSubmit'), tabSignin=document.getElementById('tabSignin'),
+  tabSignup=document.getElementById('tabSignup'), banScreen=document.getElementById('banScreen'),
+  banTypeEl=document.getElementById('banType'), banReasonEl=document.getElementById('banReason'),
+  banDurationEl=document.getElementById('banDuration'),
+  chatPanel=document.getElementById('chatPanel'), chatLog=document.getElementById('chatLog'),
+  chatInput=document.getElementById('chatInput'), chatSendBtn=document.getElementById('chatSend'), chatModerating=document.getElementById('chatModerating'),
+  warningToast=document.getElementById('warningToast'), wtReason=document.getElementById('wtReason'), wtCount=document.getElementById('wtCount'),
+  chatToggleBtn=document.getElementById('chatToggleBtn'),
+  adminScreen=document.getElementById('adminScreen'), adminTargetInput=document.getElementById('adminTargetInput'),
+  adminArgInput=document.getElementById('adminArgInput'), adminCmdGrid=document.getElementById('adminCmdGrid'),
+  adminUserList=document.getElementById('adminUserList'), adminResult=document.getElementById('adminResult'),
+  passesScreen=document.getElementById('passesScreen'),
+  profileScreen=document.getElementById('profileScreen'),
+  leaderboardScreen=document.getElementById('leaderboardScreen'),
+  spinWheelScreen=document.getElementById('spinWheelScreen'),
+  inventoryScreen=document.getElementById('inventoryScreen'),
+  onlineBar=document.getElementById('onlineBar'), onlineCountEl=document.getElementById('onlineCount'),
+  banBack=document.getElementById('banBack'),
+  logoutBtn=document.getElementById('logoutBtn'),
+  pauseScreen=document.getElementById('pauseScreen'),
+  cmdsPanel=document.getElementById('cmdsPanel'),
+  cmdsHeader=document.getElementById('cmdsHeader'),
+  cmdsClose=document.getElementById('cmdsClose'),
+  cmdsList=document.getElementById('cmdsList'),
+  updateLogScreen=document.getElementById('updateLogScreen'),
+  termsScreen=document.getElementById('termsScreen'),
+  createServerScreen=document.getElementById('createServerScreen'),
+  serverListScreen=document.getElementById('serverListScreen');
+
+function updateHUD(){
+  cashVal.textContent = money(cash);
+  killVal.textContent = fmt(kills);
+  waveVal.textContent = fmt(wave);
+  zcountVal.textContent = fmt((zombies?zombies.length:0) + (spawnQueue?spawnQueue.length:0));
+  levelVal.textContent = fmt(level);
+  diamondVal.textContent = fmt(myAccount?myAccount.diamonds||0:0);
+  let pct = Math.min(100, (xp/XP_PER_LEVEL)*100);
+  xpBarInner.style.width = pct+"%";
+  xpPct.textContent = Math.floor(pct)+"%";
+  if(player){
+    hpBarInner.style.width = Math.max(0,(player.hp/player.maxHp)*100)+"%";
+  }
+  gunVal.textContent = GUNS[currentGunIdx].name;
+  // status fx tags
+  let now = performance.now();
+  let tags = '';
+  if(now < slowUntil) tags += '<div class="fxTag fxSlow">FROZEN</div>';
+  if(now < fireUntil) tags += '<div class="fxTag fxFire">ON FIRE</div>';
+  statusFx.innerHTML = tags;
+  updateToggleBar();
+}
+
+let toggleBarBuilt = false;
+function updateToggleBar(){
+  let toggles = [];
+  if(hasPass('aimbot')) toggles.push({id:'aimbot', label:'AIMBOT', on:aimbotOn, color:'#ff5a5a'});
+  if(hasPass('autoshoot')) toggles.push({id:'autoshoot', label:'AUTO SHOOT', on:autoShootOn, color:'#5adcff'});
+  if(hasPass('autokill')) toggles.push({id:'autokill', label:'AUTO KILL', on:autoKillOn, color:'#ffd028'});
+  if(toggles.length === 0){ toggleBar.classList.add('hidden'); toggleBarBuilt=false; return; }
+  toggleBar.classList.remove('hidden');
+  if(!toggleBarBuilt){
+    let html = '';
+    for(let t of toggles){
+      html += '<button id="toggle_'+t.id+'" data-tid="'+t.id+'" style="background:rgba(255,255,255,.08);color:#8a92a0;border:1px solid rgba(255,255,255,.15);font-family:\'Russo One\',sans-serif;font-size:11px;padding:10px 8px;border-radius:8px;cursor:pointer;letter-spacing:1px;writing-mode:vertical-rl;text-orientation:upright;min-height:80px;">'+t.label+'</button>';
+    }
+    toggleBar.innerHTML = html;
+    toggleBar.querySelectorAll('button[data-tid]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        let tid = btn.dataset.tid;
+        if(tid==='aimbot') aimbotOn = !aimbotOn;
+        if(tid==='autoshoot') autoShootOn = !autoShootOn;
+        if(tid==='autokill') autoKillOn = !autoKillOn;
+        updateToggleBarStyles();
+      });
+    });
+    toggleBarBuilt = true;
+  }
+  updateToggleBarStyles();
+}
+function updateToggleBarStyles(){
+  let map = {aimbot:{on:aimbotOn,color:'#ff5a5a'},autoshoot:{on:autoShootOn,color:'#5adcff'},autokill:{on:autoKillOn,color:'#ffd028'}};
+  for(let id in map){
+    let btn = document.getElementById('toggle_'+id);
+    if(!btn) continue;
+    let info = map[id];
+    let label = id==='aimbot'?'AIMBOT':(id==='autoshoot'?'AUTO SHOOT':'AUTO KILL');
+    if(info.on){
+      btn.style.background = info.color;
+      btn.style.color = '#000';
+      btn.style.borderColor = info.color;
+      btn.style.boxShadow = '0 0 12px '+info.color+'88';
+      btn.textContent = label+' ✓';
+    } else {
+      btn.style.background = 'rgba(255,255,255,.08)';
+      btn.style.color = '#8a92a0';
+      btn.style.borderColor = 'rgba(255,255,255,.15)';
+      btn.style.boxShadow = '';
+      btn.textContent = label;
+    }
+  }
+}
+
+// ============================ UI: MAP GRID ============================
+const mapGrid=document.getElementById('mapGrid'), imTitle=document.getElementById('imTitle'),
+  imTimer=document.getElementById('imTimer'),
+  countdownEl=document.getElementById('countdownEl'),
+  cdTitle=document.getElementById('cdTitle'), cdNum=document.getElementById('cdNum'),
+  cdBoss=document.getElementById('cdBoss'),
+  cdCash=document.getElementById('cdCash'),
+  continueBtn=document.getElementById('continueBtn'),
+  hardModeBtn=document.getElementById('hardModeBtn'),
+  saveInfo=document.getElementById('saveInfo');
+
+function renderMapGrid(){
+  mapGrid.innerHTML = '';
+  mapChoices.forEach((mi, i) => {
+    let m = MAPS[mi];
+    let card = document.createElement('div');
+    card.className = 'mapCard' + (i===selectedMapIdx?' selected':'');
+    card.innerHTML = `<div class="mapSwatch" style="background:linear-gradient(135deg,${m.bg},${m.accent})"></div>
+      <div class="mapName">${m.name}</div>
+      <div class="mapDesc">${mapDesc(mi)}</div>`;
+    card.onclick = () => { selectedMapIdx = i; renderMapGrid(); };
+    mapGrid.appendChild(card);
+  });
+}
+function mapDesc(i){
+  const descs = ['Crumbled skyscrapers and empty streets.','Bitter cold and frozen ground.','Murky water and toxic spores.','Lava cracks and scorched earth.','Glittering crystals in dark caves.','Torn space-time and purple haze.','Sand-blasted walls and silence.','Crooked headstones and thick mist.','Glowing alleys and neon haze.'];
+  return descs[i] || '';
+}
+
+// ============================ UI: SHOP ============================
+const gunGrid=document.getElementById('gunGrid'), shopCash=document.getElementById('shopCash');
+
+function stars(n){ return '★'.repeat(n)+'☆'.repeat(5-n); }
+
+function renderShop(){
+  shopCash.textContent = money(cash);
+  gunGrid.innerHTML = '';
+  GUNS.forEach((g, i) => {
+    if(g.rarity) return; // wheel items only show in inventory
+    if(g.price < 0 && !ownedGuns.includes(i)) return; // hide unbuyable guns unless owned
+    let owned = ownedGuns.includes(i);
+    let equipped = i===currentGunIdx;
+    let affordable = cash >= g.price;
+    let card = document.createElement('div');
+    card.className = 'gunCard' + (owned?' owned':'') + (equipped?' equipped':'') + (!owned && !affordable?' locked':'');
+    let btn;
+    if(equipped) btn = `<button class="gunBtn equipped">EQUIPPED</button>`;
+    else if(owned) btn = `<button class="gunBtn equip" data-equip="${i}">EQUIP</button>`;
+    else if(g.price < 0) btn = `<button class="gunBtn" disabled style="opacity:.3">ADMIN ONLY</button>`;
+    else btn = `<button class="gunBtn buy" data-buy="${i}" ${affordable?'':'disabled'}>${g.price===0?'CLAIM':money(g.price)}</button>`;
+    let priceClass = g.price<0?'free':(g.price===0?'free':(affordable?'':'tooExpensive'));
+    let priceText = g.price<0?'ADMIN ONLY':(g.price===0?'FREE':money(g.price));
+    card.innerHTML = `
+      <div class="gunName" ${g.price<0?'style="color:#ffd028;text-shadow:0 0 8px #ffd02888"':''}>${g.name}</div>
+      <div class="gunPrice ${priceClass}">${priceText}</div>
+      <div class="gunStatRow"><span>DMG</span><span>${g.price<0?'∞':g.dmg+'%'}</span></div>
+      <div class="gunStatRow"><span>HP Dmg</span><span>${g.price<0?'∞':fmt(g.hpDmg)}</span></div>
+      <div class="gunStars">SPD ${stars(g.spd)}</div>
+      <div class="gunStars">PWR ${stars(g.pwr)}</div>
+      <div class="gunStars">ACC ${stars(g.acc)}</div>
+      ${btn}`;
+    gunGrid.appendChild(card);
+  });
+  gunGrid.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => buyGun(parseInt(b.dataset.buy)));
+  gunGrid.querySelectorAll('[data-equip]').forEach(b => b.onclick = () => equipGun(parseInt(b.dataset.equip)));
+}
+
+function buyGun(i){
+  let g = GUNS[i];
+  if(cash < g.price) return;
+  if(ownedGuns.includes(i)) return;
+  cash -= g.price;
+  ownedGuns.push(i);
+  currentGunIdx = i;
+  saveGame();
+  renderShop();
+  updateHUD();
+}
+function equipGun(i){
+  if(!ownedGuns.includes(i)) return;
+  currentGunIdx = i;
+  saveGame();
+  renderShop();
+  updateHUD();
+}
+
+function openShop(){
+  renderShop();
+  shopScreen.classList.remove('hidden');
+}
+function closeShop(){
+  shopScreen.classList.add('hidden');
+}
+
+// ============================ PAUSE / EXIT ============================
+function pauseGame(){
+  if(state!=='playing') return;
+  state='paused';
+  pauseScreen.classList.remove('hidden');
+  document.getElementById('pauseSaveBtn').hidden = onlineMode;
+  document.getElementById('pauseInventoryBtn').hidden = false;
+  toggleBar.classList.add('hidden');
+  toggleBarBuilt=false;
+}
+function resumeGame(){
+  pauseScreen.classList.add('hidden');
+  state='playing';
+  lastTime=performance.now();
+}
+function exitToMenu(){
+  pauseScreen.classList.add('hidden');
+  toggleBar.classList.add('hidden');
+  toggleBarBuilt=false;
+  aimbotOn=false; autoShootOn=false; autoKillOn=false;
+  hardBadge.classList.add('hidden');
+  saveGame();
+  saveProgressToServer();
+  if(onlineMode){
+    sendSock("l");
+    onlineMode=false; isHost=false;
+    onlineBar.classList.add('hidden');
+    chatPanel.classList.add('hidden');
+    chatToggleBtn.classList.add('hidden');
+    remotePlayers={};
+  }
+  createServerScreen.classList.add('hidden');
+  serverListScreen.classList.add('hidden');
+  document.getElementById('startWaveBtn').style.display = '';
+  gameoverScreen.classList.add('hidden');
+  menuScreen.classList.remove('hidden');
+  state='menu';
+  refreshMenuSaveInfo();
+  setTimeout(refreshServerList, 500);
+}
+
+// ============================ COMMANDS PANEL ============================
+function buildCmdsList(){
+  let html='';
+  if(onlineMode && (isHost || myRole==="owner" || hasPass('diamond'))){
+    html+='<div style="color:#5adc6a;font-weight:700;font-size:11px;margin-bottom:6px;letter-spacing:1px">SERVER ADMIN</div>';
+    let scmds = [
+      {label:"Kick", short:"kick", arg:" <player> [reason]"},
+      {label:"Ban", short:"ban", arg:" <player> [reason]"},
+      {label:"Mute", short:"mute", arg:" <player>"},
+      {label:"Unmute", short:"unmute", arg:" <player>"},
+      {label:"End Server", short:"endserver", arg:" [reason]"},
+      {label:"Shutdown", short:"shutdown", arg:" [seconds]"},
+    ];
+    scmds.forEach(c=>{
+      html+='<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)">';
+      html+='<span style="color:#c8d0d8">'+escapeHtml(c.label)+'</span>';
+      html+='<span style="color:#6ac8ff;font-family:monospace">/'+c.short+c.arg+'</span>';
+      html+='</div>';
+    });
+    html+='<div style="margin-top:10px"></div>';
+  }
+  if(myRole==="owner"||myRole==="admin"){
+    html+='<div style="color:#ffd028;font-weight:700;font-size:11px;margin-bottom:6px;letter-spacing:1px">GLOBAL ADMIN</div>';
+    ADMIN_CMDS.forEach(c=>{
+      let short=c.cmd.slice(0,2);
+      let argTxt = c.arg==='1'?' <value>':'';
+      html+='<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)">';
+      html+='<span style="color:#c8d0d8">'+escapeHtml(c.label)+'</span>';
+      html+='<span style="color:#6ac8ff;font-family:monospace">/'+short+argTxt+'</span>';
+      html+='</div>';
+    });
+  }
+  html+='<div style="margin-top:8px;color:#5a6270;font-size:10px">Also: /commands /cmds /list /online</div>';
+  html+='<div style="margin-top:6px;color:#5a6270;font-size:10px">Temp ban: <span style="color:#8a92a0">/tb &lt;user&gt; 24h &lt;reason&gt;</span> (s/m/h/d/w; default 24h)</div>';
+  cmdsList.innerHTML=html;
+}
+function toggleCmdsPanel(){
+  if(cmdsPanel.classList.contains('hidden')){
+    buildCmdsList();
+    cmdsPanel.classList.remove('hidden');
+  } else {
+    cmdsPanel.classList.add('hidden');
+  }
+}
+// draggable
+(function(){
+  let dragging=false, ox=0, oy=0;
+  cmdsHeader.addEventListener('mousedown', e=>{
+    dragging=true;
+    let r=cmdsPanel.getBoundingClientRect();
+    ox=e.clientX-r.left; oy=e.clientY-r.top;
+    cmdsPanel.style.right='auto';
+    e.preventDefault();
+  });
+  addEventListener('mousemove', e=>{
+    if(!dragging) return;
+    let x=e.clientX-ox, y=e.clientY-oy;
+    x=Math.max(0,Math.min(innerWidth-cmdsPanel.offsetWidth, x));
+    y=Math.max(0,Math.min(innerHeight-cmdsPanel.offsetHeight, y));
+    cmdsPanel.style.left=x+'px'; cmdsPanel.style.top=y+'px';
+  });
+  addEventListener('mouseup', ()=>{ dragging=false; });
+})();
+
+// ============================ GAME OVER ============================
+function gameOver(){
+  state = 'gameover';
+  toggleBar.classList.add('hidden');
+  toggleBarBuilt=false;
+  aimbotOn=false; autoShootOn=false; autoKillOn=false;
+  hardBadge.classList.add('hidden');
+  saveGame(); // preserve current wave for Continue
+  saveProgressToServer();
+  goWave.textContent = fmt(wave);
+  goKills.textContent = fmt(kills);
+  goCash.textContent = money(cash);
+  goLevel.textContent = fmt(level);
+  gameoverScreen.classList.remove('hidden');
+  countdownEl.classList.add('hidden');
+  hud.classList.add('hidden');
+  controlsHint.classList.add('hidden');
+}
+
+// ============================ BUTTONS ============================
+document.getElementById('playBtn').onclick = () => {
+  hardMode = false;
+  newGame();
+  if(myAccount) applyAccountToGame();
+  wave = 0;
+  deleteSave();
+  if(myAccount){ myAccount.wave = 0; saveProgressToServer(); }
+  menuScreen.classList.add('hidden');
+  startIntermission();
+  if(onlineMode) startOnlineMode();
+};
+document.getElementById('hardModeBtn').onclick = () => {
+  if(level < 100) return;
+  hardMode = true;
+  // preserve current cash/level/guns/xp — only reset scene + wave
+  let hpMult = playerMaxHpMult();
+  player = {x:W/2, y:H/2, r:15, hp:100*hpMult, maxHp:100*hpMult, speed:2.9, dir:0, hitFlash:0};
+  zombies = []; bullets = []; particles = []; floatTexts = []; hazards = [];
+  wave = 0;
+  slowUntil=0; fireUntil=0;
+  currentMap = null;
+  waveStartCash = 0;
+  if(myAccount){ myAccount.wave = 0; saveProgressToServer(); }
+  saveGame();
+  menuScreen.classList.add('hidden');
+  startIntermission();
+  if(onlineMode) startOnlineMode();
+};
+document.getElementById('continueBtn').onclick = () => {
+  let s = loadSave();
+  if(!s) return;
+  newGame();
+  applySave(s);
+  wave = s.wave - 1;
+  player.maxHp = 100 * playerMaxHpMult();
+  player.hp = player.maxHp;
+  menuScreen.classList.add('hidden');
+  startIntermission();
+};
+document.getElementById('menuShopBtn').onclick = () => {
+  if(state==='menu'){
+    if(!player) { newGame(); }
+    if(myAccount) applyAccountToGame();
+    openShop();
+  }
+};
+document.getElementById('onlineBtn').onclick = () => {
+  if(!myAccount){ alert("Sign in first."); return; }
+  menuScreen.classList.add('hidden');
+  createServerScreen.classList.remove('hidden');
+  renderCreateServerMapGrid();
+};
+let createServerSelectedMap = 0;
+function renderCreateServerMapGrid(){
+  let grid = document.getElementById('createServerMapGrid');
+  grid.innerHTML = '';
+  MAPS.forEach((m, i) => {
+    let card = document.createElement('div');
+    card.className = 'mapCard' + (i===createServerSelectedMap?' selected':'');
+    card.innerHTML = `<div class="mapPreview" style="background:${m.bg}"></div><div class="mapName">${m.name}</div>`;
+    card.onclick = () => { createServerSelectedMap = i; renderCreateServerMapGrid(); };
+    grid.appendChild(card);
+  });
+}
+document.getElementById('createServerStartBtn').onclick = async () => {
+  if(!myAccount){ alert("Sign in first."); return; }
+  let name = document.getElementById('serverNameInput').value.trim() || (myAccount.user+"'s Server");
+  newGame();
+  if(myAccount) applyAccountToGame();
+  isHost = true; onlineMode = true;
+  createServerScreen.classList.add('hidden');
+  startOnlineMode();
+  // wait for socket to be ready
+  if(socket) { try { await socket.opened; } catch(e){ alert("Connection failed."); exitToMenu(); return; } }
+  let r = await rpcCall("createServer", {name, mapIdx: createServerSelectedMap});
+  if(!r){ alert("Failed to create server."); exitToMenu(); return; }
+  let res; try{ res=JSON.parse(r); }catch(e){ alert("Bad server response."); exitToMenu(); return; }
+  if(!res.ok){ alert(res.err||"Failed to create server."); exitToMenu(); return; }
+  // start wave 1 immediately — no intermission
+  wave = 0;
+  mapChoices = [createServerSelectedMap];
+  selectedMapIdx = 0;
+  currentMap = MAPS[createServerSelectedMap];
+  startNextWave();
+  if(isHost) broadcastGameState();
+};
+document.getElementById('createServerBackBtn').onclick = () => {
+  createServerScreen.classList.add('hidden');
+  menuScreen.classList.remove('hidden');
+};
+
+// ---- server list ----
+let cachedServerList = [];
+async function refreshServerList(){
+  let r = await rpcCall("getServerList", {});
+  if(!r) return;
+  let res; try{ res=JSON.parse(r); }catch(e){ return; }
+  if(res.ok) updateServerList(res.servers);
+}
+function updateServerList(servers){
+  cachedServerList = servers || [];
+  let dot = document.getElementById('serverDot');
+  if(servers && servers.length > 0){
+    dot.classList.remove('hidden');
+    dot.setAttribute('data-tip', servers.length+' server(s) available. Click to join!');
+  } else {
+    dot.classList.add('hidden');
+  }
+  // update server list screen if visible
+  let container = document.getElementById('serverListContainer');
+  if(!serverListScreen.classList.contains('hidden')){
+    if(!servers || servers.length === 0){
+      container.innerHTML = '<div style="color:#8a92a0;text-align:center;padding:40px;font-size:14px">No servers available.<br><br>Be the first to create one!</div>';
+      return;
+    }
+    container.innerHTML = '';
+    servers.forEach(srv => {
+      let item = document.createElement('div');
+      item.className = 'serverListItem';
+      let mapName = MAPS[srv.map] ? MAPS[srv.map].name : 'Unknown';
+      item.innerHTML = `
+        <div class="sliDot ${srv.shuttingDown?'shutdown':''}"></div>
+        <div style="flex:1">
+          <div class="sliName">${srv.name}</div>
+          <div class="sliInfo">Host: ${srv.host} · Map: ${mapName} · Wave: ${srv.wave}${srv.shuttingDown?' · SHUTTING DOWN':''}</div>
+        </div>
+        <button class="btn btn-primary" style="padding:8px 20px;font-size:13px">JOIN</button>
+      `;
+      item.onclick = () => { joinServerById(srv.id); };
+      container.appendChild(item);
+    });
+  }
+}
+async function joinServerById(serverId){
+  if(!myAccount){ alert("Sign in first."); return; }
+  newGame();
+  if(myAccount) applyAccountToGame();
+  isHost = false; onlineMode = true;
+  serverListScreen.classList.add('hidden');
+  startOnlineMode();
+  // wait for socket
+  if(socket) { try { await socket.opened; } catch(e){} }
+  // register with server
+  let r = await rpcCall("joinServer", {serverId});
+  if(!r){ alert("Failed to join server."); exitToMenu(); return; }
+  let res; try{ res=JSON.parse(r); }catch(e){ alert("Bad response."); exitToMenu(); return; }
+  if(!res.ok){ alert(res.err||"Failed to join server."); exitToMenu(); return; }
+  // client: wait for host data — show waiting screen
+  state = 'intermission';
+  intermissionScreen.classList.remove('hidden');
+  hud.classList.add('hidden');
+  imTitle.textContent = "Joining server...";
+  imTimer.textContent = "";
+  mapGrid.innerHTML = '<div style="color:#8a92a0;text-align:center;padding:40px;font-size:14px">Connecting to server...<br><br>You\'ll be dropped into the game automatically.</div>';
+  document.getElementById('startWaveBtn').style.display = 'none';
+}
+document.getElementById('joinServerBtn').onclick = () => {
+  if(!myAccount){ alert("Sign in first."); return; }
+  menuScreen.classList.add('hidden');
+  serverListScreen.classList.remove('hidden');
+  refreshServerList();
+};
+document.getElementById('serverListBackBtn').onclick = () => {
+  serverListScreen.classList.add('hidden');
+  menuScreen.classList.remove('hidden');
+};
+document.getElementById('serverDot').onclick = () => {
+  if(!myAccount){ alert("Sign in first."); return; }
+  menuScreen.classList.add('hidden');
+  serverListScreen.classList.remove('hidden');
+  refreshServerList();
+};
+
+// ---- shutdown countdown ----
+function startShutdownCountdown(seconds){
+  let remaining = seconds;
+  addChatLine("SYSTEM","admin","Server shutting down in "+remaining+"s...","announce");
+  let interval = setInterval(()=>{
+    remaining--;
+    if(remaining <= 0){
+      clearInterval(interval);
+      addChatLine("SYSTEM","admin","Server is shutting down now.","announce");
+      exitToMenu();
+    } else if(remaining <= 5 || remaining % 10 === 0){
+      addChatLine("SYSTEM","admin","Shutdown in "+remaining+"s...","announce");
+    }
+  }, 1000);
+}
+document.getElementById('adminBtn').onclick = () => { openAdmin(); };
+document.getElementById('adminCloseBtn').onclick = () => { adminScreen.classList.add('hidden'); };
+document.getElementById('adminRefreshBtn').onclick = () => { refreshAdminUserList(); };
+logoutBtn.onclick = () => {
+  myAccount=null; myRole='user';
+  adminBtn.hidden=true; logoutBtn.hidden=true;
+  onlineBar.classList.add('hidden'); chatPanel.classList.add('hidden'); chatToggleBtn.classList.add('hidden');
+  onlineMode=false; isHost=false; remotePlayers={};
+  clearSession();
+  menuScreen.classList.add('hidden');
+  authScreen.classList.remove('hidden');
+  authUser.value=''; authPw.value='';
+  state='menu';
+};
+document.getElementById('passesBtn').onclick = () => { openPasses(); };
+document.getElementById('passesCloseBtn').onclick = () => { passesScreen.classList.add('hidden'); };
+document.getElementById('profileCloseBtn').onclick = () => { profileScreen.classList.add('hidden'); };
+document.getElementById('leaderboardCloseBtn').onclick = () => { leaderboardScreen.classList.add('hidden'); };
+document.getElementById('spinWheelCloseBtn').onclick = () => { spinWheelScreen.classList.add('hidden'); };
+document.getElementById('inventoryCloseBtn').onclick = () => { inventoryScreen.classList.add('hidden'); };
+
+// Pause save button (single-player only)
+document.getElementById('pauseSaveBtn').onclick = () => {
+  saveGame();
+  if(myAccount) saveProgressToServer();
+  let btn = document.getElementById('pauseSaveBtn');
+  let orig = btn.textContent;
+  btn.textContent = 'SAVED!';
+  btn.style.color = '#5adc6a';
+  setTimeout(() => { btn.textContent = orig; }, 1500);
+};
+document.getElementById('pauseInventoryBtn').onclick = () => { renderInventory(); };
+
+// Spin wheel button
+document.getElementById('spinWheelBtn').onclick = () => {
+  spinWheelScreen.classList.remove('hidden');
+  drawWheel(0);
+  document.getElementById('wheelResult').textContent = '';
+};
+
+let wheelRotation = 0, wheelSpinning = false;
+function drawWheel(rotation){
+  let wc = document.getElementById('wheelCanvas');
+  if(!wc) return;
+  let wctx = wc.getContext('2d');
+  let cx = 160, cy = 160, r = 150;
+  let n = WHEEL_ITEMS.length;
+  let slice = (Math.PI * 2) / n; // equal-sized slices
+  wctx.clearRect(0, 0, 320, 320);
+  let angle = rotation;
+  for(let i=0; i<n; i++){
+    let w = WHEEL_ITEMS[i];
+    wctx.beginPath();
+    wctx.moveTo(cx, cy);
+    wctx.arc(cx, cy, r, angle, angle + slice);
+    wctx.closePath();
+    if(w.color === 'rainbow'){
+      let grad = wctx.createConicGradient(angle, cx, cy);
+      let steps = 24;
+      for(let s=0; s<=steps; s++){
+        let hue = (s / steps) * 360;
+        grad.addColorStop(s/steps, `hsl(${hue},100%,55%)`);
+      }
+      wctx.fillStyle = grad;
+    } else {
+      wctx.fillStyle = w.color || '#888';
+    }
+    wctx.fill();
+    wctx.strokeStyle = '#222';
+    wctx.lineWidth = 1;
+    wctx.stroke();
+    // label
+    let midAngle = angle + slice / 2;
+    let lx = cx + Math.cos(midAngle) * r * 0.62;
+    let ly = cy + Math.sin(midAngle) * r * 0.62;
+    wctx.save();
+    wctx.translate(lx, ly);
+    wctx.rotate(midAngle + Math.PI / 2);
+    wctx.fillStyle = '#fff';
+    wctx.font = 'bold 9px sans-serif';
+    wctx.textAlign = 'center';
+    wctx.fillText(w.name, 0, 0);
+    wctx.restore();
+    angle += slice;
+  }
+  // center circle
+  wctx.beginPath();
+  wctx.arc(cx, cy, 20, 0, Math.PI * 2);
+  wctx.fillStyle = '#222';
+  wctx.fill();
+  wctx.strokeStyle = '#ffd028';
+  wctx.lineWidth = 2;
+  wctx.stroke();
+}
+
+document.getElementById('spinBtn').onclick = () => {
+  if(wheelSpinning) return;
+  if(!myAccount){ alert('Sign in first!'); return; }
+  if((myAccount.diamonds || 0) < 25){ alert('Not enough diamonds! Need 25 ♦'); return; }
+  myAccount.diamonds = (myAccount.diamonds || 0) - 25;
+  saveProgressToServer();
+  updateHUD();
+  wheelSpinning = true;
+  document.getElementById('wheelResult').textContent = '';
+  document.getElementById('spinBtn').disabled = true;
+
+  let result = wheelRoll();
+  let n = WHEEL_ITEMS.length;
+  let sliceAngle = (Math.PI * 2) / n; // equal-sized slices
+  let targetIdx = WHEEL_ITEMS.indexOf(result);
+  let targetAngle = targetIdx * sliceAngle + sliceAngle / 2; // center of the result's slice
+  let extraSpins = 5 * Math.PI * 2; // 5 full spins
+  let finalRotation = extraSpins + (Math.PI * 2 - targetAngle) + (Math.PI * 1.5);
+  // animate
+  let startRotation = wheelRotation % (Math.PI * 2);
+  let totalRotation = finalRotation;
+  let duration = 4000;
+  let startTime = performance.now();
+  function animateWheel(now){
+    let elapsed = now - startTime;
+    let t = Math.min(1, elapsed / duration);
+    let eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+    wheelRotation = startRotation + (totalRotation - startRotation) * eased;
+    drawWheel(wheelRotation);
+    if(t < 1){
+      requestAnimationFrame(animateWheel);
+    } else {
+      wheelSpinning = false;
+      document.getElementById('spinBtn').disabled = false;
+      // give the item
+      let gunIdx = GUNS.indexOf(result);
+      if(!ownedGuns.includes(gunIdx)) ownedGuns.push(gunIdx);
+      saveProgressToServer();
+      let isMythical = result.rarity === 'mythical';
+      let color = result.color === 'rainbow' ? '#ff3a3a' : (result.color || (isMythical ? '#ff3a3a' : '#5adc6a'));
+      let label = isMythical ? '✨ MYTHICAL ✨' : 'COMMON';
+      let nameStyle = result.color === 'rainbow'
+        ? 'background:linear-gradient(90deg,#ff3a3a,#ffd028,#5adc6a,#5adcff,#9a3ad0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:22px;font-weight:700'
+        : 'color:'+color+';font-size:22px;font-weight:700';
+      document.getElementById('wheelResult').innerHTML =
+        '<span style="color:'+color+';font-size:14px">'+label+'</span><br>' +
+        '<span style="'+nameStyle+'">'+result.name+'</span><br>' +
+        '<span style="color:#8a92a0;font-size:12px">'+(result.type==='knife'?'🔪 Knife':'🔫 Gun')+' · '+result.dmg+' DMG</span>';
+    }
+  }
+  requestAnimationFrame(animateWheel);
+};
+
+// Inventory
+document.getElementById('inventoryBtn').onclick = () => { renderInventory(); };
+function renderInventory(){
+  inventoryScreen.classList.remove('hidden');
+  let html = '';
+  // Tabs
+  let ownedWheelItems = ownedGuns.filter(i => GUNS[i] && GUNS[i].rarity);
+  let guns = ownedGuns.filter(i => GUNS[i] && !GUNS[i].rarity && GUNS[i].price >= 0);
+  let adminGuns = ownedGuns.filter(i => GUNS[i] && GUNS[i].price < 0 && !GUNS[i].rarity);
+  let passes = (myAccount && myAccount.passes) ? myAccount.passes : [];
+
+  // Wheel items section
+  html += '<div style="margin-bottom:16px">';
+  html += '<h3 style="font-family:\'Russo One\',sans-serif;font-size:16px;color:#ffd028;margin-bottom:8px">⚔️ WEAPONS (Wheel Items)</h3>';
+  if(ownedWheelItems.length === 0){
+    html += '<div style="color:#5a6270;font-size:13px;padding:8px">No wheel weapons yet. Spin the wheel to win some!</div>';
+  } else {
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">';
+    for(let i of ownedWheelItems){
+      let g = GUNS[i];
+      let equipped = i === currentGunIdx;
+      let isRainbow = g.color === 'rainbow';
+      let color = isRainbow ? '#ff3a3a' : (g.color || (g.rarity === 'mythical' ? '#ff3a3a' : '#5adc6a'));
+      let borderColor = isRainbow ? '#ff3a3a' : (g.color || (g.rarity === 'mythical' ? '#ff3a3a' : '#3a7a3a'));
+      let nameStyle = isRainbow
+        ? 'background:linear-gradient(90deg,#ff3a3a,#ffd028,#5adc6a,#5adcff,#9a3ad0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:700;font-size:12px'
+        : 'color:'+color+';font-weight:700;font-size:12px';
+      let borderStyle = isRainbow ? 'border-image:linear-gradient(135deg,#ff3a3a,#ffd028,#5adc6a,#5adcff,#9a3ad0) 1' : '';
+      html += '<div style="background:rgba(0,0,0,.3);border:2px solid '+borderColor+';border-radius:8px;padding:8px;text-align:center'+(equipped?';box-shadow:0 0 10px '+color:'')+'">';
+      html += '<div style="'+nameStyle+'">'+g.name+'</div>';
+      html += '<div style="color:#8a92a0;font-size:10px">'+(g.type==='knife'?'🔪':'🔫')+' '+(g.rarity==='mythical'?'MYTHICAL':'COMMON')+'</div>';
+      html += '<div style="color:#e8e8e8;font-size:11px;margin-top:2px">'+(g.dmg>=1e6?'∞':fmt(g.dmg))+' DMG</div>';
+      html += '<div style="font-size:10px;color:#8a92a0">SPD '+stars(g.spd)+'</div>';
+      if(equipped) html += '<div style="color:'+color+';font-size:10px;font-weight:700;margin-top:2px">EQUIPPED</div>';
+      else html += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:10px;margin-top:4px" onclick="window._invEquip('+i+')">EQUIP</button>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Admin gun section (if owned)
+  if(adminGuns.length > 0){
+    html += '<div style="margin-bottom:16px">';
+    html += '<h3 style="font-family:\'Russo One\',sans-serif;font-size:16px;color:#ffd028;margin-bottom:8px">⚙️ ADMIN WEAPONS</h3>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">';
+    for(let i of adminGuns){
+      let g = GUNS[i];
+      let equipped = i === currentGunIdx;
+      html += '<div style="background:rgba(0,0,0,.3);border:2px solid #ffd028;border-radius:8px;padding:8px;text-align:center'+(equipped?';box-shadow:0 0 10px #ffd028':'')+'">';
+      html += '<div style="color:#ffd028;font-weight:700;font-size:12px">'+g.name+'</div>';
+      html += '<div style="color:#8a92a0;font-size:10px">ADMIN ONLY</div>';
+      html += '<div style="color:#e8e8e8;font-size:11px;margin-top:2px">∞ DMG</div>';
+      if(equipped) html += '<div style="color:#ffd028;font-size:10px;font-weight:700;margin-top:2px">EQUIPPED</div>';
+      else html += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:10px;margin-top:4px" onclick="window._invEquip('+i+')">EQUIP</button>';
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+  }
+
+  // Regular guns section
+  html += '<div style="margin-bottom:16px">';
+  html += '<h3 style="font-family:\'Russo One\',sans-serif;font-size:16px;color:#5adcff;margin-bottom:8px">🔫 GUNS ('+guns.length+' owned)</h3>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px">';
+  for(let i of guns){
+    let g = GUNS[i];
+    let equipped = i === currentGunIdx;
+    html += '<div style="background:rgba(0,0,0,.2);border:1px solid #333;border-radius:6px;padding:6px;text-align:center'+(equipped?';border-color:#5adc6a;box-shadow:0 0 6px #5adc6a':'')+'">';
+    html += '<div style="color:#e8e8e8;font-size:11px;font-weight:600">'+g.name+'</div>';
+    html += '<div style="color:#8a92a0;font-size:10px">'+fmt(g.hpDmg)+' HP</div>';
+    if(equipped) html += '<div style="color:#5adc6a;font-size:9px;font-weight:700">EQUIPPED</div>';
+    else html += '<button class="btn btn-ghost" style="padding:2px 6px;font-size:9px;margin-top:2px" onclick="window._invEquip('+i+')">EQUIP</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '</div>';
+
+  // Passes section
+  html += '<div style="margin-bottom:8px">';
+  html += '<h3 style="font-family:\'Russo One\',sans-serif;font-size:16px;color:#a855f7;margin-bottom:8px">🎫 PASSES ('+passes.length+' owned)</h3>';
+  if(passes.length === 0){
+    html += '<div style="color:#5a6270;font-size:13px;padding:8px">No passes owned yet.</div>';
+  } else {
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    for(let pid of passes){
+      let p = PASSES.find(x => x.id === pid);
+      if(!p) continue;
+      let tagColor = p.tagColor || '#5adcff';
+      html += '<div style="background:rgba(0,0,0,.3);border:1px solid '+tagColor+';border-radius:6px;padding:6px 12px;color:'+tagColor+';font-size:12px;font-weight:600">'+p.name+'</div>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+
+  document.getElementById('inventoryContent').innerHTML = html;
+};
+window._invEquip = function(i){
+  currentGunIdx = i;
+  if(myAccount){ myAccount.currentGunIdx = i; saveProgressToServer(); }
+  updateHUD();
+  renderInventory();
+};
+
+document.getElementById('profileBtn').onclick = () => {
+  let user = myAccount ? myAccount.user : '';
+  user = prompt('Enter username to view profile:', user);
+  if(user && user.trim()) openProfile(user.trim());
+};
+document.getElementById('leaderboardBtn').onclick = () => { openLeaderboard('cash'); };
+
+document.querySelectorAll('.lbTab').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.lbTab').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-ghost'); });
+    btn.classList.remove('btn-ghost'); btn.classList.add('btn-primary');
+    openLeaderboard(btn.dataset.sort);
+  };
+});
+
+async function openProfile(user){
+  profileScreen.classList.remove('hidden');
+  document.getElementById('profileContent').innerHTML = '<div style="text-align:center;color:#8a92a0;padding:20px">Loading...</div>';
+  let r = await rpcCall("getProfile", {user});
+  if(!r){ document.getElementById('profileContent').innerHTML = '<div style="color:#ff5a5a">Failed to load profile.</div>'; return; }
+  let res; try{ res=JSON.parse(r); }catch(e){ document.getElementById('profileContent').innerHTML = '<div style="color:#ff5a5a">Bad response.</div>'; return; }
+  if(!res.ok){ document.getElementById('profileContent').innerHTML = '<div style="color:#ff5a5a">'+escapeHtml(res.err||'Error')+'</div>'; return; }
+  let p = res.profile;
+  let roleColor = p.role==='owner'?'#ff3a3a':(p.role==='admin'?'#3a7adb':(p.role==='moderator'?'#5adc6a':'#8a92a0'));
+  let bestGunIdx = p.currentGunIdx||0;
+  let bestGun = GUNS[bestGunIdx] ? GUNS[bestGunIdx].name : 'Unknown';
+  let passNames = (p.passes||[]).map(id => { let pp = PASSES.find(x=>x.id===id); return pp?pp.name:null; }).filter(Boolean);
+  let passDisplay = passNames.length ? passNames.join(', ') : 'None';
+  let html = '';
+  html += '<div style="text-align:center;margin-bottom:14px">';
+  html += '<div style="font-family:\'Russo One\',sans-serif;font-size:22px;color:#e8e8e8">'+escapeHtml(p.user)+'</div>';
+  html += '<span style="background:'+roleColor+';color:'+(p.role==='moderator'?'#000':'#fff')+';font-family:\'Russo One\',sans-serif;font-size:10px;padding:2px 8px;border-radius:4px;letter-spacing:1px">'+(p.role||'user').toUpperCase()+'</span>';
+  html += '</div>';
+  html += '<div style="background:rgba(0,0,0,.3);border-radius:10px;padding:14px;margin-bottom:8px">';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#8a92a0">Cash</span><span style="color:#5adc6a;font-weight:700">'+money(p.cash)+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#8a92a0">Diamonds</span><span style="color:#5adcff;font-weight:700">'+fmt(p.diamonds)+' ♦</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#8a92a0">Level</span><span style="color:#ffd028;font-weight:700">'+fmt(p.level)+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#8a92a0">Kills</span><span style="color:#e8e8e8;font-weight:700">'+fmt(p.kills)+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#8a92a0">Best Wave</span><span style="color:#e8e8e8;font-weight:700">'+fmt(p.wave)+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#8a92a0">Equipped Gun</span><span style="color:#e8e8e8;font-weight:700">'+escapeHtml(bestGun)+'</span></div>';
+  let wheelCount = (p.ownedGuns||[]).filter(i => GUNS[i] && GUNS[i].rarity).length;
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#8a92a0">Guns Owned</span><span style="color:#e8e8e8;font-weight:700">'+p.gunCount+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#8a92a0">Wheel Weapons</span><span style="color:#ffd028;font-weight:700">'+wheelCount+' / '+WHEEL_ITEMS.length+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#8a92a0">Passes</span><span style="color:#a855f7;font-size:11px;text-align:right;max-width:280px">'+escapeHtml(passDisplay)+'</span></div>';
+  html += '</div>';
+  document.getElementById('profileContent').innerHTML = html;
+}
+
+async function openLeaderboard(sortBy){
+  leaderboardScreen.classList.remove('hidden');
+  document.getElementById('leaderboardContent').innerHTML = '<div style="text-align:center;color:#8a92a0;padding:20px">Loading...</div>';
+  let r = await rpcCall("getLeaderboard", {sortBy});
+  if(!r){ document.getElementById('leaderboardContent').innerHTML = '<div style="color:#ff5a5a">Failed to load.</div>'; return; }
+  let res; try{ res=JSON.parse(r); }catch(e){ return; }
+  if(!res.ok) return;
+  let lb = res.leaderboard;
+  let labels = {cash:['Cash','#5adc6a',v=>money(v)], kills:['Kills','#e8e8e8',v=>fmt(v)], diamonds:['Diamonds','#5adcff',v=>fmt(v)+' ♦'], wave:['Best Wave','#e8e8e8',v=>fmt(v)], level:['Level','#ffd028',v=>fmt(v)]};
+  let [label, color, fmtFn] = labels[sortBy]||labels.cash;
+  let html = '';
+  lb.forEach((u, i) => {
+    let rankColor = i===0?'#ffd028':(i===1?'#c0c0c0':(i===2?'#cd7f32':'#5a6270'));
+    let roleColor = u.role==='owner'?'#ff3a3a':(u.role==='admin'?'#3a7adb':(u.role==='moderator'?'#5adc6a':'#8a92a0'));
+    let medal = i===0?'🥇':(i===1?'🥈':(i===2?'🥉':''));
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;margin-bottom:6px;background:rgba(0,0,0,.3);border-radius:8px;border-left:3px solid '+rankColor+'">';
+    html += '<div style="font-family:\'Russo One\',sans-serif;font-size:18px;color:'+rankColor+';width:40px;text-align:center">'+medal+(i+1)+'</div>';
+    html += '<div style="flex:1">';
+    html += '<div style="font-weight:600;color:#e8e8e8">'+escapeHtml(u.user)+'</div>';
+    html += '<span style="background:'+roleColor+';color:'+(u.role==='moderator'?'#000':'#fff')+';font-size:9px;padding:1px 5px;border-radius:3px">'+(u.role||'user').toUpperCase()+'</span>';
+    html += '</div>';
+    html += '<div style="color:'+color+';font-weight:700;font-size:14px">'+fmtFn(u[sortBy])+'</div>';
+    html += '</div>';
+  });
+  if(lb.length === 0) html = '<div style="text-align:center;color:#8a92a0;padding:20px">No players yet.</div>';
+  document.getElementById('leaderboardContent').innerHTML = html;
+}
+
+function openPasses(){
+  if(!myAccount){ alert("Sign in first."); return; }
+  renderPasses();
+  passesScreen.classList.remove('hidden');
+}
+function renderPasses(){
+  let diamonds = myAccount.diamonds || 0;
+  document.getElementById('passesDiamondVal').textContent = fmt(diamonds) + ' ♦';
+  let grid = document.getElementById('passesGrid');
+  let html = '';
+  for(let p of PASSES){
+    let owned = hasPass(p.id);
+    let canAfford = diamonds >= p.cost;
+    let mults = Object.entries(p.mults).map(([k,v]) => k+': '+v+'x').join(' · ');
+    let tagDisplay = p.tag ? ' · Chat Tag: '+p.tag : '';
+    let toggleDisplay = p.toggle ? 'Toggle ability — activate in-game' : '';
+    let descParts = [mults, tagDisplay, toggleDisplay].filter(x=>x).join(' · ');
+    let bgGradient = owned ? 'linear-gradient(135deg,#1a3a1a,#0d2a0d)' : (canAfford ? 'linear-gradient(135deg,#1a2a4a,#0d1a3a)' : 'linear-gradient(135deg,#2a1a1a,#1a0d0d)');
+    html += '<div style="background:'+bgGradient+';border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:14px">';
+    html += '<div style="flex:1">';
+    html += '<div style="font-family:\'Russo One\',sans-serif;font-size:18px;color:'+(p.tagColor||'#e8e8e8')+'">'+p.name+(owned?' ✓':'')+'</div>';
+    html += '<div style="font-size:11px;color:#8a92a0;margin-top:4px">'+descParts+'</div>';
+    if(p.serverOwner) html += '<div style="font-size:10px;color:#5adcff;margin-top:2px">Server Owner powers in your own server</div>';
+    html += '</div>';
+    html += '<div style="text-align:right">';
+    if(owned){
+      html += '<div style="color:#5adc6a;font-weight:700;font-size:14px">OWNED</div>';
+    } else {
+      html += '<div style="color:#5adcff;font-weight:700;font-size:16px;margin-bottom:6px">'+fmt(p.cost)+' ♦</div>';
+      html += '<button class="btn '+(canAfford?'btn-primary':'')+'" style="padding:8px 16px;font-size:12px;'+(canAfford?'':'opacity:.4;cursor:not-allowed')+'" '+(canAfford?'':'disabled')+' data-passid="'+p.id+'">BUY</button>';
+    }
+    html += '</div>';
+    html += '</div>';
+  }
+  grid.innerHTML = html;
+  grid.querySelectorAll('button[data-passid]').forEach(btn => {
+    btn.onclick = () => buyPass(btn.dataset.passid);
+  });
+}
+async function buyPass(id){
+  if(!myAccount) return;
+  let p = PASSES.find(x => x.id===id);
+  if(!p) return;
+  if(hasPass(id)) return;
+  if((myAccount.diamonds||0) < p.cost){ alert("Not enough diamonds!"); return; }
+  myAccount.diamonds = (myAccount.diamonds||0) - p.cost;
+  if(!myAccount.passes) myAccount.passes = [];
+  myAccount.passes.push(id);
+  await saveProgressToServer();
+  saveGame();
+  renderPasses();
+  if(player){ let newMax=100*playerMaxHpMult(); player.maxHp=newMax; if(player.hp>newMax) player.hp=newMax; }
+  addChatLine("SYSTEM","admin","Purchased "+p.name+" pass!","announce");
+}
+document.getElementById('startWaveBtn').onclick = () => { beginWave(); };
+document.getElementById('openShopImBtn').onclick = () => { openShop(); };
+document.getElementById('shopBtn').onclick = () => {
+  if(state==='playing'){ preShopState='playing'; state='paused'; openShop(); }
+  else if(state==='paused' && !pauseScreen.classList.contains('hidden')){ preShopState='paused'; pauseScreen.classList.add('hidden'); openShop(); }
+  else if(state==='paused'){ closeShop(); }
+};
+document.getElementById('closeShopBtn').onclick = () => {
+  closeShop();
+  if(preShopState==='playing'){ state='playing'; lastTime=performance.now(); }
+  else if(preShopState==='paused'){ pauseScreen.classList.remove('hidden'); }
+  preShopState=null;
+  if(state==='menu'){ refreshMenuSaveInfo(); }
+};
+document.getElementById('reviveBtn').onclick = () => {
+  gameoverScreen.classList.add('hidden');
+  player.hp = player.maxHp;
+  player.x = W/2; player.y = H/2;
+  beginWave();
+};
+document.getElementById('menuBtn').onclick = () => {
+  gameoverScreen.classList.add('hidden');
+  menuScreen.classList.remove('hidden');
+  state = 'menu';
+  saveGame(); // preserve current wave for Continue
+  refreshMenuSaveInfo();
+};
+// pause
+document.getElementById('pauseBtn').onclick = ()=>pauseGame();
+resumeBtn.onclick = ()=>resumeGame();
+pauseShopBtn.onclick = ()=>{ preShopState='paused'; pauseScreen.classList.add('hidden'); openShop(); };
+exitGameBtn.onclick = ()=>exitToMenu();
+cmdsClose.onclick = ()=>cmdsPanel.classList.add('hidden');
+// auth
+tabSignin.onclick = ()=>setAuthMode('signin');
+tabSignup.onclick = ()=>setAuthMode('signup');
+authSubmit.onclick = ()=>doAuth();
+authPw.addEventListener('keydown', e=>{ if(e.key==='Enter') doAuth(); });
+// update log -> terms -> auth flow
+document.getElementById('updateLogNext').onclick = () => {
+  updateLogScreen.classList.add('hidden');
+  termsScreen.classList.remove('hidden');
+};
+document.getElementById('termsAccept').onclick = () => {
+  termsScreen.classList.add('hidden');
+  try { localStorage.setItem('za_termsSeen', String(Date.now())); } catch(e){}
+  authScreen.classList.remove('hidden');
+  setAuthMode('signin');
+  tryAutoLogin();
+};
+// chat
+chatToggleBtn.onclick = ()=>{ chatOpen=!chatOpen; chatPanel.classList.toggle('hidden', !chatOpen); if(chatOpen) chatInput.focus(); };
+chatSendBtn.onclick = ()=>sendChat();
+chatInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ sendChat(); e.preventDefault(); } });
+addEventListener('keydown', e=>{
+  if(e.key==='Enter' && state==='playing' && myAccount){
+    if(!chatOpen){ chatOpen=true; chatPanel.classList.remove('hidden'); chatInput.focus(); e.preventDefault(); }
+  }
+  if(e.key==='Escape'){
+    if(chatOpen){ chatOpen=false; chatPanel.classList.add('hidden'); }
+    else if(state==='playing'){ pauseGame(); }
+    else if(state==='paused'){ resumeGame(); }
+  }
+});
+
+// ============================ LOOP ============================
+function loop(t){
+  let dt = Math.min(40, t - lastTime);
+  lastTime = t;
+  if(state==='intermission'){
+    let left = Math.ceil(intermissionTimer - (performance.now()-intermissionStart)/1000);
+    imTimer.textContent = Math.max(0,left);
+    if(left <= 0) beginWave();
+  }
+  if(state==='playing') update(dt);
+  render();
+  window._zaRAF = requestAnimationFrame(loop);
+}
+window._zaRAF = requestAnimationFrame(t => { lastTime=t; loop(t); });
+refreshMenuSaveInfo();
+// show update log + terms only once per 24 hours; otherwise go straight to auth
+let termsSeen = 0;
+try { termsSeen = parseInt(localStorage.getItem('za_termsSeen')||'0', 10); } catch(e){}
+if(Date.now() - termsSeen < 24*60*60*1000){
+  updateLogScreen.classList.add('hidden');
+  termsScreen.classList.add('hidden');
+  authScreen.classList.remove('hidden');
+  setAuthMode('signin');
+  tryAutoLogin();
+} else {
+  setAuthMode('signin');
+}
+})();
+</script>
+
+</body>
+</html>

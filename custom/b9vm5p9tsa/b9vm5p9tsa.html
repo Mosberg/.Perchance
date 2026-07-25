@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>b9vm5p9tsa — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!-- 
+Project: AI Kitchen Inventory Helper
+Features:
+  [x] Add/remove ingredients
+  [x] Persistent storage using kv
+  [x] AI Recipe Suggestions (streaming)
+  [x] Shopping List generator based on AI suggestions
+  [x] Clean, responsive UI
+-->
+<div id="mainCtn" style="max-width:600px; margin:40px auto; padding:20px; font-family:sans-serif; color:#333; text-align:left;">
+  
+  <!-- Header -->
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+    <h1 style="margin:0; color:#2c3e50;">🍳 Kitchen Helper</h1>
+    <button id="clearBtn" onclick="clearAll()" style="background:none; border:none; color:#e74c3c; cursor:pointer; font-size:0.9rem;">Clear All</button>
+  </div>
+
+  <!-- Input Section -->
+  <div style="display:flex; gap:10px; margin-bottom:20px;">
+    <input id="itemInputEl" type="text" placeholder="e.g. Eggs, Milk, Flour..." style="flex:1; padding:12px; border:1px solid #ddd; border-radius:8px; font-size:1rem; outline:none;">
+    <button id="addBtn" onclick="addItem()" style="background:#27ae60; color:white; border:none; padding:0 20px; border-radius:8px; cursor:pointer; font-weight:bold;">Add</button>
+  </div>
+
+  <!-- Inventory List -->
+  <div id="emptyStateEl" style="text-align:center; color:#95a5a6; padding:20px; border:2px dashed #ecf0f1; border-radius:8px;">
+    Your fridge is empty.<br>Add some ingredients to get started!
+  </div>
+  <div id="listCtn" style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:30px;"></div>
+
+  <!-- AI Actions -->
+  <div style="background:#f8f9fa; padding:20px; border-radius:12px; border:1px solid #e9ecef;">
+    <h3 style="margin-top:0; color:#34495e;">✨ AI Chef</h3>
+    <p style="font-size:0.9rem; color:#7f8c8d; margin-bottom:15px;">Ask the AI what you can cook or generate a shopping list.</p>
+    
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button id="suggestBtn" onclick="getSuggestions()" style="flex:1; background:#8e44ad; color:white; border:none; padding:12px; border-radius:8px; cursor:pointer; font-weight:bold;">Suggest Recipes</button>
+      <button id="shoppingBtn" onclick="getShoppingList()" style="flex:1; background:#2980b9; color:white; border:none; padding:12px; border-radius:8px; cursor:pointer; font-weight:bold;">Smart Shopping List</button>
+    </div>
+
+    <!-- AI Output Area -->
+    <div id="aiOutputCtn" style="margin-top:15px; padding:15px; background:white; border-radius:8px; min-height:100px; white-space:pre-wrap; line-height:1.5; border-left:4px solid #8e44ad; display:none;"></div>
+  </div>
+
+</div>
+
+<script type="module">
+  // State
+  let inventory = [];
+
+  // Elements
+            
+  // Initialize
+  async function init() {
+    // Load from KV
+    let stored = await root.kv.kitchenHelper.get('inventory');
+    if(stored) inventory = stored;
+    render();
+  }
+
+  // Render List
+  function render() {
+    listCtn.innerHTML = '';
+    if(inventory.length === 0) {
+      emptyStateEl.hidden = false;
+    } else {
+      emptyStateEl.hidden = true;
+      inventory.forEach((item, index) => {
+        let tag = document.createElement('div');
+        tag.style.cssText = "background:#e8f8f5; color:#16a085; padding:8px 15px; border-radius:20px; font-weight:bold; display:flex; align-items:center; gap:8px; border:1px solid #d1f2eb;";
+        tag.innerHTML = `
+          <span>${escapeHtml(item)}</span>
+          <span onclick="window.removeIngredient(${index})" style="cursor:pointer; opacity:0.6; font-size:1.2em; line-height:1;">&times;</span>
+        `;
+        listCtn.appendChild(tag);
+      });
+    }
+  }
+
+  // Helper to prevent XSS
+  function escapeHtml(text) {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  // Actions
+  async function addItem() {
+    let val = itemInputEl.value.trim();
+    if(!val) return;
+    
+    // Basic AI categorization (optional simple check)
+    inventory.push(val);
+    itemInputEl.value = '';
+    await root.kv.kitchenHelper.set('inventory', inventory);
+    render();
+  }
+
+  async function removeIngredient(index) {
+    inventory.splice(index, 1);
+    await root.kv.kitchenHelper.set('inventory', inventory);
+    render();
+  }
+
+  async function clearAll() {
+    if(confirm('Clear all ingredients?')) {
+      inventory = [];
+      await root.kv.kitchenHelper.set('inventory', inventory);
+      render();
+      aiOutputCtn.style.display = 'none';
+    }
+  }
+
+  // AI: Suggest Recipes
+  async function getSuggestions() {
+    if(inventory.length === 0) return alert("Please add ingredients first!");
+    
+    setLoading(true);
+    aiOutputCtn.style.display = 'block';
+    aiOutputCtn.style.borderLeftColor = '#8e44ad'; // Purple for recipes
+    
+    let prompt = `I have these ingredients: ${inventory.join(', ')}. Suggest 3 distinct and delicious dinner recipes I can make. Format the output with clear headings for each recipe, a list of steps, and mark any ingredients I am missing with a [MISSING] tag. Keep it concise.`;
+    
+    // Streaming magic
+    aiOutputCtn.innerHTML = root.generateText(prompt);
+    
+    // Wait for generation to finish (conceptually) to re-enable button, 
+    // though we don't strictly know when stream ends easily without onChunk callback, 
+    // so we'll use a timeout or just let the promise handle the button state if we weren't using innerHTML promise trick.
+    // Since we are using the innerHTML promise trick, we'll just set a timeout to re-enable button roughly.
+    // Better approach: use onChunk to track completion.
+    let p = root.generateText({ instruction: prompt, onChunk: () => {} });
+    aiOutputCtn.innerHTML = p;
+    await p;
+    setLoading(false);
+  }
+
+  // AI: Shopping List
+  async function getShoppingList() {
+    if(inventory.length === 0) return alert("Please add ingredients first!");
+
+    setLoading(true);
+    aiOutputCtn.style.display = 'block';
+    aiOutputCtn.style.borderLeftColor = '#2980b9'; // Blue for shopping
+
+    let prompt = `I want to make a "Roast Chicken Dinner" (Chicken, Potatoes, Carrots, Gravy). Compare this list to my current inventory: ${inventory.join(', ')}. Generate a concise shopping list of items I need to buy to complete this meal. Group them by category (Produce, Meat, Pantry, etc.).`;
+    
+    let p = root.generateText({ instruction: prompt, onChunk: () => {} });
+    aiOutputCtn.innerHTML = p;
+    await p;
+    setLoading(false);
+  }
+
+  function setLoading(isLoading) {
+    suggestBtn.disabled = isLoading;
+    shoppingBtn.disabled = isLoading;
+    if(isLoading) {
+      suggestBtn.textContent = "⏳ Thinking...";
+      shoppingBtn.textContent = "⏳ Thinking...";
+    } else {
+      suggestBtn.textContent = "Suggest Recipes";
+      shoppingBtn.textContent = "Smart Shopping List";
+    }
+  }
+
+  // Export functions to window for inline onclick handlers
+  window.addItem = addItem;
+  window.removeIngredient = removeIngredient;
+  window.clearAll = clearAll;
+  window.getSuggestions = getSuggestions;
+  window.getShoppingList = getShoppingList;
+
+  // Handle Enter key
+  itemInputEl.addEventListener('keypress', (e) => {
+    if(e.key === 'Enter') addItem();
+  });
+
+  // Start
+  init();
+</script>
+</body>
+</html>

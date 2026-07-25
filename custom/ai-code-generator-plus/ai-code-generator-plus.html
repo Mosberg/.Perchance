@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-code-generator-plus — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<h1>AI Code Generator ➕</h1>
+
+<link
+  rel="shortcut icon"
+  href="https://user.uploads.dev/file/8c7563d0ece7c9ed36c8a83f8361a7a7.webp"
+  type="image/x-icon"
+/>
+
+<script>
+  const defaultMode = modes.selectAll[0].getName;
+  const urlMode = new URLSearchParams(window.location.search).get("mode");
+  currentMode = urlModeToActualMode[urlMode] || defaultMode;
+</script>
+
+<div
+  style="
+    width: 98%;
+    width: calc(100% - 0.5rem);
+    max-width: 700px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  "
+>
+  <div>— Mode —</div>
+  <select
+    id="currentModeEl"
+    onchange="
+      currentMode = this.value;
+      localStorage.currentMode = this.value;
+      modeDescriptionEl.textContent = modes[currentMode].description || '';
+      instructionEl.placeholder =
+        modes[currentMode].instructionPlaceholder || instructionEl.dataset.defaultPlaceholder;
+    "
+    style="text-align: left"
+  >
+    [generateModesHtml()]
+  </select>
+  <div
+    id="modeDescriptionEl"
+    style="font-size: 75%; opacity: 0.6; max-width: 500px; margin: 0 auto; padding-top: 0.25rem"
+  ></div>
+  <script>
+    modeDescriptionEl.textContent = modes[currentMode].description || "";
+  </script>
+  [currentModeEl.value = currentMode, ""]
+
+  <div style="margin-top: 1rem">— Instruction —</div>
+  <div style="width: 100%; position: relative">
+    <textarea
+      id="instructionEl"
+      data-default-placeholder="Type an instruction here."
+      placeholder=""
+      style="width: 100%; height: 120px; padding-top: 0.25rem; resize: vertical"
+      oninput="
+        if (this.value.trim() == '') {
+          instructionDeleteBtn.style.display = 'none';
+        } else {
+          instructionDeleteBtn.style.display = '';
+        }
+        localStorage.instruction = this.value;
+        generateBtn.textContent = '✨ generate';
+        window.deletedInstruction = '';
+        instructionDeleteBtn.dataset.mode = 'delete';
+      "
+    ></textarea>
+    <script>
+      if (localStorage.instruction) {
+        instructionEl.value = localStorage.instruction;
+        instructionDeleteBtn.style.display = "";
+      }
+    </script>
+    <script>
+      instructionEl.placeholder =
+        modes[currentMode].instructionPlaceholder ?? instructionEl.dataset.defaultPlaceholder;
+    </script>
+    <button
+      id="instructionDeleteBtn"
+      data-mode="delete"
+      onclick="
+        if (this.dataset.mode === 'delete') {
+          window.deletedInstruction = instructionEl.value;
+          instructionEl.value = '';
+          this.dataset.mode = 'undo';
+        } else {
+          instructionEl.value = window.deletedInstruction;
+          this.dataset.mode = 'delete';
+        }
+        localStorage.instruction = instructionEl.value;
+      "
+      style="position: absolute; top: -0.75rem; right: 0.5rem; font-size: 60%; display: none"
+    ></button>
+    <script>
+      if (instructionEl.value.trim()) {
+        instructionDeleteBtn.style.display = "";
+      }
+    </script>
+    <style>
+      #instructionDeleteBtn[data-mode="delete"]:before {
+        content: "🗑️ delete";
+      }
+      #instructionDeleteBtn[data-mode="undo"]:before {
+        content: "↩️ undo";
+      }
+    </style>
+  </div>
+
+  <div style="margin-top: 0.5rem">
+    <div style="display: inline-block; position: relative">
+      <button
+        id="generateBtn"
+        onclick="
+          responseEl.value = '';
+          generate();
+        "
+      >
+        ✨ generate
+      </button>
+      <span
+        id="loaderEl"
+        style="
+          position: absolute;
+          right: 0;
+          transform: translateX(120%);
+          height: 100%;
+          display: inline-flex;
+          align-items: center;
+        "
+      ></span>
+      <span
+        style="
+          position: absolute;
+          left: 0;
+          bottom: 0;
+          transform: translateX(-120%);
+          height: 100%;
+          display: inline-flex;
+          align-items: center;
+        "
+        ><button id="stopBtn" style="font-size: 80%; display: none">🛑 stop</button></span
+      >
+    </div>
+  </div>
+
+  <div id="outputTitleEl" style="margin-top: 0.5rem">— Output —</div>
+  <style>
+    @media only screen and (max-width: 670px) {
+      #outputTitleEl {
+        margin-bottom: 1rem;
+      }
+    }
+  </style>
+  <div style="width: 100%; position: relative">
+    <textarea
+      id="responseEl"
+      oninput="
+        if (this.value.trim() == '') {
+          continueBtn.disabled = true;
+          bottomContinueBtn.disabled = true;
+          generateBtn.textContent = '✨ generate';
+          responseDeleteBtn.style.display = 'none';
+        } else {
+          continueBtn.disabled = false;
+          bottomContinueBtn.disabled = false;
+          generateBtn.textContent = '🔁 regenerate';
+          responseDeleteBtn.style.display = '';
+        }
+        responseDeleteBtn.dataset.mode = 'delete';
+        localStorage.response = this.value;
+        window.deletedResponse = '';
+        retryBtn.disabled = true;
+      "
+      placeholder="The AI's output will show up here, and you can edit it. You can also manually type text here and then click the 'continue' button, above."
+      style="
+        width: 100%;
+        height: 800px;
+        max-height: 80vh;
+        padding: 0.5rem;
+        padding-bottom: 0.75rem;
+        resize: vertical;
+      "
+    ></textarea>
+    <script>
+      if (localStorage.response) {
+        responseEl.value = localStorage.response;
+        responseDeleteBtn.style.display = "";
+        continueBtn.disabled = false;
+        bottomContinueBtn.disabled = false;
+      }
+    </script>
+    <button
+      id="responseCopyBtn"
+      onclick="
+        navigator.clipboard.writeText(responseEl.value);
+        this.innerText = '✅ copied!';
+        setTimeout(() => {
+          this.innerText = '📋 copy';
+        }, 2000);
+      "
+      style="position: absolute; top: -0.75rem; right: 0.5rem; font-size: 60%; display: none"
+    >
+      📋 copy
+    </button>
+    <div
+      style="
+        position: absolute;
+        top: -0.75rem;
+        left: 0.5rem;
+        font-size: 60%;
+        min-width: max-content;
+      "
+    >
+      <button disabled id="continueBtn" onclick="generate()" style="">▶️ continue</button>
+      <button
+        disabled
+        id="retryBtn"
+        onclick="
+          responseEl.value = window.responseContentBeforeLastGenerate || responseEl.value;
+          generate();
+        "
+        style=""
+      >
+        🔁 retry
+      </button>
+      <button
+        id="responseDeleteBtn"
+        data-mode="delete"
+        onclick="
+          if (this.dataset.mode === 'delete') {
+            if (stopBtn.offsetTop) {
+              stopBtn.click();
+            }
+            window.deletedResponse = responseEl.value;
+            responseEl.value = '';
+            this.dataset.mode = 'undo';
+          } else {
+            responseEl.value = window.deletedResponse;
+            this.dataset.mode = 'delete';
+          }
+          localStorage.response = responseEl.value;
+        "
+        style="margin-left: 1.5rem; display: none"
+      ></button>
+      <style>
+        #responseDeleteBtn[data-mode="delete"]:before {
+          content: "🗑️ delete";
+        }
+        #responseDeleteBtn[data-mode="undo"]:before {
+          content: "↩️ undo";
+        }
+      </style>
+    </div>
+    <div
+      style="
+        position: absolute;
+        bottom: -0.5rem;
+        left: 0.5rem;
+        font-size: 60%;
+        min-width: max-content;
+      "
+    >
+      <button disabled id="bottomContinueBtn" onclick="generate()" style="">▶️ continue</button>
+      <button id="bottomStopBtn" style="display: none">🛑 stop</button>
+    </div>
+  </div>
+</div>
+
+<div id="renderedOutputEl" style="margin-top: 3rem"></div>
+
+<br />
+<p style="font-size: 80%">
+  Also check out the
+  <a href="https://perchance.org/ai-story-generator" target="_blank">AI Story Generator</a>, the
+  <a href="https://perchance.org/ai-text-rewriter" target="_blank">AI Text Rewriter</a>, and the
+  <a href="https://perchance.org/ai-text-to-image-generator" target="_blank">AI Image Generator</a>.
+</p>
+
+<br />
+
+<div id="commentsCtn"></div>
+<br /><br />
+
+<!-- COMMENTS STUFF -->
+<script>
+  function createCommentsSectionHtml() {
+    let startVisible = false;
+    if (window.commentsEl && window.commentsEl.style.display !== "none") startVisible = true;
+    commentsCtn.innerHTML = ""; // must delete existing comments section first because comments plugin has code which cause it to not output any HTML if that comments section already exists on the page
+    let commentsPluginHtml = comments({
+      width: "min(750px, 100%)",
+      height: "min(70vh, 600px)",
+      forceColorScheme: localStorage.forceColorScheme || null
+    });
+    commentsCtn.innerHTML = `
+      <p><button onclick="if(commentsEl.style.display == 'none') { commentsEl.style.display=''; this.textContent='hide comments'; } else { commentsEl.style.display='none'; this.textContent='💬 show comments'; }">${startVisible ? "hide comments" : "💬 show comments"}</button></p>
+      <p id="commentsEl" style="${startVisible ? "" : "display:none;"}">
+        ${commentsPluginHtml}
+      </p>
+    `;
+  }
+  createCommentsSectionHtml();
+</script>
+
+<!-- DARK MODE STUFF -->
+<div style="position: fixed; bottom: 0.5rem; left: 0.5rem; z-index: 10">
+  <button
+    id="darkModeBtn"
+    style="cursor: pointer"
+    onclick="
+      window.toggleManualDarkMode();
+      createCommentsSectionHtml();
+    "
+  >
+    🌃
+  </button>
+</div>
+<script>
+  function toggleManualDarkMode() {
+    let newColorScheme = getCurrentColorScheme() === "dark" ? "light" : "dark";
+    localStorage.forceColorScheme = newColorScheme;
+    setColorScheme(newColorScheme);
+    // if chosen mode matches current OS default, we remove manual "forced" mode:
+    let systemColorScheme =
+      window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    if (systemColorScheme === newColorScheme) {
+      localStorage.removeItem("forceColorScheme");
+    }
+  }
+  function getCurrentColorScheme() {
+    if (localStorage.forceColorScheme !== undefined) {
+      return localStorage.forceColorScheme;
+    } else {
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    }
+  }
+  function setColorScheme(scheme) {
+    if (scheme !== "dark" && scheme !== "light")
+      throw new Error("scheme should be 'light' or 'dark'");
+    document.querySelector("#darkModeBtn").textContent = scheme === "dark" ? "🌄" : "🌃";
+    if (scheme === "dark") {
+      document.documentElement.style.colorScheme = "dark";
+      document.body.style.color = "#d8d4cf";
+      document.body.style.backgroundColor = "#131516";
+      document.documentElement.style.setProperty("--box-color", "#2a2a2a");
+    } else {
+      document.documentElement.style.colorScheme = "light";
+      document.body.style.color = "black";
+      document.body.style.backgroundColor = "white";
+      document.documentElement.style.setProperty("--box-color", "#ebebeb");
+    }
+  }
+  // during page load, set the chosen mode based on localStorage value if it exists:
+  if (localStorage.forceColorScheme !== undefined) {
+    setColorScheme(localStorage.forceColorScheme);
+  } else {
+    // user has not manually overwritten, so we use OS default:
+    let systemIsInDarkMode = !!(
+      window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+    );
+    setColorScheme(systemIsInDarkMode ? "dark" : "light");
+  }
+</script>
+
+<!-- FEEDBACK STUFF -->
+<div style="position: fixed; bottom: 0.5rem; right: 0.5rem; text-align: right; z-index: 100">
+  <div id="feedbackCommentsCtn"></div>
+  <button
+    id="feedbackBtn893745ykfuhd"
+    onclick="
+      if (feedbackCommentsCtn.innerHTML.length === 0) {
+        feedbackCommentsCtn.innerHTML = generateFeedbackCommentsHtml();
+        this.innerHTML = '✖ close';
+      } else {
+        feedbackCommentsCtn.innerHTML = '';
+        this.innerHTML = '🗨️ feedback';
+      }
+    "
+  >
+    🗨️ feedback
+  </button>
+</div>
+<script>
+  function generateFeedbackCommentsHtml() {
+    let options = {
+      channel: "feedback",
+      hideComments: location.hash.includes("#showfeedback") ? false : true,
+      height: location.hash.includes("#showfeedback") ? 500 : 120,
+      commentPlaceholderText: "Share some feedback. Do not share personal info, data is public.",
+      submitButtonText: "submit feedback"
+    };
+    if (localStorage.forceColorScheme) options.forceColorScheme = localStorage.forceColorScheme;
+    return comments(options);
+  }
+</script>
+
+<style>
+  button:disabled {
+    filter: grayscale(
+      1
+    ); /* since firefox doesn't seem to change emoji colors to indicate disabledness - only affects text */
+  }
+</style>
+
+</body>
+</html>

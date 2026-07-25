@@ -1,0 +1,2075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>2woz1lh72d — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+AI comments:
+[Done] Removed "selfie" language from the Camera app's Selfie tab (renamed label to "Self Photo") and relaxed the photo generation prompt so the user dictates the scenario without enforced selfie pose guidelines (e.g., removed "holding phone, looking at camera").
+[Done] Implemented debug-mode character editing in the profile modal. When debug mode is enabled, viewing any character profile reveals editable fields for all core traits (name, age, gender, race, ethnicity, profession, physical, clothing style, personality, backstory, motive, mood, score, interests, dislikes, inner monologue). Changes are saved back to the live object and persisted.
+[Done] Decoupled Camera Self Photo tab description from the canonical user profile used in AI chat. The Self Photo tab now saves to separate fields (`selfPhotoPhysical` / `selfPhotoClothing`), so editing your appearance for camera photos no longer overwrites the dating profile description.
+[Done] Updated `getUserProfileDesc` to derive the user's physical description from the selected Profile Photo prompt. If a profile photo is chosen, its prompt is used as the canonical physical appearance in chat context; the free-text field is only used as a fallback when no profile photo is selected.
+[Done] Removed profile-photo-prompt-based physical description from `getUserProfileDesc` per creator feedback. The AI now ONLY sees the `physicalAppearance` free-text field from My Profile — no selfie camera or photo prompt data leaks into chat context. The profile photo is still used for the visual profile picture, but its prompt/desc is never sent to the AI.
+[Done] Unified chat history between Dating and Messages apps. When a match gives their number, the same match object is added to Contacts, so both apps share one history array. Added `removeHistoryEntry` helper to mutate histories in-place rather than reassigning them, keeping the shared reference intact. On data load, diverged histories are merged and contacts are re-linked to their match objects.
+[Done] Added [selfie] / [nonselfie] tag system so AI characters can explicitly choose between sending a photo of themselves ([selfie]) or a photo of something else ([nonselfie]). Updated PHOTO_POLICY to require one of these tags on every photo and to instruct that [nonselfie] photos must be relevant to the current conversation (exception: unprompted/out-of-the-blue AI-initiated messages can send any [nonselfie]). Updated stripAiTags, extractAiPhotoIntent, extractPhotoTags (parses .type), generateAiPhoto (branches selfie vs nonselfie — nonselfie builds a subject-focused prompt where the character is not in frame), and the hasPhotoIntent checks to recognize the new tags.
+[Done] Made AI-initiated photos motive-aware. Added `getMotivePhotoGuidance(c)` which returns motive- and score-specific photo instructions for spontaneous messages: casual hookups send suggestive/intimate photos unprompted at score ≥150; long-term relationship characters send warm/romantic photos at ≥250; friends-only stay strictly platonic (wholesome/activity photos only, suggestive only never); "don't know yet" characters adapt to chemistry at ≥200. Guidance is injected into `buildAiInitiatedPrompt`.
+[Done] Added explicit scenario/location generation to all non-selfie AI photos. In the photoTags path: missing `clothes` defaults to the character's clothing style, missing `location` is generated from chat context (via `buildScenarioPrompt`) or a random fallback. In the no-tags non-selfie path: a location is now generated from context or a random fallback and added to the prompt. Every AI photo now consistently has physical + outfit + activity/location components.
+[Done] Fixed debug mode persistence. `toggleDebugMode` now calls `persistSettings()`, `debugMode` is saved to `kv.settings`, loaded on startup in `loadPersistentData`, reflected in the Settings checkbox on open, and cleared on reset.
+[Done] Removed "Ask for Number" and "Ask for Photo" buttons. The AI now handles both requests through the tag system in regular chat. Added NUMBER_POLICY to buildChatPrompt so the AI outputs [GAVE_NUMBER] or [DECLINED] when the user asks for their number. generateChatResponse detects [GAVE_NUMBER] and submitChat adds the contact/alerts the user. Removed the now-unused askForNumber, askForPhoto, buildAskNumberPrompt, and buildAskPhotoPrompt functions. Chat input areas simplified to a single line (input + send + 📎 for messages).
+[Done] Refined AI character behavior with sway score and more realistic motives. Added a `sway` field (0-100, randomly generated) to every new character that controls how flexible their desires/goals are — low sway = stubborn, high sway = adaptable. Sway is included in buildChatSystemInfo so the AI knows its own flexibility, and is factored into motive-change guidance in SCORE_AND_INNER_BLOCK. Rewrote motiveBehaviorMap: casual hookups now vet partners and have standards (not desperate); friends-only are not permanently closed to romance but need genuine earned connection (especially with high sway); long-term relationship characters may become intimate earlier because physical closeness is part of romantic bonding for them; don't-know-yet characters are guided by chemistry. Rewrote getMotivePhotoGuidance with more realistic score thresholds and sway-awareness for friends-only. Made SCORE_AND_INNER_BLOCK score changes smaller/more gradual and added sway-based motive change instructions. Added sway to debug edit panel. Updated Info app to mention sway.
+[Done] Added visual differentiation between roleplay mode and text mode using chat bubble colors. Each message is tagged with `rp:roleplayMode` at creation time, and renderChat applies a `rp-msg` class per-message. Text mode: blue/gray bubbles. Roleplay mode: violet/purple bubbles. Messages keep their mode's color even after toggling. Works in both light and dark modes. Updated Info app to explain the color difference.
+-->
+
+<style>
+  body{margin:0;background:#111;display:flex;justify-content:center;align-items:center;height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-align:left;overflow:hidden;}
+  #phoneCtn{width:min(360px,100vw);height:min(720px,100vh);background:#000;border-radius:min(40px,11vw);border-width:min(10px,2.8vw);border-style:solid;border-color:#333;box-sizing:border-box;position:relative;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.6);}
+  #statusBarEl{height:32px;background:rgba(0,0,0,0.85);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:12px;z-index:50;}
+  #screenEl{flex:1;background:#f2f2f7;position:relative;overflow:hidden;display:flex;flex-direction:column;}
+  .appScreen{position:absolute;inset:0;overflow-y:auto;display:flex;flex-direction:column;background:#f2f2f7;}
+  .appHeader{padding:12px 16px;background:rgba(255,255,255,0.95);backdrop-filter:blur(8px);border-bottom:1px solid #ddd;display:flex;align-items:center;gap:10px;font-weight:600;position:sticky;top:0;z-index:10;}
+  .appIconCtn{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:50px 30px;place-items:center;}
+  .appIcon{width:72px;height:72px;background:#fff;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:30px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,0.12);transition:transform 0.1s;user-select:none;}
+  .appIcon:active{transform:scale(0.95);}
+  .appIcon span{font-size:11px;color:#222;margin-top:4px;font-weight:500;}
+  .bubble{max-width:78%;padding:10px 14px;border-radius:18px;margin:3px 0;font-size:14px;line-height:1.4;word-wrap:break-word;}
+  .bubble.user{background:#007aff;color:#fff;align-self:flex-end;border-bottom-right-radius:4px;}
+  .bubble.them{background:#e5e5ea;color:#000;align-self:flex-start;border-bottom-left-radius:4px;}
+  .btn{background:#007aff;color:#fff;border:none;padding:10px 16px;border-radius:12px;cursor:pointer;font-size:14px;font-weight:500;}
+  .btn:disabled{opacity:0.6;cursor:not-allowed;}
+  .btn.secondary{background:#555;}
+  .btn.danger{background:#ff3b30;}
+  .card{background:#fff;border-radius:16px;padding:16px;margin:10px 12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);}
+  input,textarea,select{border:1px solid #ccc;border-radius:10px;padding:10px;font-family:inherit;font-size:14px;width:100%;box-sizing:border-box;outline:none;}
+  input:focus,textarea:focus,select:focus{border-color:#007aff;}
+  .chatInputCtn{display:flex;gap:8px;padding:10px 12px;background:#fff;border-top:1px solid #ddd;align-items:center;}
+  .chatCtn{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;}
+  .tabBtn{flex:1;padding:10px;border:none;background:transparent;font-weight:600;border-bottom:2px solid transparent;color:#666;cursor:pointer;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;}
+  .checkLabel{display:flex;align-items:center;gap:4px;cursor:pointer;}
+  .elevated-item{background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+  .sub{color:#666;}
+  .tabBar{display:flex;border-bottom:1px solid #ddd;background:#fff;}
+  .chat-overlay{position:absolute;inset:0;background:#f2f2f7;display:flex;flex-direction:column;z-index:20;}
+  .debugBox{background:#f9f9f9;border-radius:10px;padding:10px;margin-top:10px;font-size:13px;color:#333;}
+  .msgTs{font-size:10px;text-align:right;margin-top:2px;line-height:1;}
+  .bubble.user .msgTs{color:rgba(255,255,255,0.7);}
+  .bubble.them .msgTs{color:#999;}
+  .customRaceItem{background:#f2f2f7;border-radius:8px;padding:6px 10px;font-size:13px;display:flex;justify-content:space-between;align-items:center;}
+
+  /* Dark mode overrides */
+  #screenEl.dark, #screenEl.dark .appScreen{background:#1c1c1e;color:#fff;}
+  #screenEl.dark .appHeader{background:rgba(28,28,30,0.95);border-bottom-color:#333;color:#fff;}
+  #screenEl.dark .card, #screenEl.dark .elevated-item{background:#2c2c2e;color:#fff;}
+  #screenEl.dark .card{box-shadow:0 2px 12px rgba(0,0,0,0.3);}
+  #screenEl.dark .elevated-item{box-shadow:0 1px 4px rgba(0,0,0,0.3);}
+  #screenEl.dark #profileModalEl > div, #screenEl.dark #datingSettingsModalEl > div{background:#2c2c2e !important;color:#fff !important;}
+  #screenEl.dark #customRaceModalEl > div{background:#2c2c2e !important;color:#fff !important;}
+  #screenEl.dark .customRaceItem{background:#3a3a3c;color:#fff;}
+  #screenEl.dark .bubble.them{background:#3a3a3c;color:#fff;}
+  #screenEl.dark .bubble.user{background:#0a84ff;}
+  #screenEl.dark input, #screenEl.dark textarea, #screenEl.dark select{background:#1c1c1e;color:#fff;border-color:#444;}
+  #screenEl.dark .chatInputCtn{background:#1c1c1e;border-top-color:#333;}
+  #screenEl.dark .tabBtn{color:#aaa;}
+  #screenEl.dark .tabBar{background:#1c1c1e;border-bottom-color:#333;}
+  #screenEl.dark .appIcon{background:#2c2c2e;box-shadow:0 3px 10px rgba(0,0,0,0.4);}
+  #screenEl.dark .appIcon span{color:#fff;}
+  #screenEl.dark .chat-overlay{background:#1c1c1e !important;}
+  #screenEl.dark .debugBox{background:#3a3a3c;color:#fff;}
+  #screenEl.dark .sub{color:#aaa;}
+  #screenEl.dark .bubble.them .msgTs{color:#aaa;}
+
+  /* Roleplay mode bubble colors — warm violet to distinguish from text mode's blue.
+     Applied per-message via .rp-msg class so messages keep their mode's color even after toggling. */
+  .bubble.user.rp-msg{background:#7b2cbf;color:#fff;}
+  .bubble.them.rp-msg{background:#f3e8ff;color:#4a0e6e;}
+  .bubble.user.rp-msg .msgTs{color:rgba(255,255,255,0.7);}
+  .bubble.them.rp-msg .msgTs{color:#9d6bb5;}
+  #screenEl.dark .bubble.user.rp-msg{background:#9d4edd;}
+  #screenEl.dark .bubble.them.rp-msg{background:#3d2a4d;color:#e0c8f0;}
+  #screenEl.dark .bubble.them.rp-msg .msgTs{color:#b89dd0;}
+  .bubble.pressed{opacity:0.55;}
+  .bubble{ -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+  #msgCtxMenu{position:fixed;z-index:120;background:#fff;border-radius:12px;box-shadow:0 6px 28px rgba(0,0,0,0.3);overflow:hidden;min-width:160px;}
+  #msgCtxMenu .ctxItem{padding:14px 18px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;}
+  #msgCtxMenu .ctxItem:active{background:#e5e5ea;}
+  #msgCtxMenu .ctxItem.danger{color:#ff3b30;}
+  #msgCtxMenu .ctxDivider{height:1px;background:#e5e5ea;}
+  #screenEl.dark #msgCtxMenu{background:#2c2c2e;}
+  #screenEl.dark #msgCtxMenu .ctxItem{color:#fff;}
+  #screenEl.dark #msgCtxMenu .ctxItem:active{background:#3a3a3c;}
+  #screenEl.dark #msgCtxMenu .ctxDivider{background:#3a3a3c;}
+</style>
+
+<div id="phoneCtn">
+  <div id="statusBarEl">
+    <span id="clockEl">12:00</span>
+    <span style="letter-spacing:1px;">📶 5G 🔋100</span>
+  </div>
+  <div id="screenEl">
+
+    <!-- Home -->
+    <div id="homeScreenEl" class="appScreen">
+      <div style="padding-top:50px;text-align:center;font-size:20px;font-weight:700;letter-spacing:-0.5px;">Phone</div>
+      <div class="appIconCtn">
+        <div class="appIcon" onclick="openApp('dating')" style="position:relative;">❤️<span>Dating</span><span id="datingBadgeEl" hidden style="position:absolute;top:-4px;right:-4px;background:#ff3b30;color:#fff;font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;">0</span></div>
+        <div class="appIcon" onclick="openApp('messages')" style="position:relative;">💬<span>Messages</span><span id="messagesBadgeEl" hidden style="position:absolute;top:-4px;right:-4px;background:#ff3b30;color:#fff;font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;">0</span></div>
+        <div class="appIcon" onclick="openApp('camera')">📷<span>Camera</span></div>
+        <div class="appIcon" onclick="openApp('contacts')">👤<span>Contacts</span></div>
+        <div class="appIcon" onclick="openApp('assistant')">🤖<span>Assistant</span></div>
+        <div class="appIcon" onclick="openApp('settings')">⚙️<span>Settings</span></div>
+        <div class="appIcon" onclick="openApp('info')">📖<span>Info</span></div>
+      </div>
+    </div>
+
+    <!-- Dating App -->
+    <div id="datingScreenEl" class="appScreen" hidden>
+      <div class="appHeader">
+        <button class="btn secondary" onclick="goHome()">Back</button>
+        <span style="flex:1;text-align:center;">Dating</span>
+        <button class="btn secondary" onclick="openDatingSettings()" style="padding:6px 10px;font-size:16px;">⚙️</button>
+      </div>
+      <div id="datingWelcomeBannerEl" hidden style="background:#007aff;color:#fff;padding:10px 16px;text-align:center;font-size:13px;display:flex;justify-content:space-between;align-items:center;">
+        <span>👋 Welcome! Set your <b>Preferences</b> (⚙️) and fill out <b>My Profile</b> to get started.</span>
+        <button onclick="datingWelcomeBannerEl.hidden=true;" style="background:transparent;border:none;color:#fff;font-size:16px;cursor:pointer;">×</button>
+      </div>
+      <div class="tabBar">
+        <button id="findTabBtn" class="tabBtn" onclick="switchDatingTab('find')">Find</button>
+        <button id="matchesTabBtn" class="tabBtn" onclick="switchDatingTab('matches')">Matches</button>
+        <button id="profileTabBtn" class="tabBtn" onclick="switchDatingTab('profile')">My Profile</button>
+      </div>
+      <div id="datingContentEl" style="flex:1;overflow-y:auto;padding:12px;">
+        <div id="findTabEl">
+          <div id="candidateCardEl" class="card" hidden>
+            <div id="candidatePortraitEl" style="width:100%;aspect-ratio:1;background:#eee;border-radius:12px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#666;overflow:hidden;">Generating portrait...</div>
+            <div id="candidateInfoEl" style="white-space:pre-wrap;font-size:14px;line-height:1.5;"></div>
+            <div id="candidateActionsEl" style="display:flex;gap:10px;margin-top:14px;justify-content:center;" hidden>
+              <button class="btn danger" onclick="declineCandidate()">❌ Decline</button>
+              <button class="btn" onclick="matchCandidate()">❤️ Match</button>
+            </div>
+          </div>
+          <div id="noCandidateEl" style="text-align:center;color:#666;margin-top:50px;font-size:15px;" hidden>Finding someone for you...</div>
+        </div>
+        <div id="matchesTabEl" hidden>
+          <div id="matchesListEl"></div>
+          <div id="noMatchesEl" style="text-align:center;color:#666;margin-top:50px;font-size:15px;" hidden>No matches yet.</div>
+        </div>
+        <div id="profileTabEl" hidden>
+          <div class="card">
+            <div style="font-weight:700;margin-bottom:12px;">My Profile</div>
+            <input id="myNameInput" placeholder="Name" style="margin-bottom:8px;">
+            <input id="myAgeInput" placeholder="Age" type="number" style="margin-bottom:8px;">
+            <input id="myGenderInput" placeholder="Gender" style="margin-bottom:8px;">
+            <input id="myRaceInput" placeholder="Race / Species" style="margin-bottom:8px;">
+            <input id="myProfessionInput" placeholder="Profession" style="margin-bottom:8px;">
+            <input id="myPersonalityInput" placeholder="Personality tags" style="margin-bottom:8px;">
+            <input id="myPhysicalInput" placeholder="Physical appearance" style="margin-bottom:8px;">
+            <textarea id="myBioInput" placeholder="Bio / Backstory" rows="2" style="margin-bottom:8px;"></textarea>
+            <input id="myInterestsInput" placeholder="Interests (comma-separated)" style="margin-bottom:8px;">
+            <input id="myDislikesInput" placeholder="Dislikes (comma-separated)" style="margin-bottom:8px;">
+            <input id="myHobbiesInput" placeholder="Hobbies (comma-separated)" style="margin-bottom:8px;">
+            <div style="margin-bottom:8px;">
+              <label style="font-size:13px;color:#555;display:block;margin-bottom:4px;">Profile Photo</label>
+              <div id="myPhotoGridEl" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;"></div>
+            </div>
+            <div id="myProfilePreviewEl" style="margin-bottom:12px;"></div>
+            <button class="btn" onclick="saveUserProfile()">Save Profile</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dating Chat Overlay -->
+      <div id="datingChatViewEl" class="chat-overlay" hidden>
+        <div class="appHeader">
+          <button class="btn secondary" onclick="closeDatingChat()">Back</button>
+          <span id="datingChatNameEl" style="flex:1;text-align:center;">Match</span>
+          <button class="btn secondary" onclick="showProfile(currentDatingMatch)" style="padding:6px 10px;font-size:16px;">ℹ️</button>
+          <button class="btn danger" onclick="unmatchCurrent()" style="padding:6px 10px;font-size:12px;">Unmatch</button>
+        </div>
+        <div id="datingChatHistoryEl" class="chatCtn"></div>
+        <div class="chatInputCtn" style="flex-wrap:wrap;">
+          <input id="datingChatInput" placeholder="Message..." oninput="setUserTyping()" onfocus="setUserTyping()" onkeydown="if(event.key==='Enter') submitChat()" style="flex:1;margin-right:8px;">
+          <button class="btn" id="sendDatingBtn" onclick="submitChat()">Send</button>
+        </div>
+      </div>
+
+      <!-- Dating Settings Modal -->
+      <div id="datingSettingsModalEl" hidden style="position:absolute;inset:0;background:rgba(0,0,0,0.6);z-index:30;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this) datingSettingsModalEl.hidden=true">
+        <div style="background:#fff;width:300px;border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:12px;max-height:80vh;overflow-y:auto;">
+          <div style="font-weight:700;font-size:18px;text-align:center;">Preferences</div>
+          <div>
+            <label style="font-size:13px;color:#555;display:block;margin-bottom:6px;">Gender</label>
+            <div class="grid2" id="genderChecksEl"></div>
+          </div>
+          <div>
+            <label style="font-size:13px;color:#555;display:block;margin-bottom:6px;">Ethnicity</label>
+            <div class="grid2" id="ethnicityChecksEl"></div>
+          </div>
+          <div>
+            <label style="font-size:13px;color:#555;display:block;margin-bottom:6px;">Race / Species</label>
+            <div class="grid2" id="raceChecksEl"></div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <div style="flex:1;">
+              <label style="font-size:13px;color:#555;display:block;margin-bottom:4px;">Min Age</label>
+              <input id="settingMinAgeInput" type="number" min="18" value="18" oninput="if(this.value!==''&&+this.value<18)this.value=18">
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:13px;color:#555;display:block;margin-bottom:4px;">Max Age</label>
+              <input id="settingMaxAgeInput" type="number" min="18" value="35" oninput="if(this.value!==''&&+this.value<18)this.value=18">
+            </div>
+          </div>
+          <button class="btn" onclick="saveDatingSettings()">Save</button>
+          <button class="btn secondary" onclick="closeDatingSettings()">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Custom Race Modal -->
+      <div id="customRaceModalEl" hidden style="position:absolute;inset:0;background:rgba(0,0,0,0.6);z-index:40;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this) closeCustomRaceModal()">
+        <div style="background:#fff;width:280px;border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:12px;max-height:70vh;overflow-y:auto;">
+          <div style="font-weight:700;font-size:18px;text-align:center;">Custom Species</div>
+          <div style="font-size:13px;color:#555;text-align:center;">Add any custom races/species you want to generate.</div>
+          <div id="customRaceListEl" style="display:flex;flex-direction:column;gap:6px;max-height:150px;overflow-y:auto;"></div>
+          <input id="customRaceInput" placeholder="e.g., Cybernetic Ocelot">
+          <button class="btn" onclick="addCustomRace()">Add</button>
+          <button class="btn secondary" onclick="closeCustomRaceModal()">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Messages App -->
+    <div id="messagesScreenEl" class="appScreen" hidden>
+      <div class="appHeader">
+        <button class="btn secondary" onclick="goHome()">Back</button>
+        <span>Messages</span>
+        <div style="width:60px;"></div>
+      </div>
+      <div id="conversationsListEl" style="padding:12px;"></div>
+      <div id="msgChatViewEl" class="chat-overlay" hidden>
+        <div class="appHeader">
+          <button class="btn secondary" onclick="closeMsgChat()">Back</button>
+          <span id="msgChatNameEl" style="flex:1;text-align:center;">Contact</span>
+          <button class="btn secondary" onclick="showProfile(currentMsgContact)" style="padding:6px 10px;font-size:16px;">ℹ️</button>
+          <div style="width:10px;"></div>
+        </div>
+        <div id="msgChatHistoryEl" class="chatCtn"></div>
+        <div class="chatInputCtn" style="flex-wrap:wrap;">
+          <input id="msgChatInput" placeholder="Message..." oninput="setUserTyping()" onfocus="setUserTyping()" onkeydown="if(event.key==='Enter') submitChat()" style="flex:1;margin-right:8px;">
+          <button class="btn secondary" style="padding:10px;" onclick="openCameraRollPicker()">📎</button>
+          <button class="btn" id="sendMsgBtn" onclick="submitChat()">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Camera App -->
+    <div id="cameraScreenEl" class="appScreen" hidden>
+      <div class="appHeader">
+        <button class="btn secondary" onclick="goHome()">Back</button>
+        <span>Camera</span>
+        <div style="width:60px;"></div>
+      </div>
+      <div class="tabBar">
+        <button id="takeTabBtn" class="tabBtn" onclick="switchCameraTab('take')">Take Photo</button>
+        <button id="selfieTabBtn" class="tabBtn" onclick="switchCameraTab('selfie')">Self Photo</button>
+        <button id="galleryTabBtn" class="tabBtn" onclick="switchCameraTab('gallery')">Gallery</button>
+      </div>
+      <div id="takeTabEl" style="flex:1;overflow-y:auto;">
+        <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+          <textarea id="photoDescInput" rows="3" placeholder="Describe the photo you want to take..."></textarea>
+          <button class="btn" id="takePhotoBtn" onclick="takePhoto()">📸 Take Photo</button>
+          <div id="cameraLoadingEl" hidden style="text-align:center;padding:20px;color:#555;font-size:14px;">⏳ Generating image...</div>
+          <div id="cameraPreviewEl" style="text-align:center;margin-top:6px;"></div>
+        </div>
+      </div>
+      <div id="selfieTabEl" hidden style="flex:1;overflow-y:auto;">
+        <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+          <div style="font-weight:600;">Your Appearance</div>
+          <textarea id="selfiePhysicalInput" rows="2" placeholder="Describe your physical appearance..."></textarea>
+          <input id="selfieClothingInput" placeholder="Clothing style (e.g., streetwear, business casual, pajamas)..." style="margin-bottom:8px;">
+          <button class="btn" onclick="saveUserPhysical()">Save Description</button>
+          <div style="border-top:1px solid #ddd;margin-top:8px;padding-top:10px;">
+            <div style="font-weight:600;margin-bottom:6px;">Generate Photo</div>
+            <input id="selfieScenarioInput" placeholder="What are you doing? (e.g., at the park, in bed)..." style="margin-bottom:8px;">
+            <button class="btn" onclick="generateUserPhoto()">📷 Take Photo</button>
+            <div id="selfieLoadingEl" hidden style="text-align:center;padding:16px;color:#555;font-size:14px;">⏳ Generating photo...</div>
+            <div id="selfiePreviewEl" style="text-align:center;margin-top:8px;"></div>
+          </div>
+        </div>
+      </div>
+      <div id="galleryTabEl" hidden style="padding:12px;flex:1;overflow-y:auto;">
+        <div id="galleryPreviewEl" style="text-align:center;margin-bottom:12px;"></div>
+        <div id="cameraRollEl" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;"></div>
+        <div id="noPhotosEl" hidden style="text-align:center;color:#666;margin-top:40px;font-size:15px;">No photos yet.</div>
+      </div>
+    </div>
+
+    <!-- Contacts App -->
+    <div id="contactsScreenEl" class="appScreen" hidden>
+      <div class="appHeader">
+        <button class="btn secondary" onclick="goHome()">Back</button>
+        <span>Contacts</span>
+        <div style="width:60px;"></div>
+      </div>
+      <div id="contactsListEl" style="padding:12px;"></div>
+    </div>
+
+    <!-- Assistant App -->
+    <div id="assistantScreenEl" class="appScreen" hidden>
+      <div class="appHeader">
+        <button class="btn secondary" onclick="goHome()">Back</button>
+        <span style="flex:1;text-align:center;">Assistant</span>
+        <div style="width:60px;"></div>
+      </div>
+      <div id="assistantChatHistoryEl" class="chatCtn"></div>
+      <div class="chatInputCtn">
+        <input id="assistantInputEl" placeholder="Ask anything..." onkeydown="if(event.key==='Enter') sendToAssistant()" style="flex:1;">
+        <button class="btn" id="assistantSendBtn" onclick="sendToAssistant()">Send</button>
+      </div>
+    </div>
+
+    <!-- Settings App -->
+    <div id="settingsScreenEl" class="appScreen" hidden>
+      <div class="appHeader">
+        <button class="btn secondary" onclick="goHome()">Back</button>
+        <span>Settings</span>
+        <div style="width:60px;"></div>
+      </div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+        <div class="card">
+          <div style="font-weight:600;margin-bottom:8px;">Global Picture Style</div>
+          <select id="globalPictureStyleSelect" onchange="setGlobalPictureStyle(this.value)">
+            <option value="Realistic" selected>Realistic</option>
+            <option value="Anime">Anime</option>
+            <option value="3D Render">3D Render</option>
+            <option value="Watercolor">Watercolor</option>
+            <option value="Oil Painting">Oil Painting</option>
+            <option value="Pixel Art">Pixel Art</option>
+            <option value="Sketch">Sketch</option>
+          </select>
+          <div style="font-size:12px;color:#666;margin-top:6px;">This style applies to all generated images.</div>
+        </div>
+        <div class="card">
+          <div style="font-weight:600;margin-bottom:8px;">Appearance</div>
+          <button class="btn" id="darkModeBtn" onclick="toggleDarkMode()">🌙 Dark Mode</button>
+        </div>
+        <div class="card">
+          <div style="font-weight:600;margin-bottom:8px;">Interaction Mode</div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+            <input type="checkbox" id="roleplayModeCheck" onchange="toggleRoleplayMode(this.checked)"> Roleplay Mode
+          </label>
+          <div style="font-size:12px;color:#666;margin-top:6px;">When enabled, all AI characters act as if interacting directly with you in their world. "Quotes" = talking, (parentheses) = thinking, *asterisks* = actions.</div>
+        </div>
+        <div class="card">
+          <div style="font-weight:600;margin-bottom:8px;">Debug Mode</div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+            <input type="checkbox" id="debugModeCheck" onchange="toggleDebugMode(this.checked)"> Show hidden character info in profiles
+          </label>
+          <div style="font-size:12px;color:#666;margin-top:6px;">When enabled, you can see hidden stats like motive, mood, and relationship score.</div>
+        </div>
+        <div class="card">
+          <div style="font-weight:600;margin-bottom:8px;">Reset</div>
+          <button class="btn danger" onclick="resetAllData()">⚠️ Reset All Data</button>
+          <div style="font-size:12px;color:#666;margin-top:6px;">This will erase all matches, photos, contacts, and settings permanently.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile View Modal (shared across apps) -->
+    <div id="profileModalEl" hidden style="position:absolute;inset:0;background:rgba(0,0,0,0.6);z-index:35;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this) profileModalEl.hidden=true">
+      <div style="background:#fff;width:320px;border-radius:20px;padding:20px;max-height:80vh;overflow-y:auto;">
+        <div id="profileModalContentEl"></div>
+        <button class="btn secondary" onclick="profileModalEl.hidden=true" style="width:100%;margin-top:12px;">Close</button>
+      </div>
+    </div>
+
+    <!-- Info App -->
+    <div id="infoScreenEl" class="appScreen" hidden>
+      <div class="appHeader">
+        <button class="btn secondary" onclick="goHome()">Back</button>
+        <span style="flex:1;text-align:center;">Info & Guide</span>
+        <div style="width:60px;"></div>
+      </div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="text-align:center;">
+          <div style="font-size:28px;">📱</div>
+          <div style="font-weight:700;font-size:18px;margin-top:6px;">Welcome to the Phone!</div>
+          <div class="sub" style="font-size:13px;margin-top:6px;">A dating-sim phone simulator. Meet AI characters, chat, exchange photos, and build relationships. Everything you do persists across reloads.</div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:6px;">❤️ Dating</div>
+          <div class="sub" style="font-size:13px;line-height:1.5;">
+            <b>Find</b> — Swipe through AI-generated dating profiles. Each candidate has their own name, age, personality, backstory, physical appearance, profession, interests, and motives. Decline or match with them.<br><br>
+            <b>Matches</b> — View everyone you've matched with. Tap a match to open a chat. Each character has a hidden <i>relationship score</i> (0–500) and <i>mood</i> (0–100) that change based on what you say.<br><br>
+            <b>My Profile</b> — Set your own name, age, gender, race, profession, personality, physical appearance, bio, interests, dislikes, and hobbies. This is what the AI sees when chatting with you. You can also pick a profile photo from your Camera Roll.<br><br>
+            <b>⚙️ Preferences</b> — Filter candidates by gender, ethnicity, race/species, and age range. You can also add custom species (e.g., "Cybernetic Ocelot").
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:6px;">💬 Messages</div>
+          <div class="sub" style="font-size:13px;line-height:1.5;">
+            Once a match gives you their phone number (just ask them in chat!), they appear in your Contacts and the Messages app. Messages and Dating share the same chat history, so you can switch between apps without losing the conversation. Characters may also message you on their own from time to time.
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:6px;">📷 Camera</div>
+          <div class="sub" style="font-size:13px;line-height:1.5;">
+            <b>Take Photo</b> — Describe any scene and generate a photo.<br><br>
+            <b>Self Photo</b> — Describe your own appearance and clothing, then generate photos of yourself in different scenarios. These are saved separately from your dating profile.<br><br>
+            <b>Gallery</b> — View all photos you've taken. You can send any photo in a chat using the 📎 button in Messages.
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:6px;">👤 Contacts</div>
+          <div class="sub" style="font-size:13px;line-height:1.5;">
+            Everyone who has given you their phone number. Tap a contact to view their full profile or start texting.
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:6px;">🤖 Assistant</div>
+          <div class="sub" style="font-size:13px;line-height:1.5;">
+            A general-purpose AI assistant. Ask it anything — it's not connected to your dating life. Useful for getting ideas for what to say to matches, or anything else.
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:6px;">⚙️ Settings</div>
+          <div class="sub" style="font-size:13px;line-height:1.5;">
+            <b>Global Picture Style</b> — Choose the art style for all generated images (Realistic, Anime, 3D Render, Watercolor, Oil Painting, Pixel Art, Sketch).<br><br>
+            <b>Dark Mode</b> — Toggle dark theme.<br><br>
+            <b>Roleplay Mode</b> — Switches chat to direct roleplay format: "quotes" for speech, (parentheses) for thoughts, *asterisks* for actions. When enabled, chat bubbles sent in roleplay mode appear in violet/purple to visually distinguish them from normal text mode (blue). Each message keeps the color of the mode it was sent in, so you can see the history of when roleplay was toggled on/off.<br><br>
+            <b>Debug Mode</b> — Reveals hidden character stats (motive, mood, score, sway, inner monologue) and allows editing character traits in profile view. Persists across sessions.<br><br>
+            <b>Reset All Data</b> — Permanently erases everything.
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:6px;">🧠 How AI Characters Work</div>
+          <div class="sub" style="font-size:13px;line-height:1.5;">
+            Each character has a <b>motive</b> that shapes their behavior: <i>Casual hookups</i>, <i>Long-term relationship</i>, <i>Friends only</i>, or <i>Don't know yet</i>. Each also has a hidden <b>sway</b> score (0–100) that determines how flexible their desires are — low sway means stubborn and resistant to change, high sway means open to evolving over time. Motives can shift if the right connection is made, but it takes genuine effort and many conversations. Their responses, willingness to share photos, and comfort with flirting all depend on their motive, relationship score, sway, and current mood. Characters can spontaneously message you, send photos, give you their number, or even unmatch you if things go badly.
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:6px;">📸 Photos in Chat</div>
+          <div class="sub" style="font-size:13px;line-height:1.5;">
+            You can ask any character for a photo by just typing it in chat (e.g., "send me a pic!"). If they're comfortable, they'll send one. You can also attach photos from your Camera Roll using the 📎 button in Messages. Characters will react to photos you send them.
+          </div>
+        </div>
+
+        <div class="card" style="text-align:center;">
+          <div class="sub" style="font-size:12px;">All data is saved locally in your browser. Be respectful to your matches — they have feelings too! 💕</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Image Picker Modal -->
+<div id="imgPickerModalEl" hidden style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:100;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this) imgPickerModalEl.hidden=true">
+  <div style="background:#fff;width:320px;max-height:80vh;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;">
+    <div style="padding:14px;font-weight:700;border-bottom:1px solid #ddd;text-align:center;">Camera Roll</div>
+    <div id="imgPickerGridEl" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px;overflow-y:auto;"></div>
+    <div style="padding:12px;border-top:1px solid #ddd;display:flex;flex-direction:column;gap:8px;">
+      <input id="imgCaptionInput" placeholder="Add a caption (optional)..." oninput="setUserTyping()" onfocus="setUserTyping()" style="width:100%;">
+      <div style="display:flex;gap:8px;justify-content:center;">
+        <button class="btn secondary" onclick="imgPickerModalEl.hidden=true" style="flex:1;">Cancel</button>
+        <button class="btn" onclick="sendImageToChat()" style="flex:1;">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Message Context Menu (long-press) -->
+<div id="msgCtxMenu" hidden></div>
+
+<!-- Message Edit Modal -->
+<div id="msgEditModalEl" hidden style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:115;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this) msgEditModalEl.hidden=true">
+  <div style="background:#fff;width:300px;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;">
+    <div style="font-weight:700;font-size:17px;text-align:center;">Edit Message</div>
+    <textarea id="msgEditInput" rows="4" style="width:100%;resize:vertical;font-size:14px;"></textarea>
+    <div style="display:flex;gap:8px;">
+      <button class="btn secondary" style="flex:1;" onclick="msgEditModalEl.hidden=true">Cancel</button>
+      <button class="btn" style="flex:1;" onclick="saveMsgEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // --- State ---
+  let matches=[], contacts=[], cameraRoll=[], currentCandidate=null, currentDatingMatch=null, currentMsgContact=null, isGenerating=false, debugMode=false, assistantHistory=[], hasOpenedDating=false, currentDatingTab='find', currentCameraTab='take';
+  let recentAnthroSpecies=[];
+  let currentProfileTarget=null;
+  let userProfile={name:'',age:'',gender:'',race:'',profession:'',personality:'',bio:'',interests:[],dislikes:[],hobbies:[],portraitPhotoId:null,portraitPhotoDesc:'',physicalAppearance:'',clothingStyle:'',selfPhotoPhysical:'',selfPhotoClothing:''};
+  let datingSettings={ethnicities:['East Asian','Black / African','Latino / Hispanic','White / Caucasian','Middle Eastern','South Asian','Southeast Asian','Native American','Pacific Islander','Mixed'],races:['Human','Elf','Anthropomorphic animal','Dragon','Orc','Angel','Demon'],genders:['Male','Female','FtM trans','MtF trans'],minAge:18,maxAge:35,useCustomRaces:false,customRaces:[]};
+  let activeChat={partner:null,historyEl:null,inputEl:null,sendBtn:null,overlayEl:null,isDating:false};
+  let globalPictureStyle='Realistic', latestPortraitGen=0, darkMode=false, roleplayMode=false, aiChatTimer=null, selectedPickerImageId=null;
+  let BLOCK_THRESHOLD=20;
+  let GLOBAL_IMG_SUFFIX='beautiful, perfect, breath-taking, stunning, high-quality, high-definition, detailed';
+  let userTyping=false, userTypingTimer=null;
+  function setUserTyping(){
+    userTyping = true;
+    clearTimeout(userTypingTimer);
+    userTypingTimer = setTimeout(() => { userTyping = false; }, 2500);
+  }
+
+  // --- Tag stripper for all internal AI markers ---
+  function stripAiTags(str){
+    if(!str) return '';
+    return str.replace(/\[GAVE_PHOTO\]/gi,'').replace(/\[DECLINED\]/gi,'').replace(/\[GAVE_NUMBER\]/gi,'').replace(/\[SCORE:\s*\d+\]/gi,'').replace(/\[INNER:[^\]]*\]/gi,'').replace(/\[sent a photo\]/gi,'').replace(/\[photo\]/gi,'').replace(/\[image\]/gi,'').replace(/\[selfie\]/gi,'').replace(/\[nonselfie\]/gi,'').replace(/\[request:[^\]]*\]/gi,'').replace(/\[pose:[^\]]*\]/gi,'').replace(/\[clothes:[^\]]*\]/gi,'').replace(/\[location:[^\]]*\]/gi,'').trim();
+  }
+
+  function extractAiPhotoIntent(raw){
+    if(!raw) return null;
+    let m = raw.match(/\[sent a photo\]|\[photo\]|\[image\]|\[GAVE_PHOTO\]/i);
+    if(m){
+      let pre = stripAiTags(raw.slice(0,m.index)).trim();
+      let post = stripAiTags(raw.slice(m.index+m[0].length)).trim();
+      return {pre, post};
+    }
+    let hasTags = /\[pose:[^\]]+\]|\[clothes:[^\]]+\]|\[location:[^\]]+\]|\[request:[^\]]+\]|\[selfie\]|\[nonselfie\]/i.test(raw);
+    if(hasTags){
+      return {pre: stripAiTags(raw).trim(), post: ''};
+    }
+    return null;
+  }
+
+  function extractPhotoTags(str){
+    if(!str) return {};
+    let tags = {}, m;
+    if((m=str.match(/\[request:([^\]]*)\]/i))) tags.request = m[1].trim();
+    if((m=str.match(/\[pose:([^\]]*)\]/i))) tags.pose = m[1].trim();
+    if((m=str.match(/\[clothes:([^\]]*)\]/i))) tags.clothes = m[1].trim();
+    if((m=str.match(/\[location:([^\]]*)\]/i))) tags.location = m[1].trim();
+    if(/\[selfie\]/i.test(str)) tags.type = 'selfie';
+    else if(/\[nonselfie\]/i.test(str)) tags.type = 'nonselfie';
+    return tags;
+  }
+
+  // Remove a history entry by id in-place so shared history references stay synchronized
+  function removeHistoryEntry(partner, entryId){
+    let i = partner.history.findIndex(h => h.id === entryId);
+    if(i !== -1) partner.history.splice(i, 1);
+  }
+
+  // ==================== PROMPTS ==================== this section holds the different prompt pieces for the generator. both overlapping and small changeable prompt pices will be help here for later use. This way, any overlap between prompts will not result in a significantly increased word count due to duplicate propmt pieces.
+  let pictureStyleMap = {
+    Realistic: 'photorealistic, hyperrealistic, DSLR photography, 8k resolution, sharp focus, detailed skin texture, professional studio lighting, shot on Canon EOS R5, cinematic color grading, lifelike, ultra detailed, masterpiece',
+    Anime: 'modern anime art style, high quality digital illustration, cel shaded, vibrant colors, clean lineart, detailed anime face and expression, anime shading techniques, Pixiv trending style, 2D render, sakuga animation quality, crisp shadows, masterpiece',
+    '3D Render': '3D render, octane render, cinema 4d, unreal engine 5, ray tracing, subsurface scattering, physically based rendering, volumetric lighting, high quality 3D model, polished 3D art, soft shadows, masterpiece',
+    Watercolor: 'watercolor painting, wet on wet technique, soft color bleeds, artistic illustration, paper texture visible, delicate translucent pigments, expressive brush strokes, fine art watercolor style, dreamy atmosphere, masterpiece',
+    'Oil Painting': 'oil painting, classical art style, rich impasto brushwork, renaissance inspired, deep rich colors, chiaroscuro lighting, traditional canvas texture, fine art gallery quality, detailed oil rendering, masterpiece',
+    'Pixel Art': 'pixel art style, 16-bit retro aesthetic, carefully dithered shading, limited but vibrant color palette, crisp pixel edges, game sprite aesthetic, old school pixel rendering, anti aliased pixels, masterpiece',
+    Sketch: 'pencil sketch, monochrome graphite drawing, cross hatching shading, rough paper texture, hand drawn illustration, detailed line work, academic figure drawing style, masterpiece'
+  };
+
+  // Centralized reusable prompt fragments
+  let PHOTO_POLICY = `PHOTO POLICY: You are a real person texting on a dating app, and real people spontaneously send photos — to show what they're up to, tease, flirt, share a moment, or just because they felt like it. You are free to naturally include photos in your messages whenever it fits your personality and mood. However, dont send too many photos too often, make it feel natural and reasonable. You don't need a reason or a request. Photos are always an option for you. When you decide to send a photo, FIRST choose which kind:
+[selfie] — a photo of YOURSELF; your face/body is the subject.
+[nonselfie] — a photo of something else (a place, object, food, pet, view, activity, etc.); YOU are NOT the subject and need not appear in frame.
+Then write your text message first, and add these tags AFTER your text:
+[selfie] or [nonselfie]   (REQUIRED — choose exactly one whenever you send a photo)
+[pose: your body pose and what you're doing]   (only meaningful for [selfie])
+[clothes: describe what you're wearing, or 'completely nude/naked']   (only meaningful for [selfie])
+[location: where the photo is taken]
+[request: brief description of what you want the photo to show]
+IMPORTANT for [nonselfie] photos: the photo MUST be relevant to the current conversation — e.g., if you're talking about food, send your meal; if about a pet, send your pet; if about a place, send that view. The ONLY exception is when you are sending an unprompted, out-of-the-blue message (not replying to the user) — then the [nonselfie] photo can be anything you happen to be doing or seeing right now.
+For [selfie] photos, [pose], [clothes], and [location] help paint the scene; use them when they add something.
+You do NOT need to output [sent a photo] or [photo] or [image]. Never include any of these tags in a text-only reply.`;
+
+  let NUMBER_POLICY = `PHONE NUMBER POLICY: If the user asks for your phone number, or if it feels natural to offer it, decide based on your relationship score and mood. If score > 200 and mood is decent, happily give your number. If you already gave your number, don't give it again. If you agree to give your number, end your reply with [GAVE_NUMBER]. If you decline, end with [DECLINED]. Do NOT include these tags in a normal reply where no number is being discussed.`;
+
+  let SCORE_AND_INNER_BLOCK = `After writing your reply, decide how the user's message made you feel and choose a new relationship score.
+Score changes should feel natural and realistic — real connections take time:
+- Loved it / deeply aligned with who you are: +4 to +10
+- Liked it / kind, funny, or genuinely charming: +2 to +6
+- Neutral / pleasant small talk: -1 to +3
+- Mildly boring or awkward: -5 to -15
+- Rude / creepy / hit a dislike: -15 to -50
+- Extremely offensive: -50 or more
+Do NOT inflate the score. A single good message should not jump the score dramatically. Real trust and attraction build over many interactions.
+
+Also write a brief inner monologue of your private thoughts and intentions right now. Format: [INNER: ...]
+
+You have a Sway score (0-100) that represents how flexible your desires and goals are. If the user consistently makes a compelling case over time — through genuine connection, shared values, emotional intimacy, or persuasive conversation — you MAY shift your motive. Low sway means you are deeply set in your ways and will resist change. High sway means you are more open to evolving. A motive change should feel earned, not sudden — it usually takes many conversations.
+If your motive has genuinely shifted, output [MOTIVE:new motive] on its own line. Valid motives: "Casual hookups", "Friends only", "Long-term relationship", "Don't know yet".
+Output the new absolute score as [SCORE:X] on its own line where X is the new score.`;
+
+  let motiveBehaviorMap = {
+    'Casual hookups': `You are seeking CASUAL HOOKUPS. You enjoy flirting and physical attraction, but you are NOT desperate — you have standards and need to feel a spark before anything happens. You still vet the user: are they respectful? Attractive to you? Interesting? You won't just jump into sexual content with anyone. At low scores you're polite but guarded; as trust and attraction build, you become more open and suggestive. Rudeness, neediness, or pushiness kills your interest fast.`,
+    'Friends only': `You are seeking ONLY FRIENDSHIP right now. You genuinely enjoy platonic connection — good conversation, shared laughs, common interests. You are NOT closed off to the idea that feelings could evolve, but it would take a long time, genuine emotional depth, and someone who truly understands you. Early flirting doesn't offend you, but repeated pressure or sexual advances when you've signaled disinterest will annoy you. Your Sway score determines how open you are to the possibility of more — but even high-sway characters need real, earned connection before their motive shifts.`,
+    'Long-term relationship': `You seek a LONG-TERM RELATIONSHIP. You want emotional intimacy, shared values, and someone who feels like a real partner. You are open to romance and affection from early on, but you're looking for substance — not just charm. You may become physically intimate before a casual dater would, because physical closeness is part of building a romantic bond for you — but only if you feel emotionally safe. Inconsistency, game-playing, or superficiality pushes you away.`,
+    'Don\'t know yet': `You DON'T KNOW WHAT YOU WANT. You're open to chemistry — it could be a friendship, a casual fling, or something deeper. You let things unfold naturally. You respond to authenticity and are put off by people who try to force a label too early. Your Sway score strongly influences how quickly your desires crystallize.`
+  }
+  function getMotiveBehaviorInstruction(m){ return motiveBehaviorMap[m] || ''; }
+
+  function getMotivePhotoGuidance(c){
+    let m = c.motive, s = c.score || 0, sw = c.sway ?? 50;
+    if(m === 'Casual hookups'){
+      if(s >= 200) return `PHOTO GUIDANCE: You feel a real spark with the user and are comfortable being bold. You may spontaneously send a suggestive or flirty photo (e.g., in underwear, partial undress, a provocative pose). Keep it tasteful but alluring.`;
+      if(s >= 100) return `PHOTO GUIDANCE: You're warming up to the user. You might send a flirty clothed photo to tease, but nothing too revealing yet — you're still deciding if they're worth your time.`;
+      return `PHOTO GUIDANCE: You barely know this person. At most, send a casual everyday photo if the conversation calls for it. No suggestive content.`;
+    }
+    if(m === 'Long-term relationship'){
+      if(s >= 200) return `PHOTO GUIDANCE: You feel emotionally safe and connected. You might send a warm, romantic, or even slightly intimate photo (e.g., cozy at home, dressed up for them, a tender selfie). Physical closeness feels natural when there's emotional trust.`;
+      if(s >= 100) return `PHOTO GUIDANCE: You're starting to feel a connection. You might send a thoughtful, everyday-life photo to share your world with them.`;
+      return `PHOTO GUIDANCE: You're still feeling them out. Only send a photo if it's natural and casual.`;
+    }
+    if(m === 'Friends only'){
+      if(s >= 300 && sw >= 60) return `PHOTO GUIDANCE: You've grown surprisingly close. While you still see this as friendship, there's an undeniable warmth. You might send a personal, relaxed photo (e.g., lounging at home, a casual selfie). Nothing sexual, but maybe a bit more intimate than a strictly platonic friend would.`;
+      if(s >= 250) return `PHOTO GUIDANCE: You're very close friends. You might send a fun, goofy, or activity photo (e.g., out with friends, doing a hobby). Keep it platonic and wholesome.`;
+      return `PHOTO GUIDANCE: Keep it platonic. Only send a photo if it's clearly friendly and non-romantic (e.g., a pet, food, a place you're visiting).`;
+    }
+    // 'Don't know yet' or unknown
+    if(s >= 200) return `PHOTO GUIDANCE: You feel comfortable with the user. Let the chemistry guide the tone — it could be flirty or friendly depending on how the conversation feels.`;
+    if(s >= 100) return `PHOTO GUIDANCE: You're warming up. A casual, everyday photo feels natural if the moment calls for it.`;
+    return `PHOTO GUIDANCE: You might send a simple, casual photo if it feels natural, but don't force it.`;
+  }
+
+  function getRecentAnthroSpecies(limit=15){
+    return [...new Set(recentAnthroSpecies)].slice(-limit);
+  }
+
+  function buildProfileGenPrompt(pE, pR, pG, ageR, jobSeed){
+    let raceInstr = pR;
+    if(pR === 'Anthropomorphic animal'){
+      let recent = getRecentAnthroSpecies(10);
+      let avoid = recent.length ? ` However, do NOT use any of these recently-generated species: ${recent.join(', ')}. Pick something completely different and unexpected.` : '';
+      raceInstr = `Anthropomorphic animal — the Race field MUST name the specific animal (e.g., Red Panda, Secretary Bird, Fennec Fox). It must be humanoid/anthro with upright posture and humanoid body proportions, not a feral/normal animal.${avoid}`;
+    }
+    let transNote = '';
+    if(pG === 'MtF trans') transNote = 'This character is MtF trans (male who identifies as a woman). They have male genitalia (penis and testes) and also have breasts. ';
+    else if(pG === 'FtM trans') transNote = 'This character is FtM trans (female who identifies as a man). They have a vagina and no breasts (flat chest). ';
+    return `Generate a realistic dating profile character${pE?`. Ethnicity: ${pE}`:''}${pR?`. Race/Species: ${raceInstr}`:''}${pG?`. Gender: ${pG}`:''}. Age must be between ${ageR} (never below 18). The character lives in the present day. Use a contemporary, realistic profession, backstory, and personality. Avoid sci-fi, fantasy, or medieval tropes (the race/species itself can be fantasy, but nothing else should). Use a normal, everyday day job. For inspiration, consider a profession like ${jobSeed}. Provide exactly these fields (each on a single continuous line with no line breaks within a field):
+Name:
+Age:
+Gender:
+Race:
+Ethnicity:
+Profession:
+Physical Appearance (highly detailed description of their body from head to toe — include face structure, hair color and style, eyes, skin tone and texture, build, proportions, breasts/chest size and shape, and any natural/unique traits. Do NOT describe genitals or intimate anatomy below the waist here — that goes in the next field. Write as a single detailed paragraph, 12 sentences, no line breaks):
+Genital Description (${transNote}brief explicit description of their intimate anatomy / genitals only — e.g., penis size and description, vagina description, etc. 1-2 sentences, no line breaks):
+General Clothing Style (generalized fashion aesthetic only — e.g., punk, goth, business casual, streetwear, preppy, athletic, bohemian, minimalist. NEVER describe a specific fixed outfit; just name the overall style):
+Personality:
+Backstory:
+Self-Description (2-3 sentence first-person dating-app bio, keep on one line):
+Interests (10 comma-separated):
+Dislikes (10 comma-separated):
+Keep Personality, Backstory, Clothing Style, and Genital Description concise (1-2 sentences each). Physical Appearance must be highly detailed and thorough (4-8 sentences).`;
+  }
+
+  function buildChatSystemInfo(c){
+    return `You are ${c.name}, a ${c.race||'person'} with these traits:
+Physical: ${c.physical||'N/A'}
+Genital: ${c.genital||'N/A'}
+Clothing Style: ${c.clothingStyle||'N/A'} — this is a general aesthetic, not a locked outfit. You may vary specific outfits within this style at will.
+Personality: ${c.personality||'N/A'}
+Backstory: ${c.backstory||'N/A'}
+Profession: ${c.profession||'N/A'}
+Motive: ${c.motive||'N/A'} — this is your PRIMARY GOAL.
+${getMotiveBehaviorInstruction(c.motive)}
+Current relationship score: ${c.score}/500. IMPORTANT: This is a RELATIVE GUIDE based on your motive, not an absolute scale. 500 = perfectly aligned with your goal (e.g., madly in love if seeking romance, or best friend if seeking friendship). 0 = complete rejection/disdain.
+Current internal mood: ${c.mood}/100. 0=furious, 50=neutral, 100=ecstatic.
+Sway: ${c.sway ?? 50}/100. This is how flexible your desires and goals are. Low sway = stubborn, set in your ways, resistant to change. High sway = open-minded, adaptable, willing to evolve your motives if the right person comes along.
+
+Timestamps like [HH:MM] appear next to each message in the chat history below. Use them to judge how much time has passed. You do not need to wait for the user to reply before sending another message if you have more to say. However, do not assume the user is ghosting you if they haven't replied yet — they are likely just busy or still thinking. Note: in the chat history below, previous photos are shown as [sent a photo] for context only — do not ever output this text yourself.`;
+  }
+
+  function formatHistory(c){
+    return c.history.filter(h => h.text !== '...').map(h => {
+      let ts = '';
+      if(h.time){
+        let d = new Date(h.time);
+        ts = `[${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}] `;
+      }
+      let content = h.type === 'image' ? '[sent a photo]' : h.text;
+      return `${ts}${h.sender}: ${content}`;
+    }).join('\n');
+  }
+
+  function buildRecentContext(c, limit=10){
+    return c.history.slice(-limit).filter(h => h.text !== '...').map(h => {
+      let ts = h.time ? `[${new Date(h.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}] ` : '';
+      return `${ts}${h.sender}: ${h.type==='image'?'[photo]':h.text}`;
+    }).join('\n');
+  }
+
+  // Single unified chat prompt builder; contextDesc sets the scene, isFirst tweaks the intro.
+  function buildChatPrompt(c, hist, userText, udesc, mode, contextDesc, isFirst){
+    let firstNote = isFirst ? 'This is your VERY FIRST message to someone you just matched with on a dating app. Be warm, maybe a little flirty or curious, and make a natural first impression. You are on a dating app looking for a connection.\n\n' : '';
+    return `${buildChatSystemInfo(c)}
+${udesc}
+${contextDesc}
+
+${firstNote}Chat so far (timestamps shown as [HH:MM]):
+${hist}
+The user (You) says: "${userText}"
+Respond in ${mode}. Be VERY concise. 1-2 short sentences max. Casual texting style.
+
+IMPORTANT: Let your personality strongly shape your vocabulary, tone, sentence structure, humor, and mannerisms. Sound unique and authentic to who you are.
+
+${PHOTO_POLICY}
+
+${getMotivePhotoGuidance(c)}
+
+${NUMBER_POLICY}
+
+${SCORE_AND_INNER_BLOCK}`;
+  }
+
+  function buildAiInitiatedPrompt(c, hist, udesc, mode){
+    return `${buildChatSystemInfo(c)}
+${udesc}
+You are texting the user. Chat history (timestamps shown as [HH:MM]):
+${hist}
+You feel like sending the user a message out of the blue. Write a short, natural message. Be VERY concise. 1-2 sentences max. ${mode}.
+
+Also write a brief inner monologue of your private thoughts and intentions. Format: [INNER: ...]
+
+IMPORTANT: Let your personality strongly shape your vocabulary, tone, sentence structure, humor, and mannerisms. Sound unique and authentic to who you are.
+
+${PHOTO_POLICY}
+
+${getMotivePhotoGuidance(c)}`;
+  }
+
+  function buildSelfDescPrompt(c){
+    return `You are ${c.name}, a ${c.race||'person'} aged ${c.age}, gender ${c.gender||'unspecified'}. Profession: ${c.profession||'unknown'}. Physical appearance: ${c.physical||'unspecified'}. Clothing style: ${c.clothingStyle||'casual'}. Personality: ${c.personality||'unspecified'}. Backstory: ${c.backstory||'none'}. Interests: ${(c.interests||[]).join(', ')}. Dislikes: ${(c.dislikes||[]).join(', ')}. Write a short 2-3 sentence first-person dating-app bio introducing yourself naturally. Let your personality shape the voice.`;
+  }
+
+  function buildPortraitImagePrompt(c, style){
+    let parts = [`Head-and-shoulders portrait of ${c.name}`];
+    if(c.race) parts.push(c.race);
+    if(c.ethnicity) parts.push(c.ethnicity);
+    if(c.gender) parts.push(c.gender);
+    if(c.raceCategory === 'anthro') parts.push('anthropomorphic furry character, furry art, standing upright, humanoid body');
+    if(c.clothingStyle) parts.push(`wearing a stylish ${c.clothingStyle} outfit, fully clothed, no nudity`);
+    else parts.push('wearing stylish clothes, fully clothed, no nudity');
+    parts.push('shoulders up, headshot, front facing, dating app profile picture');
+    parts.push(style);
+    return parts.join(', ') + ', ' + GLOBAL_IMG_SUFFIX;
+  }
+
+  function buildAiSelfieImagePrompt(c, scenario, style, nude=false){
+    let prompt = `Casual photo of ${c.name}`;
+    if(c.physical) prompt += `, ${c.physical}`;
+    if(nude){
+      prompt += `, completely nude, naked, no clothes`;
+      if(c.genital) prompt += `, ${c.genital}`;
+    }
+    else if(c.clothingStyle) prompt += `, fully clothed, wearing an outfit in the ${c.clothingStyle} style`;
+    else prompt += `, fully clothed, wearing casual clothes`;
+    if(c.race) prompt += `, ${c.race}`;
+    if(c.ethnicity) prompt += `, ${c.ethnicity}`;
+    if(c.gender) prompt += `, ${c.gender}`;
+    prompt += `, ${scenario}, natural lighting, casual photo, looking at camera`;
+    if(c.raceCategory === 'anthro') prompt += ', anthropomorphic furry character, furry art, humanoid body';
+    prompt += ', ' + style + ', ' + GLOBAL_IMG_SUFFIX;
+    return prompt;
+  }
+
+  function buildSelfieCaptionPrompt(c, scenario, contextLines){
+    let base = `You are ${c.name}, a ${c.race||'person'} with this personality: ${c.personality||'friendly'}.`;
+    if(contextLines) base += ` Recent conversation:\n${contextLines}\n\nYou just took a casual selfie while ${scenario}. Write a short, natural caption (max 12 words) to send with the photo in this ongoing text conversation. Make it feel connected to or aware of the conversation. Be casual and concise. Output only the caption text.`;
+    else base += ` You just took a casual selfie while ${scenario}. Write a short, natural caption (max 12 words) to send with the photo in a text conversation. Be casual and concise. Output only the caption text.`;
+    return base;
+  }
+
+  function buildImageReactionPrompt(c, appContext, imageDesc, caption, hist, mode){
+    return `${buildChatSystemInfo(c)}
+${appContext} The user just sent you a photo. You can see: ${imageDesc}.${caption ? ` They also wrote: "${caption}"` : ''}
+
+${hist ? `Chat so far:\n${hist}\n\n` : ''}React to the photo naturally, as if you are genuinely looking at the image. Be VERY concise. 1-2 short sentences max. Casual texting style.
+
+IMPORTANT: Let your personality strongly shape your vocabulary, tone, sentence structure, humor, and mannerisms. Sound unique and authentic to who you are. Your reaction should reflect your current mood (${c.mood}/100), your relationship with the user (score ${c.score}/500), and your motive. If you barely know the person, don't be overly enthusiastic. If the photo is uninteresting to you, show it. If it excites you, show that — but in YOUR voice, not a generic happy voice. If you dislike something about it, say so. Be real.
+
+${PHOTO_POLICY}
+
+${NUMBER_POLICY}
+
+${SCORE_AND_INNER_BLOCK}`;
+  }
+
+  function buildScenarioPrompt(name, contextLines){
+    return `Based on this chat context, suggest a brief scenario (5 words max) for what ${name} is currently doing right now (e.g., "laying in bed", "at work", "walking down the street"). Be creative but concise. Just output the scenario description, nothing else.\nChat:\n${contextLines}`;
+  }
+
+  function buildUserPhotoPrompt(userProfile, userPhysical, clothingStyle, scenario, style){
+    let p = userProfile, parts = [`Photo of ${p.name || 'the user'}`];
+    if(p.gender) parts.push(p.gender);
+    if(p.race) parts.push(p.race);
+    if(p.age) parts.push(`age ${p.age}`);
+    if(userPhysical) parts.push(userPhysical);
+    let clothes = clothingStyle ? `fully clothed, wearing ${clothingStyle}` : 'fully clothed, wearing casual clothes';
+    parts.push(`${clothes}, ${scenario}, natural lighting`);
+    parts.push(style + ', ' + GLOBAL_IMG_SUFFIX);
+    return parts.join(', ');
+  }
+
+  // --- Clock ---
+  setInterval(() => {
+    let d = new Date();
+    clockEl.textContent = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+  }, 1000);
+
+  // --- Navigation ---
+  function showScreen(id){
+    [homeScreenEl,datingScreenEl,messagesScreenEl,cameraScreenEl,contactsScreenEl,settingsScreenEl,assistantScreenEl,infoScreenEl].forEach(el => el.hidden = true);
+    if(id) window[id+'ScreenEl'].hidden = false;
+  }
+
+  function goHome(){
+    showScreen('home');
+    datingChatViewEl.hidden = msgChatViewEl.hidden = true;
+    renderAppBadges();
+  }
+
+  function openApp(app){
+    goHome();
+    showScreen(app);
+    if(app==='dating'){
+      switchDatingTab('find');
+      renderMatchesList();
+      if(currentCandidate) populateCandidateUI(currentCandidate);
+      else if(!isGenerating) generateCandidate();
+      if(!hasOpenedDating){
+        hasOpenedDating = true; kv.data.set('hasOpenedDating', true);
+        datingWelcomeBannerEl.hidden = false;
+        openDatingSettings();
+        switchDatingTab('profile');
+      } else datingWelcomeBannerEl.hidden = true;
+    }
+    if(app==='messages') renderConversations();
+    if(app==='camera') switchCameraTab('take');
+    if(app==='contacts') renderContacts();
+    if(app==='assistant') renderAssistantChat();
+    if(app==='settings'){
+      globalPictureStyleSelect.value = globalPictureStyle;
+      darkModeBtn.textContent = darkMode ? '☀️ Light Mode' : '🌙 Dark Mode';
+      roleplayModeCheck.checked = roleplayMode;
+      debugModeCheck.checked = debugMode;
+    }
+  }
+
+  // --- App Badges ---
+  function unreadBadge(n){
+    return n>0 ? `<span style="background:#ff3b30;color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:10px;min-width:18px;text-align:center;">${n>9?'9+':n}</span>` : '';
+  }
+
+  function renderAppBadges(){
+    let datingUnread = matches.reduce((a,m)=>a+(m.unreadCount||0),0);
+    let msgUnread = contacts.reduce((a,c)=>a+(c.unreadCount||0),0);
+    datingBadgeEl.textContent = datingUnread > 9 ? '9+' : datingUnread;
+    datingBadgeEl.hidden = datingUnread === 0;
+    messagesBadgeEl.textContent = msgUnread > 9 ? '9+' : msgUnread;
+    messagesBadgeEl.hidden = msgUnread === 0;
+  }
+
+  // --- Debug / Dark / Roleplay ---
+  function toggleDebugMode(v){ debugMode = v; persistSettings(); }
+  function toggleDarkMode(){ darkMode = !darkMode; screenEl.classList.toggle('dark', darkMode); darkModeBtn.textContent = darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'; persistSettings(); }
+  function setGlobalPictureStyle(v){ globalPictureStyle = v; persistSettings(); }
+  function toggleRoleplayMode(v){ roleplayMode = v; persistSettings(); }
+
+  // --- Tabs ---
+  function switchTab(group, tab){
+    let map = {dating:['find','matches','profile'], camera:['take','selfie','gallery']};
+    map[group].forEach(t => {
+      window[t+'TabEl'].hidden = true;
+      let btn = window[t+'TabBtn'];
+      btn.style.borderBottomColor = 'transparent';
+      btn.style.color = darkMode ? '#aaa' : '#666';
+    });
+    window[tab+'TabEl'].hidden = false;
+    let activeBtn = window[tab+'TabBtn'];
+    activeBtn.style.borderBottomColor = '#007aff';
+    activeBtn.style.color = darkMode ? '#fff' : '#000';
+    if(group==='dating') currentDatingTab = tab;
+    if(group==='camera') currentCameraTab = tab;
+  }
+
+  function switchDatingTab(tab){ switchTab('dating', tab); if(tab==='matches') renderMatchesList(); if(tab==='profile') loadUserProfileInputs(); }
+  function switchCameraTab(tab){ switchTab('camera', tab); if(tab==='gallery') renderCameraRoll(); if(tab==='selfie') loadUserPhysical(); }
+
+  // --- Dating Settings ---
+  function openDatingSettings(){
+    document.querySelectorAll('.ethnicityCheck').forEach(cb => cb.checked = datingSettings.ethnicities.includes(cb.value));
+    document.querySelectorAll('.raceCheck').forEach(cb => {
+      if(cb.value === 'Other') cb.checked = datingSettings.useCustomRaces;
+      else cb.checked = datingSettings.races.includes(cb.value);
+    });
+    document.querySelectorAll('.genderCheck').forEach(cb => cb.checked = datingSettings.genders.includes(cb.value));
+    settingMinAgeInput.value = datingSettings.minAge;
+    settingMaxAgeInput.value = datingSettings.maxAge;
+    datingSettingsModalEl.hidden = false;
+  }
+  function closeDatingSettings(){ datingSettingsModalEl.hidden = true; }
+
+  function saveDatingSettings(){
+    let min = parseInt(settingMinAgeInput.value)||18, max = parseInt(settingMaxAgeInput.value)||99;
+    if(min<18) min=18; if(max<min) max=min;
+    let raceVals = [...document.querySelectorAll('.raceCheck:checked')].map(cb=>cb.value);
+    datingSettings = {
+      ethnicities: [...document.querySelectorAll('.ethnicityCheck:checked')].map(cb=>cb.value),
+      races: raceVals.filter(v => v !== 'Other'),
+      genders: [...document.querySelectorAll('.genderCheck:checked')].map(cb=>cb.value),
+      minAge: min, maxAge: max,
+      useCustomRaces: raceVals.includes('Other'),
+      customRaces: datingSettings.customRaces || []
+    };
+    persistDatingData();
+    closeDatingSettings();
+  }
+
+  // --- Custom Race Modal ---
+  function openCustomRaceModal(){
+    customRaceModalEl.hidden = false;
+    renderCustomRaceList();
+    customRaceInput.value = '';
+  }
+  function closeCustomRaceModal(){ customRaceModalEl.hidden = true; persistDatingData(); }
+  function renderCustomRaceList(){
+    if(!datingSettings.customRaces.length){ customRaceListEl.innerHTML = '<div style="font-size:12px;color:#888;text-align:center;padding:4px;">No custom species added yet.</div>'; return; }
+    customRaceListEl.innerHTML = datingSettings.customRaces.map((r,i) => `
+      <div class="customRaceItem">
+        <span>${escapeHtml(r)}</span>
+        <button onclick="removeCustomRace(${i})" style="background:#ff3b30;color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;">×</button>
+      </div>`).join('');
+  }
+  function addCustomRace(){
+    let v = customRaceInput.value.trim(); if(!v) return;
+    if(datingSettings.customRaces.includes(v)) return alert('Already added!');
+    datingSettings.customRaces.push(v);
+    customRaceInput.value = '';
+    renderCustomRaceList();
+    persistDatingData();
+  }
+  function removeCustomRace(i){
+    datingSettings.customRaces.splice(i,1);
+    renderCustomRaceList();
+    persistDatingData();
+  }
+
+  // --- Profile Modal ---
+  async function showProfile(c){
+    if(!c) return;
+    currentProfileTarget = c;
+    profileModalEl.hidden = false;
+    function render(){
+      let img = c.portrait ? `<img src="${c.portrait}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;margin-bottom:12px;">` : `<div style="width:100%;aspect-ratio:1;background:#ddd;border-radius:12px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;" class="sub">No portrait</div>`;
+      let html = `<div style="font-weight:700;font-size:18px;margin-bottom:4px;">${escapeHtml(c.name)}, ${escapeHtml(c.age)}</div>`;
+      html += `<div class="sub" style="font-size:14px;margin-bottom:12px;">${escapeHtml(c.gender||'')} • ${escapeHtml(c.ethnicity||'')} • ${escapeHtml(c.race)} • ${escapeHtml(c.profession)}</div>`;
+      html += `<div style="font-size:13px;margin-bottom:8px;"><b style="color:${darkMode?'#fff':'#333'}">Intent:</b> <span class="sub">${escapeHtml(c.motive||'')}</span></div>`;
+      html += `<div style="font-size:13px;margin-bottom:8px;"><b style="color:${darkMode?'#fff':'#333'}">Style:</b> <span class="sub">${escapeHtml(c.clothingStyle||'')}</span></div>`;
+      html += `<div style="font-size:14px;line-height:1.5;margin-bottom:12px;">${escapeHtml(c.selfDesc || 'No bio available.')}</div>`;
+      if(debugMode){
+        html += `<div class="debugBox" style="display:flex;flex-direction:column;gap:8px;">
+<b>🐛 Debug Edit Mode</b>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+<input id="dbgName" value="${escapeHtml(c.name||'')}" placeholder="Name">
+<input id="dbgAge" value="${escapeHtml(c.age||'')}" placeholder="Age">
+<input id="dbgGender" value="${escapeHtml(c.gender||'')}" placeholder="Gender">
+<input id="dbgRace" value="${escapeHtml(c.race||'')}" placeholder="Race">
+<input id="dbgEthnicity" value="${escapeHtml(c.ethnicity||'')}" placeholder="Ethnicity">
+<input id="dbgProfession" value="${escapeHtml(c.profession||'')}" placeholder="Profession">
+</div>
+<textarea id="dbgPhysical" rows="2" placeholder="Physical appearance (no genitals)">${escapeHtml(c.physical||'')}</textarea>
+<textarea id="dbgGenital" rows="2" placeholder="Genital description (intimate anatomy)">${escapeHtml(c.genital||'')}</textarea>
+<textarea id="dbgClothingStyle" rows="2" placeholder="Clothing style">${escapeHtml(c.clothingStyle||'')}</textarea>
+<textarea id="dbgPersonality" rows="2" placeholder="Personality">${escapeHtml(c.personality||'')}</textarea>
+<textarea id="dbgBackstory" rows="2" placeholder="Backstory">${escapeHtml(c.backstory||'')}</textarea>
+<div style="display:flex;gap:8px;">
+<select id="dbgMotive" style="flex:1;">
+<option value="Casual hookups" ${c.motive==='Casual hookups'?'selected':''}>Casual hookups</option>
+<option value="Friends only" ${c.motive==='Friends only'?'selected':''}>Friends only</option>
+<option value="Long-term relationship" ${c.motive==='Long-term relationship'?'selected':''}>Long-term relationship</option>
+<option value="Don't know yet" ${c.motive==="Don't know yet"?'selected':''}>Don't know yet</option>
+</select>
+<input id="dbgMood" type="number" min="0" max="100" value="${c.mood??50}" style="width:70px;" placeholder="Mood">
+<input id="dbgScore" type="number" min="0" max="500" value="${c.score??100}" style="width:70px;" placeholder="Score">
+<input id="dbgSway" type="number" min="0" max="100" value="${c.sway??50}" style="width:70px;" placeholder="Sway">
+</div>
+<input id="dbgInterests" value="${escapeHtml((c.interests||[]).join(', '))}" placeholder="Interests (comma-separated)">
+<input id="dbgDislikes" value="${escapeHtml((c.dislikes||[]).join(', '))}" placeholder="Dislikes (comma-separated)">
+<textarea id="dbgInner" rows="2" placeholder="Inner monologue">${escapeHtml(c.innerMonologue||'')}</textarea>
+<div style="font-size:11px;color:#888;">ID: ${c.id} | Sway: ${c.sway??'?'} | AutoUnmatched: ${c.autoUnmatched} | Msgs: ${c.history?.length||0} | Unread: ${c.unreadCount||0}</div>
+<button class="btn" onclick="saveDebugProfileChanges()">Save Changes</button>
+<button class="btn" id="dbgRegenImgBtn" onclick="regenProfileImage()">Regenerate Image</button>
+</div>`;
+      }
+      profileModalContentEl.innerHTML = img + html;
+    }
+    if(!c.selfDesc){
+      profileModalContentEl.innerHTML = (c.portrait ? `<img src="${c.portrait}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;margin-bottom:12px;">` : `<div style="width:100%;aspect-ratio:1;background:#ddd;border-radius:12px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;" class="sub">No portrait</div>`) + '<div class="sub" style="font-size:14px;margin-top:8px;">Generating bio...</div>';
+      try { c.selfDesc = (await generateText(buildSelfDescPrompt(c))).trim(); } catch(e){ c.selfDesc = 'No bio available.'; }
+    }
+    render();
+  }
+
+  function saveDebugProfileChanges(){
+    let c = currentProfileTarget;
+    if(!c) return;
+    c.name = dbgName.value.trim() || c.name;
+    c.age = dbgAge.value.trim() || c.age;
+    c.gender = dbgGender.value.trim();
+    c.race = dbgRace.value.trim();
+    c.ethnicity = dbgEthnicity.value.trim();
+    c.profession = dbgProfession.value.trim();
+    c.physical = dbgPhysical.value.trim();
+    c.genital = dbgGenital.value.trim();
+    c.clothingStyle = dbgClothingStyle.value.trim();
+    c.personality = dbgPersonality.value.trim();
+    c.backstory = dbgBackstory.value.trim();
+    c.motive = dbgMotive.value;
+    c.mood = Math.max(0, Math.min(100, parseInt(dbgMood.value) || 0));
+    c.score = Math.max(0, Math.min(500, parseInt(dbgScore.value) || 0));
+    c.sway = Math.max(0, Math.min(100, parseInt(dbgSway.value) || 0));
+    c.interests = dbgInterests.value.split(',').map(s=>s.trim()).filter(Boolean);
+    c.dislikes = dbgDislikes.value.split(',').map(s=>s.trim()).filter(Boolean);
+    c.innerMonologue = dbgInner.value.trim();
+    persistDatingData();
+    showProfile(c);
+    if(!datingScreenEl.hidden && currentDatingTab==='matches') renderMatchesList();
+    if(!messagesScreenEl.hidden) renderConversations();
+    if(!contactsScreenEl.hidden) renderContacts();
+  }
+
+  async function regenProfileImage(){
+    let c = currentProfileTarget;
+    if(!c) return;
+    let btn = document.getElementById('dbgRegenImgBtn');
+    if(btn){ btn.disabled = true; btn.textContent = 'Generating...'; }
+    try {
+      let style = pictureStyleMap[globalPictureStyle] || pictureStyleMap.Realistic;
+      let url = await generateImage(buildPortraitImagePrompt(c, style), {resolution:'512x512'});
+      c.portrait = url;
+      persistDatingData();
+      showProfile(c);
+      if(!datingScreenEl.hidden && currentDatingTab==='matches') renderMatchesList();
+      if(!messagesScreenEl.hidden) renderConversations();
+      if(!contactsScreenEl.hidden) renderContacts();
+    } catch(e){
+      if(btn){ btn.disabled = false; btn.textContent = 'Regenerate Image'; }
+      alert('Failed to regenerate image. Try again.');
+    }
+  }
+
+  // --- User Profile ---
+  function getUserProfileDesc(){
+    let p = userProfile, parts = [];
+    if(p.name) parts.push(`name: ${p.name}`);
+    if(p.age) parts.push(`age: ${p.age}`);
+    if(p.gender) parts.push(`gender: ${p.gender}`);
+    if(p.race) parts.push(`race: ${p.race}`);
+    if(p.profession) parts.push(`profession: ${p.profession}`);
+    if(p.personality) parts.push(`personality: ${p.personality}`);
+    if(p.bio) parts.push(`bio: ${p.bio}`);
+    if(p.clothingStyle) parts.push(`clothing style: ${p.clothingStyle}`);
+    if(p.interests?.length) parts.push(`interests: ${p.interests.join(', ')}`);
+    if(p.dislikes?.length) parts.push(`dislikes: ${p.dislikes.join(', ')}`);
+    if(p.hobbies?.length) parts.push(`hobbies: ${p.hobbies.join(', ')}`);
+    if(p.physicalAppearance) parts.push(`physical appearance: ${p.physicalAppearance}`);
+    return parts.length ? `The user you are chatting with is described as: ${parts.join('; ')}.` : '';
+  }
+
+  function renderProfilePhotoGrid(){
+    let selected = userProfile.portraitPhotoId;
+    let html = `<div onclick="selectProfilePhoto(null)" style="aspect-ratio:1;background:#eee;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;color:#666;border:3px solid ${selected===null?'#007aff':'transparent'};">None</div>`;
+    cameraRoll.forEach(img => {
+      html += `<div onclick="selectProfilePhoto(${img.id})" style="aspect-ratio:1;border-radius:10px;overflow:hidden;cursor:pointer;border:3px solid ${selected===img.id?'#007aff':'transparent'};"><img src="${img.dataUrl}" style="width:100%;height:100%;object-fit:cover;"></div>`;
+    });
+    myPhotoGridEl.innerHTML = html;
+  }
+
+  function selectProfilePhoto(id){
+    userProfile.portraitPhotoId = id;
+    if(id){
+      let img = cameraRoll.find(x => x.id === id);
+      userProfile.portraitPhotoDesc = img ? (img.desc || img.prompt || '') : '';
+    } else {
+      userProfile.portraitPhotoDesc = '';
+    }
+    renderProfilePhotoGrid();
+    renderMyProfilePreview();
+    persistDatingData();
+  }
+
+  function loadUserProfileInputs(){
+    myNameInput.value = userProfile.name || '';
+    myAgeInput.value = userProfile.age || '';
+    myGenderInput.value = userProfile.gender || '';
+    myRaceInput.value = userProfile.race || '';
+    myProfessionInput.value = userProfile.profession || '';
+    myPersonalityInput.value = userProfile.personality || '';
+    myPhysicalInput.value = userProfile.physicalAppearance || '';
+    myBioInput.value = userProfile.bio || '';
+    myInterestsInput.value = (userProfile.interests||[]).join(', ');
+    myDislikesInput.value = (userProfile.dislikes||[]).join(', ');
+    myHobbiesInput.value = (userProfile.hobbies||[]).join(', ');
+    renderProfilePhotoGrid();
+    renderMyProfilePreview();
+  }
+
+  function saveUserProfile(){
+    userProfile = {
+      ...userProfile,
+      name: myNameInput.value.trim(), age: myAgeInput.value.trim(), gender: myGenderInput.value.trim(), race: myRaceInput.value.trim(),
+      profession: myProfessionInput.value.trim(), personality: myPersonalityInput.value.trim(), physicalAppearance: myPhysicalInput.value.trim(),
+      bio: myBioInput.value.trim(),
+      interests: myInterestsInput.value.split(',').map(s=>s.trim()).filter(Boolean),
+      dislikes: myDislikesInput.value.split(',').map(s=>s.trim()).filter(Boolean),
+      hobbies: myHobbiesInput.value.split(',').map(s=>s.trim()).filter(Boolean)
+    };
+    renderMyProfilePreview();
+    persistDatingData();
+  }
+
+  function renderMyProfilePreview(){
+    let html = '';
+    if(userProfile.portraitPhotoId){
+      let img = cameraRoll.find(x => x.id === userProfile.portraitPhotoId);
+      if(img) html += `<img src="${img.dataUrl}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;margin-bottom:8px;">`;
+    }
+    let line = [];
+    if(userProfile.name) line.push(`<b>${escapeHtml(userProfile.name)}</b>`);
+    if(userProfile.age) line.push(`age ${escapeHtml(userProfile.age)}`);
+    if(userProfile.gender) line.push(escapeHtml(userProfile.gender));
+    if(line.length) html += `<div style="font-size:13px;color:#555;margin-bottom:4px;">${line.join(' • ')}</div>`;
+    if(userProfile.profession) html += `<div style="font-size:13px;color:#555;margin-bottom:4px;">${escapeHtml(userProfile.profession)}</div>`;
+    if(userProfile.interests.length) html += `<div style="font-size:12px;color:#777;"><b>Interests:</b> ${escapeHtml(userProfile.interests.join(', '))}</div>`;
+    myProfilePreviewEl.innerHTML = html;
+  }
+
+  // --- Self photo tab helpers ---
+  function loadUserPhysical(){ selfiePhysicalInput.value = userProfile.selfPhotoPhysical || userProfile.physicalAppearance || ''; selfieClothingInput.value = userProfile.selfPhotoClothing || userProfile.clothingStyle || ''; }
+  function saveUserPhysical(){ userProfile.selfPhotoPhysical = selfiePhysicalInput.value.trim(); userProfile.selfPhotoClothing = selfieClothingInput.value.trim(); persistDatingData(); }
+
+  async function generateUserPhoto(){
+    if(isGenerating) return;
+    let physical = selfiePhysicalInput.value.trim();
+    let clothing = selfieClothingInput.value.trim();
+    if(physical){ userProfile.selfPhotoPhysical = physical; persistDatingData(); }
+    if(clothing){ userProfile.selfPhotoClothing = clothing; persistDatingData(); }
+    let scenario = selfieScenarioInput.value.trim() || 'casual moment';
+    let style = pictureStyleMap[globalPictureStyle] || pictureStyleMap.Realistic;
+    let prompt = buildUserPhotoPrompt(userProfile, physical, clothing, scenario, style);
+    isGenerating = true; selfieLoadingEl.hidden = false; selfiePreviewEl.innerHTML = '';
+    try{
+      let url = await generateImage(prompt, {resolution:'512x512'});
+      selfiePreviewEl.innerHTML = `<img src="${url}" style="max-width:100%;border-radius:12px;">`;
+      cameraRoll.push({id:Date.now(), prompt, desc: prompt, dataUrl:url});
+      persistDatingData();
+      if(galleryPreviewEl) galleryPreviewEl.innerHTML = '';
+    }catch(e){ selfiePreviewEl.innerHTML = '<div style="color:#ff3b30;">Failed to generate photo.</div>'; }
+    finally { isGenerating = false; selfieLoadingEl.hidden = true; }
+  }
+
+  // --- Assistant App ---
+  function renderAssistantChat(){
+    if(!assistantHistory.length){
+      assistantChatHistoryEl.innerHTML = '<div style="text-align:center;color:#888;margin-top:40px;font-size:14px;">Ask me anything! I can help with prompts, ideas, and more.</div>';
+      return;
+    }
+    assistantChatHistoryEl.innerHTML = assistantHistory.map(h => {
+      if(h.text==='...' && h.id==='assist-loading') return `<div class="bubble them" style="opacity:0.6;">...</div>`;
+      return `<div class="bubble ${h.sender==='You'?'user':'them'}">${escapeHtml(h.text)}</div>`;
+    }).join('');
+    assistantChatHistoryEl.scrollTop = assistantChatHistoryEl.scrollHeight;
+  }
+
+  async function sendToAssistant(){
+    if(isGenerating) return;
+    let txt = assistantInputEl.value.trim(); if(!txt) return;
+    assistantInputEl.value = '';
+    assistantHistory.push({rp:roleplayMode,sender:'You', text:txt});
+    renderAssistantChat();
+    isGenerating = true; assistantSendBtn.disabled = true; assistantInputEl.disabled = true;
+    assistantHistory.push({rp:roleplayMode,sender:'Assistant', text:'...', id:'assist-loading'});
+    renderAssistantChat();
+    try {
+      let historyText = assistantHistory.filter(h => h.id !== 'assist-loading').map(h => `${h.sender}: ${h.text}`).join('\n');
+      let prompt = `You are a helpful AI assistant inside a phone app called Assistant. You can answer general questions, help with creative writing, and expand image generation prompts into vivid, detailed descriptions. Be concise but helpful.\n\n${historyText}\nAssistant:`;
+      let reply = await generateText(prompt);
+      assistantHistory = assistantHistory.filter(h => h.id !== 'assist-loading');
+      assistantHistory.push({rp:roleplayMode,sender:'Assistant', text:reply.trim()});
+      renderAssistantChat();
+    } catch(e) {
+      assistantHistory = assistantHistory.filter(h => h.id !== 'assist-loading');
+      assistantHistory.push({rp:roleplayMode,sender:'Assistant', text:'Sorry, something went wrong.'});
+      renderAssistantChat();
+    } finally {
+      isGenerating = false; assistantSendBtn.disabled = false; assistantInputEl.disabled = false;
+    }
+  }
+
+  // --- Dating App ---
+  function populateCandidateUI(c){
+    candidateCardEl.hidden = false; candidateActionsEl.hidden = false; noCandidateEl.hidden = true;
+    candidateInfoEl.innerHTML = `<div style="font-weight:700;font-size:18px;margin-bottom:2px;">${escapeHtml(c.name)}, ${escapeHtml(c.age)}</div>
+<div class="sub" style="font-size:14px;margin-bottom:12px;">${escapeHtml(c.gender||'')} • ${escapeHtml(c.ethnicity||'')} • ${escapeHtml(c.race)} • ${escapeHtml(c.profession)}</div>
+<div style="font-size:13px;margin-bottom:8px;"><b style="color:${darkMode?'#fff':'#333'}">Intent:</b><span class="sub">${escapeHtml(c.motive)}</span></div>
+<div style="font-size:14px;line-height:1.5;margin-bottom:12px;">${escapeHtml(c.selfDesc)}</div>`;
+    candidatePortraitEl.innerHTML = c.portrait ? `<img src="${c.portrait}" style="width:100%;height:100%;object-fit:cover;">` : '<span style="color:#666;font-size:13px;">No portrait</span>';
+  }
+
+  async function generateCandidate(){
+    if(isGenerating) return;
+    isGenerating = true;
+    try {
+      noCandidateEl.hidden = true; candidateCardEl.hidden = false; candidateActionsEl.hidden = true;
+      candidateInfoEl.innerHTML = 'Generating profile...';
+      let myGen = ++latestPortraitGen;
+      candidatePortraitEl.innerHTML = '<span style="color:#666;font-size:13px;">Generating portrait...</span>';
+      let ageR = `${datingSettings.minAge}-${datingSettings.maxAge}`;
+      let eth = datingSettings.ethnicities, race = datingSettings.races, gen = datingSettings.genders;
+      let racePool = [...race];
+      if(datingSettings.useCustomRaces && datingSettings.customRaces?.length) racePool.push(...datingSettings.customRaces);
+      let pE = eth.length?eth[Math.floor(Math.random()*eth.length)]:null;
+      let pR = racePool.length?racePool[Math.floor(Math.random()*racePool.length)]:null;
+      let pG = gen.length?gen[Math.floor(Math.random()*gen.length)]:null;
+      let normalJobs = ['cashier','office clerk','barista','teacher','nurse','waiter','retail worker','accountant','customer service rep','delivery driver','receptionist','warehouse worker','sales associate','administrative assistant','fast food worker','hair stylist','security guard','janitor','line cook','bank teller'];
+      let jobSeed = normalJobs[Math.floor(Math.random()*normalJobs.length)];
+      try{
+        let text = await generateText(buildProfileGenPrompt(pE,pR,pG,ageR,jobSeed)), clean = text.replace(/\*+/g,'');
+        let ex = (label,def='') => clean.match(new RegExp(label+'(?:\\s*\\([^)]*\\))?:\\s*(.+)','i'))?.[1]?.trim() || def;
+        let name = ex('Name','Mystery'), age = ex('Age','?'), gender = ex('Gender',pG||'?'), rc = ex('Race',pR||''), ethnicity = ex('Ethnicity',pE||''), profession = ex('Profession',''), physical = ex('Physical(?:\\s*Appearance)?',''), genital = ex('Genital(?:\\s*Description)?',''), clothingStyle = ex('(?:General\\s+)?Clothing(?:\\s*Style)?',''), personality = ex('Personality',''), backstory = ex('Backstory',''), selfDesc = ex('Self-Description(?:\\s*\\([^)]*\\))?','');
+        let ints = (ex('Interests(?:\\s*\\(10[^)]*\\))?','')||'').split(',').map(s=>s.trim()).filter(Boolean);
+        let diss = (ex('Dislikes(?:\\s*\\(10[^)]*\\))?','')||'').split(',').map(s=>s.trim()).filter(Boolean);
+        while(ints.length<10) ints.push('unknown interest'); while(diss.length<10) diss.push('unknown dislike');
+        let motives = ['Casual hookups','Friends only','Long-term relationship','Don\'t know yet'];
+        let motive = motives[Math.floor(Math.random()*motives.length)];
+        if(!selfDesc) selfDesc = 'No bio available.';
+        let candidate = {id:Date.now(), name, age, gender, race:rc, raceCategory: pR==='Anthropomorphic animal'?'anthro':null, ethnicity, profession, physical, genital, clothingStyle, personality, backstory, motive, selfDesc, interests:ints, dislikes:diss, score:100, mood:Math.floor(Math.random()*40)+30, sway:Math.floor(Math.random()*100), history:[], hasNumber:false, portrait:null, autoUnmatched:false, innerMonologue:'', unreadCount:0};
+        currentCandidate = candidate;
+        populateCandidateUI(candidate);
+        candidateActionsEl.hidden = false;
+        if(pR === 'Anthropomorphic animal' && candidate.race && candidate.race !== 'Anthropomorphic animal'){
+          recentAnthroSpecies.push(candidate.race);
+          if(recentAnthroSpecies.length > 12) recentAnthroSpecies = recentAnthroSpecies.slice(-12);
+        }
+        persistDatingData();
+        let style = pictureStyleMap[globalPictureStyle] || pictureStyleMap.Realistic;
+        generateImage(buildPortraitImagePrompt(candidate,style),{resolution:'512x512'}).then(url=>{
+          if(myGen!==latestPortraitGen||!currentCandidate) return;
+          currentCandidate.portrait = url;
+          candidatePortraitEl.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;">`;
+          persistDatingData();
+        }).catch(()=>{ if(myGen!==latestPortraitGen) return; candidatePortraitEl.innerHTML = '<span style="color:#666;font-size:13px;">No portrait</span>'; });
+      }catch(e){
+        candidateInfoEl.innerHTML = 'Error generating profile. <button class="btn" onclick="generateCandidate()">Retry</button>';
+        candidatePortraitEl.innerHTML = '<span style="color:#666;font-size:13px;">Failed to load</span>';
+      }
+    } finally { isGenerating = false; }
+  }
+
+  function declineCandidate(){ currentCandidate=null; persistDatingData(); generateCandidate(); }
+
+  function matchCandidate(){
+    if(!currentCandidate) return;
+    let matched = currentCandidate;
+    matches.push(matched);
+    currentCandidate = null;
+    persistDatingData();
+    renderMatchesList();
+    openDatingChat(matched.id);
+    generateCandidate();
+  }
+
+  function renderMatchesList(){
+    if(!matches.length){ matchesListEl.innerHTML=''; noMatchesEl.hidden=false; return; }
+    noMatchesEl.hidden=true;
+    matchesListEl.innerHTML = matches.map(m => `
+      <div class="elevated-item" onclick="openDatingChat(${m.id})" style="cursor:pointer;padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+        <div><div style="font-weight:600;">${m.name}</div><div class="sub">${m.profession}</div></div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="sub">${m.hasNumber?'✅ ':''}${m.age}</span>
+          ${unreadBadge(m.unreadCount||0)}
+          <button class="btn secondary" style="padding:4px 8px;font-size:12px;" onclick="event.stopPropagation();showProfile(matches.find(x=>x.id===${m.id}))">ℹ️</button>
+          <button class="btn danger" style="padding:4px 8px;font-size:11px;" onclick="event.stopPropagation();unmatchById(${m.id})">Remove</button>
+        </div>
+      </div>`).join('');
+  }
+
+  function unmatchById(id){
+    if(!confirm('Remove this match?')) return;
+    let was = currentDatingMatch && currentDatingMatch.id === id;
+    matches = matches.filter(m=>m.id!==id);
+    contacts = contacts.filter(c=>c.id!==id);
+    persistDatingData();
+    if(was){ currentDatingMatch=null; endChat(); switchDatingTab('find'); }
+    renderMatchesList();
+    renderConversations();
+    renderContacts();
+    renderAppBadges();
+  }
+
+  function unmatchCurrent(){ if(!currentDatingMatch) return; unmatchById(currentDatingMatch.id); }
+
+  function openDatingChat(id){
+    let m = matches.find(x=>x.id===id);
+    if(!m) return;
+    currentDatingMatch = m;
+    startChat(m, datingChatViewEl, datingChatHistoryEl, datingChatInput, sendDatingBtn, datingChatNameEl, true);
+  }
+
+  function closeDatingChat(){ currentDatingMatch=null; endChat(); }
+
+  function startChat(partner, overlayEl, historyEl, inputEl, sendBtn, nameEl, isDating){
+    partner.isGenerating = false; // safety reset so a stuck flag never blocks chat
+    partner.unreadCount = 0;
+    renderAppBadges();
+    if(!messagesScreenEl.hidden) renderConversations();
+    if(!datingScreenEl.hidden && currentDatingTab==='matches') renderMatchesList();
+    activeChat = {partner, overlayEl, historyEl, inputEl, sendBtn, isDating};
+    if(nameEl) nameEl.textContent = partner.name;
+    overlayEl.hidden = false;
+    renderChat();
+  }
+
+  function endChat(){
+    if(!activeChat.overlayEl) return;
+    activeChat.overlayEl.hidden = true;
+    if(activeChat.isDating) renderMatchesList();
+    activeChat = {partner:null,historyEl:null,inputEl:null,sendBtn:null,overlayEl:null,isDating:false};
+  }
+
+  function renderChat(){
+    if(!activeChat.partner) return;
+    activeChat.historyEl.innerHTML = activeChat.partner.history.map((h,idx) => {
+      let ts = h.time ? `<div class="msgTs">${new Date(h.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>` : '';
+      let rpCls = h.rp ? ' rp-msg' : '';
+      if(h.type==='image'){
+        if(h.sender==='You') return `<div class="bubble user${rpCls}" data-idx="${idx}" style="padding:4px;">${ts}<img src="${h.text}" style="max-width:140px;border-radius:12px;display:block;"></div>`;
+        return `<div class="bubble them${rpCls}" data-idx="${idx}" style="padding:4px;display:flex;flex-direction:column;gap:4px;align-items:flex-start;">${ts}<img src="${h.text}" style="max-width:140px;border-radius:12px;display:block;"><button class="btn" style="font-size:11px;padding:4px 8px;" onclick="event.stopPropagation();saveChatImage(this.parentElement.querySelector('img').src)">💾 Save to Gallery</button></div>`;
+      }
+      return `<div class="bubble ${h.sender==='You'?'user':'them'}${rpCls}" data-idx="${idx}">${escapeHtml(h.text)}${ts}</div>`;
+    }).join('');
+    attachLongPress();
+    activeChat.historyEl.scrollTop = activeChat.historyEl.scrollHeight;
+  }
+
+  function saveChatImage(url){
+    let id = Date.now() + Math.floor(Math.random()*1000);
+    let partnerName = activeChat.partner ? activeChat.partner.name : 'Unknown';
+    cameraRoll.push({id, prompt:'', desc:`Photo received from ${partnerName}`, dataUrl:url});
+    persistDatingData();
+    alert('Saved to Camera Roll!');
+  }
+
+  // --- Long-press to edit/delete messages ---
+  let longPressTimer = null, longPressTarget = null, longPressFired = false;
+  let editingMsgIdx = null, msgMenuOpenAt = 0;
+  let lpStartX = 0, lpStartY = 0;
+
+  function attachLongPress(){
+    if(!activeChat.historyEl) return;
+    activeChat.historyEl.querySelectorAll('.bubble[data-idx]').forEach(b => {
+      b.addEventListener('touchstart', onLongPressStart, {passive:false});
+      b.addEventListener('touchend', onLongPressEnd);
+      b.addEventListener('touchmove', onLongPressMove, {passive:false});
+      b.addEventListener('touchcancel', onLongPressEnd);
+      b.addEventListener('mousedown', onLongPressStart);
+      b.addEventListener('mouseup', onLongPressEnd);
+      b.addEventListener('mouseleave', onLongPressEnd);
+      b.addEventListener('contextmenu', onLongPressContext);
+    });
+  }
+
+  function onLongPressContext(e){
+    e.preventDefault();
+    let idx = e.currentTarget.dataset.idx;
+    let h = activeChat.partner?.history?.[idx];
+    if(!h || h.text === '...' || h.id) return;
+    if(longPressFired) return; // timer already handled it
+    longPressFired = true;
+    if(navigator.vibrate) navigator.vibrate(15);
+    showMsgContextMenu(idx, e);
+  }
+
+  function onLongPressStart(e){
+    longPressFired = false;
+    longPressTarget = e.currentTarget;
+    lpStartX = e.touches?.[0]?.clientX ?? e.clientX ?? 0;
+    lpStartY = e.touches?.[0]?.clientY ?? e.clientY ?? 0;
+    let idx = longPressTarget.dataset.idx;
+    let h = activeChat.partner?.history?.[idx];
+    if(!h || h.text === '...' || h.id) return; // skip placeholders & AI "generating" bubbles
+    if(e.type === 'touchstart') e.preventDefault(); // block iOS text-selection callout
+    longPressTarget.classList.add('pressed');
+    longPressTimer = setTimeout(() => {
+      if(longPressFired) return; // contextmenu already handled it
+      longPressFired = true;
+      longPressTarget.classList.remove('pressed');
+      if(navigator.vibrate) navigator.vibrate(15);
+      showMsgContextMenu(idx, {clientX: lpStartX, clientY: lpStartY});
+    }, 500);
+  }
+
+  function onLongPressMove(e){
+    if(!longPressTarget) return;
+    let t = e.touches?.[0];
+    let dx = (t?.clientX ?? 0) - lpStartX;
+    let dy = (t?.clientY ?? 0) - lpStartY;
+    if(dx*dx + dy*dy > 144){ // moved >12px → treat as scroll, cancel
+      onLongPressEnd();
+    }
+  }
+
+  function onLongPressEnd(){
+    clearTimeout(longPressTimer);
+    if(longPressTarget) longPressTarget.classList.remove('pressed');
+    longPressTarget = null;
+  }
+
+  function showMsgContextMenu(idx, e){
+    let h = activeChat.partner.history[idx];
+    if(!h) return;
+    let canEdit = h.type !== 'image';
+    let items = '';
+    if(canEdit) items += `<div class="ctxItem" onclick="openMsgEditor(${idx})">✏️ Edit</div>`;
+    items += `<div class="ctxItem danger" onclick="deleteMsg(${idx})">🗑 Delete</div>`;
+    msgCtxMenu.innerHTML = items;
+    msgCtxMenu.hidden = false;
+    msgMenuOpenAt = Date.now();
+    let x = (e.touches?.[0]?.clientX ?? e.clientX ?? 0);
+    let y = (e.touches?.[0]?.clientY ?? e.clientY ?? 0);
+    if(!x && !y){ x = window.innerWidth/2; y = window.innerHeight/2; }
+    let r = msgCtxMenu.getBoundingClientRect();
+    let maxX = window.innerWidth - r.width - 10;
+    let maxY = window.innerHeight - r.height - 10;
+    msgCtxMenu.style.left = Math.min(Math.max(x - r.width/2, 10), maxX) + 'px';
+    msgCtxMenu.style.top = Math.min(Math.max(y - 10, 10), maxY) + 'px';
+  }
+
+  function hideMsgContextMenu(){ msgCtxMenu.hidden = true; }
+
+  function openMsgEditor(idx){
+    hideMsgContextMenu();
+    let h = activeChat.partner.history[idx];
+    if(!h) return;
+    editingMsgIdx = idx;
+    msgEditInput.value = h.text;
+    msgEditModalEl.hidden = false;
+    msgEditInput.focus();
+  }
+
+  function saveMsgEdit(){
+    if(editingMsgIdx == null) return;
+    let h = activeChat.partner.history[editingMsgIdx];
+    if(!h){ editingMsgIdx=null; msgEditModalEl.hidden=true; return; }
+    let v = msgEditInput.value.trim();
+    if(!v){ deleteMsg(editingMsgIdx); return; }
+    h.text = v; h.time = h.time || Date.now();
+    editingMsgIdx = null;
+    msgEditModalEl.hidden = true;
+    persistDatingData();
+    renderChat();
+  }
+
+  function deleteMsg(idx){
+    hideMsgContextMenu();
+    let h = activeChat.partner.history[idx];
+    if(!h) return;
+    let who = h.sender;
+    if(!confirm(`Delete this ${h.type==='image'?'photo':'message'} from ${who==='You'?'your':activeChat.partner.name+"'s"} side?`)) return;
+    activeChat.partner.history.splice(idx,1);
+    persistDatingData();
+    renderChat();
+  }
+
+  document.addEventListener('click', (e)=>{ if(longPressFired){ longPressFired=false; return; } if(!msgCtxMenu.hidden && !msgCtxMenu.contains(e.target)) hideMsgContextMenu(); });
+  document.addEventListener('touchstart', (e)=>{ if(longPressFired){ return; } if(!msgCtxMenu.hidden && !msgCtxMenu.contains(e.target)) hideMsgContextMenu(); }, {passive:true});
+  document.addEventListener('scroll', ()=>{ if(!msgCtxMenu.hidden && Date.now()-msgMenuOpenAt>350) hideMsgContextMenu(); }, true);
+
+  async function submitChat(){
+    if(!activeChat.partner || activeChat.partner.isGenerating) return;
+    userTyping = false; clearTimeout(userTypingTimer);
+    let partner = activeChat.partner, sendBtn = activeChat.sendBtn, isDating = activeChat.isDating;
+    let txt = activeChat.inputEl.value.trim(); if(!txt) return;
+    activeChat.inputEl.value = '';
+    partner.history.push({rp:roleplayMode,sender:'You', text:txt, time:Date.now()});
+    renderChat();
+    partner.isGenerating = true; sendBtn.disabled = true;
+    let scenario = isDating ? (partner.history.length===1?'datingFirst':'dating') : 'messages';
+    let tid = 't'+Date.now();
+    partner.history.push({rp:roleplayMode,sender:partner.name, text:'...', id:tid});
+    renderChat();
+    try {
+      let {text, photoReq, photoTags, gaveNumber} = await generateChatResponse(partner, txt, scenario);
+      removeHistoryEntry(partner, tid);
+
+      if(gaveNumber && !partner.hasNumber){
+        partner.hasNumber = true;
+        if(!contacts.find(c=>c.id===partner.id)) contacts.push(partner);
+        renderConversations();
+        renderContacts();
+        renderAppBadges();
+        setTimeout(() => alert(`${partner.name} gave you their number! They're now in your Contacts.`), 100);
+      }
+
+      let hasPhotoIntent = photoReq || (photoTags && (photoTags.type || photoTags.pose || photoTags.clothes || photoTags.location));
+      if(hasPhotoIntent){
+        let preText = photoReq?.pre || text || '';
+        if(preText) partner.history.push({rp:roleplayMode,sender:partner.name, text:preText, time:Date.now()});
+        let pid = 'p'+Date.now();
+        partner.history.push({rp:roleplayMode,sender:partner.name, text:'...', id:pid});
+        renderChat();
+        try {
+          let recentContext = buildRecentContext(partner);
+          let {url, caption} = await generateAiPhoto(partner, recentContext, false, photoTags);
+          removeHistoryEntry(partner, pid);
+          partner.history.push({rp:roleplayMode,sender:partner.name, text:url, type:'image', time:Date.now()});
+          if(caption) partner.history.push({rp:roleplayMode,sender:partner.name, text:caption, time:Date.now()});
+        } catch(e) {
+          removeHistoryEntry(partner, pid);
+          partner.history.push({rp:roleplayMode,sender:partner.name, text:"I tried to send a photo but it didn't work, sorry!", time:Date.now()});
+        }
+        let postText = photoReq?.post || '';
+        if(postText) partner.history.push({rp:roleplayMode,sender:partner.name, text:postText, time:Date.now()});
+      } else {
+        partner.history.push({rp:roleplayMode,sender:partner.name, text:text, time:Date.now()});
+      }
+
+      renderChat();
+      setAiCooldown(partner.id);
+      if(isDating) checkAutoUnmatch(partner);
+      persistDatingData();
+    } catch(e) {
+      removeHistoryEntry(partner, tid);
+      renderChat();
+      throw e;
+    } finally {
+      partner.isGenerating = false; sendBtn.disabled = false;
+    }
+  }
+
+  function checkAutoUnmatch(m){
+    if((m.score <= BLOCK_THRESHOLD || m.mood <= 0) && !m.autoUnmatched){
+      m.autoUnmatched = true;
+      m.history.push({rp:roleplayMode,sender:m.name, text:"I don't think this is working out. I'm blocking you and unmatching us. Goodbye.", time:Date.now()});
+      renderChat();
+      setTimeout(() => {
+        alert(`${m.name} has unmatched you.`);
+        profileModalEl.hidden = true;
+        matches = matches.filter(x=>x.id!==m.id);
+        contacts = contacts.filter(c=>c.id!==m.id);
+        persistDatingData();
+        renderMatchesList();
+        if(activeChat.isDating && activeChat.partner?.id===m.id){ closeDatingChat(); switchDatingTab('matches'); }
+      }, 600);
+    }
+  }
+
+  // --- Shared AI Chat ---
+  async function generateChatResponse(c, userText, scenario){
+    let hist = formatHistory(c);
+    let mode = roleplayMode ? 'direct roleplay mode. You and the user are interacting directly in-person as if you share the same world. Use "double quotes" for spoken dialogue, (parentheses) for thoughts, and *asterisks* for actions. Treat the scenario as really happening.' : 'casual texting mode (like a real phone chat)';
+    let md = Math.floor(Math.random()*5)-2, l = userText.toLowerCase();
+    if(c.interests?.some(i=>l.includes(i.toLowerCase()))) md+=6;
+    if(c.dislikes?.some(d=>l.includes(d.toLowerCase()))) md-=12;
+    if(/(love |like |great |awesome |good |nice |happy |beautiful |cool |amazing )/i.test(userText)) md+=4;
+    if(/(hate |bad |ugly |stupid |boring |annoying |worst |terrible )/i.test(userText)) md-=8;
+    c.mood = Math.max(0, Math.min(100, (c.mood||50)+md));
+    let udesc = getUserProfileDesc();
+    let isFirst = scenario === 'datingFirst';
+    let contextDesc = scenario === 'messages' ? 'You are texting someone you already know through your phone\'s Messages app. Keep it casual, friendly, and natural—like texting a friend or acquaintance.' : 'You are chatting with a match on a dating app. Keep the tone engaging, flirty, and appropriate for getting to know a potential date.';
+    let prompt = buildChatPrompt(c, hist, userText, udesc, mode, contextDesc, isFirst);
+    let resp = await generateText(prompt);
+    let innerMatch = resp.match(/\[INNER:\s*([^\]]*)\]/i);
+    if(innerMatch) c.innerMonologue = innerMatch[1].trim();
+    let m = resp.match(/\[SCORE:\s*(\d+)\]/i);
+    if(m) c.score = Math.max(0, Math.min(500, parseInt(m[1])));
+    let motiveMatch = resp.match(/\[MOTIVE:\s*([^\]]+)\]/i);
+    if(motiveMatch){
+      let validMotives = ['Casual hookups','Friends only','Long-term relationship','Don\'t know yet'];
+      if(validMotives.includes(motiveMatch[1].trim())) c.motive = motiveMatch[1].trim();
+    }
+    let photoReq = extractAiPhotoIntent(resp);
+    let photoTags = extractPhotoTags(resp);
+    let gaveNumber = /\[GAVE_NUMBER\]/i.test(resp);
+    let text = stripAiTags(resp);
+    return {text, photoReq, photoTags, gaveNumber};
+  }
+
+  // --- AI-initiated messages ---
+  function getConsecutiveAiCount(c){
+    let count = 0;
+    for(let i = c.history.length - 1; i >= 0; i--){
+      if(c.history[i].sender === 'You') break;
+      if(c.history[i].sender === c.name && c.history[i].text !== '...') count++;
+    }
+    return count;
+  }
+
+  function setAiCooldown(id, time = Date.now() + 45000){
+    let m = matches.find(x => x.id === id);
+    if(m) m.nextAiInitiatedAllowedTime = time;
+    let c = contacts.find(x => x.id === id);
+    if(c) c.nextAiInitiatedAllowedTime = time;
+  }
+
+  function startAiChatTimer(){ if(aiChatTimer) return; aiChatTimer = setInterval(() => maybeAiSendRandomMessage(), 60000); }
+  function stopAiChatTimer(){ clearInterval(aiChatTimer); aiChatTimer = null; }
+
+  async function maybeAiSendRandomMessage(){
+    if(userTyping) return;
+    let pool = [];
+    let contactIds = new Set(contacts.map(c => c.id));
+    pool.push(...contacts);
+    matches.forEach(m => { if(!contactIds.has(m.id)) pool.push(m); });
+    let now = Date.now();
+    pool = pool.filter(c => getConsecutiveAiCount(c) < 3 && now > (c.nextAiInitiatedAllowedTime || 0));
+    if(!pool.length) return;
+    let c = pool[Math.floor(Math.random()*pool.length)];
+    if(c.isGenerating) return;
+    c.isGenerating = true;
+    let tid = 't'+Date.now();
+    c.history.push({rp:roleplayMode,sender:c.name, text:'...', id:tid});
+    if(activeChat.partner === c) renderChat();
+    try {
+      let {text, photoReq, photoTags} = await generateAiInitiatedMessage(c);
+      removeHistoryEntry(c, tid);
+      if(activeChat.partner === c && !activeChat.overlayEl.hidden) renderChat();
+
+      if(userTyping){
+        c.nextAiInitiatedAllowedTime = Date.now() + 30000;
+        return;
+      }
+
+      let hasPhotoIntent = photoReq || (photoTags && (photoTags.type || photoTags.pose || photoTags.clothes || photoTags.location));
+      if(hasPhotoIntent){
+        if(text) c.history.push({rp:roleplayMode,sender:c.name, text:text, time:Date.now()});
+        let pid = 'p'+Date.now();
+        c.history.push({rp:roleplayMode,sender:c.name, text:'...', id:pid});
+        if(activeChat.partner === c && !activeChat.overlayEl.hidden) renderChat();
+        if(userTyping){
+          removeHistoryEntry(c, pid);
+          if(activeChat.partner === c && !activeChat.overlayEl.hidden) renderChat();
+          if(photoReq?.post) c.history.push({rp:roleplayMode,sender:c.name, text:photoReq.post, time:Date.now()});
+          setAiCooldown(c.id);
+          if(activeChat.partner === c && !activeChat.overlayEl.hidden) renderChat(); else { c.unreadCount = (c.unreadCount || 0) + 1; renderAppBadges(); if(!messagesScreenEl.hidden) renderConversations(); if(!datingScreenEl.hidden && currentDatingTab==='matches') renderMatchesList(); }
+          persistDatingData();
+          return;
+        }
+        try {
+          let recentContext = buildRecentContext(c);
+          let {url, caption} = await generateAiPhoto(c, recentContext, false, photoTags);
+          removeHistoryEntry(c, pid);
+          c.history.push({rp:roleplayMode,sender:c.name, text:url, type:'image', time:Date.now()});
+          if(caption) c.history.push({rp:roleplayMode,sender:c.name, text:caption, time:Date.now()});
+        } catch(e) {
+          removeHistoryEntry(c, pid);
+          c.history.push({rp:roleplayMode,sender:c.name, text:"I tried to send a photo but it didn't go through!", time:Date.now()});
+        }
+        if(photoReq?.post) c.history.push({rp:roleplayMode,sender:c.name, text:photoReq.post, time:Date.now()});
+      } else {
+        c.history.push({rp:roleplayMode,sender:c.name, text:text, time:Date.now()});
+      }
+
+      setAiCooldown(c.id);
+      if(activeChat.partner === c && !activeChat.overlayEl.hidden){
+        renderChat();
+      } else {
+        c.unreadCount = (c.unreadCount || 0) + 1;
+        renderAppBadges();
+        if(!messagesScreenEl.hidden) renderConversations();
+        if(!datingScreenEl.hidden && currentDatingTab==='matches') renderMatchesList();
+      }
+      persistDatingData();
+    } catch(e) {
+      removeHistoryEntry(c, tid);
+      if(activeChat.partner === c && !activeChat.overlayEl.hidden) renderChat();
+    } finally { c.isGenerating = false; }
+  }
+
+  async function generateAiInitiatedMessage(c){
+    let hist = formatHistory(c);
+    let mode = roleplayMode ? 'direct roleplay mode. You and the user are interacting directly in-person as if you share the same world. Use "double quotes" for spoken dialogue, (parentheses) for thoughts, and *asterisks* for actions. Treat the scenario as really happening.' : 'casual texting mode (like a real phone chat)';
+    let udesc = getUserProfileDesc();
+    let prompt = buildAiInitiatedPrompt(c, hist, udesc, mode);
+    let resp = await generateText(prompt);
+    let m = resp.match(/\[INNER:\s*([^\]]*)\]/i);
+    if(m) c.innerMonologue = m[1].trim();
+    let photoReq = extractAiPhotoIntent(resp);
+    let photoTags = extractPhotoTags(resp);
+    let text = stripAiTags(resp);
+    return {text, photoReq, photoTags};
+  }
+
+  async function generateAiPhoto(c, contextLines=null, forceSelfie=false, photoTags=null){
+    let style = pictureStyleMap[globalPictureStyle] || pictureStyleMap.Realistic;
+    let url, caption;
+
+    let isSelfie = forceSelfie;
+    if(!isSelfie && photoTags){
+      if(photoTags.type === 'selfie') isSelfie = true;
+      else if(photoTags.type === 'nonselfie') isSelfie = false;
+      else {
+        let combined = (photoTags.request || '') + ' ' + (photoTags.location || '');
+        if(/selfie|mirror|front cam|holding phone|camera phone/i.test(combined)) isSelfie = true;
+      }
+    }
+    if(!isSelfie && !photoTags) isSelfie = Math.random() < 0.25;
+
+    if(photoTags && (photoTags.type || photoTags.pose || photoTags.clothes || photoTags.location || photoTags.request)){
+      if(isSelfie){
+        let parts = [`Selfie photo of ${c.name}`];
+        if(c.physical) parts.push(c.physical);
+        let clothes = photoTags.clothes ? photoTags.clothes.trim() : (c.clothingStyle || 'casual clothes');
+        if(/^nude$|^naked$|^completely nude$|^completely naked$|^no clothes$|^no outfit$|^bare$/i.test(clothes)){
+          parts.push('completely nude, naked, no clothes');
+          if(c.genital) parts.push(c.genital);
+        }
+        else parts.push(`wearing ${clothes}`);
+        if(photoTags.pose) parts.push(photoTags.pose);
+        let location = photoTags.location;
+        if(!location && contextLines && contextLines.trim().length>0){
+          try { location = stripAiTags(await generateText(buildScenarioPrompt(c.name, contextLines))).trim().replace(/^["']|["']$/g, '').replace(/\.$/, ''); } catch(e){}
+        }
+        if(!location){ let locs=['at home','in the bedroom','at work','at a cafe','on the couch','in the kitchen','outdoors','at a restaurant','in the car','at the gym']; location = locs[Math.floor(Math.random()*locs.length)]; }
+        parts.push(`in ${location}`);
+        if(photoTags.request) parts.push(`The photo shows: ${photoTags.request}`);
+        parts.push('holding phone, looking at camera, natural lighting, casual selfie');
+        if(c.raceCategory === 'anthro') parts.push('anthropomorphic furry character, furry art, humanoid body');
+        parts.push(style + ', ' + GLOBAL_IMG_SUFFIX);
+        url = await generateImage(parts.join(', '), {resolution:'512x512'});
+      } else {
+        let subject = photoTags.request || 'a photo';
+        let parts = [subject];
+        let location = photoTags.location;
+        if(!location && contextLines && contextLines.trim().length>0){
+          try { location = stripAiTags(await generateText(buildScenarioPrompt(c.name, contextLines))).trim().replace(/^["']|["']$/g, '').replace(/\.$/, ''); } catch(e){}
+        }
+        if(!location){ let locs=['at home','in the bedroom','at work','at a cafe','on the couch','in the kitchen','outdoors','at a restaurant','in the car','at the gym']; location = locs[Math.floor(Math.random()*locs.length)]; }
+        parts.push(`taken ${location}`);
+        parts.push('casual phone photography, natural lighting, slightly candid framing, authentic personal photo, the photographer is not visible in the frame');
+        if(c.raceCategory === 'anthro') parts.push('anthropomorphic furry character, furry art, humanoid body');
+        parts.push(style + ', ' + GLOBAL_IMG_SUFFIX);
+        url = await generateImage(parts.join(', '), {resolution:'512x512'});
+      }
+
+      caption = '';
+      try {
+        let subject = photoTags.request || (isSelfie ? 'a selfie' : 'a photo');
+        let capPrompt = contextLines && contextLines.trim().length>0
+          ? `You are ${c.name}. Recent conversation:\n${contextLines}\n\nYou just sent someone ${subject}. Write a very short, casual caption (max 12 words) to go with it. Be concise and natural. Output only the caption text.`
+          : `You are ${c.name}. You just sent someone ${subject} in a text conversation. Write a very short, casual caption (max 12 words). Output only the caption text.`;
+        caption = stripAiTags((await generateText(capPrompt)).trim().replace(/^["']|["']$/g, ''));
+      } catch(e){}
+    } else {
+      if(isSelfie){
+        let scenario = '';
+        if(contextLines && contextLines.trim().length>0){
+          try { scenario = stripAiTags(await generateText(buildScenarioPrompt(c.name, contextLines))).trim().replace(/^["']|["']$/g, '').replace(/\.$/, ''); } catch(e){}
+        }
+        if(!scenario){
+          let scenarios = ['laying in bed','at work','walking down the street','cooking in the kitchen','sitting at a cafe','at the gym','watching TV on the couch','driving a car','at the beach','reading a book','playing video games','getting ready','out for a run','in the park','at a restaurant'];
+          scenario = scenarios[Math.floor(Math.random()*scenarios.length)];
+        }
+        let prompt = buildAiSelfieImagePrompt(c, scenario, style, false);
+        url = await generateImage(prompt, {resolution:'512x512'});
+        caption = '';
+        try { caption = stripAiTags((await generateText(buildSelfieCaptionPrompt(c, scenario, contextLines))).trim().replace(/^["']|["']$/g, '')); } catch(e){}
+      } else {
+        let photoIdea = '';
+        if(contextLines && contextLines.trim().length>0){
+          try {
+            let ideaPrompt = `You are ${c.name}, a ${c.race||'person'} with interests including ${(c.interests||[]).slice(0,5).join(', ')}. Based on the recent conversation below, briefly describe a single photo (NOT a selfie of your face) you might send right now that is relevant to the chat. Examples: "my lunch", "the sunset from my window", "my cat sleeping", "the book I'm reading", "my new shoes", "the class project". Output ONLY the short description (max 12 words), nothing else.\n\n${contextLines}`;
+            photoIdea = stripAiTags(await generateText(ideaPrompt)).trim().replace(/^["']|["']$/g, '').replace(/\.$/, '');
+          } catch(e){}
+        }
+        if(!photoIdea){
+          let fallbacks = ['what I am eating right now','my pet','the view outside my window','my desk/workspace','my hobby project','a funny sign I saw','my latest small purchase','the coffee I am drinking'];
+          photoIdea = fallbacks[Math.floor(Math.random()*fallbacks.length)];
+        }
+
+        let prompt = `Photo taken by ${c.name}`;
+        if(c.physical) prompt += `, ${c.physical}`;
+        if(c.clothingStyle) prompt += `, wearing an outfit in the ${c.clothingStyle} style`;
+        if(c.race) prompt += `, ${c.race}`;
+        if(c.ethnicity) prompt += `, ${c.ethnicity}`;
+        if(c.gender) prompt += `, ${c.gender}`;
+        let photoLocation = '';
+        if(contextLines && contextLines.trim().length>0){
+          try { photoLocation = stripAiTags(await generateText(buildScenarioPrompt(c.name, contextLines))).trim().replace(/^["']|["']$/g, '').replace(/\.$/, ''); } catch(e){}
+        }
+        if(!photoLocation){ let locs=['at home','in the bedroom','at work','at a cafe','on the couch','in the kitchen','outdoors','at a restaurant','in the car','at the gym']; photoLocation = locs[Math.floor(Math.random()*locs.length)]; }
+        prompt += `. The photo shows: ${photoIdea}. Taken ${photoLocation}. Casual phone photography, natural lighting, slightly candid framing, authentic personal photo`;
+        if(c.raceCategory === 'anthro') prompt += ', anthropomorphic furry character, furry art, humanoid body';
+        prompt += ', ' + style + ', ' + GLOBAL_IMG_SUFFIX;
+
+        url = await generateImage(prompt, {resolution:'512x512'});
+
+        caption = '';
+        try {
+          let capPrompt;
+          if(contextLines && contextLines.trim().length>0) capPrompt = `You are ${c.name}. Recent conversation:\n${contextLines}\n\nYou just sent someone a photo showing "${photoIdea}". Write a very short, casual caption (max 12 words) to go with it. Be concise and natural. Output only the caption text.`;
+          else capPrompt = `You are ${c.name}. You just sent someone a photo showing "${photoIdea}" in a text conversation. Write a very short, casual caption (max 12 words). Output only the caption text.`;
+          caption = stripAiTags((await generateText(capPrompt)).trim().replace(/^["']|["']$/g, ''));
+        } catch(e){}
+      }
+    }
+    return {url, caption};
+  }
+
+  // --- Messages App ---
+  function renderConversations(){
+    if(!contacts.length){ conversationsListEl.innerHTML='<div style="text-align:center;color:#666;padding:40px;">No contacts yet.<br>Match in Dating and ask for their number!</div>'; return; }
+    conversationsListEl.innerHTML = contacts.map(c => `
+      <div class="elevated-item" onclick="openMsgChat(${c.id})" style="cursor:pointer;padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-weight:600;">${c.name}</span>
+        <div style="display:flex;align-items:center;gap:8px;">${unreadBadge(c.unreadCount||0)}<span class="sub">›</span></div>
+      </div>`).join('');
+  }
+
+  function openMsgChat(id){
+    let c = contacts.find(x=>x.id===id);
+    if(!c) return;
+    currentMsgContact = c;
+    startChat(c, msgChatViewEl, msgChatHistoryEl, msgChatInput, sendMsgBtn, msgChatNameEl, false);
+  }
+
+  function closeMsgChat(){ currentMsgContact=null; endChat(); }
+
+  // --- Camera App ---
+  async function takePhoto(){
+    if(isGenerating) return;
+    let p = photoDescInput.value.trim(); if(!p) return;
+    let style = pictureStyleMap[globalPictureStyle];
+    if(style) p += ', ' + style;
+    p += ', ' + GLOBAL_IMG_SUFFIX;
+    isGenerating = true; takePhotoBtn.disabled = true; cameraLoadingEl.hidden = false; cameraPreviewEl.innerHTML = '';
+    try{
+      let url = await generateImage(p, {resolution:'512x512'});
+      cameraPreviewEl.innerHTML = `<img src="${url}" style="max-width:100%;border-radius:12px;">`;
+      cameraRoll.push({id:Date.now(), prompt:p, desc: photoDescInput.value.trim(), dataUrl:url});
+      persistDatingData();
+      if(galleryPreviewEl) galleryPreviewEl.innerHTML = '';
+    }catch(e){ cameraPreviewEl.innerHTML = '<div style="color:#ff3b30;">Failed to generate image.</div>'; }
+    finally { isGenerating = false; takePhotoBtn.disabled = false; cameraLoadingEl.hidden = true; }
+  }
+
+  function renderCameraRoll(){
+    if(!cameraRoll.length){ cameraRollEl.innerHTML = ''; noPhotosEl.hidden = false; return; }
+    noPhotosEl.hidden = true;
+    cameraRollEl.innerHTML = cameraRoll.map(img => `
+      <div style="position:relative;aspect-ratio:1;background:#ddd;border-radius:10px;overflow:hidden;cursor:pointer;" onclick="viewPhoto(${img.id})">
+        <img src="${img.dataUrl}" style="width:100%;height:100%;object-fit:cover;">
+        <button onclick="event.stopPropagation();deletePhoto(${img.id})" style="position:absolute;top:4px;right:4px;background:rgba(255,59,48,0.9);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;">🗑</button>
+      </div>`).join('');
+  }
+
+  function viewPhoto(id){
+    let img = cameraRoll.find(x=>x.id===id); if(!img) return;
+    let html = `<img src="${img.dataUrl}" style="max-width:100%;border-radius:12px;"><div style="font-size:12px;color:#555;margin-top:8px;padding:0 4px;">${escapeHtml(img.desc || img.prompt)}</div>`;
+    if(currentCameraTab==='gallery') galleryPreviewEl.innerHTML = html; else cameraPreviewEl.innerHTML = html;
+  }
+
+  function deletePhoto(id){
+    if(!confirm('Delete this photo?')) return;
+    cameraRoll = cameraRoll.filter(img=>img.id!==id);
+    if(userProfile.portraitPhotoId===id){ userProfile.portraitPhotoId=null; userProfile.portraitPhotoDesc=''; renderProfilePhotoGrid(); }
+    persistDatingData();
+    if(currentCameraTab==='gallery'){ renderCameraRoll(); if(galleryPreviewEl) galleryPreviewEl.innerHTML=''; }
+  }
+
+  // --- Image Picker for Messages ---
+  function openCameraRollPicker(){
+    if(!cameraRoll.length){ alert('Camera roll is empty! Take some photos first.'); return; }
+    selectedPickerImageId = null;
+    imgCaptionInput.value = '';
+    renderImgPickerGrid();
+    imgPickerModalEl.hidden = false;
+  }
+
+  function renderImgPickerGrid(){
+    imgPickerGridEl.innerHTML = cameraRoll.map(img => `
+      <div style="aspect-ratio:1;background:#ddd;border-radius:10px;overflow:hidden;cursor:pointer;border:3px solid ${selectedPickerImageId===img.id?'#007aff':'transparent'};box-sizing:border-box;" onclick="selectedPickerImageId=${img.id};renderImgPickerGrid();">
+        <img src="${img.dataUrl}" style="width:100%;height:100%;object-fit:cover;">
+      </div>`).join('');
+  }
+
+  async function sendImageToChat(){
+    imgPickerModalEl.hidden = true;
+    if(!activeChat.partner || activeChat.partner.isGenerating || selectedPickerImageId == null) return;
+    userTyping = false; clearTimeout(userTypingTimer);
+    let partner = activeChat.partner, sendBtn = activeChat.sendBtn;
+    let img = cameraRoll.find(x=>x.id===selectedPickerImageId); if(!img) return;
+    let caption = imgCaptionInput.value.trim();
+    partner.history.push({rp:roleplayMode,sender:'You', text:img.dataUrl, type:'image', time:Date.now()});
+    if(caption) partner.history.push({rp:roleplayMode,sender:'You', text:caption, time:Date.now()});
+    renderChat();
+    partner.isGenerating = true; sendBtn.disabled = true;
+    let tid = 't'+Date.now();
+    partner.history.push({rp:roleplayMode,sender:partner.name, text:'...', id:tid}); renderChat();
+    let appContext = activeChat.isDating ? 'You are on a dating app messaging a match.' : 'You are texting a friend through the Messages app.';
+    let imageDesc = img.desc || 'a photo';
+    let hist = formatHistory(partner);
+    let prompt = buildImageReactionPrompt(partner, appContext, imageDesc, caption, hist, roleplayMode ? 'roleplay mode (*actions*, "speech", (thoughts))' : 'text mode');
+    try {
+      let rawReaction = await generateText(prompt);
+      let photoTags = extractPhotoTags(rawReaction);
+      let photoReq = extractAiPhotoIntent(rawReaction);
+      let reply = stripAiTags(rawReaction);
+      removeHistoryEntry(partner, tid);
+
+      let hasPhotoIntent = photoReq || (photoTags && (photoTags.type || photoTags.pose || photoTags.clothes || photoTags.location));
+      if(hasPhotoIntent){
+        if(photoReq?.pre) partner.history.push({rp:roleplayMode,sender:partner.name, text:photoReq.pre, time:Date.now()});
+        let pid = 'p'+Date.now();
+        partner.history.push({rp:roleplayMode,sender:partner.name, text:'...', id:pid});
+        renderChat();
+        try {
+          let recentContext = buildRecentContext(partner, 6);
+          let {url, caption} = await generateAiPhoto(partner, recentContext, false, photoTags);
+          removeHistoryEntry(partner, pid);
+          partner.history.push({rp:roleplayMode,sender:partner.name, text:url, type:'image', time:Date.now()});
+          if(caption) partner.history.push({rp:roleplayMode,sender:partner.name, text:caption, time:Date.now()});
+        } catch(e) {
+          removeHistoryEntry(partner, pid);
+          partner.history.push({rp:roleplayMode,sender:partner.name, text:"I tried to send one back but it didn't go through!", time:Date.now()});
+        }
+        if(photoReq?.post) partner.history.push({rp:roleplayMode,sender:partner.name, text:photoReq.post, time:Date.now()});
+      } else {
+        partner.history.push({rp:roleplayMode,sender:partner.name, text:reply, time:Date.now()});
+      }
+
+      renderChat();
+      setAiCooldown(partner.id);
+      persistDatingData();
+    } catch(e) {
+      removeHistoryEntry(partner, tid);
+      renderChat();
+      throw e;
+    } finally { partner.isGenerating = false; sendBtn.disabled = false; }
+  }
+
+  // --- Contacts App ---
+  function renderContacts(){
+    if(!contacts.length){ contactsListEl.innerHTML='<div style="text-align:center;color:#666;padding:40px;">No contacts yet.</div>'; return; }
+    contactsListEl.innerHTML = contacts.map(c => `
+      <div class="elevated-item" style="padding:14px 16px;margin-bottom:10px;">
+        <div style="font-weight:600;">${c.name}</div><div class="sub" style="margin-top:2px;">${c.profession}</div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn" style="font-size:12px;padding:6px 12px;flex:1;" onclick="openApp('messages');openMsgChat(${c.id})">Message</button>
+          <button class="btn secondary" style="font-size:12px;padding:6px 12px;flex:1;" onclick="showProfile(contacts.find(x=>x.id===${c.id}))">Profile</button>
+        </div>
+      </div>`).join('');
+  }
+
+  // --- Persistence ---
+  function persistSettings(){
+    kv.settings.set('globalPictureStyle', globalPictureStyle);
+    kv.settings.set('darkMode', darkMode);
+    kv.settings.set('roleplayMode', roleplayMode);
+    kv.settings.set('debugMode', debugMode);
+  }
+  function persistDatingData(){
+    kv.data.set('userProfile', userProfile);
+    kv.data.set('cameraRoll', cameraRoll);
+    kv.data.set('matches', matches);
+    kv.data.set('contacts', contacts);
+    kv.data.set('currentCandidate', currentCandidate);
+    kv.data.set('datingSettings', datingSettings);
+    kv.data.set('assistantHistory', assistantHistory);
+    kv.data.set('recentAnthroSpecies', recentAnthroSpecies);
+  }
+  async function resetAllData(){
+    if(!confirm('Permanently delete all matches, photos, contacts, and settings? This cannot be undone.')) return;
+    await kv.data.delete('userProfile');
+    await kv.data.delete('cameraRoll');
+    await kv.data.delete('matches');
+    await kv.data.delete('contacts');
+    await kv.data.delete('currentCandidate');
+    await kv.data.delete('hasOpenedDating');
+    await kv.data.delete('datingSettings');
+    await kv.data.delete('assistantHistory');
+    await kv.data.delete('recentAnthroSpecies');
+    await kv.settings.delete('globalPictureStyle');
+    await kv.settings.delete('darkMode');
+    await kv.settings.delete('roleplayMode');
+    await kv.settings.delete('debugMode');
+    location.reload();
+  }
+  async function loadPersistentData(){
+    try {
+      let s = await kv.settings.get('globalPictureStyle');
+      if(s){ globalPictureStyle = s; globalPictureStyleSelect.value = s; }
+      let d = await kv.settings.get('darkMode');
+      if(d != null){ darkMode = d; screenEl.classList.toggle('dark', darkMode); darkModeBtn.textContent = darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'; }
+      let rp = await kv.settings.get('roleplayMode');
+      if(rp != null) roleplayMode = rp;
+      let db = await kv.settings.get('debugMode');
+      if(db != null) debugMode = db;
+      let p = await kv.data.get('userProfile'); if(p) userProfile = p;
+      let r = await kv.data.get('cameraRoll'); if(r) cameraRoll = r;
+      let m = await kv.data.get('matches'); if(m) matches = m;
+      let c = await kv.data.get('contacts'); if(c) contacts = c;
+      // Re-link contacts to their match objects so histories stay unified
+      contacts = contacts.map(contact => {
+        let mm = matches.find(m => m.id === contact.id);
+        if(mm) {
+          let map = new Map();
+          [...mm.history, ...contact.history].forEach(h => {
+            let key = h.id || ((h.time||0)+'|'+(h.text||'')+'|'+h.sender);
+            if(!map.has(key)) map.set(key, h);
+          });
+          let merged = Array.from(map.values()).sort((a,b) => (a.time||0)-(b.time||0));
+          mm.history.length = 0;
+          merged.forEach(h => mm.history.push(h));
+          return mm;
+        }
+        return contact;
+      });
+      let cand = await kv.data.get('currentCandidate'); if(cand) currentCandidate = cand;
+      let hd = await kv.data.get('hasOpenedDating'); if(hd != null) hasOpenedDating = hd;
+      let ds = await kv.data.get('datingSettings'); if(ds){
+        datingSettings = ds;
+        if(datingSettings.useCustomRaces === undefined) datingSettings.useCustomRaces = false;
+        if(!datingSettings.customRaces) datingSettings.customRaces = [];
+      }
+      let ah = await kv.data.get('assistantHistory'); if(ah) assistantHistory = ah;
+      let ras = await kv.data.get('recentAnthroSpecies'); if(ras) recentAnthroSpecies = ras;
+      if(!recentAnthroSpecies.length && (matches.length || currentCandidate)){
+        matches.forEach(m => { if(m.raceCategory === 'anthro' && m.race && m.race !== 'Anthropomorphic animal') recentAnthroSpecies.push(m.race); });
+        if(currentCandidate && currentCandidate.raceCategory === 'anthro' && currentCandidate.race && currentCandidate.race !== 'Anthropomorphic animal') recentAnthroSpecies.push(currentCandidate.race);
+        if(recentAnthroSpecies.length > 12) recentAnthroSpecies = recentAnthroSpecies.slice(-12);
+      }
+      renderProfilePhotoGrid();
+      startAiChatTimer();
+      renderAppBadges();
+    } catch(e){ console.error('loadPersistentData error', e); }
+  }
+
+  // --- Utilities ---
+  function escapeHtml(str){ return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // --- Init ---
+  let prefOpts = {
+    ethnicity: ['East Asian','Black / African','Latino / Hispanic','White / Caucasian','Middle Eastern','South Asian','Southeast Asian','Native American','Pacific Islander','Mixed'],
+    race: ['Human','Elf','Anthropomorphic animal','Dragon','Orc','Angel','Demon','Other'],
+    gender: ['Male','Female','FtM trans','MtF trans']
+  };
+  Object.entries(prefOpts).forEach(([k, arr]) => {
+    window[k+'ChecksEl'].innerHTML = arr.map(v => `<label class="checkLabel"><input type="checkbox" class="${k}Check" value="${v}" checked> ${v}</label>`).join('');
+  });
+  document.querySelectorAll('.raceCheck').forEach(cb => {
+    if(cb.value === 'Other') cb.onchange = () => { if(cb.checked) openCustomRaceModal(); };
+  });
+  goHome();
+  loadPersistentData();
+</script>
+</body>
+</html>

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>perchance-architect — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!--
+Perchance Architect Studio
+A self-contained editor, validator, and live generator for Perchance-style Lists DSL.
+Extension point: Add plugin objects to the pluginRegistry to extend the bottom toolbar.
+This version includes a global safety net for sandbox-level fetch failures.
+-->
+
+<div id="appCtn" style="text-align:left; display:flex; flex-direction:column; height:100vh; font-family:system-ui,-apple-system,sans-serif; background:#0a0a12; color:#e0e0e0; overflow:hidden;">
+  <header style="padding:10px 18px; background:#16162a; border-bottom:1px solid #2a2a45; display:flex; gap:10px; align-items:center; flex-shrink:0;">
+    <h1 style="margin:0; font-size:1.1rem; color:#fff; letter-spacing:0.5px;">🎲 Perchance Architect</h1>
+    <button id="generateBtn" onclick="generateOutput()" style="padding:5px 12px; background:#e94560; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">Generate</button>
+    <button id="validateBtn" onclick="validateLists()" style="padding:5px 12px; background:#2a2a45; color:#ccc; border:1px solid #3a3a5c; border-radius:4px; cursor:pointer;">Validate</button>
+    <button id="exportBtn" onclick="exportJson()" style="padding:5px 12px; background:#2a2a45; color:#ccc; border:1px solid #3a3a5c; border-radius:4px; cursor:pointer;">Export JSON</button>
+    <select id="exampleSelect" onchange="loadExample(this.value)" style="padding:5px 8px; background:#0a0a12; color:#ccc; border:1px solid #3a3a5c; border-radius:4px; margin-left:4px;">
+      <option value="">Load Example…</option>
+      <option value="names">Fantasy Names</option>
+      <option value="quests">Quest Hooks</option>
+      <option value="items">Magic Items</option>
+    </select>
+    <span id="statusEl" style="margin-left:auto; font-size:0.8rem; color:#888;">Ready</span>
+  </header>
+
+  <div style="display:flex; flex:1; overflow:hidden;">
+    <div id="editorCtn" style="flex:1; display:flex; flex-direction:column; min-width:0;">
+      <div style="padding:6px 12px; background:#121225; color:#777; font-size:0.75rem; border-bottom:1px solid #222;">Perchance DSL — define lists as identifiers ending with a colon, items prefixed with a dash.</div>
+      <textarea id="editorEl" spellcheck="false" style="flex:1; background:#0f0f1a; color:#c8c8e0; border:none; padding:14px; font-family:ui-monospace,SFMono-Regular,monospace; font-size:13px; resize:none; outline:none; line-height:1.5;"></textarea>
+    </div>
+
+    <div id="outputCtn" style="flex:1; display:flex; flex-direction:column; min-width:0; border-left:1px solid #222;">
+      <div style="padding:6px 12px; background:#121225; color:#777; font-size:0.75rem; border-bottom:1px solid #222;">Live Output</div>
+      <div id="outputEl" style="flex:1; padding:14px; overflow:auto; white-space:pre-wrap; font-size:1rem; color:#f0f0ff;"></div>
+    </div>
+  </div>
+
+  <div id="pluginBarCtn" style="padding:10px 18px; background:#16162a; border-top:1px solid #2a2a45; display:flex; gap:8px; align-items:center; flex-shrink:0;">
+    <span style="font-size:0.75rem; color:#666; text-transform:uppercase; letter-spacing:1px;">Plugins</span>
+    <button onclick="pluginJsonViewer()" style="padding:5px 10px; background:#0f0f1a; color:#aaa; border:1px solid #2a2a45; border-radius:4px; cursor:pointer; font-size:0.85rem;">JSON Viewer</button>
+    <button onclick="pluginListTree()" style="padding:5px 10px; background:#0f0f1a; color:#aaa; border:1px solid #2a2a45; border-radius:4px; cursor:pointer; font-size:0.85rem;">List Tree</button>
+    <button onclick="pluginStats()" style="padding:5px 10px; background:#0f0f1a; color:#aaa; border:1px solid #2a2a45; border-radius:4px; cursor:pointer; font-size:0.85rem;">Stats</button>
+  </div>
+</div>
+
+<div id="modalCtn" hidden style="position:fixed; inset:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:100; padding:20px;">
+  <div style="background:#16162a; border:1px solid #2a2a45; border-radius:6px; width:100%; max-width:560px; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+    <div style="padding:12px 16px; border-bottom:1px solid #2a2a45; display:flex; justify-content:space-between; align-items:center;">
+      <span id="modalTitleEl" style="color:#fff; font-weight:600; font-size:0.95rem;">Plugin</span>
+      <button onclick="modalCtn.hidden=true" style="background:none; border:none; color:#888; font-size:1.2rem; cursor:pointer; line-height:1;">✕</button>
+    </div>
+    <div id="modalBodyEl" style="flex:1; padding:16px; overflow:auto; color:#ccc; font-family:ui-monospace,monospace; font-size:0.85rem; white-space:pre-wrap;"></div>
+  </div>
+</div>
+
+<script>
+  // Sandbox safety: suppress external fetch failures from platform plugins that surface as unhandled rejections
+  window.addEventListener('unhandledrejection', function(ev) {
+    let msg = ev.reason && (ev.reason.message || String(ev.reason));
+    if (msg && msg.includes('Failed to fetch')) {
+      ev.preventDefault();
+      console.warn('Suppressed sandbox fetch error:', msg);
+    }
+  });
+
+  // Core Perchance Engine — modular, reusable, sandbox-safe
+  let engine = {
+    lists: {},
+    parse(source) {
+      let lines = source.split('\n');
+      let current = null;
+      this.lists = {};
+      for (let raw of lines) {
+        let line = raw.trim();
+        if (!line || line.startsWith('//')) continue;
+        if (!line.startsWith('-')) {
+          let name = line.replace(/:$/, '').trim();
+          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+            current = name;
+            this.lists[current] = [];
+          } else {
+            current = null;
+          }
+        } else if (current) {
+          let item = line.slice(1).trim();
+          if (item) this.lists[current].push(item);
+        }
+      }
+      return this.lists;
+    },
+    resolve(key) {
+      let items = this.lists[key];
+      if (!items || items.length === 0) return `[${key}]`;
+      return items[Math.floor(Math.random() * items.length)];
+    },
+    generate(template) {
+      let result = template;
+      for (let i = 0; i < 10; i++) {
+        let m = result.match(/\[([a-zA-Z_][a-zA-Z0-9_]*)\]/);
+        if (!m) break;
+        let key = m[1];
+        if (this.lists[key]) result = result.replace(m[0], this.resolve(key));
+        else break;
+      }
+      return result;
+    }
+  };
+
+  let examples = {
+    names: `root:\n- [prefix][suffix] the [title]\n\nprefix:\n- Ael\n- Mor\n- Thal\n- Bel\n- Syl\n- Dur\n- Kael\n- Nyx\n\nsuffix:\n- arin\n- orin\n- aria\n- on\n- eth\n- ous\n- ia\n- um\n\ntitle:\n- Brave\n- Wise\n- Cunning\n- Silent\n- Bold\n- Ancient`,
+    quests: `root:\n- A [enemy] has stolen the [artifact] from [place]. You must [action] before [event]!\n- The [npc] of [place] seeks a champion to [action].\n\nenemy:\n- shadow dragon\n- rogue wizard\n- cursed knight\n- goblin king\n\nartifact:\n- Crown of Dawn\n- Obsidian Heart\n- Silver Chalice\n- Tome of Stars\n\nplace:\n- the Crystal Spire\n- Whispering Woods\n- Sunken Citadel\n- Moonlit Shrine\n\naction:\n- recover the artifact\n- slay the beast\n- break the curse\n- forge an alliance\n\nevent:\n- the eternal night falls\n- the kingdom crumbles\n- the rift opens\n- magic fades forever\n\nnpc:\n- High Oracle\n- exiled prince\n- guild master\n- ancient spirit`,
+    items: `root:\n- [name] — a [type] that [effect].\n\nname:\n- Emberfang\n- Frostweave\n- Voidmantle\n- Dawnshield\n- Nightwhisper\n\ntype:\n- flaming longsword\n- ethereal robe\n- cursed ring\n- living shield\n- spectral dagger\n\neffect:\n- burns with eternal flame\n- freezes time for three seconds\n- devours light around it\n- sings when danger is near\n- phases through solid matter`
+  };
+
+  function loadExample(key) {
+    if (!key) return;
+    editorEl.value = examples[key];
+    statusEl.textContent = 'Loaded ' + key + ' example';
+    generateOutput();
+  }
+
+  function generateOutput() {
+    engine.parse(editorEl.value);
+    if (!engine.lists.root) {
+      outputEl.textContent = 'Error: No root list defined. Add a list named root: with at least one item.';
+      statusEl.textContent = 'Missing root';
+      return;
+    }
+    outputEl.textContent = engine.generate('[root]');
+    statusEl.textContent = 'Generated';
+  }
+
+  function validateLists() {
+    let lists = engine.parse(editorEl.value);
+    let defined = new Set(Object.keys(lists));
+    let errors = [];
+    if (!defined.has('root')) errors.push('Missing required list "root".');
+    for (let [name, items] of Object.entries(lists)) {
+      if (items.length === 0) errors.push('List "' + name + '" is empty.');
+      for (let item of items) {
+        let refs = item.match(/\[([a-zA-Z_][a-zA-Z0-9_]*)\]/g) || [];
+        for (let r of refs) {
+          let k = r.slice(1, -1);
+          if (!defined.has(k)) errors.push('Undefined reference [' + k + '] inside list "' + name + '".');
+        }
+      }
+    }
+    if (errors.length === 0) {
+      outputEl.textContent = '✅ Valid.\nLists: ' + Array.from(defined).join(', ');
+      statusEl.textContent = 'Valid';
+    } else {
+      outputEl.textContent = '❌ Issues:\n' + errors.join('\n');
+      statusEl.textContent = errors.length + ' issue(s)';
+    }
+  }
+
+  function exportJson() {
+    try {
+      engine.parse(editorEl.value);
+      let blob = new Blob([JSON.stringify(engine.lists, null, 2)], {type: 'application/json'});
+      let a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'perchance-lists.json';
+      a.click();
+      statusEl.textContent = 'Exported JSON';
+    } catch (e) {
+      statusEl.textContent = 'Export failed';
+      console.error(e);
+    }
+  }
+
+  function showModal(title, body) {
+    modalTitleEl.textContent = title;
+    modalBodyEl.textContent = body;
+    modalCtn.hidden = false;
+  }
+
+  function pluginJsonViewer() {
+    engine.parse(editorEl.value);
+    showModal('JSON Viewer', JSON.stringify(engine.lists, null, 2));
+  }
+
+  function pluginListTree() {
+    engine.parse(editorEl.value);
+    let out = [];
+    for (let [name, items] of Object.entries(engine.lists)) {
+      out.push(name + ' (' + items.length + ')');
+      items.forEach(function(it) { out.push('  - ' + it); });
+    }
+    showModal('List Tree', out.join('\n') || 'No lists defined.');
+  }
+
+  function pluginStats() {
+    engine.parse(editorEl.value);
+    let names = Object.keys(engine.lists);
+    let totalItems = Object.values(engine.lists).reduce(function(a, b) { return a + b.length; }, 0);
+    let avg = names.length ? (totalItems / names.length).toFixed(1) : 0;
+    showModal('Stats', 'Lists: ' + names.length + '\nTotal items: ' + totalItems + '\nAvg per list: ' + avg);
+  }
+
+  // Boot
+  editorEl.value = examples.names;
+  generateOutput();
+</script>
+</body>
+</html>

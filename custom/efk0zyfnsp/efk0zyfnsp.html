@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>efk0zyfnsp — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+
+<div id="appCtn" style="max-width:800px; margin:0 auto; text-align:left; font-family:system-ui,-apple-system,sans-serif; color:#e0d0d0; background:#1a0a0a; min-height:100vh; padding:24px;">
+  <h1 style="margin:0 0 16px; color:#ff4d4d; text-align:center; text-shadow:0 0 8px rgba(255,77,77,0.4);">NSFW Scene Weaver</h1>
+
+  <div id="controlsCtn" style="display:flex; gap:10px; justify-content:center; margin-bottom:20px; flex-wrap:wrap;">
+    <button id="genTextBtn" onclick="generateSceneText()" style="padding:10px 20px; background:#ff4d4d; border:none; color:#1a0a0a; font-weight:bold; border-radius:6px; cursor:pointer;">Generate Scene</button>
+    <button id="genImgBtn" onclick="generateSceneImage()" hidden style="padding:10px 20px; background:#d92626; border:none; color:#fff; font-weight:bold; border-radius:6px; cursor:pointer;">Generate Image</button>
+    <button id="saveBtn" onclick="saveCurrentScene()" hidden style="padding:10px 20px; background:#4a1a1a; border:1px solid #ff4d4d; color:#ff4d4d; font-weight:bold; border-radius:6px; cursor:pointer;">Save Scene</button>
+  </div>
+
+  <div id="sceneOutputCtn" style="background:#2a1515; border:1px solid #4a1a1a; border-radius:8px; padding:16px; margin-bottom:20px; line-height:1.6; min-height:120px;">
+    <div id="sceneTextCtn" style="white-space:pre-wrap;">Click "Generate Scene" to begin...</div>
+  </div>
+
+  <div id="imageAreaCtn" hidden style="text-align:center; margin-bottom:20px;">
+    <img id="sceneImgEl" style="max-width:100%; border-radius:8px; border:2px solid #4a1a1a; transition:opacity 0.3s ease;">
+  </div>
+
+  <h2 style="color:#ff4d4d; border-bottom:1px solid #4a1a1a; padding-bottom:8px;">Saved Scenes</h2>
+  <div id="galleryCtn" style="margin-bottom:24px;"></div>
+
+  <h2 style="color:#ff4d4d; border-bottom:1px solid #4a1a1a; padding-bottom:8px;">Community Comments</h2>
+  <div id="commentsCtn"></div>
+  <script>
+    if(typeof commentsPlugin === 'function') {
+      commentsCtn.innerHTML = commentsPlugin({channel:"nsfwSceneWeaver", width:"100%", height:"400px"});
+    } else {
+      commentsCtn.innerHTML = '<div style="color:#888; padding:10px;">Comments plugin is unavailable in this context.</div>';
+    }
+  </script>
+</div>
+
+<style>
+  body { text-align:left !important; background:#1a0a0a; }
+  #appCtn button:hover { filter:brightness(1.2); }
+  #appCtn button:disabled { opacity:0.6; cursor:not-allowed; filter:grayscale(0.5); }
+</style>
+
+<script>
+  // ---------------------------------------------------------------------------
+  // SceneWeaver Plugin Core — Modular, extensible scene generation system
+  // ---------------------------------------------------------------------------
+  let SceneWeaver = {
+    storageKey: "nsfwScenes_v2",
+
+    // Extension Hook: intercept/process raw evaluated text before DOM insertion
+    processSceneText(text) { return text; },
+
+    // Extension Hook: intercept/process final image prompt before generation
+    processImagePrompt(prompt) { return prompt; },
+
+    // Evaluate the master list and inject it into the output container
+    generateText() {
+      genTextBtn.disabled = true;
+      genTextBtn.textContent = "Weaving...";
+
+      sceneTextCtn.innerHTML = "[nsfwSceneExplicit]";
+      update(sceneTextCtn);
+
+      // Reveal downstream controls; reset image area
+      genImgBtn.hidden = false;
+      saveBtn.hidden = false;
+      imageAreaCtn.hidden = true;
+      sceneImgEl.removeAttribute("src");
+      sceneImgEl.style.opacity = "1";
+
+      genTextBtn.disabled = false;
+      genTextBtn.textContent = "Generate Scene";
+    },
+
+    // Build an image prompt from shared lists, then call the global generator
+    async generateImage() {
+      let basePrompt = "explicit NSFW digital painting of a [nsfwArchetype] [nsfwSpecies], [nsfwGenderPresentation], [nsfwPhysique] body, [nsfwSkin] skin, [nsfwClothingState], [nsfwSetting], [nsfwMood] atmosphere, highly detailed skin, cinematic lighting, adult content, anatomically correct, volumetrics, 8k render";
+
+      // Use a temporary off-DOM element so Perchance can evaluate the bracket lists
+      let tmpEl = document.createElement("div");
+      tmpEl.hidden = true;
+      document.body.appendChild(tmpEl);
+      tmpEl.innerHTML = basePrompt;
+      update(tmpEl);
+      let rawPrompt = tmpEl.textContent.trim();
+      tmpEl.remove();
+
+      let promptText = this.processImagePrompt(rawPrompt);
+
+      genImgBtn.disabled = true;
+      genImgBtn.textContent = "Rendering...";
+      imageAreaCtn.hidden = false;
+      sceneImgEl.style.opacity = "0.3"; // loading indicator via opacity
+
+      try {
+        let dataUrl = await generateImage(promptText, {resolution:"768x768"});
+        sceneImgEl.src = dataUrl;
+        sceneImgEl.onload = () => { sceneImgEl.style.opacity = "1"; };
+      } catch(err) {
+        console.error(err);
+        sceneImgEl.alt = "Image generation failed.";
+        sceneImgEl.style.opacity = "1";
+      }
+
+      genImgBtn.disabled = false;
+      genImgBtn.textContent = "Generate Image";
+    },
+
+    // Persistent storage helpers
+    getScenes() {
+      try { return JSON.parse(localStorage[this.storageKey] || "[]"); } catch(e) { return []; }
+    },
+
+    saveScenes(scenes) {
+      localStorage[this.storageKey] = JSON.stringify(scenes);
+    },
+
+    // Persist the currently displayed scene
+    saveCurrent() {
+      let current = sceneTextCtn.textContent.trim() || sceneTextCtn.innerText.trim();
+      if(!current || current === 'Click "Generate Scene" to begin...') return;
+
+      let scenes = this.getScenes();
+      scenes.push({ text: sceneTextCtn.innerHTML, time: Date.now() });
+      this.saveScenes(scenes);
+      this.renderGallery();
+    },
+
+    // Remove a scene by its index and redraw the gallery
+    deleteScene(idx) {
+      let scenes = this.getScenes();
+      scenes.splice(idx, 1);
+      this.saveScenes(scenes);
+      this.renderGallery();
+    },
+
+    // Render the last 20 saved scenes in reverse chronological order
+    renderGallery() {
+      let scenes = this.getScenes();
+      if(!scenes.length) {
+        galleryCtn.innerHTML = '<div style="color:#888; font-size:0.9em;">No saved scenes yet.</div>';
+        return;
+      }
+
+      galleryCtn.innerHTML = scenes.slice(-20).reverse().map((s, i) => {
+        let realIdx = scenes.length - 1 - i;
+        let dateStr = new Date(s.time).toLocaleString();
+        return `<div style="background:#2a1515; border:1px solid #4a1a1a; border-radius:6px; padding:10px; margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-size:0.75em; color:#aa6666;">${dateStr}</span>
+            <button onclick="SceneWeaver.deleteScene(${realIdx})" style="background:#4a1a1a; color:#ff4d4d; border:1px solid #ff4d4d; border-radius:4px; font-size:0.75em; cursor:pointer;">Delete</button>
+          </div>
+          <div style="white-space:pre-wrap; font-size:0.95em;">${s.text}</div>
+        </div>`;
+      }).join("");
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Global bridges for inline event handlers and external plugin access
+  // ---------------------------------------------------------------------------
+  window.generateSceneText = function() { SceneWeaver.generateText(); };
+  window.generateSceneImage = function() { SceneWeaver.generateImage(); };
+  window.saveCurrentScene = function() { SceneWeaver.saveCurrent(); };
+  window.deleteScene = function(idx) { SceneWeaver.deleteScene(idx); };
+
+  // Initialize gallery on load
+  SceneWeaver.renderGallery();
+</script>
+</body>
+</html>

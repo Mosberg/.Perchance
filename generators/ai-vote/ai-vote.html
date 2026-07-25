@@ -1,0 +1,3330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ai-vote — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Georgia, serif; background: #0e0e0e; color: #d8d8d8; min-height: 100vh; padding: 48px 20px 80px; }
+  #app { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 0.78rem; letter-spacing: 0.28em; text-transform: uppercase; color: #aaa; margin-bottom: 6px; font-weight: 400; text-align: center; }
+  .sub { font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: #666; text-align: center; margin-bottom: 20px; }
+  .gap { margin-top: 48px; }
+
+  /* slash command suggestion panel */
+  .slash-suggest { margin-top: 10px; border: 1px solid #2a2a2a; border-left: 2px solid #3a8a3a; background: #121212; border-radius: 3px; padding: 6px 0; font-family: Georgia, serif; }
+  .slash-suggest[hidden] { display: none; }
+  .slash-suggest .ss-row { padding: 7px 14px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #1a1a1a; }
+  .slash-suggest .ss-row:last-child { border-bottom: none; }
+  .slash-suggest .ss-cmd { color: #5aca5a; font-weight: 700; font-size: 0.88rem; min-width: 64px; flex-shrink: 0; }
+  .slash-suggest .ss-desc { color: #888; font-size: 0.82rem; }
+  .slash-suggest .ss-empty { padding: 10px 14px; color: #555; font-style: italic; font-size: 0.82rem; }
+  .slash-suggest .ss-hint { padding: 6px 14px 2px; color: #5a8aaa; font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase; }
+
+  /* tabs */
+  .tabs { display: flex; border-bottom: 1px solid #1a1a1a; margin-bottom: 14px; }
+  .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: #555; font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase; padding: 10px 18px; margin-bottom: -1px; cursor: pointer; font-family: Georgia, serif; transition: all 0.15s; }
+  .tab-btn:hover { color: #aaa; }
+  .tab-btn.active { color: #d8d8d8; border-bottom-color: #d8d8d8; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* UTC clock */
+  #utc-clock { text-align: center; font-family: 'Courier New', Courier, monospace; font-size: 1.4rem; font-weight: 700; letter-spacing: 0.18em; color: #fff; margin-bottom: 24px; font-variant-numeric: tabular-nums; text-shadow: 0 0 4px rgba(255,255,255,0.85), 0 0 10px rgba(255,255,255,0.55), 0 0 18px rgba(255,255,255,0.3); }
+
+  /* story archive */
+  .day-block { border-bottom: 1px solid #1a1a1a; }
+  .day-block summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 12px 0; cursor: pointer; user-select: none; }
+  .day-block summary::-webkit-details-marker { display: none; }
+  .day-block summary::before { content: '▶'; font-size: 0.55rem; color: #444; transition: transform 0.15s; flex-shrink: 0; }
+  .day-block[open] summary::before { transform: rotate(90deg); }
+  .day-block summary h1 { margin: 0; }
+  .day-ongoing { color: #555; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; }
+  .day-body { border-left: 2px solid #222; padding-left: 16px; font-size: 1.05rem; line-height: 1.9; color: #e8e8e8; margin-bottom: 20px; }
+  .story-para { margin: 0 0 16px; }
+  .story-para:last-child { margin-bottom: 0; }
+  .chapter-line { margin-top: 22px; }
+  .chapter-line:first-child { margin-top: 0; }
+  .chapter-tag { color: #6a8a9a; font-size: 0.72rem; letter-spacing: 0.2em; text-transform: uppercase; }
+
+  /* hide-dates mode for archives */
+  .archive-no-dates .day-block { display: block; }
+  .archive-no-dates .day-block > summary { display: none; }
+  .archive-no-dates .day-body { border-left: none; padding-left: 0; margin-bottom: 28px; }
+  .archive-no-dates .day-block > div[style] { padding-left: 0 !important; }
+  .archive-no-dates .day-block .day-block .day-body { margin-bottom: 28px; }
+
+  /* story */
+  #story-body { border-left: 2px solid #222; padding-left: 16px; min-height: 24px; }
+  #story-text { font-size: 1.05rem; line-height: 1.9; color: #e8e8e8; }
+  #story-empty { color: #444; font-style: italic; font-size: 0.9rem; }
+
+  /* round header */
+  #round-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  #round-header h1 { margin: 0; }
+  #timer { font-size: 1.1rem; font-variant-numeric: tabular-nums; color: #bbb; letter-spacing: 0.04em; }
+  #timer.red { color: #c0392b; }
+
+  /* winner banner */
+  #winner-banner { border: 1px solid #3a8a3a; background: #091409; border-radius: 3px; padding: 14px 18px; margin-bottom: 20px; }
+  .wb-label { font-size: 0.68rem; letter-spacing: 0.22em; text-transform: uppercase; color: #3a8a3a; margin-bottom: 8px; }
+  .wb-text { font-size: 1.05rem; line-height: 1.6; color: #e8e8e8; }
+
+  /* sentence list */
+  #sent-status { color: #777; font-size: 0.9rem; font-style: italic; padding: 20px 0; text-align: center; }
+  .sc-card { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid #1a1a1a; align-items: flex-start; }
+  .sc-card.mv { padding-left: 10px; border-left: 2px solid #3a8a3a; }
+  .sc-card.mv-down { padding-left: 10px; border-left: 2px solid #c0392b; }
+  .vc { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; width: 30px; }
+  .vc .vb.down { margin-top: 4px; }
+  .vb { background: none; border: 1px solid #2a2a2a; width: 26px; height: 26px; border-radius: 3px; font-size: 0.72rem; cursor: pointer; color: #888; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.12s; }
+  .vb:hover:not([disabled]) { border-color: #666; color: #d8d8d8; }
+  .vb.on { border-color: #3a8a3a; color: #3a8a3a; background: #091409; }
+  .vb.on-down { border-color: #c0392b; color: #c0392b; background: #140505; }
+  .vb[disabled] { opacity: 0.28; cursor: default; }
+  .vs { font-size: 0.78rem; font-weight: 700; color: #777; }
+  .vs.p { color: #3a8a3a; }
+  .vs.n { color: #c0392b; }
+  .sc-body { flex: 1; padding-top: 3px; }
+  .sc-txt { font-size: 1rem; line-height: 1.6; color: #e0e0e0; }
+  .sc-mod { font-size: 0.72rem; color: #5a8aaa; font-style: italic; margin-bottom: 5px; }
+  .sc-mod-btn { background: none; border: none; color: #555; font-size: 0.72rem; cursor: pointer; font-family: Georgia, serif; padding: 6px 0 0; display: inline-block; }
+  .sc-mod-btn:hover:not([disabled]) { color: #aaa; }
+  .sc-mod-btn[disabled] { opacity: 0.3; cursor: default; }
+
+  /* room archive host controls */
+  .arch-ctl { display: inline-block; white-space: nowrap; }
+  .arch-ctl-btn { background: none; border: none; color: #444; font-size: 0.72rem; cursor: pointer; font-family: Georgia, serif; padding: 0 3px; }
+  .arch-ctl-btn:hover { color: #aaa; }
+  .arch-ctl-del:hover { color: #c0392b; }
+  .sc-children { margin: 2px 0 4px 30px; padding-left: 14px; border-left: 2px solid #1e1e1e; }
+  .sc-children .sc-card { padding: 10px 0; border-bottom: 1px solid #161616; }
+  .sc-children .sc-txt { font-size: 0.95rem; color: #cacaca; }
+
+  /* submit form */
+  .form-textarea { width: 100%; font-family: Georgia, serif; font-size: 1rem; line-height: 1.6; padding: 10px 13px; border: 1px solid #2a2a2a; border-radius: 3px; background: #0e0e0e; color: #d8d8d8; resize: vertical; min-height: 400px; margin-bottom: 10px; transition: border-color 0.15s; }
+  .form-textarea:focus { outline: none; border-color: #555; }
+  .form-textarea::placeholder { color: #555; }
+  .form-textarea:disabled { opacity: 0.35; cursor: not-allowed; }
+  .form-row { display: flex; align-items: center; gap: 12px; }
+  #room-chapter-toggle-row { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: #888; letter-spacing: 0.02em; margin-bottom: 10px; cursor: pointer; user-select: none; }
+  #room-chapter-toggle-row input { accent-color: #5a9abb; cursor: pointer; }
+  #room-chapter-toggle-row b { color: #b8ceda; font-weight: 600; }
+  #room-parabreak-toggle-row { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: #888; letter-spacing: 0.02em; margin-bottom: 10px; cursor: pointer; user-select: none; }
+  #room-parabreak-toggle-row input { accent-color: #5a9abb; cursor: pointer; }
+  .pbtn { background: #d8d8d8; color: #000 !important; border: none; padding: 9px 20px; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: 2px; font-family: Georgia, serif; transition: background 0.12s; }
+  .pbtn:hover:not(:disabled) { background: #fff; }
+  .pbtn:disabled { background: #1e1e1e; color: #555 !important; cursor: default; }
+  .fl { font-size: 0.8rem; color: #888; font-style: italic; }
+
+  /* write-as-character generator */
+  .gen-toggle { background: none; border: 1px solid #252525; color: #666; font-size: 0.75rem; padding: 6px 13px; border-radius: 2px; cursor: pointer; font-family: Georgia, serif; letter-spacing: 0.05em; transition: all 0.12s; margin-top: 12px; display: inline-block; }
+  .gen-toggle:hover, .gen-toggle.open { border-color: #484848; color: #aaa; }
+  #gen-prompt-wrap { margin-top: 12px; }
+  #gen-direction { width: 100%; font-family: Georgia, serif; font-size: 0.88rem; background: #0e0e0e; color: #d8d8d8; border: 1px solid #2a2a2a; border-radius: 3px; padding: 8px 12px; margin-bottom: 10px; transition: border-color 0.15s; }
+  #gen-direction:focus { outline: none; border-color: #555; }
+  #gen-direction::placeholder { color: #555; }
+  #gen-stop-btn { background: #140909; color: #c0392b !important; border: 1px solid #5a1a1a; }
+  #gen-stop-btn:hover:not(:disabled) { background: #1d0d0d; }
+
+  /* ai character chat */
+  .char-field { width: 100%; font-family: Georgia, serif; background: #0e0e0e; color: #d8d8d8; border: 1px solid #2a2a2a; border-radius: 3px; padding: 9px 12px; margin-bottom: 10px; transition: border-color 0.15s; font-size: 0.9rem; }
+  .char-field:focus { outline: none; border-color: #555; }
+  .char-field::placeholder { color: #555; }
+  .char-prompt-field { resize: vertical; min-height: 64px; line-height: 1.5; }
+  #ai-messages { max-height: 360px; overflow-y: auto; margin-bottom: 16px; }
+  .ai-msg { padding: 10px 0; border-bottom: 1px solid #181818; }
+  .ai-who { display: block; font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 5px; }
+  .ai-user .ai-who { color: #777; }
+  .ai-char .ai-who { color: #4a8aaa; }
+  .ai-txt { font-size: 0.95rem; line-height: 1.65; color: #e0e0e0; }
+  .ai-pending .ai-txt { color: #555; font-style: italic; }
+  .ai-input-row { display: flex; gap: 10px; }
+  #ai-text-input { flex: 1; font-family: Georgia, serif; font-size: 0.95rem; padding: 9px 12px; border: 1px solid #2a2a2a; border-radius: 3px; background: #0e0e0e; color: #d8d8d8; transition: border-color 0.15s; }
+  #ai-text-input:focus { outline: none; border-color: #555; }
+  #ai-text-input::placeholder { color: #555; }
+  #ai-stop-btn { background: #140909; color: #c0392b !important; border: 1px solid #5a1a1a; }
+  #ai-stop-btn:hover { background: #200d0d; }
+  .ai-reset { background: none; border: none; color: #555; font-size: 0.75rem; cursor: pointer; font-family: Georgia, serif; padding: 0; margin-bottom: 14px; display: inline-block; }
+  .ai-reset:hover { color: #aaa; }
+
+  /* ── D&D ── */
+  #dnd-die-wrap { text-align: center; padding: 16px 0 8px; }
+  .die-face { display: inline-flex; align-items: center; justify-content: center; width: 68px; height: 68px; border: 2px solid #333; border-radius: 8px; font-size: 2.2rem; font-weight: 700; color: #d8d8d8; font-family: Georgia, serif; margin-bottom: 6px; }
+  .die-cf { border-color: #c0392b; color: #c0392b; background: #140505; }
+  .die-cs { border-color: #5aca5a; color: #5aca5a; background: #060d06; }
+  .die-label { font-size: 0.7rem; letter-spacing: 0.18em; text-transform: uppercase; color: #777; }
+  .die-label-cf { color: #c0392b; }
+  .die-label-cs { color: #5aca5a; }
+
+  #dnd-dm-area { border: 1px solid #1a2a3a; background: #070b0f; border-radius: 4px; padding: 12px 16px; margin-bottom: 16px; }
+  .dm-label { font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase; color: #5a9abb; margin-bottom: 6px; }
+  #dnd-dm-text { font-size: 0.95rem; line-height: 1.7; color: #b8ceda; font-style: italic; }
+
+  #dnd-tab-bar { display: flex; gap: 2px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #1e1e1e; margin-bottom: 14px; padding-bottom: 0; }
+  .dnd-ch-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 7px 13px; margin-bottom: -1px; cursor: pointer; font-family: Georgia, serif; font-size: 0.83rem; color: #555; transition: color 0.15s, border-color 0.15s; }
+  .dnd-ch-tab:hover { color: #ccc; }
+  .dnd-ch-tab.active { color: #d8d8d8; border-bottom-color: #5a9abb; font-weight: 600; }
+  #dnd-add-ch-btn { background: none; border: none; color: #444; font-size: 1.1rem; padding: 5px 10px; cursor: pointer; border-radius: 4px; margin-bottom: -1px; transition: color 0.15s, background 0.15s; line-height: 1; }
+  #dnd-add-ch-btn:hover { color: #aaa; background: #1a1a1a; }
+  #dnd-del-btn { display: none; background: none; border: 1px solid #2a2a2a; color: #555; font-size: 0.8rem; padding: 2px 7px; margin-left: 3px; cursor: pointer; border-radius: 3px; transition: color 0.15s, border-color 0.15s, background 0.15s; }
+  #dnd-del-btn:hover { color: #c0392b; border-color: #5a1a1a; background: #140505; }
+  #dnd-char-preview { background: #111; border: 1px solid #1e1e1e; border-radius: 4px; padding: 10px 14px; margin: 10px 0 4px; font-size: 0.92rem; line-height: 1.6; color: #b8ceda; font-style: italic; }
+  #dnd-char-stop-btn { background: #140909; color: #c0392b !important; border: 1px solid #5a1a1a; }
+  #dnd-char-stop-btn:hover { background: #200d0d; }
+  #dnd-stop-btn { background: #140909; color: #c0392b !important; border: 1px solid #5a1a1a; }
+  #dnd-stop-btn:hover { background: #200d0d; }
+
+  /* ── Rooms ── */
+  #room-tab-bar { display: flex; gap: 2px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #1e1e1e; margin-bottom: 20px; }
+  .room-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 7px 13px; margin-bottom: -1px; cursor: pointer; font-family: Georgia, serif; font-size: 0.83rem; color: #555; transition: color 0.15s, border-color 0.15s; }
+  .room-tab:hover { color: #ccc; }
+  .room-tab.active { color: #d8d8d8; border-bottom-color: #5a9abb; font-weight: 600; }
+  #room-add-btn { background: none; border: none; color: #444; font-size: 1.1rem; padding: 5px 10px; cursor: pointer; border-radius: 4px; margin-bottom: -1px; transition: color 0.15s, background 0.15s; line-height: 1; }
+  #room-add-btn:hover { color: #aaa; background: #1a1a1a; }
+  #room-join-row { display: flex; gap: 8px; margin-bottom: 20px; }
+  #room-join-input { flex: 1; font-family: Georgia, serif; font-size: 0.85rem; background: #0e0e0e; color: #d8d8d8; border: 1px solid #2a2a2a; border-radius: 3px; padding: 8px 12px; transition: border-color 0.15s; }
+  #room-join-input:focus { outline: none; border-color: #555; }
+  #room-join-input::placeholder { color: #555; }
+  #room-join-btn { background: none; border: 1px solid #252525; color: #888; font-size: 0.75rem; padding: 0 16px; border-radius: 2px; cursor: pointer; font-family: Georgia, serif; letter-spacing: 0.05em; transition: all 0.12s; }
+  #room-join-btn:hover { border-color: #484848; color: #d8d8d8; }
+  #room-empty { color: #555; font-size: 0.85rem; font-style: italic; text-align: center; padding: 40px 10px; }
+  #room-del-link { background: none; border: none; color: #444; font-size: 0.72rem; letter-spacing: 0.05em; cursor: pointer; font-family: Georgia, serif; padding: 0; }
+  #room-del-link:hover { color: #c0392b; }
+  #room-chat-tab-bar { display: flex; gap: 2px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #1e1e1e; margin-bottom: 10px; }
+  .room-chat-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 6px 12px; margin-bottom: -1px; cursor: pointer; font-family: Georgia, serif; font-size: 0.8rem; color: #555; transition: color 0.15s, border-color 0.15s; }
+  .room-chat-tab:hover { color: #ccc; }
+  .room-chat-tab.active { color: #d8d8d8; border-bottom-color: #5a9abb; font-weight: 600; }
+  #room-chat-add-btn { background: none; border: none; color: #444; font-size: 1rem; padding: 4px 9px; cursor: pointer; border-radius: 4px; margin-bottom: -1px; transition: color 0.15s, background 0.15s; line-height: 1; }
+  #room-chat-add-btn:hover { color: #aaa; background: #1a1a1a; }
+  #room-chat-del-btn { display: none; background: none; border: 1px solid #2a2a2a; color: #555; font-size: 0.75rem; padding: 2px 6px; margin-left: 3px; cursor: pointer; border-radius: 3px; transition: color 0.15s, border-color 0.15s, background 0.15s; }
+  #room-chat-del-btn:hover { color: #c0392b; border-color: #5a1a1a; background: #140505; }
+  #room-timer { font-size: 1.1rem; font-variant-numeric: tabular-nums; color: #bbb; letter-spacing: 0.04em; }
+  #room-timer.red { color: #c0392b; }
+  #room-presence-label { font-size: 0.7rem; color: #666; letter-spacing: 0.05em; vertical-align: middle; }
+  #room-presence-label .joined-count-num { color: #5a9abb; font-weight: 600; }
+  #room-winner-banner { border: 1px solid #3a8a3a; background: #091409; border-radius: 3px; padding: 14px 18px; margin-bottom: 20px; }
+  #room-sent-status { color: #777; font-size: 0.9rem; font-style: italic; padding: 20px 0; text-align: center; }
+  #room-story-empty { color: #444; font-style: italic; font-size: 0.9rem; }
+  #room-gen-prompt-wrap { margin-top: 12px; }
+  #room-gen-direction { width: 100%; font-family: Georgia, serif; font-size: 0.88rem; background: #0e0e0e; color: #d8d8d8; border: 1px solid #2a2a2a; border-radius: 3px; padding: 8px 12px; margin-bottom: 10px; transition: border-color 0.15s; }
+  #room-gen-direction:focus { outline: none; border-color: #555; }
+  #room-gen-direction::placeholder { color: #555; }
+  #room-gen-stop-btn { background: #140909; color: #c0392b !important; border: 1px solid #5a1a1a; }
+  #room-gen-stop-btn:hover:not(:disabled) { background: #1d0d0d; }
+  #room-ai-messages { max-height: 360px; overflow-y: auto; margin-bottom: 16px; }
+  #room-ai-text-input { flex: 1; font-family: Georgia, serif; font-size: 0.95rem; padding: 9px 12px; border: 1px solid #2a2a2a; border-radius: 3px; background: #0e0e0e; color: #d8d8d8; transition: border-color 0.15s; }
+  #room-ai-text-input:focus { outline: none; border-color: #555; }
+  #room-ai-text-input::placeholder { color: #555; }
+  #room-ai-stop-btn { background: #140909; color: #c0392b !important; border: 1px solid #5a1a1a; }
+  #room-ai-stop-btn:hover { background: #200d0d; }
+</style>
+
+<script>window.createServerSocket = root.createServerSocket;</script>
+
+<script type="text/x-server-plugin">
+// Authoritative round/vote/presence backbone for Story Roulette + Rooms.
+// Chat, D&D chat, story archive and legacy import stay on commentsPlugin
+// (see the client script) — this only owns rounds/sentences/votes/presence.
+
+const ROUND_MS_DEFAULT = 3600000;
+const SUBMIT_COOLDOWN_DEFAULT = 5 * 60 * 1000;
+const MIN_SENT_LEN = 4;
+const MAX_SENT_LEN = 2000;
+const STATE_VERSION = 2;
+// Two independent caps so a very active room can never evict the main
+// story's oldest chapters (or vice versa) — see archiveAdd's eviction.
+const GLOBAL_ARCHIVE_CAP = 20000; // max global-game winner entries kept
+const ROOM_ARCHIVE_CAP = 30000;   // max winner entries kept across all rooms combined
+
+// ── hand-rolled UTF-8 codec (TextEncoder/TextDecoder aren't available here) ──
+function utf8Encode(str) {
+  const bytes = [];
+  for (let i = 0; i < str.length; i++) {
+    let c = str.codePointAt(i);
+    if (c > 0xFFFF) i++; // consumed a surrogate pair
+    if (c < 0x80) {
+      bytes.push(c);
+    } else if (c < 0x800) {
+      bytes.push(0xC0 | (c >> 6), 0x80 | (c & 0x3F));
+    } else if (c < 0x10000) {
+      bytes.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+    } else {
+      bytes.push(0xF0 | (c >> 18), 0x80 | ((c >> 12) & 0x3F), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+    }
+  }
+  return Uint8Array.from(bytes);
+}
+function utf8Decode(bytes, start, len) {
+  let out = '', i = start;
+  const end = start + len;
+  while (i < end) {
+    const b0 = bytes[i++];
+    if (b0 < 0x80) { out += String.fromCharCode(b0); continue; }
+    if (b0 < 0xE0) { const b1 = bytes[i++]; out += String.fromCharCode(((b0 & 0x1F) << 6) | (b1 & 0x3F)); continue; }
+    if (b0 < 0xF0) { const b1 = bytes[i++], b2 = bytes[i++]; out += String.fromCharCode(((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)); continue; }
+    const b1 = bytes[i++], b2 = bytes[i++], b3 = bytes[i++];
+    let cp = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
+    cp -= 0x10000;
+    out += String.fromCharCode(0xD800 + (cp >> 10), 0xDC00 + (cp & 0x3FF));
+  }
+  return out;
+}
+
+function genId() { return Math.random().toString(36).slice(2, 10); }
+
+function freshGlobal() {
+  const nowMs = Date.now();
+  return {
+    roundId: genId(), startMs: nowMs - (nowMs % ROUND_MS_DEFAULT),
+    roundMs: ROUND_MS_DEFAULT, cooldownMs: SUBMIT_COOLDOWN_DEFAULT,
+    sentences: {}, nextOrd: 1, lastSubmit: {}
+  };
+}
+
+let liveGlobal = freshGlobal();
+let liveRooms = new Map(); // slug -> game object (same shape + slug/name)
+let liveArchive = []; // monotonic log of round winners: {rid,date,ms,text,slug|null}
+
+// ── state persistence: single versioned JSON snapshot, not a hot path ──
+function loadState() {
+  try {
+    if (state.byteLength < 5) return;
+    const dv = new DataView(state.buffer, state.byteOffset, state.byteLength);
+    const len = dv.getUint32(0, true);
+    if (len > 0 && len < state.byteLength - 5 && (state[4] === 1 || state[4] === STATE_VERSION)) {
+      const parsed = JSON.parse(utf8Decode(state, 5, len));
+      if (parsed && parsed.global) liveGlobal = parsed.global;
+      if (parsed && parsed.rooms) liveRooms = new Map(Object.entries(parsed.rooms));
+      if (parsed && Array.isArray(parsed.archive)) liveArchive = parsed.archive;
+    }
+  } catch (e) {}
+}
+function persist() {
+  try {
+    const json = JSON.stringify({ global: liveGlobal, rooms: Object.fromEntries(liveRooms), archive: liveArchive });
+    const bytes = utf8Encode(json);
+    if (bytes.length + 5 > state.byteLength) return; // bounds check — drop write rather than overflow
+    const dv = new DataView(state.buffer, state.byteOffset, state.byteLength);
+    dv.setUint32(0, bytes.length, true);
+    state[4] = STATE_VERSION;
+    state.set(bytes, 5);
+  } catch (e) {}
+}
+loadState();
+
+// ── shared game helpers (used by both the global game and every room) ──
+function tallyOf(s) {
+  let up = 0, down = 0;
+  for (const k in s.votes) { if (s.votes[k] === 1) up++; else if (s.votes[k] === -1) down++; }
+  return { up, down, net: up - down };
+}
+function isExpired(g) {
+  return g.startMs > 0 && g.roundMs > 0 && Date.now() - g.startMs >= g.roundMs;
+}
+function pickWinner(g) {
+  let best = null;
+  for (const sid in g.sentences) {
+    const s = g.sentences[sid], t = tallyOf(s);
+    if (!best || t.net > best.net || (t.net === best.net && s.ord < best.ord)) best = { sid, text: s.text, net: t.net, ord: s.ord };
+  }
+  return best;
+}
+function snapshotSentences(g) {
+  return Object.entries(g.sentences).map(function (e) {
+    const sid = e[0], s = e[1], t = tallyOf(s);
+    return { sid: sid, text: s.text, parentSid: s.parentSid, ord: s.ord, up: t.up, down: t.down };
+  });
+}
+
+// ── global game ──
+function maybeAdvanceGlobal() {
+  if (!isExpired(liveGlobal)) return;
+  const g = liveGlobal;
+  const winner = pickWinner(g);
+  if (winner) pubsub.publish('game', JSON.stringify({ scope: 'game', type: 'roundEnd', rid: g.roundId, sid: winner.sid, text: winner.text }));
+  const nowMs = Date.now();
+  liveGlobal = {
+    roundId: genId(), startMs: nowMs - (nowMs % g.roundMs), roundMs: g.roundMs, cooldownMs: g.cooldownMs,
+    sentences: {}, nextOrd: 1, lastSubmit: g.lastSubmit
+  };
+  persist();
+  pubsub.publish('game', JSON.stringify({ scope: 'game', type: 'newRound', roundId: liveGlobal.roundId, startMs: liveGlobal.startMs, roundMs: liveGlobal.roundMs }));
+}
+
+// ── rooms ──
+function publishJoinedCount(slug, count) {
+  pubsub.publish('room:' + slug, JSON.stringify({ scope: 'room', slug: slug, type: 'joinedCount', count: count }));
+}
+function maybeAdvanceRoom(slug) {
+  const r = liveRooms.get(slug);
+  if (!r || r.startMs === 0 || !isExpired(r)) return;
+  advanceRoom(slug, r);
+}
+function advanceRoom(slug, r, resetCooldowns) {
+  const winner = pickWinner(r);
+  if (winner) pubsub.publish('room:' + slug, JSON.stringify({ scope: 'room', slug: slug, type: 'roundEnd', rid: r.roundId, sid: winner.sid, text: winner.text }));
+  // timer-expiry advances keep carrying lastSubmit forward (guards against
+  // spamming through a round boundary); a unanimous-vote advance means the
+  // room just demonstrated it can move at that pace, so cooldowns reset —
+  // the client's own per-round cooldown display (keyed by roundId in
+  // localStorage) already assumes a fresh round means a fresh cooldown.
+  const fresh = { slug: slug, name: r.name, roundId: genId(), startMs: 0, roundMs: r.roundMs, cooldownMs: r.cooldownMs, hostPwHash: r.hostPwHash, sentences: {}, nextOrd: 1, lastSubmit: resetCooldowns ? {} : r.lastSubmit, joinedVids: r.joinedVids || {} };
+  liveRooms.set(slug, fresh);
+  persist();
+  pubsub.publish('room:' + slug, JSON.stringify({ scope: 'room', slug: slug, type: 'newRound', roundId: fresh.roundId, startMs: 0, roundMs: fresh.roundMs }));
+}
+// ── "currently present" tracking for the unanimous-vote mechanic ──
+// pubsub.numSubscribers() counts raw live connections, which overcounts after
+// a reconnect (network blip / phone lock / tab backgrounding all create a new
+// conn before the platform notices the old one is dead) — the old zombie
+// subscription and the fresh one both count, inflating the threshold above
+// what's actually needed for the room's real occupants to reach it. Track
+// presence ourselves instead, keyed by vid (same anonymized id as joinedVids)
+// with a short TTL refreshed by every room action plus a client heartbeat —
+// deliberately not persisted, this is ephemeral and shouldn't eat into `state`.
+const ROOM_PRESENCE_TTL_MS = 45000;
+const roomPresence = new Map(); // slug -> Map(vid -> lastSeenMs)
+function touchPresence(slug, vid) {
+  if (!vid) return;
+  let m = roomPresence.get(slug);
+  if (!m) { m = new Map(); roomPresence.set(slug, m); }
+  m.set(vid, Date.now());
+}
+function presentCount(slug) {
+  const m = roomPresence.get(slug);
+  if (!m) return 0;
+  const cutoff = Date.now() - ROOM_PRESENCE_TTL_MS;
+  for (const [v, ts] of m) { if (ts < cutoff) m.delete(v); }
+  return m.size;
+}
+function checkUnanimous(slug) {
+  const r = liveRooms.get(slug);
+  if (!r || r.startMs === 0 || isExpired(r)) return;
+  const count = presentCount(slug);
+  if (count < 2) return;
+  for (const sid in r.sentences) {
+    if (tallyOf(r.sentences[sid]).up >= count) { advanceRoom(slug, r, true); return; }
+  }
+}
+
+// ── host authentication (per-room password; only the hash is stored, publicly) ──
+const hostConnRooms = new Map(); // conn.id -> Set(slug) where that conn is host
+
+function isRoomHost(connId, slug) {
+  const s = hostConnRooms.get(connId);
+  return !!(s && s.has(slug));
+}
+
+// ── host-login rate limiting — these are user-chosen passwords, not generated
+// high-entropy secrets, so unlimited guesses would make them brute-forceable.
+// Keyed by both conn.id (tight) and the most-specific conn.net group (looser),
+// since reconnecting hands out a fresh conn.id and would otherwise reset the count.
+const HOST_LOGIN_CONN_MAX = 5, HOST_LOGIN_NET_MAX = 20, HOST_LOGIN_WINDOW_MS = 60000;
+const hostLoginAttempts = new Map(); // key (conn.id or 'net:'+group) -> {count, resetAt}
+function bumpAttempt(key, max) {
+  const now = Date.now();
+  let rec = hostLoginAttempts.get(key);
+  if (!rec || now > rec.resetAt) { rec = { count: 0, resetAt: now + HOST_LOGIN_WINDOW_MS }; hostLoginAttempts.set(key, rec); }
+  if (rec.count >= max) return false;
+  rec.count++;
+  return true;
+}
+function allowHostLoginAttempt(conn) {
+  const netGroup = conn.net && conn.net.length ? conn.net[conn.net.length - 1] : null;
+  const connOk = bumpAttempt(conn.id, HOST_LOGIN_CONN_MAX);
+  const netOk = netGroup ? bumpAttempt('net:' + netGroup, HOST_LOGIN_NET_MAX) : true;
+  return connOk && netOk;
+}
+
+// compact synchronous SHA-256 (ASCII input only — sufficient for the prefixed password)
+function sha256(ascii) {
+  function rr(v, a) { return (v >>> a) | (v << (32 - a)); }
+  var maxWord = Math.pow(2, 32), i, j, result = '', words = [];
+  var asciiBitLength = ascii.length * 8;
+  var hash = sha256.h = sha256.h || [], k = sha256.k = sha256.k || [];
+  var pc = k.length, comp = {};
+  for (var cand = 2; pc < 64; cand++) {
+    if (!comp[cand]) {
+      for (i = 0; i < 313; i += cand) comp[i] = cand;
+      hash[pc] = (Math.pow(cand, .5) * maxWord) | 0;
+      k[pc++] = (Math.pow(cand, 1 / 3) * maxWord) | 0;
+    }
+  }
+  ascii += '\x80';
+  while (ascii.length % 64 - 56) ascii += '\x00';
+  for (i = 0; i < ascii.length; i++) {
+    j = ascii.charCodeAt(i);
+    if (j >> 8) return;
+    words[i >> 2] |= j << ((3 - i) % 4) * 8;
+  }
+  words[words.length] = ((asciiBitLength / maxWord) | 0);
+  words[words.length] = (asciiBitLength);
+  for (j = 0; j < words.length;) {
+    var w = words.slice(j, j += 16), oldHash = hash;
+    hash = hash.slice(0, 8);
+    for (i = 0; i < 64; i++) {
+      var w15 = w[i - 15], w2 = w[i - 2], a = hash[0], e = hash[4];
+      var t1 = hash[7] + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & hash[5]) ^ ((~e) & hash[6])) + k[i]
+        + (w[i] = i < 16 ? w[i] : (w[i - 16] + (rr(w15, 7) ^ rr(w15, 18) ^ (w15 >>> 3)) + w[i - 7] + (rr(w2, 17) ^ rr(w2, 19) ^ (w2 >>> 10))) | 0);
+      var t2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+      hash = [(t1 + t2) | 0].concat(hash);
+      hash[4] = (hash[4] + t1) | 0;
+    }
+    for (i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
+  }
+  for (i = 0; i < 8; i++) for (j = 28; j >= 0; j -= 4) result += ((hash[i] >> j) & 0xf).toString(16);
+  return result;
+}
+
+self.onclose = function (e) {
+  hostConnRooms.delete(e.conn.id);
+  hostLoginAttempts.delete(e.conn.id);
+};
+
+self.rpc = {
+  joinGame: function (e) {
+    e.conn.subscribe('game');
+    maybeAdvanceGlobal();
+    const g = liveGlobal;
+    return JSON.stringify({ roundId: g.roundId, startMs: g.startMs, roundMs: g.roundMs, sentences: snapshotSentences(g) });
+  },
+
+  submitSentence: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    maybeAdvanceGlobal();
+    const g = liveGlobal;
+    const text = typeof d.text === 'string' ? d.text.trim().slice(0, MAX_SENT_LEN) : '';
+    const vid = typeof d.vid === 'string' ? d.vid.slice(0, 32) : '';
+    if (!vid) return JSON.stringify({ error: 'no id' });
+    if (text.length < MIN_SENT_LEN) return JSON.stringify({ error: 'too short' });
+    if (isExpired(g)) return JSON.stringify({ error: 'round ended' });
+    const last = g.lastSubmit[vid];
+    if (last && Date.now() - last < g.cooldownMs) return JSON.stringify({ error: 'cooldown' });
+    const parentSid = (typeof d.parentSid === 'string' && g.sentences[d.parentSid]) ? d.parentSid : null;
+    const sid = genId(), ord = g.nextOrd++;
+    g.sentences[sid] = { text: text, parentSid: parentSid, ord: ord, votes: {} };
+    g.lastSubmit[vid] = Date.now();
+    persist();
+    pubsub.publish('game', JSON.stringify({ scope: 'game', type: 'sentence', sid: sid, text: text, parentSid: parentSid, ord: ord }));
+    return JSON.stringify({ ok: true, sid: sid });
+  },
+
+  vote: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    maybeAdvanceGlobal();
+    const g = liveGlobal;
+    const vid = typeof d.vid === 'string' ? d.vid.slice(0, 32) : '';
+    const s = g.sentences[d.sid];
+    if (!vid || !s || (d.dir !== 1 && d.dir !== -1 && d.dir !== 0)) return JSON.stringify({ error: 'bad vote' });
+    if (isExpired(g)) return JSON.stringify({ error: 'round ended' });
+    if (d.dir === 0) delete s.votes[vid]; else s.votes[vid] = d.dir;
+    persist();
+    const t = tallyOf(s);
+    pubsub.publish('game', JSON.stringify({ scope: 'game', type: 'vote', sid: d.sid, up: t.up, down: t.down }));
+    return JSON.stringify({ ok: true });
+  },
+
+  advanceRound: function (e) {
+    maybeAdvanceGlobal();
+    return JSON.stringify({ ok: true });
+  },
+
+  roomConfig: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const slug = typeof d.slug === 'string' ? d.slug.slice(0, 64) : '';
+    if (!slug) return JSON.stringify({ error: 'bad room' });
+    const alreadyExisted = liveRooms.has(slug);
+    let r = liveRooms.get(slug);
+    if (!r) {
+      const roundMs = Math.max(60000, Math.min(1440 * 60000, (parseInt(d.roundMin) || 60) * 60000));
+      const cooldownMinRaw = parseInt(d.cooldownMin);
+      const cooldownMs = Math.max(0, Math.min(1440 * 60000, (isNaN(cooldownMinRaw) ? 5 : cooldownMinRaw) * 60000));
+      const pw = typeof d.password === 'string' ? d.password : '';
+      r = {
+        slug: slug, name: (typeof d.name === 'string' && d.name.trim() ? d.name.trim().slice(0, 64) : slug),
+        roundId: genId(), startMs: 0, roundMs: roundMs, cooldownMs: cooldownMs,
+        hostPwHash: pw ? sha256('room-host|' + slug + '|' + pw) : null,
+        sentences: {}, nextOrd: 1, lastSubmit: {}, joinedVids: {}
+      };
+      liveRooms.set(slug, r);
+      persist();
+    }
+    if (!r.joinedVids) r.joinedVids = {};
+    const vid = typeof d.vid === 'string' ? d.vid.slice(0, 32) : '';
+    if (vid && !r.joinedVids[vid]) { r.joinedVids[vid] = true; persist(); }
+    touchPresence(slug, vid);
+    e.conn.subscribe('room:' + slug);
+    maybeAdvanceRoom(slug);
+    r = liveRooms.get(slug);
+    const joinedCount = Object.keys(r.joinedVids).length;
+    publishJoinedCount(slug, joinedCount);
+    return JSON.stringify({
+      ok: true, name: r.name, roundId: r.roundId, startMs: r.startMs, roundMs: r.roundMs, cooldownMs: r.cooldownMs,
+      sentences: snapshotSentences(r), joinedCount: joinedCount, existed: alreadyExisted
+    });
+  },
+
+  roomLeave: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const slug = typeof d.slug === 'string' ? d.slug : '';
+    if (!slug) return JSON.stringify({ error: 'bad room' });
+    try { e.conn.unsubscribe('room:' + slug); } catch (err) {}
+    const vid = typeof d.vid === 'string' ? d.vid.slice(0, 32) : '';
+    if (vid) { const m = roomPresence.get(slug); if (m) m.delete(vid); }
+    return JSON.stringify({ ok: true });
+  },
+
+  roomHeartbeat: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const slug = typeof d.slug === 'string' ? d.slug : '';
+    const vid = typeof d.vid === 'string' ? d.vid.slice(0, 32) : '';
+    if (!slug || !vid || !liveRooms.has(slug)) return JSON.stringify({ error: 'bad request' });
+    touchPresence(slug, vid);
+    return JSON.stringify({ ok: true });
+  },
+
+  roomSubmitSentence: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const slug = typeof d.slug === 'string' ? d.slug : '';
+    const r = liveRooms.get(slug);
+    if (!r) return JSON.stringify({ error: 'no such room' });
+    maybeAdvanceRoom(slug);
+    const text = typeof d.text === 'string' ? d.text.trim().slice(0, MAX_SENT_LEN) : '';
+    const vid = typeof d.vid === 'string' ? d.vid.slice(0, 32) : '';
+    if (!vid) return JSON.stringify({ error: 'no id' });
+    touchPresence(slug, vid);
+    if (text.length < MIN_SENT_LEN) return JSON.stringify({ error: 'too short' });
+    if (r.startMs > 0 && isExpired(r)) return JSON.stringify({ error: 'round ended' });
+    const isHost = isRoomHost(e.conn.id, slug);
+    const last = r.lastSubmit[vid];
+    if (!isHost && r.cooldownMs > 0 && last && Date.now() - last < r.cooldownMs) return JSON.stringify({ error: 'cooldown' });
+    if (r.startMs === 0) {
+      r.startMs = Date.now();
+      pubsub.publish('room:' + slug, JSON.stringify({ scope: 'room', slug: slug, type: 'roundStarted', startMs: r.startMs }));
+    }
+    const parentSid = (typeof d.parentSid === 'string' && r.sentences[d.parentSid]) ? d.parentSid : null;
+    const sid = genId(), ord = r.nextOrd++;
+    r.sentences[sid] = { text: text, parentSid: parentSid, ord: ord, votes: {} };
+    r.lastSubmit[vid] = Date.now();
+    persist();
+    pubsub.publish('room:' + slug, JSON.stringify({ scope: 'room', slug: slug, type: 'sentence', sid: sid, text: text, parentSid: parentSid, ord: ord }));
+    checkUnanimous(slug);
+    return JSON.stringify({ ok: true, sid: sid });
+  },
+
+  roomVote: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const slug = typeof d.slug === 'string' ? d.slug : '';
+    const r = liveRooms.get(slug);
+    if (!r) return JSON.stringify({ error: 'no such room' });
+    maybeAdvanceRoom(slug);
+    const vid = typeof d.vid === 'string' ? d.vid.slice(0, 32) : '';
+    const s = r.sentences[d.sid];
+    if (!vid || !s || (d.dir !== 1 && d.dir !== -1 && d.dir !== 0)) return JSON.stringify({ error: 'bad vote' });
+    touchPresence(slug, vid);
+    if (r.startMs === 0 || isExpired(r)) return JSON.stringify({ error: 'round ended' });
+    if (d.dir === 0) delete s.votes[vid]; else s.votes[vid] = d.dir;
+    persist();
+    const t = tallyOf(s);
+    pubsub.publish('room:' + slug, JSON.stringify({ scope: 'room', slug: slug, type: 'vote', sid: d.sid, up: t.up, down: t.down }));
+    checkUnanimous(slug);
+    return JSON.stringify({ ok: true });
+  },
+
+  roomAdvanceRound: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const slug = typeof d.slug === 'string' ? d.slug : '';
+    if (!liveRooms.get(slug)) return JSON.stringify({ error: 'no such room' });
+    maybeAdvanceRoom(slug);
+    return JSON.stringify({ ok: true });
+  },
+
+  // ── host-only powers (per-room) ──
+  hostLogin: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const slug = typeof d.slug === 'string' ? d.slug.slice(0, 64) : '';
+    const r = liveRooms.get(slug);
+    if (!r) return JSON.stringify({ error: 'no such room' });
+    if (!r.hostPwHash) return JSON.stringify({ error: 'no host password set' });
+    if (!allowHostLoginAttempt(e.conn)) return JSON.stringify({ error: 'too many attempts — try again later' });
+    const pw = typeof d.password === 'string' ? d.password : '';
+    if (pw && sha256('room-host|' + slug + '|' + pw) === r.hostPwHash) {
+      if (!hostConnRooms.has(e.conn.id)) hostConnRooms.set(e.conn.id, new Set());
+      hostConnRooms.get(e.conn.id).add(slug);
+      hostLoginAttempts.delete(e.conn.id);
+      return JSON.stringify({ ok: true });
+    }
+    return JSON.stringify({ error: 'wrong password' });
+  },
+
+  hostLogout: function (e, data) {
+    let d; try { d = JSON.parse(data || '{}') || {}; } catch (err) {}
+    const slug = typeof d.slug === 'string' ? d.slug.slice(0, 64) : '';
+    const s = hostConnRooms.get(e.conn.id);
+    if (s && slug) s.delete(slug);
+    return JSON.stringify({ ok: true });
+  },
+
+  hostRoomDeleteSentence: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const slug = typeof d.slug === 'string' ? d.slug : '';
+    if (!isRoomHost(e.conn.id, slug)) return JSON.stringify({ error: 'not host' });
+    const r = liveRooms.get(slug);
+    if (!r) return JSON.stringify({ error: 'no such room' });
+    const sid = typeof d.sid === 'string' ? d.sid : '';
+    if (!r.sentences[sid]) return JSON.stringify({ error: 'no such sentence' });
+    delete r.sentences[sid];
+    persist();
+    pubsub.publish('room:' + slug, JSON.stringify({ scope: 'room', slug: slug, type: 'sentenceDeleted', sid: sid }));
+    return JSON.stringify({ ok: true });
+  },
+
+  hostRoomForceAdvance: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const slug = typeof d.slug === 'string' ? d.slug : '';
+    if (!isRoomHost(e.conn.id, slug)) return JSON.stringify({ error: 'not host' });
+    const r = liveRooms.get(slug);
+    if (!r) return JSON.stringify({ error: 'no such room' });
+    advanceRoom(slug, r);
+    return JSON.stringify({ ok: true });
+  },
+
+  hostRoomArchiveEdit: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const slug = typeof d.slug === 'string' ? d.slug : '';
+    if (!isRoomHost(e.conn.id, slug)) return JSON.stringify({ error: 'not host' });
+    const rid = typeof d.rid === 'string' ? d.rid : '';
+    const text = typeof d.text === 'string' ? d.text.trim().slice(0, MAX_SENT_LEN) : '';
+    if (!rid || !text) return JSON.stringify({ error: 'bad request' });
+    const entry = liveArchive.find(function (a) { return a.rid === rid && a.slug === slug; });
+    if (!entry) return JSON.stringify({ error: 'no such entry' });
+    entry.text = text;
+    persist();
+    pubsub.publish('room:' + slug, JSON.stringify({ scope: 'room', slug: slug, type: 'archiveEdited', rid: rid, text: text }));
+    return JSON.stringify({ ok: true });
+  },
+
+  hostRoomArchiveDelete: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const slug = typeof d.slug === 'string' ? d.slug : '';
+    if (!isRoomHost(e.conn.id, slug)) return JSON.stringify({ error: 'not host' });
+    const rid = typeof d.rid === 'string' ? d.rid : '';
+    if (!rid) return JSON.stringify({ error: 'bad request' });
+    const idx = liveArchive.findIndex(function (a) { return a.rid === rid && a.slug === slug; });
+    if (idx === -1) return JSON.stringify({ error: 'no such entry' });
+    liveArchive.splice(idx, 1);
+    persist();
+    pubsub.publish('room:' + slug, JSON.stringify({ scope: 'room', slug: slug, type: 'archiveDeleted', rid: rid }));
+    return JSON.stringify({ ok: true });
+  },
+
+  // ── story archive (round winners) — durable, monotonic, server-authoritative ──
+  archiveAdd: function (e, data) {
+    let d; try { d = JSON.parse(data); } catch (err) { return JSON.stringify({ error: 'bad request' }); }
+    const rid = typeof d.rid === 'string' ? d.rid.slice(0, 32) : '';
+    const text = typeof d.text === 'string' ? d.text.slice(0, MAX_SENT_LEN) : '';
+    const date = typeof d.date === 'string' ? d.date.slice(0, 8) : '';
+    const ms = typeof d.ms === 'number' ? d.ms : 0;
+    const slug = typeof d.slug === 'string' && d.slug.length ? d.slug.slice(0, 64) : null;
+    if (!rid || !text || !date) return JSON.stringify({ error: 'bad archive entry' });
+    // dedupe by rid+slug (null slug for the global game)
+    for (let i = 0; i < liveArchive.length; i++) {
+      if (liveArchive[i].rid === rid && liveArchive[i].slug === slug) return JSON.stringify({ ok: true, dup: true });
+    }
+    liveArchive.push({ rid: rid, date: date, ms: ms, text: text, slug: slug });
+    // evict oldest-first, but only within the same scope (global vs. all rooms
+    // combined) so one busy room can never push out the main story's history
+    const isGlobal = slug === null;
+    const cap = isGlobal ? GLOBAL_ARCHIVE_CAP : ROOM_ARCHIVE_CAP;
+    let scopeCount = 0;
+    for (let i = 0; i < liveArchive.length; i++) if ((liveArchive[i].slug === null) === isGlobal) scopeCount++;
+    if (scopeCount > cap) {
+      let excess = scopeCount - cap;
+      liveArchive = liveArchive.filter(function (a) {
+        if (excess > 0 && (a.slug === null) === isGlobal) { excess--; return false; }
+        return true;
+      });
+    }
+    persist();
+    return JSON.stringify({ ok: true });
+  },
+
+  archiveList: function (e, data) {
+    let d = {}; try { d = JSON.parse(data || '{}') || {}; } catch (err) {}
+    const wantSlug = (typeof d.slug === 'string' && d.slug.length) ? d.slug : null;
+    const sinceDate = (typeof d.sinceDate === 'string') ? d.sinceDate : null;
+    const out = [];
+    for (let i = 0; i < liveArchive.length; i++) {
+      const a = liveArchive[i];
+      if (wantSlug !== null ? a.slug === wantSlug : a.slug === null) {
+        if (sinceDate && a.date < sinceDate) continue;
+        out.push(a);
+      }
+    }
+    return JSON.stringify(out);
+  }
+};
+</script>
+
+<div id="app">
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="story" onclick="switchTab('story')">Story Roulette</button>
+    <button class="tab-btn" data-tab="rooms" onclick="switchTab('rooms')">Rooms</button>
+    <button class="tab-btn" data-tab="dnd" onclick="switchTab('dnd')">D&amp;D</button>
+  </div>
+
+  <div id="utc-clock">--:--:-- UTC</div>
+
+  <!-- ══ STORY ROULETTE TAB ══ -->
+  <div id="tab-story" class="tab-panel active">
+
+    <!-- story archive -->
+    <div class="gap" id="archive-wrap">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <h1>Story Archive</h1>
+        <div style="display:flex;gap:6px">
+          <button class="gen-toggle" id="archive-dates-btn" onclick="toggleArchiveDates('archive-wrap','archive-dates-btn')">Hide Dates</button>
+          <button class="gen-toggle" id="fetch-history-btn" onclick="fetchHistory()">Fetch History</button>
+        </div>
+      </div>
+      <p class="sub">One sentence per hour · one story per day</p>
+      <div id="fetch-history-fl" style="color:#666;font-size:0.72rem;letter-spacing:0.1em;text-align:center;margin-bottom:10px;font-style:italic"></div>
+      <div id="daily-stories"></div>
+    </div>
+
+    <!-- current round -->
+    <div class="gap">
+      <div id="round-header">
+        <div>
+          <h1 style="text-align:left">Current Round</h1>
+          <p class="sub" style="text-align:left;margin:0">Write a sentence. Vote for the best. One survives per hour.</p>
+        </div>
+        <span id="timer">--:--</span>
+      </div>
+
+      <div id="winner-banner" style="display:none">
+        <div class="wb-label">Round Winner</div>
+        <div id="winner-text" class="wb-text"></div>
+      </div>
+
+      <div id="sentence-list" style="margin-bottom:20px">
+        <div id="sent-status">Connecting…</div>
+      </div>
+
+      <div id="modify-banner" style="display:none;margin-bottom:8px">
+        <span class="fl">Modifying: "<span id="modify-preview"></span>"</span>
+        <button class="ai-reset" style="margin-bottom:0;margin-left:10px" onclick="cancelModify()">Cancel</button>
+      </div>
+      <textarea class="form-textarea" id="sent-input"
+        placeholder="Write a sentence to continue the story…"
+        oninput="onTyping()"></textarea>
+      <div class="form-row">
+        <button class="pbtn" id="sent-btn" onclick="submitSentence()" disabled>Submit</button>
+        <span class="fl" id="sent-fl"></span>
+      </div>
+
+      <!-- write as character -->
+      <button class="gen-toggle" id="gen-toggle-btn" onclick="toggleGenArea()">✦ Write as <span id="gen-char-label">The Narrator</span></button>
+      <div id="gen-prompt-wrap" style="display:none">
+        <input id="gen-direction" type="text" placeholder="Direction (optional) — e.g. 'something dark happens'"
+          onkeydown="if(event.key==='Enter')generateSentence()">
+        <div class="form-row">
+          <button class="pbtn" id="gen-btn" onclick="generateSentence()">Generate</button>
+          <button class="pbtn" id="gen-stop-btn" onclick="stopGenSentence()" style="display:none">Stop</button>
+          <span class="fl" id="gen-fl"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- shared chat -->
+    <div class="gap">
+      <h1>Chat</h1>
+      <div id="main-comment-panel">[window.chat = commentsPlugin(window.chatOpts)]</div>
+      <div id="slashSuggestPanel" class="slash-suggest" hidden></div>
+    </div>
+
+    <!-- character chat -->
+    <div class="gap">
+      <h1>Character Chat</h1>
+      <p class="sub">Private — only visible to you</p>
+
+      <div id="char-setup">
+        <input class="char-field" id="char-name" type="text" placeholder="Character name…" value="The Narrator"
+          oninput="updateGenLabel()">
+        <textarea class="char-field char-prompt-field" id="char-prompt"
+          placeholder="Describe the character… (e.g. 'A cryptic oracle who speaks in riddles and is deeply aware of the story being written.')"></textarea>
+        <button class="pbtn" onclick="beginAiChat()">Begin Chat</button>
+      </div>
+
+      <div id="ai-chat-area" style="display:none">
+        <button class="ai-reset" onclick="resetAiChat()">← Change character</button>
+        <div id="ai-messages"></div>
+        <div class="ai-input-row">
+          <input type="text" id="ai-text-input" placeholder="Say something…"
+            onkeydown="if(event.key==='Enter'){sendToAi();event.preventDefault();}">
+          <button id="ai-send-btn" class="pbtn" onclick="sendToAi()">Send</button>
+          <button id="ai-stop-btn" class="pbtn" onclick="stopAi()" style="display:none">Stop</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end #tab-story -->
+
+  <!-- ══ ROOMS TAB ══ -->
+  <div id="tab-rooms" class="tab-panel">
+
+    <div id="room-tab-bar">
+      <button id="room-add-btn" onclick="roomAdd()" title="Create a new room and choose its round length &amp; cooldown">+</button>
+    </div>
+
+    <div id="room-join-row">
+      <input id="room-join-input" type="text" placeholder="Have a room name? Type it here to join…" onkeydown="if(event.key==='Enter')roomJoin()">
+      <button id="room-join-btn" onclick="roomJoin()">Join</button>
+    </div>
+
+    <div id="room-empty">Use <b>+</b> to create a new room and choose its round length &amp; cooldown, or type an existing room's name above to join it — a joined room always keeps the settings its creator picked.</div>
+
+    <div id="room-panel" style="display:none">
+
+      <div class="gap" style="margin-top:0" id="room-header">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <h1 style="text-align:left" id="room-name-label">Room</h1>
+          <div style="display:flex;align-items:center;gap:10px">
+            <button class="gen-toggle" id="host-btn" onclick="isHost?hostLogout():hostLogin()" title="Host mode: remove sentences, force-advance rounds, bypass cooldown">Host</button>
+            <button id="room-del-link" onclick="roomDeleteCurrent()">Delete room</button>
+          </div>
+        </div>
+        <p class="sub" style="text-align:left;margin:0;line-height:1.7" id="room-meta-label"></p>
+        <p class="sub" style="text-align:left;margin:6px 0 0"><span id="room-presence-label"></span></p>
+        <button class="gen-toggle" id="room-refresh-link" onclick="roomRefresh()" title="Reconnect to this room" style="margin-top:14px">⟳ Refresh Room</button>
+      </div>
+
+      <div class="gap" id="room-archive-wrap">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <h1>Room Archive</h1>
+          <div style="display:flex;gap:6px">
+            <button class="gen-toggle" id="room-archive-dates-btn" onclick="toggleArchiveDates('room-archive-wrap','room-archive-dates-btn')">Hide Dates</button>
+            <button class="gen-toggle" id="room-fetch-history-btn" onclick="roomFetchHistory()">Fetch History</button>
+          </div>
+        </div>
+        <p class="sub">One sentence per round · one story per day</p>
+        <div id="room-fetch-history-fl" style="color:#666;font-size:0.72rem;letter-spacing:0.1em;text-align:center;margin-bottom:10px;font-style:italic"></div>
+        <div id="room-daily-stories"></div>
+      </div>
+
+      <div class="gap">
+        <div id="room-round-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div>
+            <h1 style="text-align:left">Current Round</h1>
+            <p class="sub" style="text-align:left;margin:0" id="room-round-sub">Write a sentence. Vote for the best.</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <button class="gen-toggle" id="host-room-advance-btn" onclick="hostRoomForceAdvance()" style="display:none;color:#c0392b;border-color:#5a1a1a" title="End the round now (top-voted sentence wins)">⏭ Force Advance</button>
+            <span id="room-timer">--:--</span>
+          </div>
+        </div>
+
+        <div id="room-winner-banner" style="display:none">
+          <div class="wb-label">Round Winner</div>
+          <div id="room-winner-text" class="wb-text"></div>
+        </div>
+
+        <div id="room-sentence-list" style="margin-bottom:20px">
+          <div id="room-sent-status">Connecting…</div>
+        </div>
+
+        <div id="room-modify-banner" style="display:none;margin-bottom:8px">
+          <span class="fl">Modifying: "<span id="room-modify-preview"></span>"</span>
+          <button class="ai-reset" style="margin-bottom:0;margin-left:10px" onclick="roomCancelModify()">Cancel</button>
+        </div>
+        <textarea class="form-textarea" id="room-sent-input"
+          placeholder="Write a sentence to continue the story…"
+          oninput="roomOnTyping()"></textarea>
+        <label id="room-chapter-toggle-row">
+          <input type="checkbox" id="room-chapter-check">
+          Also mark this as the start of <b>Chapter <span id="room-chapter-num-label">1</span></b>
+        </label>
+        <label id="room-parabreak-toggle-row">
+          <input type="checkbox" id="room-parabreak-check">
+          Start a new paragraph here (space-break before this sentence)
+        </label>
+        <div class="form-row">
+          <button class="pbtn" id="room-sent-btn" onclick="roomSubmitSentence()" disabled>Submit</button>
+          <span class="fl" id="room-sent-fl"></span>
+        </div>
+
+        <!-- write as character -->
+        <button class="gen-toggle" id="room-gen-toggle-btn" onclick="roomToggleGenArea()">✦ Write as <span id="room-gen-char-label">The Narrator</span></button>
+        <div id="room-gen-prompt-wrap" style="display:none">
+          <input id="room-gen-direction" type="text" placeholder="Direction (optional) — e.g. 'something dark happens'"
+            onkeydown="if(event.key==='Enter')roomGenerateSentence()">
+          <div class="form-row">
+            <button class="pbtn" id="room-gen-btn" onclick="roomGenerateSentence()">Generate</button>
+            <button class="pbtn" id="room-gen-stop-btn" onclick="roomStopGenSentence()" style="display:none">Stop</button>
+            <span class="fl" id="room-gen-fl"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- shared chat -->
+      <div class="gap">
+        <h1>Chat</h1>
+        <div id="room-chat-tab-bar">
+          <button id="room-chat-add-btn" onclick="roomChatAddChannel()" title="New chat channel">+</button>
+          <button id="room-chat-del-btn" style="display:none" title="Delete channel" onclick="roomChatDeleteCurrentChannel()">×</button>
+        </div>
+        <div id="room-comment-panel">[window.cpRoomChat = commentsPlugin(window.roomChatOpts)]</div>
+        <div id="roomSlashSuggestPanel" class="slash-suggest" hidden></div>
+      </div>
+
+      <!-- character chat -->
+      <div class="gap">
+        <h1>Character Chat</h1>
+        <p class="sub">Private — only visible to you</p>
+
+        <div id="room-char-setup">
+          <input class="char-field" id="room-char-name" type="text" placeholder="Character name…" value="The Narrator"
+            oninput="roomUpdateGenLabel()">
+          <textarea class="char-field char-prompt-field" id="room-char-prompt"
+            placeholder="Describe the character… (e.g. 'A cryptic oracle who speaks in riddles and is deeply aware of the story being written.')"></textarea>
+          <button class="pbtn" onclick="roomBeginAiChat()">Begin Chat</button>
+        </div>
+
+        <div id="room-ai-chat-area" style="display:none">
+          <button class="ai-reset" onclick="roomResetAiChat()">← Change character</button>
+          <div id="room-ai-messages"></div>
+          <div class="ai-input-row">
+            <input type="text" id="room-ai-text-input" placeholder="Say something…"
+              onkeydown="if(event.key==='Enter'){roomSendToAi();event.preventDefault();}">
+            <button id="room-ai-send-btn" class="pbtn" onclick="roomSendToAi()">Send</button>
+            <button id="room-ai-stop-btn" class="pbtn" onclick="roomStopAi()" style="display:none">Stop</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end #room-panel -->
+
+  </div><!-- end #tab-rooms -->
+
+  <!-- ══ D&D TAB ══ -->
+  <div id="tab-dnd" class="tab-panel">
+
+    <!-- Channel tab bar -->
+    <div id="dnd-tab-bar">
+      <button class="dnd-ch-tab" data-channel="general" onclick="dndSwitchChannel('general')">general</button>
+      <button id="dnd-add-ch-btn" onclick="dndAddChannel()" title="New channel">+</button>
+    </div>
+
+    <!-- Game panel -->
+    <div id="dnd-game" style="display:none">
+
+      <!-- commentsPlugin chat -->
+      <div id="dnd-comment-panel" style="margin-bottom:8px">[window.cpDnd = commentsPlugin(window.cpDndOpts)]</div>
+      <div id="dndSlashSuggestPanel" class="slash-suggest" hidden></div>
+
+      <!-- Speak via Character -->
+      <button class="gen-toggle" id="dnd-char-toggle" onclick="toggleDndChar()" style="margin-bottom:28px">✦ Speak via Character</button>
+      <div id="dnd-char-area" style="display:none;margin-bottom:28px">
+        <input class="char-field" id="dnd-char-name-input" type="text"
+          placeholder="Character name… (e.g. The Innkeeper, Shadow the Rogue)">
+        <textarea class="char-field char-prompt-field" id="dnd-char-desc-input"
+          placeholder="Describe this character… personality, role in the world, secrets…"></textarea>
+        <textarea class="char-field" id="dnd-char-prompt" rows="2"
+          placeholder="Optional: what should this character react to or say?"></textarea>
+        <div id="dnd-char-preview" style="display:none"></div>
+        <div class="form-row" style="margin-top:10px">
+          <button class="pbtn" id="dnd-char-send-btn" onclick="speakAsChar()">Speak</button>
+          <button class="pbtn" id="dnd-char-stop-btn" onclick="stopDndChar()" style="display:none">Stop</button>
+          <button class="pbtn" id="dnd-char-post-btn" onclick="postCharMessage()" style="display:none">Post</button>
+          <span class="fl" id="dnd-char-fl"></span>
+        </div>
+      </div>
+
+      <!-- Action / dice -->
+      <h1 style="text-align:left;margin-bottom:10px">Take Action</h1>
+      <textarea class="form-textarea" id="dnd-action"
+        placeholder="Describe what your character does…"></textarea>
+
+      <div id="dnd-die-wrap" style="display:none">
+        <div class="die-face" id="dnd-die-face"></div>
+        <div class="die-label" id="dnd-die-label"></div>
+      </div>
+
+      <div id="dnd-dm-area" style="display:none">
+        <div class="dm-label">Dungeon Master</div>
+        <div id="dnd-dm-text"></div>
+      </div>
+
+      <div class="form-row">
+        <button class="pbtn" id="dnd-roll-btn" onclick="dndRollAndAct()">Roll d20</button>
+        <button class="pbtn" id="dnd-stop-btn" onclick="dndStop()" style="display:none">Stop</button>
+        <span class="fl" id="dnd-fl"></span>
+      </div>
+
+    </div><!-- end #dnd-game -->
+
+  </div><!-- end #tab-dnd -->
+
+</div>
+
+<script>
+  // ── helpers ──────────────────────────────────────────────────────
+  function utcDateStr() {
+    const d = new Date();
+    return d.getUTCFullYear() + ''
+      + String(d.getUTCMonth() + 1).padStart(2, '0')
+      + String(d.getUTCDate()).padStart(2, '0');
+  }
+  function formatDateLabel(yyyymmdd) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return months[parseInt(yyyymmdd.slice(4,6)) - 1] + ' ' + parseInt(yyyymmdd.slice(6,8)) + ', ' + yyyymmdd.slice(0,4);
+  }
+  function tickUtcClock() {
+    const el = document.getElementById('utc-clock');
+    if (!el) return;
+    const d = new Date();
+    el.textContent = String(d.getUTCHours()).padStart(2, '0') + ':'
+      + String(d.getUTCMinutes()).padStart(2, '0') + ':'
+      + String(d.getUTCSeconds()).padStart(2, '0') + ' UTC';
+  }
+
+  // ── Story Roulette globals ────────────────────────────────────────
+  const PAGE_DATE = utcDateStr();
+  const CHAT_CH   = 'sentence-roulette-chat-v1';
+  const ARCHIVE_CH = 'sentence-roulette-archive-v1';
+  let ROUND_MS  = 3600000;
+
+  let socket = null, reconnectDelay = 500;
+  let transitioning = false, timerIv = null;
+  const rounds = {}, sents = {}, wins = {};
+  let cur = null;
+  let modifyTarget = null;
+
+  // ── host state ──
+  let isHost = false, hostPassword = null;
+
+  // ── archive globals ───────────────────────────────────────────────
+  let archiveCtrl = null;
+  const archiveDays = {};
+  let archiveComments = [];
+  let archiveServerLoaded = false, archiveServerEmpty = true, migrationAttempted = false;
+
+  // ── legacy migration globals ──────────────────────────────────────
+  let legacyLoaded = false, archiveLoaded = false;
+  const legacyRounds = {}, legacyWins = {};
+
+  const SEED_WINNERS = [];
+
+  // ── Rooms globals ───────────────────────────────────────────────────
+  let roomSlug = null, roomName = '', roomRoundMs = 3600000, roomCooldownMs = 5 * 60 * 1000;
+  let roomPendingRoundMin = null, roomPendingCooldownMin = null, roomPendingPassword = null, roomCfgSeen = false;
+  let roomTransitioning = false, roomTimerIv = null, roomHeartbeatIv = null;
+  const roomRounds = {}, roomSents = {}, roomWins = {};
+  let roomCur = null;
+  let roomModifyTarget = null;
+  let roomJoinedCount = 1;
+
+  let roomArchiveCtrl = null;
+  const roomArchiveDays = {};
+  let roomArchiveComments = [];
+  let roomFetchingHistory = false;
+  let roomArchiveServerLoaded = false, roomMigrationAttempted = false;
+
+
+  function h8(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+    return Math.abs(h).toString(36).padStart(8,'0').slice(0,8);
+  }
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function breakSents(escaped) { return escaped.replace(/([.!?])\s+/g, '$1<br>'); }
+  function truncate(s, n) { return s.length > n ? s.slice(0, n).trim() + '…' : s; }
+
+  function roomRenderPresenceLabel() {
+    const el = document.getElementById('room-presence-label');
+    if (!el) return;
+    el.innerHTML = '<span class="joined-count-num">' + roomJoinedCount + '</span>'
+      + (roomJoinedCount === 1 ? ' person visited this room' : ' people visited this room');
+  }
+
+  function vid() {
+    let id = localStorage.getItem('sr-vid');
+    if (!id) { id = h8(Date.now() + ':' + Math.random()); localStorage.setItem('sr-vid', id); }
+    return id;
+  }
+  function myVoteDir(rid, sid) {
+    const v = localStorage.getItem('sr-vd-' + rid + '-' + sid);
+    return v ? parseInt(v) : 0;
+  }
+  function setVoteDir(rid, sid, dir) {
+    if (dir === 0) localStorage.removeItem('sr-vd-' + rid + '-' + sid);
+    else localStorage.setItem('sr-vd-' + rid + '-' + sid, dir);
+  }
+  function roomMyVoteDir(rid, sid) {
+    const v = localStorage.getItem('sr-room-vd-' + roomSlug + '-' + rid + '-' + sid);
+    return v ? parseInt(v) : 0;
+  }
+  function roomSetVoteDir(rid, sid, dir) {
+    const k = 'sr-room-vd-' + roomSlug + '-' + rid + '-' + sid;
+    if (dir === 0) localStorage.removeItem(k);
+    else localStorage.setItem(k, dir);
+  }
+
+  const SUBMIT_COOLDOWN = 5 * 60 * 1000;
+  function lastSub(rid)   { const v = localStorage.getItem('sr-last-' + rid); return v ? parseInt(v) : null; }
+  function setLastSub(rid){ localStorage.setItem('sr-last-' + rid, Date.now()); }
+  function canSubmit(rid) { const l = lastSub(rid); return !l || Date.now() - l >= SUBMIT_COOLDOWN; }
+  function cooldownLeft(rid){ const l = lastSub(rid); return l ? Math.max(0, SUBMIT_COOLDOWN - (Date.now() - l)) : 0; }
+  function fmtMs(ms)      { const m = Math.floor(ms/60000), s = Math.floor((ms%60000)/1000); return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
+
+  function exp(rid) { return rid && rounds[rid] && Date.now() - rounds[rid].ms >= ROUND_MS; }
+
+  function roomLastSub(rid)    { const v = localStorage.getItem('sr-room-last-' + roomSlug + '-' + rid); return v ? parseInt(v) : null; }
+  function roomSetLastSub(rid) { localStorage.setItem('sr-room-last-' + roomSlug + '-' + rid, Date.now()); }
+  function roomCanSubmit(rid)  { if (isHost) return true; const l = roomLastSub(rid); return !l || Date.now() - l >= roomCooldownMs; }
+  function roomCooldownLeft(rid){ if (isHost) return 0; const l = roomLastSub(rid); return l ? Math.max(0, roomCooldownMs - (Date.now() - l)) : 0; }
+
+  function roomExp(rid) { return !!(rid && roomRounds[rid] && roomRounds[rid].ms > 0 && Date.now() - roomRounds[rid].ms >= roomRoundMs); }
+
+  // ── socket message handlers (replace the old parseEvent/roomParseEvent
+  // commentsPlugin replay — the server is now authoritative for rounds/
+  // sentences/votes, and pushes deltas over pub/sub instead) ──
+  function handleGameMsg(msg) {
+    switch (msg.type) {
+      case 'sentence':
+        if (!sents[msg.sid]) sents[msg.sid] = { rid: cur, text: msg.text, ord: msg.ord, parent: msg.parentSid, up: 0, down: 0 };
+        break;
+      case 'vote': {
+        const s = sents[msg.sid];
+        if (s) { s.up = msg.up; s.down = msg.down; }
+        break;
+      }
+      case 'sentenceDeleted':
+        delete sents[msg.sid];
+        break;
+      case 'roundEnd':
+        if (!wins[msg.rid]) { wins[msg.rid] = { sid: msg.sid, text: msg.text }; writeToArchive(msg.rid, msg.text); }
+        break;
+      case 'newRound':
+        rounds[msg.roundId] = { ms: msg.startMs };
+        cur = msg.roundId;
+        if (msg.roundMs) ROUND_MS = msg.roundMs;
+        break;
+    }
+    render();
+    onTyping();
+  }
+
+  function handleRoomMsg(msg) {
+    switch (msg.type) {
+      case 'sentence':
+        if (!roomSents[msg.sid]) roomSents[msg.sid] = { rid: roomCur, text: msg.text, ord: msg.ord, parent: msg.parentSid, up: 0, down: 0 };
+        break;
+      case 'vote': {
+        const s = roomSents[msg.sid];
+        if (s) { s.up = msg.up; s.down = msg.down; }
+        break;
+      }
+      case 'sentenceDeleted':
+        delete roomSents[msg.sid];
+        break;
+      case 'roundStarted':
+        if (roomRounds[roomCur]) roomRounds[roomCur].ms = msg.startMs;
+        break;
+      case 'roundEnd':
+        if (!roomWins[msg.rid]) { roomWins[msg.rid] = { sid: msg.sid, text: msg.text }; roomWriteToArchive(msg.rid, msg.text); }
+        break;
+      case 'newRound':
+        roomRounds[msg.roundId] = { ms: msg.startMs };
+        roomCur = msg.roundId;
+        if (msg.roundMs) roomRoundMs = msg.roundMs;
+        break;
+      case 'joinedCount': {
+        roomJoinedCount = msg.count;
+        roomRenderPresenceLabel();
+        break;
+      }
+      case 'archiveEdited':
+        roomArchiveApplyEdit(msg.rid, msg.text);
+        break;
+      case 'archiveDeleted':
+        roomArchiveApplyRemove(msg.rid);
+        break;
+    }
+    roomRender();
+    roomOnTyping();
+  }
+
+  function roomArchiveFindText(rid) {
+    for (const d in roomArchiveDays) {
+      const e = roomArchiveDays[d].find(function(x) { return x.rid === rid; });
+      if (e) return e.text;
+    }
+    if (roomWins[rid]) return roomWins[rid].text;
+    return null;
+  }
+
+  function roomArchiveApplyEdit(rid, text) {
+    Object.keys(roomArchiveDays).forEach(function(d) {
+      roomArchiveDays[d].forEach(function(e) { if (e.rid === rid) e.text = text; });
+    });
+    if (roomWins[rid]) roomWins[rid].text = text;
+  }
+
+  function roomArchiveApplyRemove(rid) {
+    Object.keys(roomArchiveDays).forEach(function(d) {
+      roomArchiveDays[d] = roomArchiveDays[d].filter(function(e) { return e.rid !== rid; });
+    });
+    delete roomWins[rid];
+  }
+
+  async function hostRoomArchiveEditStart(rid) {
+    if (!isHost || !socket || socket.readyState !== 1 || !roomSlug) return;
+    const current = roomArchiveFindText(rid);
+    if (current === null) return;
+    const next = prompt('Edit this archive line:', current);
+    if (next === null) return;
+    const text = next.trim();
+    if (!text) { alert('Text can\'t be empty — use Remove instead.'); return; }
+    try {
+      const res = JSON.parse(await socket.rpc.hostRoomArchiveEdit(JSON.stringify({ slug: roomSlug, rid: rid, text: text })));
+      if (res.error) { alert('Failed — try again.'); }
+    } catch (e) { alert('Failed — try again.'); }
+  }
+
+  async function hostRoomArchiveRemove(rid) {
+    if (!isHost || !socket || socket.readyState !== 1 || !roomSlug) return;
+    if (!confirm('Remove this line from the room archive? This can\'t be undone.')) return;
+    try {
+      const res = JSON.parse(await socket.rpc.hostRoomArchiveDelete(JSON.stringify({ slug: roomSlug, rid: rid })));
+      if (res.error) { alert('Failed — try again.'); }
+    } catch (e) { alert('Failed — try again.'); }
+  }
+
+  // ── socket connection lifecycle ─────────────────────────────────────
+  function connect() {
+    if (typeof window.createServerSocket !== 'function') { setTimeout(connect, 1000); return; }
+    try { socket = window.createServerSocket(); }
+    catch (e) { scheduleReconnect(); return; }
+    socket.addEventListener('open', function() {
+      reconnectDelay = 500;
+      rejoinAfterConnect();
+    });
+    socket.addEventListener('message', function(event) {
+      let msg; try { msg = JSON.parse(event.data); } catch(e) { return; }
+      if (msg.scope === 'game') handleGameMsg(msg);
+      else if (msg.scope === 'room' && msg.slug === roomSlug) handleRoomMsg(msg);
+    });
+    socket.addEventListener('close', function() { scheduleReconnect(); });
+  }
+
+  function scheduleReconnect() {
+    const delay = reconnectDelay + Math.random() * 300;
+    setTimeout(connect, delay);
+    reconnectDelay = Math.min(reconnectDelay * 2, 8000);
+  }
+
+  async function rejoinAfterConnect() {
+    try {
+      const snap = JSON.parse(await socket.rpc.joinGame(''));
+      applyGameSnapshot(snap);
+    } catch(e) {}
+    if (isHost && hostPassword && roomSlug) { try { await socket.rpc.hostLogin(JSON.stringify({ slug: roomSlug, password: hostPassword })); } catch(e) {} }
+    loadArchive();
+    if (roomSlug) { try { await roomConnect(); } catch(e) {} }
+  }
+
+  function applyGameSnapshot(snap) {
+    cur = snap.roundId;
+    rounds[cur] = { ms: snap.startMs };
+    if (snap.roundMs) ROUND_MS = snap.roundMs;
+    snap.sentences.forEach(function(s) {
+      sents[s.sid] = { rid: cur, text: s.text, ord: s.ord, parent: s.parentSid, up: s.up, down: s.down };
+    });
+    startTimer(); render(); onTyping();
+  }
+
+  async function roomConnect() {
+    if (!socket || socket.readyState !== 1 || !roomSlug) return;
+    const hadPendingCreate = roomPendingRoundMin != null || roomPendingCooldownMin != null || roomPendingPassword != null;
+    try {
+      const snap = JSON.parse(await socket.rpc.roomConfig(JSON.stringify({
+        slug: roomSlug, name: roomName,
+        roundMin: roomPendingRoundMin, cooldownMin: roomPendingCooldownMin,
+        password: roomPendingPassword, vid: vid()
+      })));
+      // pending creation settings only ever apply to the very first roomConfig
+      // call for a room — clear them so later reconnects don't resend them
+      // (harmless server-side, but would otherwise re-trigger the notice below)
+      roomPendingRoundMin = null; roomPendingCooldownMin = null; roomPendingPassword = null;
+      if (snap.error) {
+        const st = document.getElementById('room-sent-status');
+        if (st) st.textContent = snap.error;
+        return;
+      }
+      if (hadPendingCreate && snap.existed) {
+        alert('A room named "' + snap.name + '" already exists — you\'ve joined that one instead. The round length, cooldown, and host password you entered were not applied.');
+      }
+      applyRoomSnapshot(snap);
+    } catch(e) {}
+  }
+
+  function applyRoomSnapshot(snap) {
+    roomName = snap.name || roomName;
+    roomRoundMs = snap.roundMs; roomCooldownMs = snap.cooldownMs;
+    roomCfgSeen = true;
+    roomPersistResolvedSettings();
+    roomCur = snap.roundId;
+    roomRounds[roomCur] = { ms: snap.startMs };
+    snap.sentences.forEach(function(s) {
+      roomSents[s.sid] = { rid: roomCur, text: s.text, ord: s.ord, parent: s.parentSid, up: s.up, down: s.down };
+    });
+    roomJoinedCount = snap.joinedCount || 1;
+    roomRenderPresenceLabel();
+    roomStartTimer(); roomStartHeartbeat(); roomRender(); roomOnTyping();
+    roomLoadArchive();
+  }
+
+  // ── archive ───────────────────────────────────────────────────────
+  function parseArchiveComment(c) {
+    const raw = (c.message || c.text || '').trim();
+    if (!raw.startsWith('W|')) return null;
+    const parts = raw.split('|');
+    if (parts.length < 4) return null;
+    const rid = parts[1], date = parts[2];
+    let ms = 0, text;
+    if (parts.length >= 5 && /^\d{10,}$/.test(parts[3])) {
+      ms = parseInt(parts[3]);
+      text = parts.slice(4).join('|').trim();
+    } else {
+      text = parts.slice(3).join('|').trim();
+    }
+    if (!rid || !date || !text) return null;
+    return { rid: rid, date: date, ms: ms, text: text };
+  }
+
+  function applyArchiveEntries(list) {
+    Object.keys(archiveDays).forEach(function(k) { delete archiveDays[k]; });
+    list.forEach(function(e) {
+      if (!archiveDays[e.date]) archiveDays[e.date] = [];
+      if (!archiveDays[e.date].some(function(x) { return x.rid === e.rid; }))
+        archiveDays[e.date].push({ rid: e.rid, text: e.text, ms: e.ms });
+    });
+  }
+
+  async function loadArchive() {
+    if (!socket || socket.readyState !== 1) return;
+    try {
+      const list = JSON.parse(await socket.rpc.archiveList('{}'));
+      applyArchiveEntries(list);
+      archiveServerLoaded = true;
+      archiveServerEmpty = list.length === 0;
+      renderDailyStories();
+      tryMigrate();
+    } catch(e) {}
+  }
+
+  function isArchived(rid) {
+    return Object.keys(archiveDays).some(function(d) {
+      return archiveDays[d].some(function(e) { return e.rid === rid; });
+    });
+  }
+
+  async function writeToArchive(rid, text) {
+    if (!socket || socket.readyState !== 1) return;
+    const ms = rounds[rid] ? rounds[rid].ms : Date.now();
+    try { await socket.rpc.archiveAdd(JSON.stringify({ rid: rid, date: PAGE_DATE, ms: ms, text: text })); } catch(e) {}
+    if (!isArchived(rid)) {
+      if (!archiveDays[PAGE_DATE]) archiveDays[PAGE_DATE] = [];
+      archiveDays[PAGE_DATE].push({ rid: rid, text: text, ms: ms });
+      renderDailyStories();
+    }
+  }
+
+  let fetchingHistory = false;
+
+  // one-time migration of legacy comment-channel winners into server state.
+  // runs after both the server archive and the old comment sources have loaded;
+  // idempotent — the server dedupes by rid, so re-running is harmless.
+  async function tryMigrate() {
+    if (migrationAttempted) return;
+    if (!archiveServerLoaded || !archiveLoaded || !legacyLoaded) return;
+    migrationAttempted = true;
+    const allWins = {};
+    SEED_WINNERS.forEach(function(s) { allWins[s.rid] = { ms: s.ms, text: s.text, date: null }; });
+    archiveComments.forEach(function(c) {
+      const e = parseArchiveComment(c);
+      if (e) allWins[e.rid] = { ms: e.ms, text: e.text, date: e.date };
+    });
+    Object.keys(legacyWins).forEach(function(rid) {
+      if (legacyRounds[rid] && !allWins[rid])
+        allWins[rid] = { ms: legacyRounds[rid], text: legacyWins[rid], date: null };
+    });
+    const toWrite = Object.keys(allWins).filter(function(rid) { return !isArchived(rid); });
+    if (!toWrite.length) return;
+    for (const rid of toWrite) {
+      const w = allWins[rid];
+      let date = w.date;
+      if (!date) {
+        const d = new Date(w.ms);
+        date = d.getUTCFullYear() + ''
+          + String(d.getUTCMonth() + 1).padStart(2, '0')
+          + String(d.getUTCDate()).padStart(2, '0');
+      }
+      try { await socket.rpc.archiveAdd(JSON.stringify({ rid: rid, date: date, ms: w.ms, text: w.text })); } catch(e) {}
+    }
+    await loadArchive();
+  }
+
+  async function fetchHistory() {
+    if (fetchingHistory) return;
+    if (!socket || socket.readyState !== 1) return;
+    const btn = document.getElementById('fetch-history-btn');
+    const fl  = document.getElementById('fetch-history-fl');
+    fetchingHistory = true;
+    if (btn) btn.disabled = true;
+    if (fl) fl.textContent = 'Refreshing…';
+    migrationAttempted = false;
+    await tryMigrate();
+    await loadArchive();
+    if (fl) fl.textContent = archiveServerEmpty ? 'No history yet.' : 'Archive up to date.';
+    if (btn) btn.disabled = false;
+    fetchingHistory = false;
+  }
+
+  function toggleArchiveDates(wrapId, btnId) {
+    const wrap = document.getElementById(wrapId);
+    const btn = document.getElementById(btnId);
+    if (!wrap || !btn) return;
+    const blocks = wrap.querySelectorAll('.day-block');
+    const on = wrap.classList.toggle('archive-no-dates');
+    if (on) {
+      wrap._dateOpenState = [];
+      blocks.forEach(function(d) { wrap._dateOpenState.push(d.open); d.open = true; });
+      btn.textContent = 'Show Dates';
+    } else {
+      if (wrap._dateOpenState) blocks.forEach(function(d, i) { d.open = !!wrap._dateOpenState[i]; });
+      btn.textContent = 'Hide Dates';
+    }
+  }
+
+  function correctedDays() {
+    const result = {};
+    Object.keys(archiveDays).forEach(function(date) {
+      archiveDays[date].forEach(function(entry) {
+        let targetDate = date, ms = entry.ms, text = entry.text;
+        if (ms === 0) {
+          for (let i = 0; i < SEED_WINNERS.length; i++) {
+            if (SEED_WINNERS[i].rid === entry.rid) {
+              const d = new Date(SEED_WINNERS[i].ms);
+              targetDate = d.getUTCFullYear() + ''
+                + String(d.getUTCMonth() + 1).padStart(2, '0')
+                + String(d.getUTCDate()).padStart(2, '0');
+              ms = SEED_WINNERS[i].ms;
+              text = SEED_WINNERS[i].text;
+              break;
+            }
+          }
+        }
+        if (!result[targetDate]) result[targetDate] = [];
+        if (!result[targetDate].some(function(e) { return e.rid === entry.rid; }))
+          result[targetDate].push({ rid: entry.rid, text: text, ms: ms });
+      });
+    });
+    return result;
+  }
+
+  function renderDailyStories() {
+    const el = document.getElementById('daily-stories');
+    if (!el) return;
+
+    const days = correctedDays();
+    const archivedRids = new Set((days[PAGE_DATE] || []).map(function(e) { return e.rid; }));
+    const liveToday = Object.entries(wins)
+      .filter(function([rid]) { return rounds[rid] && !archivedRids.has(rid); })
+      .sort(function(a, b) { return rounds[a[0]].ms - rounds[b[0]].ms; })
+      .map(function([, w]) { return w.text; });
+
+    const allDates = Object.keys(days).sort();
+    if (!allDates.includes(PAGE_DATE) && liveToday.length) allDates.push(PAGE_DATE);
+    allDates.sort();
+
+    if (!allDates.length) { el.innerHTML = '<span id="story-empty">The story hasn\'t begun yet.</span>'; return; }
+
+    const cutoff = new Date();
+    cutoff.setUTCDate(cutoff.getUTCDate() - 7);
+    const cutoffStr = cutoff.getUTCFullYear() + ''
+      + String(cutoff.getUTCMonth() + 1).padStart(2, '0')
+      + String(cutoff.getUTCDate()).padStart(2, '0');
+
+    function renderDayBlock(date) {
+      const isToday = date === PAGE_DATE;
+      const entries = (days[date] || [])
+        .slice().sort(function(a, b) {
+          if (!a.ms && !b.ms) return 0;
+          if (!a.ms) return 1;
+          if (!b.ms) return -1;
+          return a.ms - b.ms;
+        })
+        .map(function(e) { return e.text; });
+      if (isToday) liveToday.forEach(function(t) { entries.push(t); });
+      if (!entries.length) return '';
+      const suffix = isToday ? ' <span class="day-ongoing">(ongoing)</span>' : '';
+      return '<details class="day-block"' + (isToday ? ' open' : '') + '>'
+        + '<summary><h1>' + esc(formatDateLabel(date)) + suffix + '</h1></summary>'
+        + '<div class="day-body">' + entries.map(function(t) { return breakSents(esc(t)); }).join('<br><br>') + '</div>'
+        + '</details>';
+    }
+
+    const recentDates = allDates.filter(function(d) { return d >= cutoffStr; });
+    const olderDates  = allDates.filter(function(d) { return d < cutoffStr; });
+
+    let html = '';
+    if (olderDates.length) {
+      const inner = olderDates.map(renderDayBlock).filter(Boolean).join('');
+      if (inner) {
+        html += '<details class="day-block">'
+          + '<summary><h1>' + olderDates.length + ' earlier day' + (olderDates.length === 1 ? '' : 's') + '</h1></summary>'
+          + '<div style="padding-left:12px;margin-bottom:8px">' + inner + '</div>'
+          + '</details>';
+      }
+    }
+    html += recentDates.map(renderDayBlock).filter(Boolean).join('');
+    el.innerHTML = html || '<span id="story-empty">The story hasn\'t begun yet.</span>';
+  }
+
+  // ── room archive ─────────────────────────────────────────────────
+  function roomParseArchiveComment(c) {
+    const raw = (c.message || c.text || '').trim();
+    if (!raw.startsWith('W|')) return null;
+    const parts = raw.split('|');
+    if (parts.length < 4) return null;
+    const rid = parts[1], date = parts[2];
+    let ms = 0, text;
+    if (parts.length >= 5 && /^\d{10,}$/.test(parts[3])) {
+      ms = parseInt(parts[3]);
+      text = parts.slice(4).join('|').trim();
+    } else {
+      text = parts.slice(3).join('|').trim();
+    }
+    if (!rid || !date || !text) return null;
+    return { rid: rid, date: date, ms: ms, text: text };
+  }
+
+  function roomApplyArchiveEntries(list) {
+    Object.keys(roomArchiveDays).forEach(function(k) { delete roomArchiveDays[k]; });
+    list.forEach(function(e) {
+      if (!roomArchiveDays[e.date]) roomArchiveDays[e.date] = [];
+      if (!roomArchiveDays[e.date].some(function(x) { return x.rid === e.rid; }))
+        roomArchiveDays[e.date].push({ rid: e.rid, text: e.text, ms: e.ms });
+    });
+  }
+
+  async function roomLoadArchive() {
+    if (!socket || socket.readyState !== 1 || !roomSlug) return;
+    try {
+      const list = JSON.parse(await socket.rpc.archiveList(JSON.stringify({ slug: roomSlug })));
+      roomApplyArchiveEntries(list);
+      roomArchiveServerLoaded = true;
+      roomRenderDailyStories();
+      roomTryMigrate();
+    } catch(e) {}
+  }
+
+  function roomIsArchived(rid) {
+    return Object.keys(roomArchiveDays).some(function(d) {
+      return roomArchiveDays[d].some(function(e) { return e.rid === rid; });
+    });
+  }
+
+  async function roomWriteToArchive(rid, text) {
+    if (!socket || socket.readyState !== 1 || !roomSlug) return;
+    const ms = roomRounds[rid] ? roomRounds[rid].ms : Date.now();
+    try { await socket.rpc.archiveAdd(JSON.stringify({ rid: rid, date: PAGE_DATE, ms: ms, text: text, slug: roomSlug })); } catch(e) {}
+    if (!roomIsArchived(rid)) {
+      if (!roomArchiveDays[PAGE_DATE]) roomArchiveDays[PAGE_DATE] = [];
+      roomArchiveDays[PAGE_DATE].push({ rid: rid, text: text, ms: ms });
+      roomRenderDailyStories();
+    }
+  }
+
+  // one-time migration of this room's legacy comment-channel winners into
+  // server state; idempotent (server dedupes by rid+slug).
+  async function roomTryMigrate() {
+    if (roomMigrationAttempted) return;
+    if (!roomArchiveServerLoaded || !roomArchiveCtrl) return;
+    roomMigrationAttempted = true;
+    const allWins = {};
+    roomArchiveComments.forEach(function(c) {
+      const e = roomParseArchiveComment(c);
+      if (e) allWins[e.rid] = { ms: e.ms, text: e.text, date: e.date };
+    });
+    Object.keys(roomWins).forEach(function(rid) {
+      if (roomRounds[rid] && !allWins[rid])
+        allWins[rid] = { ms: roomRounds[rid].ms, text: roomWins[rid].text, date: null };
+    });
+    const toWrite = Object.keys(allWins).filter(function(rid) { return !roomIsArchived(rid); });
+    if (!toWrite.length) return;
+    for (const rid of toWrite) {
+      const w = allWins[rid];
+      let date = w.date;
+      if (!date) {
+        const d = new Date(w.ms);
+        date = d.getUTCFullYear() + ''
+          + String(d.getUTCMonth() + 1).padStart(2, '0')
+          + String(d.getUTCDate()).padStart(2, '0');
+      }
+      try { await socket.rpc.archiveAdd(JSON.stringify({ rid: rid, date: date, ms: w.ms, text: w.text, slug: roomSlug })); } catch(e) {}
+    }
+    await roomLoadArchive();
+  }
+
+  async function roomFetchHistory() {
+    if (roomFetchingHistory) return;
+    if (!socket || socket.readyState !== 1 || !roomSlug) return;
+    const btn = document.getElementById('room-fetch-history-btn');
+    const fl  = document.getElementById('room-fetch-history-fl');
+    roomFetchingHistory = true;
+    if (btn) btn.disabled = true;
+    if (fl) fl.textContent = 'Refreshing…';
+    roomMigrationAttempted = false;
+    await roomTryMigrate();
+    await roomLoadArchive();
+    if (fl) fl.textContent = 'Archive up to date.';
+    if (btn) btn.disabled = false;
+    roomFetchingHistory = false;
+  }
+
+  function roomRenderDailyStories() {
+    const el = document.getElementById('room-daily-stories');
+    if (!el) return;
+
+    const days = roomArchiveDays;
+    const archivedRids = new Set((days[PAGE_DATE] || []).map(function(e) { return e.rid; }));
+    const liveToday = Object.entries(roomWins)
+      .filter(function([rid]) { return roomRounds[rid] && !archivedRids.has(rid); })
+      .sort(function(a, b) { return roomRounds[a[0]].ms - roomRounds[b[0]].ms; })
+      .map(function([rid, w]) { return { rid: rid, text: w.text }; });
+
+    const allDates = Object.keys(days).sort();
+    if (!allDates.includes(PAGE_DATE) && liveToday.length) allDates.push(PAGE_DATE);
+    allDates.sort();
+
+    if (!allDates.length) { el.innerHTML = '<span id="room-story-empty">The story hasn\'t begun yet.</span>'; return; }
+
+    const cutoff = new Date();
+    cutoff.setUTCDate(cutoff.getUTCDate() - 7);
+    const cutoffStr = cutoff.getUTCFullYear() + ''
+      + String(cutoff.getUTCMonth() + 1).padStart(2, '0')
+      + String(cutoff.getUTCDate()).padStart(2, '0');
+
+    function entryHtml(e) {
+      const ctl = isHost
+        ? '<span class="arch-ctl">'
+          + '<button class="arch-ctl-btn" onclick="hostRoomArchiveEditStart(\'' + e.rid + '\')" title="Edit this line">✎</button>'
+          + '<button class="arch-ctl-btn arch-ctl-del" onclick="hostRoomArchiveRemove(\'' + e.rid + '\')" title="Remove this line">✕</button>'
+          + '</span>'
+        : '';
+      return '<span class="arch-entry" data-rid="' + e.rid + '">' + esc(e.text) + '</span>' + ctl;
+    }
+
+    function buildDayBodyHtml(entries) {
+      const parts = [];
+      let para = [];
+      const chapterRe = / CHAPTER (\d+)\s*$/i;
+      const paraBreakRe = /\s*¶\s*$/;
+      function flush() {
+        if (para.length) { parts.push('<p class="story-para">' + para.map(entryHtml).join(' ') + '</p>'); para = []; }
+      }
+      entries.forEach(function(e) {
+        const m = chapterRe.exec(e.text);
+        if (m) {
+          const prose = e.text.slice(0, m.index).trim();
+          flush();
+          if (prose) parts.push('<p class="story-para chapter-line">' + entryHtml({ rid: e.rid, text: prose }) + ' <span class="chapter-tag">Chapter ' + m[1] + '</span></p>');
+        } else if (paraBreakRe.test(e.text)) {
+          flush();
+          para.push({ rid: e.rid, text: e.text.replace(paraBreakRe, '') });
+        } else {
+          para.push(e);
+        }
+      });
+      flush();
+      return parts.join('');
+    }
+
+    function renderDayBlock(date) {
+      const isToday = date === PAGE_DATE;
+      const entries = (days[date] || [])
+        .slice().sort(function(a, b) {
+          if (!a.ms && !b.ms) return 0;
+          if (!a.ms) return 1;
+          if (!b.ms) return -1;
+          return a.ms - b.ms;
+        })
+        .map(function(e) { return { rid: e.rid, text: e.text }; });
+      if (isToday) liveToday.forEach(function(w) { entries.push(w); });
+      if (!entries.length) return '';
+      const suffix = isToday ? ' <span class="day-ongoing">(ongoing)</span>' : '';
+      return '<details class="day-block"' + (isToday ? ' open' : '') + '>'
+        + '<summary><h1>' + esc(formatDateLabel(date)) + suffix + '</h1></summary>'
+        + '<div class="day-body">' + buildDayBodyHtml(entries) + '</div>'
+        + '</details>';
+    }
+
+    const recentDates = allDates.filter(function(d) { return d >= cutoffStr; });
+    const olderDates  = allDates.filter(function(d) { return d < cutoffStr; });
+
+    let html = '';
+    if (olderDates.length) {
+      const inner = olderDates.map(renderDayBlock).filter(Boolean).join('');
+      if (inner) {
+        html += '<details class="day-block">'
+          + '<summary><h1>' + olderDates.length + ' earlier day' + (olderDates.length === 1 ? '' : 's') + '</h1></summary>'
+          + '<div style="padding-left:12px;margin-bottom:8px">' + inner + '</div>'
+          + '</details>';
+      }
+    }
+    html += recentDates.map(renderDayBlock).filter(Boolean).join('');
+    el.innerHTML = html || '<span id="room-story-empty">The story hasn\'t begun yet.</span>';
+  }
+
+  function buildThreads(rows) {
+    const bySid = {};
+    rows.forEach(function(r) { bySid[r.sid] = r; r.children = []; });
+    const roots = [];
+    rows.forEach(function(r) {
+      if (r.parent && bySid[r.parent]) bySid[r.parent].children.push(r);
+      else roots.push(r);
+    });
+    (function sortRec(list) {
+      list.sort(function(a, b) { return b.net - a.net || a.ord - b.ord; });
+      list.forEach(function(r) { sortRec(r.children); });
+    })(roots);
+    return roots;
+  }
+
+  function renderSentenceCard(s, rid, isExp, depth) {
+    const myDir = myVoteDir(rid, s.sid);
+    const mvClass = myDir === 1 ? ' mv' : myDir === -1 ? ' mv-down' : '';
+    const dis = isExp ? ' disabled' : '';
+    const modLabel = depth > 0 ? '<div class="sc-mod">✎ Modification</div>' : '';
+    let html = '<div class="sc-card' + mvClass + '">'
+      + '<div class="vc">'
+      + '<button class="vb up' + (myDir === 1 ? ' on' : '') + '"' + dis + ' onclick="doVote(\'' + s.sid + '\',1)">▲</button>'
+      + '<span class="vs' + (s.up > 0 ? ' p' : '') + '">' + s.up + '</span>'
+      + '<button class="vb down' + (myDir === -1 ? ' on-down' : '') + '"' + dis + ' onclick="doVote(\'' + s.sid + '\',-1)">▼</button>'
+      + '<span class="vs' + (s.down > 0 ? ' n' : '') + '">' + s.down + '</span>'
+      + '</div>'
+      + '<div class="sc-body">'
+      + modLabel
+      + '<p class="sc-txt">' + esc(s.text) + '</p>'
+      + '<button class="sc-mod-btn"' + dis + ' onclick="startModify(\'' + s.sid + '\')">✎ Modify</button>'
+      + '</div>'
+      + '</div>';
+    if (s.children.length) {
+      html += '<div class="sc-children">'
+        + s.children.map(function(c) { return renderSentenceCard(c, rid, isExp, depth + 1); }).join('')
+        + '</div>';
+    }
+    return html;
+  }
+
+  function render() {
+
+    const rid = cur;
+    if (!rid) { document.getElementById('sentence-list').innerHTML = '<div id="sent-status">Starting…</div>'; return; }
+
+    const isExp = exp(rid), win = wins[rid];
+
+    if (modifyTarget && (!sents[modifyTarget] || sents[modifyTarget].rid !== rid)) cancelModify();
+
+    const banner = document.getElementById('winner-banner');
+    if (isExp && win) { banner.style.display = ''; document.getElementById('winner-text').innerHTML = breakSents(esc(win.text)); }
+    else banner.style.display = 'none';
+
+    const sl = document.getElementById('sentence-list');
+    const flatRows = Object.entries(sents)
+      .filter(([, s]) => s.rid === rid)
+      .map(([sid, s]) => ({ sid, text: s.text, up: s.up || 0, down: s.down || 0, net: (s.up || 0) - (s.down || 0), ord: s.ord, parent: s.parent }));
+
+    if (!flatRows.length) {
+      sl.innerHTML = '<div id="sent-status">No sentences yet — write one below!</div>';
+    } else {
+      const roots = buildThreads(flatRows);
+      sl.innerHTML = roots.map(function(r) { return renderSentenceCard(r, rid, isExp, 0); }).join('');
+    }
+
+    const inp = document.getElementById('sent-input');
+    if (isExp) {
+      inp.disabled = true; inp.placeholder = 'This round has ended.';
+      document.getElementById('sent-btn').disabled = true;
+    } else if (!canSubmit(rid)) {
+      inp.disabled = true; inp.placeholder = 'Next submission in ' + fmtMs(cooldownLeft(rid)) + '…';
+      document.getElementById('sent-btn').disabled = true;
+    } else {
+      inp.disabled = false; inp.placeholder = 'Write a sentence to continue the story…';
+      onTyping();
+    }
+
+    renderDailyStories();
+  }
+
+  function roomBuildThreads(rows) {
+    const bySid = {};
+    rows.forEach(function(r) { bySid[r.sid] = r; r.children = []; });
+    const roots = [];
+    rows.forEach(function(r) {
+      if (r.parent && bySid[r.parent]) bySid[r.parent].children.push(r);
+      else roots.push(r);
+    });
+    (function sortRec(list) {
+      list.sort(function(a, b) { return b.net - a.net || a.ord - b.ord; });
+      list.forEach(function(r) { sortRec(r.children); });
+    })(roots);
+    return roots;
+  }
+
+  function roomRenderSentenceCard(s, rid, isExp, depth) {
+    const myDir = roomMyVoteDir(rid, s.sid);
+    const mvClass = myDir === 1 ? ' mv' : myDir === -1 ? ' mv-down' : '';
+    const dis = isExp ? ' disabled' : '';
+    const modLabel = depth > 0 ? '<div class="sc-mod">✎ Modification</div>' : '';
+    let html = '<div class="sc-card' + mvClass + '">'
+      + '<div class="vc">'
+      + '<button class="vb up' + (myDir === 1 ? ' on' : '') + '"' + dis + ' onclick="roomDoVote(\'' + s.sid + '\',1)">▲</button>'
+      + '<span class="vs' + (s.up > 0 ? ' p' : '') + '">' + s.up + '</span>'
+      + '<button class="vb down' + (myDir === -1 ? ' on-down' : '') + '"' + dis + ' onclick="roomDoVote(\'' + s.sid + '\',-1)">▼</button>'
+      + '<span class="vs' + (s.down > 0 ? ' n' : '') + '">' + s.down + '</span>'
+      + '</div>'
+      + '<div class="sc-body">'
+      + modLabel
+      + '<p class="sc-txt">' + esc(s.text) + '</p>'
+      + '<button class="sc-mod-btn"' + dis + ' onclick="roomStartModify(\'' + s.sid + '\')">✎ Modify</button>'
+      + (isHost ? '<button class="sc-mod-btn" style="color:#c0392b;margin-left:10px" onclick="hostRoomDeleteSentence(\'' + s.sid + '\')">✕ Remove</button>' : '')
+      + '</div>'
+      + '</div>';
+    if (s.children.length) {
+      html += '<div class="sc-children">'
+        + s.children.map(function(c) { return roomRenderSentenceCard(c, rid, isExp, depth + 1); }).join('')
+        + '</div>';
+    }
+    return html;
+  }
+
+  function roomRender() {
+    const rid = roomCur;
+    if (!rid) { document.getElementById('room-sentence-list').innerHTML = '<div id="room-sent-status">Starting…</div>'; return; }
+
+    const isExp = roomExp(rid), win = roomWins[rid];
+
+    if (roomModifyTarget && (!roomSents[roomModifyTarget] || roomSents[roomModifyTarget].rid !== rid)) roomCancelModify();
+
+    const subEl = document.getElementById('room-round-sub');
+    if (subEl) {
+      subEl.textContent = (roomRounds[rid] && roomRounds[rid].ms === 0)
+        ? 'Write the first sentence to start the round timer.'
+        : 'Write a sentence. Vote for the best.';
+    }
+
+    const banner = document.getElementById('room-winner-banner');
+    if (isExp && win) { banner.style.display = ''; document.getElementById('room-winner-text').innerHTML = breakSents(esc(win.text)); }
+    else banner.style.display = 'none';
+
+    const sl = document.getElementById('room-sentence-list');
+    const flatRows = Object.entries(roomSents)
+      .filter(([, s]) => s.rid === rid)
+      .map(([sid, s]) => ({ sid, text: s.text, up: s.up || 0, down: s.down || 0, net: (s.up || 0) - (s.down || 0), ord: s.ord, parent: s.parent }));
+
+    if (!flatRows.length) {
+      sl.innerHTML = '<div id="room-sent-status">No sentences yet — write one below!</div>';
+    } else {
+      const roots = roomBuildThreads(flatRows);
+      sl.innerHTML = roots.map(function(r) { return roomRenderSentenceCard(r, rid, isExp, 0); }).join('');
+    }
+
+    const chapCheck = document.getElementById('room-chapter-check');
+    const paraCheck = document.getElementById('room-parabreak-check');
+    const chapNumEl = document.getElementById('room-chapter-num-label');
+    if (chapNumEl) chapNumEl.textContent = roomNextChapterNum();
+
+    const inp = document.getElementById('room-sent-input');
+    if (isExp) {
+      inp.disabled = true; inp.placeholder = 'This round has ended.';
+      document.getElementById('room-sent-btn').disabled = true;
+      if (chapCheck) chapCheck.disabled = true;
+      if (paraCheck) paraCheck.disabled = true;
+    } else if (!roomCanSubmit(rid)) {
+      inp.disabled = true; inp.placeholder = 'Next submission in ' + fmtMs(roomCooldownLeft(rid)) + '…';
+      document.getElementById('room-sent-btn').disabled = true;
+      if (chapCheck) chapCheck.disabled = true;
+      if (paraCheck) paraCheck.disabled = true;
+    } else {
+      inp.disabled = false; inp.placeholder = 'Write a sentence to continue the story…';
+      roomOnTyping();
+      if (chapCheck) chapCheck.disabled = false;
+      if (paraCheck) paraCheck.disabled = false;
+    }
+
+    updateRoomHeader();
+    roomRenderDailyStories();
+  }
+
+  function startTimer() {
+    if (timerIv) clearInterval(timerIv);
+    timerIv = setInterval(tick, 1000);
+    tick();
+  }
+
+  async function tick() {
+    const dateChanged = utcDateStr() !== PAGE_DATE;
+    const el = document.getElementById('timer');
+    if (!cur || !rounds[cur]) { el.textContent = '--:--'; if (dateChanged) location.reload(); return; }
+    const left = Math.max(0, ROUND_MS - (Date.now() - rounds[cur].ms));
+    if (left === 0) {
+      el.textContent = 'ENDED'; el.classList.add('red');
+      clearInterval(timerIv);
+      await handleRoundEnd();
+      if (dateChanged) location.reload();
+      return;
+    }
+    if (dateChanged) { location.reload(); return; }
+    el.textContent = fmtMs(left);
+    el.classList.toggle('red', left < 300000);
+
+    if (cur && !exp(cur)) {
+      const inp = document.getElementById('sent-input');
+      if (!canSubmit(cur)) {
+        inp.disabled = true;
+        inp.placeholder = 'Next submission in ' + fmtMs(cooldownLeft(cur)) + '…';
+        document.getElementById('sent-btn').disabled = true;
+      } else if (inp.disabled && inp.placeholder.startsWith('Next submission')) {
+        inp.disabled = false;
+        inp.placeholder = 'Write a sentence to continue the story…';
+        onTyping();
+      }
+    }
+  }
+
+  async function handleRoundEnd() {
+    if (transitioning || !socket || socket.readyState !== 1) return;
+    transitioning = true;
+    try { await socket.rpc.advanceRound(''); } catch(e) {}
+    finally { transitioning = false; startTimer(); }
+  }
+
+  function roomStartTimer() {
+    if (roomTimerIv) clearInterval(roomTimerIv);
+    roomTimerIv = setInterval(roomTick, 1000);
+    roomTick();
+  }
+
+  // keeps the server's "who's actually here right now" presence set fresh —
+  // covers people just sitting on the round without voting/submitting/reconnecting
+  function roomStartHeartbeat() {
+    if (roomHeartbeatIv) clearInterval(roomHeartbeatIv);
+    roomHeartbeatIv = setInterval(function() {
+      if (!socket || socket.readyState !== 1 || !roomSlug) return;
+      socket.rpc.roomHeartbeat(JSON.stringify({ slug: roomSlug, vid: vid() })).catch(function() {});
+    }, 15000);
+  }
+
+  async function roomTick() {
+    const el = document.getElementById('room-timer');
+    if (!roomCur || !roomRounds[roomCur]) { el.textContent = '--:--'; return; }
+    if (roomRounds[roomCur].ms === 0) {
+      el.textContent = 'PENDING';
+      el.classList.remove('red');
+      return;
+    }
+    const left = Math.max(0, roomRoundMs - (Date.now() - roomRounds[roomCur].ms));
+    if (left === 0) {
+      el.textContent = 'ENDED'; el.classList.add('red');
+      clearInterval(roomTimerIv);
+      await roomHandleRoundEnd();
+      return;
+    }
+    el.textContent = fmtMs(left);
+    el.classList.toggle('red', left < 300000);
+
+    if (roomCur && !roomExp(roomCur)) {
+      const inp = document.getElementById('room-sent-input');
+      const chapCheck = document.getElementById('room-chapter-check');
+      const paraCheck = document.getElementById('room-parabreak-check');
+      if (!roomCanSubmit(roomCur)) {
+        inp.disabled = true;
+        inp.placeholder = 'Next submission in ' + fmtMs(roomCooldownLeft(roomCur)) + '…';
+        document.getElementById('room-sent-btn').disabled = true;
+        if (chapCheck) chapCheck.disabled = true;
+        if (paraCheck) paraCheck.disabled = true;
+      } else if (inp.disabled && inp.placeholder.startsWith('Next submission')) {
+        inp.disabled = false;
+        inp.placeholder = 'Write a sentence to continue the story…';
+        roomOnTyping();
+        if (chapCheck) chapCheck.disabled = false;
+        if (paraCheck) paraCheck.disabled = false;
+      }
+    }
+  }
+
+  async function roomHandleRoundEnd() {
+    if (roomTransitioning || !socket || socket.readyState !== 1 || !roomSlug) return;
+    roomTransitioning = true;
+    try { await socket.rpc.roomAdvanceRound(JSON.stringify({ slug: roomSlug })); } catch(e) {}
+    finally { roomTransitioning = false; roomStartTimer(); }
+  }
+
+  async function doVote(sid, dir) {
+    if (!socket || socket.readyState !== 1 || !cur || exp(cur)) return;
+    const rid = cur, v = vid();
+    const next = myVoteDir(rid, sid) === dir ? 0 : dir;
+    setVoteDir(rid, sid, next);
+    render();
+    try { await socket.rpc.vote(JSON.stringify({ sid, dir: next, vid: v })); } catch(e) {}
+  }
+
+  async function submitSentence() {
+    const inp = document.getElementById('sent-input');
+    const text = inp.value.trim();
+    if (!socket || socket.readyState !== 1 || !cur || exp(cur) || !canSubmit(cur) || text.length < 4) return;
+    const rid = cur;
+    const parentSid = modifyTarget && sents[modifyTarget] && sents[modifyTarget].rid === rid ? modifyTarget : null;
+    const btn = document.getElementById('sent-btn'), fl = document.getElementById('sent-fl');
+    btn.disabled = true; fl.textContent = 'Submitting…';
+    try {
+      const res = JSON.parse(await socket.rpc.submitSentence(JSON.stringify({ text, parentSid, vid: vid() })));
+      if (res.error) { fl.textContent = res.error === 'cooldown' ? 'Too soon — try again shortly.' : 'Failed — try again.'; btn.disabled = false; return; }
+      setLastSub(rid);
+      inp.value = ''; fl.textContent = 'Submitted!';
+      setTimeout(function() { fl.textContent = ''; }, 2500);
+      modifyTarget = null;
+      document.getElementById('modify-banner').style.display = 'none';
+      render();
+    } catch(e) { fl.textContent = 'Failed — try again.'; btn.disabled = false; }
+  }
+
+  function onTyping() {
+    const t = document.getElementById('sent-input').value;
+    document.getElementById('sent-btn').disabled =
+      t.trim().length < 4 || !socket || socket.readyState !== 1 || !cur || exp(cur) || !canSubmit(cur);
+  }
+
+  function startModify(sid) {
+    const s = sents[sid];
+    if (!s) return;
+    modifyTarget = sid;
+    const inp = document.getElementById('sent-input');
+    inp.value = s.text;
+    onTyping();
+    document.getElementById('modify-banner').style.display = '';
+    document.getElementById('modify-preview').textContent = truncate(s.text, 70);
+    inp.focus();
+    inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function cancelModify() {
+    modifyTarget = null;
+    document.getElementById('modify-banner').style.display = 'none';
+    document.getElementById('sent-input').value = '';
+    onTyping();
+  }
+
+  // ── host powers (client side, per-room) ──
+  async function hostLogin() {
+    if (!socket || socket.readyState !== 1 || !roomSlug) { alert('Join a room first.'); return; }
+    const pw = prompt('Enter host password for "' + roomName + '":');
+    if (!pw) return;
+    try {
+      const res = JSON.parse(await socket.rpc.hostLogin(JSON.stringify({ slug: roomSlug, password: pw })));
+      if (res.ok) {
+        isHost = true; hostPassword = pw;
+        alert('Host mode enabled.');
+        roomRender(); roomOnTyping(); updateHostUI();
+      } else {
+        alert(res.error === 'no host password set' ? 'This room has no host password set by its creator.' : 'Wrong password.');
+      }
+    } catch (e) { alert('Failed — try again.'); }
+  }
+
+  function hostLogout() {
+    isHost = false; hostPassword = null;
+    if (socket && socket.readyState === 1 && roomSlug) { try { socket.rpc.hostLogout(JSON.stringify({ slug: roomSlug })); } catch (e) {} }
+    roomRender(); roomOnTyping(); updateHostUI();
+  }
+
+  function updateHostUI() {
+    const btn = document.getElementById('host-btn');
+    if (btn) { btn.textContent = isHost ? '✓ Host' : 'Host'; btn.classList.toggle('open', isHost); }
+    const roomAdvBtn = document.getElementById('host-room-advance-btn');
+    if (roomAdvBtn) roomAdvBtn.style.display = isHost ? '' : 'none';
+  }
+
+  async function hostRoomDeleteSentence(sid) {
+    if (!isHost || !socket || socket.readyState !== 1 || !roomSlug) return;
+    if (!confirm('Remove this sentence?')) return;
+    try {
+      const res = JSON.parse(await socket.rpc.hostRoomDeleteSentence(JSON.stringify({ slug: roomSlug, sid: sid })));
+      if (res.error) { alert(res.error); return; }
+    } catch (e) { alert('Failed — try again.'); }
+  }
+
+  async function hostRoomForceAdvance() {
+    if (!isHost || !socket || socket.readyState !== 1 || !roomSlug) return;
+    if (!confirm('Force-advance the round now? The top-voted sentence wins.')) return;
+    try { await socket.rpc.hostRoomForceAdvance(JSON.stringify({ slug: roomSlug })); } catch (e) { alert('Failed — try again.'); }
+  }
+
+  async function roomDoVote(sid, dir) {
+    if (!socket || socket.readyState !== 1 || !roomCur || roomExp(roomCur)) return;
+    const rid = roomCur, v = vid();
+    const next = roomMyVoteDir(rid, sid) === dir ? 0 : dir;
+    roomSetVoteDir(rid, sid, next);
+    roomRender();
+    try { await socket.rpc.roomVote(JSON.stringify({ slug: roomSlug, sid, dir: next, vid: v })); } catch(e) {}
+  }
+
+  async function roomSubmitSentence() {
+    const inp = document.getElementById('room-sent-input');
+    const typed = inp.value.trim();
+    if (!socket || socket.readyState !== 1 || !roomCur || roomExp(roomCur) || !roomCanSubmit(roomCur) || typed.length < 4) return;
+    const chapCheck = document.getElementById('room-chapter-check');
+    const paraCheck = document.getElementById('room-parabreak-check');
+    const markChapter = !!(chapCheck && chapCheck.checked);
+    const markPara = !markChapter && !!(paraCheck && paraCheck.checked);
+    const text = markChapter ? typed + ' CHAPTER ' + roomNextChapterNum() : markPara ? typed + ' ¶' : typed;
+    const rid = roomCur;
+    const parentSid = roomModifyTarget && roomSents[roomModifyTarget] && roomSents[roomModifyTarget].rid === rid ? roomModifyTarget : null;
+    const btn = document.getElementById('room-sent-btn'), fl = document.getElementById('room-sent-fl');
+    btn.disabled = true; fl.textContent = 'Submitting…';
+    try {
+      const res = JSON.parse(await socket.rpc.roomSubmitSentence(JSON.stringify({ slug: roomSlug, text, parentSid, vid: vid() })));
+      if (res.error) { fl.textContent = res.error === 'cooldown' ? 'Too soon — try again shortly.' : 'Failed — try again.'; btn.disabled = false; return; }
+      roomSetLastSub(rid);
+      inp.value = ''; fl.textContent = 'Submitted!';
+      if (chapCheck) chapCheck.checked = false;
+      if (paraCheck) paraCheck.checked = false;
+      setTimeout(function() { fl.textContent = ''; }, 2500);
+      roomModifyTarget = null;
+      document.getElementById('room-modify-banner').style.display = 'none';
+      roomRender();
+    } catch(e) { fl.textContent = 'Failed — try again.'; btn.disabled = false; }
+  }
+
+  function roomOnTyping() {
+    const t = document.getElementById('room-sent-input').value;
+    document.getElementById('room-sent-btn').disabled =
+      t.trim().length < 4 || !socket || socket.readyState !== 1 || !roomCur || roomExp(roomCur) || !roomCanSubmit(roomCur);
+  }
+
+  function roomNextChapterNum() {
+    let maxN = 0;
+    Object.values(roomWins).forEach(function(w) {
+      const m = / CHAPTER (\d+)\s*$/i.exec(w.text);
+      if (m) maxN = Math.max(maxN, parseInt(m[1]));
+    });
+    return maxN + 1;
+  }
+
+  function roomStartModify(sid) {
+    const s = roomSents[sid];
+    if (!s) return;
+    roomModifyTarget = sid;
+    const inp = document.getElementById('room-sent-input');
+    inp.value = s.text;
+    roomOnTyping();
+    document.getElementById('room-modify-banner').style.display = '';
+    document.getElementById('room-modify-preview').textContent = truncate(s.text, 70);
+    inp.focus();
+    inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function roomCancelModify() {
+    roomModifyTarget = null;
+    document.getElementById('room-modify-banner').style.display = 'none';
+    document.getElementById('room-sent-input').value = '';
+    roomOnTyping();
+  }
+
+  // ── write-as-character generator ──────────────────────────────────
+  let genStream = null;
+  let genOpen = false;
+
+  function updateGenLabel() {
+    document.getElementById('gen-char-label').textContent = charName();
+  }
+
+  function toggleGenArea() {
+    genOpen = !genOpen;
+    document.getElementById('gen-prompt-wrap').style.display = genOpen ? '' : 'none';
+    document.getElementById('gen-toggle-btn').classList.toggle('open', genOpen);
+    updateGenLabel();
+    if (genOpen) document.getElementById('gen-direction').focus();
+  }
+
+  async function generateSentence() {
+    if (genStream) return;
+    if (modifyTarget) cancelModify();
+    const direction = (document.getElementById('gen-direction').value || '').trim();
+    const name = charName();
+    const desc = (document.getElementById('char-prompt').value || '').trim();
+    const story = getStoryText();
+
+    const lines = [
+      'You are ' + name + (desc ? '. ' + desc : '.'),
+      '',
+      story
+        ? 'A collaborative story is being written one sentence at a time. The story so far:\n"' + story + '"'
+        : 'A collaborative story is being written one sentence at a time. No sentences have been written yet — this is the very beginning.',
+      '',
+      'Write exactly ONE sentence to continue this story'
+        + (direction ? ' in this direction: ' + direction : '')
+        + '. Output only the raw sentence itself. No prefix, no preamble, no explanation — just the sentence.'
+    ];
+
+    const inp = document.getElementById('sent-input');
+    inp.value = '';
+    onTyping();
+
+    const genBtn = document.getElementById('gen-btn');
+    const stopBtn = document.getElementById('gen-stop-btn');
+    const fl = document.getElementById('gen-fl');
+    genBtn.style.display = 'none';
+    stopBtn.style.display = '';
+    fl.textContent = 'Writing…';
+
+    let buf = '';
+    genStream = ai({
+      instruction: lines.join('\n'),
+      stopSequences: ['\n'],
+      onChunk: function(data) {
+        buf += data.textChunk;
+        inp.value = buf;
+        onTyping();
+      },
+      onFinish: function() {
+        inp.value = buf.trim().replace(/^["'«]|["'»]$/g, '').trim();
+        onTyping();
+        fl.textContent = '';
+        genBtn.style.display = '';
+        stopBtn.style.display = 'none';
+        genStream = null;
+        inp.focus();
+      }
+    });
+
+    await genStream;
+  }
+
+  function stopGenSentence() {
+    if (genStream) { genStream.stop(); genStream = null; }
+  }
+
+  // ── room: write-as-character generator ──────────────────────────────
+  let roomGenStream = null;
+  let roomGenOpen = false;
+
+  function roomUpdateGenLabel() {
+    document.getElementById('room-gen-char-label').textContent = roomCharName();
+  }
+
+  function roomToggleGenArea() {
+    roomGenOpen = !roomGenOpen;
+    document.getElementById('room-gen-prompt-wrap').style.display = roomGenOpen ? '' : 'none';
+    document.getElementById('room-gen-toggle-btn').classList.toggle('open', roomGenOpen);
+    roomUpdateGenLabel();
+    if (roomGenOpen) document.getElementById('room-gen-direction').focus();
+  }
+
+  function roomGetStoryText() {
+    const list = Object.entries(roomWins)
+      .filter(([r]) => roomRounds[r])
+      .sort((a, b) => roomRounds[a[0]].ms - roomRounds[b[0]].ms)
+      .map(([, w]) => w.text);
+    return list.length ? list.join(' ') : null;
+  }
+
+  async function roomGenerateSentence() {
+    if (roomGenStream) return;
+    if (roomModifyTarget) roomCancelModify();
+    const direction = (document.getElementById('room-gen-direction').value || '').trim();
+    const name = roomCharName();
+    const desc = (document.getElementById('room-char-prompt').value || '').trim();
+    const story = roomGetStoryText();
+
+    const lines = [
+      'You are ' + name + (desc ? '. ' + desc : '.'),
+      '',
+      story
+        ? 'A collaborative story is being written one sentence at a time. The story so far:\n"' + story + '"'
+        : 'A collaborative story is being written one sentence at a time. No sentences have been written yet — this is the very beginning.',
+      '',
+      'Write exactly ONE sentence to continue this story'
+        + (direction ? ' in this direction: ' + direction : '')
+        + '. Output only the raw sentence itself. No prefix, no preamble, no explanation — just the sentence.'
+    ];
+
+    const inp = document.getElementById('room-sent-input');
+    inp.value = '';
+    roomOnTyping();
+
+    const genBtn = document.getElementById('room-gen-btn');
+    const stopBtn = document.getElementById('room-gen-stop-btn');
+    const fl = document.getElementById('room-gen-fl');
+    genBtn.style.display = 'none';
+    stopBtn.style.display = '';
+    fl.textContent = 'Writing…';
+
+    let buf = '';
+    roomGenStream = ai({
+      instruction: lines.join('\n'),
+      stopSequences: ['\n'],
+      onChunk: function(data) {
+        buf += data.textChunk;
+        inp.value = buf;
+        roomOnTyping();
+      },
+      onFinish: function() {
+        inp.value = buf.trim().replace(/^["'«]|["'»]$/g, '').trim();
+        roomOnTyping();
+        fl.textContent = '';
+        genBtn.style.display = '';
+        stopBtn.style.display = 'none';
+        roomGenStream = null;
+        inp.focus();
+      }
+    });
+
+    await roomGenStream;
+  }
+
+  function roomStopGenSentence() {
+    if (roomGenStream) { roomGenStream.stop(); roomGenStream = null; }
+  }
+
+  // ── AI character chat ─────────────────────────────────────────────
+  let aiHistory = [];
+  let aiGenerating = false;
+  let aiStream = null;
+
+  function charName() {
+    return (document.getElementById('char-name').value || '').trim() || 'The Narrator';
+  }
+
+  function getStoryText() {
+    const list = Object.entries(wins)
+      .filter(([r]) => rounds[r])
+      .sort((a, b) => rounds[a[0]].ms - rounds[b[0]].ms)
+      .map(([, w]) => w.text);
+    return list.length ? list.join(' ') : null;
+  }
+
+  function buildInstruction() {
+    const name = charName();
+    const desc = (document.getElementById('char-prompt').value || '').trim();
+    const story = getStoryText();
+    const lines = [];
+    lines.push('You are ' + name + (desc ? '. ' + desc : '.'));
+    if (story) {
+      lines.push('');
+      lines.push('There is a collaborative story being built by users who vote on sentences each hour. The story so far:');
+      lines.push('"' + story + '"');
+    }
+    lines.push('');
+    lines.push('Respond naturally and concisely as ' + name + ' (1-3 sentences). Stay in character.');
+    const recent = aiHistory.slice(-20);
+    if (recent.length) {
+      lines.push('');
+      lines.push('Conversation so far:');
+      for (const m of recent) lines.push((m.role === 'user' ? 'User' : name) + ': ' + m.text);
+    }
+    return lines.join('\n');
+  }
+
+  function beginAiChat() {
+    document.getElementById('char-setup').style.display = 'none';
+    document.getElementById('ai-chat-area').style.display = '';
+    document.getElementById('ai-text-input').focus();
+  }
+
+  function resetAiChat() {
+    if (aiStream) aiStream.stop();
+    aiHistory = [];
+    aiGenerating = false;
+    document.getElementById('ai-messages').innerHTML = '';
+    document.getElementById('ai-send-btn').style.display = '';
+    document.getElementById('ai-stop-btn').style.display = 'none';
+    document.getElementById('ai-chat-area').style.display = 'none';
+    document.getElementById('char-setup').style.display = '';
+  }
+
+  async function sendToAi() {
+    if (aiGenerating) return;
+    const inp = document.getElementById('ai-text-input');
+    const text = inp.value.trim();
+    if (!text) return;
+    inp.value = '';
+
+    aiHistory.push({ role: 'user', text });
+    aiHistory.push({ role: 'assistant', text: '…', pending: true });
+    renderAiChat();
+
+    aiGenerating = true;
+    document.getElementById('ai-send-btn').style.display = 'none';
+    document.getElementById('ai-stop-btn').style.display = '';
+
+    let buf = '';
+    const name = charName();
+
+    aiStream = ai({
+      instruction: buildInstruction(),
+      startWith: name + ': ',
+      stopSequences: ['\nUser:', '\n\n'],
+      onChunk: function(data) {
+        if (!data.isFromStartWith) {
+          buf += data.textChunk;
+          aiHistory[aiHistory.length - 1] = { role: 'assistant', text: buf || '…', pending: true };
+          renderAiChat();
+        }
+      },
+      onFinish: function() {
+        aiHistory[aiHistory.length - 1] = { role: 'assistant', text: buf.trim() || '(no response)' };
+        renderAiChat();
+        aiGenerating = false;
+        document.getElementById('ai-send-btn').style.display = '';
+        document.getElementById('ai-stop-btn').style.display = 'none';
+        document.getElementById('ai-text-input').focus();
+      }
+    });
+
+    await aiStream;
+  }
+
+  function stopAi() {
+    if (aiStream) aiStream.stop();
+  }
+
+  function renderAiChat() {
+    const el = document.getElementById('ai-messages');
+    const name = charName();
+    el.innerHTML = aiHistory.map(function(m) {
+      const isUser = m.role === 'user';
+      return '<div class="ai-msg ' + (isUser ? 'ai-user' : 'ai-char') + (m.pending ? ' ai-pending' : '') + '">'
+        + '<span class="ai-who">' + esc(isUser ? 'You' : name) + '</span>'
+        + '<p class="ai-txt">' + esc(m.text) + '</p>'
+        + '</div>';
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  // ── room: AI character chat ──────────────────────────────────────
+  let roomAiHistory = [];
+  let roomAiGenerating = false;
+  let roomAiStream = null;
+
+  function roomCharName() {
+    return (document.getElementById('room-char-name').value || '').trim() || 'The Narrator';
+  }
+
+  function roomBuildInstruction() {
+    const name = roomCharName();
+    const desc = (document.getElementById('room-char-prompt').value || '').trim();
+    const story = roomGetStoryText();
+    const lines = [];
+    lines.push('You are ' + name + (desc ? '. ' + desc : '.'));
+    if (story) {
+      lines.push('');
+      lines.push('There is a collaborative story being built by users who vote on sentences each round. The story so far:');
+      lines.push('"' + story + '"');
+    }
+    lines.push('');
+    lines.push('Respond naturally and concisely as ' + name + ' (1-3 sentences). Stay in character.');
+    const recent = roomAiHistory.slice(-20);
+    if (recent.length) {
+      lines.push('');
+      lines.push('Conversation so far:');
+      for (const m of recent) lines.push((m.role === 'user' ? 'User' : name) + ': ' + m.text);
+    }
+    return lines.join('\n');
+  }
+
+  function roomBeginAiChat() {
+    document.getElementById('room-char-setup').style.display = 'none';
+    document.getElementById('room-ai-chat-area').style.display = '';
+    document.getElementById('room-ai-text-input').focus();
+  }
+
+  function roomResetAiChat() {
+    if (roomAiStream) roomAiStream.stop();
+    roomAiHistory = [];
+    roomAiGenerating = false;
+    document.getElementById('room-ai-messages').innerHTML = '';
+    document.getElementById('room-ai-send-btn').style.display = '';
+    document.getElementById('room-ai-stop-btn').style.display = 'none';
+    document.getElementById('room-ai-chat-area').style.display = 'none';
+    document.getElementById('room-char-setup').style.display = '';
+  }
+
+  async function roomSendToAi() {
+    if (roomAiGenerating) return;
+    const inp = document.getElementById('room-ai-text-input');
+    const text = inp.value.trim();
+    if (!text) return;
+    inp.value = '';
+
+    roomAiHistory.push({ role: 'user', text });
+    roomAiHistory.push({ role: 'assistant', text: '…', pending: true });
+    roomRenderAiChat();
+
+    roomAiGenerating = true;
+    document.getElementById('room-ai-send-btn').style.display = 'none';
+    document.getElementById('room-ai-stop-btn').style.display = '';
+
+    let buf = '';
+    const name = roomCharName();
+
+    roomAiStream = ai({
+      instruction: roomBuildInstruction(),
+      startWith: name + ': ',
+      stopSequences: ['\nUser:', '\n\n'],
+      onChunk: function(data) {
+        if (!data.isFromStartWith) {
+          buf += data.textChunk;
+          roomAiHistory[roomAiHistory.length - 1] = { role: 'assistant', text: buf || '…', pending: true };
+          roomRenderAiChat();
+        }
+      },
+      onFinish: function() {
+        roomAiHistory[roomAiHistory.length - 1] = { role: 'assistant', text: buf.trim() || '(no response)' };
+        roomRenderAiChat();
+        roomAiGenerating = false;
+        document.getElementById('room-ai-send-btn').style.display = '';
+        document.getElementById('room-ai-stop-btn').style.display = 'none';
+        document.getElementById('room-ai-text-input').focus();
+      }
+    });
+
+    await roomAiStream;
+  }
+
+  function roomStopAi() {
+    if (roomAiStream) roomAiStream.stop();
+  }
+
+  function roomRenderAiChat() {
+    const el = document.getElementById('room-ai-messages');
+    const name = roomCharName();
+    el.innerHTML = roomAiHistory.map(function(m) {
+      const isUser = m.role === 'user';
+      return '<div class="ai-msg ' + (isUser ? 'ai-user' : 'ai-char') + (m.pending ? ' ai-pending' : '') + '">'
+        + '<span class="ai-who">' + esc(isUser ? 'You' : name) + '</span>'
+        + '<p class="ai-txt">' + esc(m.text) + '</p>'
+        + '</div>';
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  // ── commentsPlugin options ─────────────────────────────────────────
+  // moderation fields shared across every chat embed
+  const _mod = {
+    adminPasswordHash: commentOptions.adminPasswordHash,
+    adminFlair: commentOptions.adminFlair,
+    deleteButtonIcon: commentOptions.deleteButtonIcon,
+    bannedUsers: commentOptions.bannedUsers.selectAll.map(function(x) { return x.evaluateItem; }),
+    bannedWords: commentOptions.bannedWords ? commentOptions.bannedWords.selectAll.map(function(x) { return x.evaluateItem; }) : undefined,
+    rateLimits: commentOptions.rateLimits,
+    slashCommands: commentOptions.slashCommands,
+    onInputTextChange: commentOptions.onInputTextChange
+  };
+
+  window.chatOpts = {
+    channel: CHAT_CH, width: '100%', height: 600,
+    commentPlaceholderText: 'Say anything…  New slashCommands write / and see', submitButtonText: 'Send',
+    customEmojis: commentOptions.customEmojis,
+    adminPasswordHash: _mod.adminPasswordHash,
+    adminFlair: _mod.adminFlair,
+    deleteButtonIcon: _mod.deleteButtonIcon,
+    bannedUsers: _mod.bannedUsers,
+    bannedWords: _mod.bannedWords,
+    rateLimits: _mod.rateLimits,
+    slashCommands: _mod.slashCommands,
+    onInputTextChange: _mod.onInputTextChange
+  };
+
+  window.cpArchiveOpts = {
+    channel: ARCHIVE_CH, width: 8, height: 8,
+    containerStyle: 'position:fixed;bottom:0;left:0;width:8px;height:8px;overflow:clip;',
+    onLoad: function(comments) {
+      archiveCtrl = window.cpArchive;
+      archiveComments = comments.slice();
+      archiveLoaded = true;
+      tryMigrate();
+    },
+    onComment: function(c) {
+      archiveComments.push(c);
+    }
+  };
+
+
+  window.cpLegacyOpts = {
+    channel: 'sentence-roulette-v1', width: 8, height: 8,
+    containerStyle: 'position:fixed;bottom:8px;right:0;width:8px;height:8px;overflow:clip;',
+    onLoad: function(comments) {
+      comments.forEach(function(c) {
+        const raw = (c.message || c.text || '').trim();
+        if (raw.startsWith('R|')) {
+          const p = raw.indexOf('|', 2);
+          const rid = raw.slice(2, p), ms = parseInt(raw.slice(p + 1));
+          if (rid && ms && !legacyRounds[rid]) legacyRounds[rid] = ms;
+        } else if (raw.startsWith('W|')) {
+          const a = raw.indexOf('|', 2); if (a < 0) return;
+          const rid = raw.slice(2, a), rest = raw.slice(a + 1);
+          const b = rest.indexOf('|'); if (b < 0) return;
+          const text = rest.slice(b + 1).trim();
+          if (rid && text && !legacyWins[rid]) legacyWins[rid] = text;
+        }
+      });
+      legacyLoaded = true;
+      tryMigrate();
+    }
+  };
+
+  window.roomArchiveOpts = {
+    channel: 'sr-room-none', width: 8, height: 8,
+    containerStyle: 'position:fixed;bottom:16px;right:0;width:8px;height:8px;overflow:clip;',
+    onLoad: function(comments) {
+      if (window.roomArchiveOpts.channel === 'sr-room-none') return;
+      roomArchiveCtrl = window.cpRoomArchive;
+      roomArchiveComments = comments.slice();
+      roomTryMigrate();
+    },
+    onComment: function(c) {
+      if (window.roomArchiveOpts.channel === 'sr-room-none') return;
+      roomArchiveComments.push(c);
+    }
+  };
+
+  window.roomChatOpts = {
+    channel: 'sr-room-none-chat', width: '100%', height: 600,
+    commentPlaceholderText: 'Say anything…  New slashCommands write / and see  (type #name to create/join a channel)', submitButtonText: 'Send',
+    customEmojis: commentOptions.customEmojis,
+    adminPasswordHash: _mod.adminPasswordHash,
+    adminFlair: _mod.adminFlair,
+    deleteButtonIcon: _mod.deleteButtonIcon,
+    bannedUsers: _mod.bannedUsers,
+    bannedWords: _mod.bannedWords,
+    rateLimits: _mod.rateLimits,
+    slashCommands: _mod.slashCommands,
+    onInputTextChange: _mod.onInputTextChange,
+    beforeSubmit(data) {
+      const text = (data && typeof data.inputText === 'string') ? data.inputText : '';
+      const m = text.match(/^\s*#([a-zA-Z0-9-]+)/);
+      if (m) {
+        roomChatEnsureChannel(m[1].toLowerCase());
+        return null;
+      }
+    }
+  };
+
+  // ── Rooms: chat channels (mirrors the D&D channel system, scoped per room) ──
+  function roomChatAddTabButton(name) {
+    const addBtn = document.getElementById('room-chat-add-btn');
+    const tab = document.createElement('button');
+    tab.className = 'room-chat-tab';
+    tab.dataset.channel = name;
+    tab.textContent = name;
+    tab.onclick = function() { roomChatSwitchChannel(name); };
+    addBtn.parentNode.insertBefore(tab, addBtn);
+  }
+
+  function roomChatSwitchChannel(name) {
+    window.roomChatOpts.channel = 'sr-room-' + roomSlug + '-chat-' + h8(name);
+    const panel = document.getElementById('room-comment-panel');
+    panel.innerHTML = '';
+    update(panel);
+    document.querySelectorAll('.room-chat-tab').forEach(function(t) {
+      t.classList.toggle('active', t.dataset.channel === name);
+    });
+    const delBtn = document.getElementById('room-chat-del-btn');
+    const activeTab = document.querySelector('.room-chat-tab.active');
+    if (delBtn && name !== 'general' && activeTab) {
+      activeTab.insertAdjacentElement('afterend', delBtn);
+      delBtn.style.display = 'inline-block';
+    } else if (delBtn) {
+      delBtn.style.display = 'none';
+    }
+    localStorage.setItem('sr-room-chat-last-' + roomSlug, name);
+  }
+
+  function roomChatEnsureChannel(name) {
+    name = String(name).toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (!name) return;
+    const exists = [...document.querySelectorAll('.room-chat-tab')].some(function(t) { return t.dataset.channel === name; });
+    if (!exists) {
+      roomChatAddTabButton(name);
+      const list = JSON.parse(localStorage.getItem('sr-room-chat-channels-' + roomSlug) || '[]');
+      if (!list.includes(name)) { list.push(name); localStorage.setItem('sr-room-chat-channels-' + roomSlug, JSON.stringify(list)); }
+    }
+    roomChatSwitchChannel(name);
+  }
+
+  function roomChatAddChannel() {
+    const raw = prompt('Channel name:');
+    if (!raw) return;
+    const name = raw.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    if (!name) return;
+    if ([...document.querySelectorAll('.room-chat-tab')].some(function(t) { return t.dataset.channel === name; })) {
+      roomChatSwitchChannel(name);
+      return;
+    }
+    roomChatAddTabButton(name);
+    const list = JSON.parse(localStorage.getItem('sr-room-chat-channels-' + roomSlug) || '[]');
+    if (!list.includes(name)) { list.push(name); localStorage.setItem('sr-room-chat-channels-' + roomSlug, JSON.stringify(list)); }
+    roomChatSwitchChannel(name);
+  }
+
+  function roomChatDeleteChannel(name) {
+    if (!confirm('Delete channel "' + name + '"?')) return;
+    const tab = [...document.querySelectorAll('.room-chat-tab')].find(function(t) { return t.dataset.channel === name; });
+    if (tab) tab.remove();
+    const delBtn = document.getElementById('room-chat-del-btn');
+    if (delBtn) delBtn.style.display = 'none';
+    const list = JSON.parse(localStorage.getItem('sr-room-chat-channels-' + roomSlug) || '[]').filter(function(c) { return c !== name; });
+    localStorage.setItem('sr-room-chat-channels-' + roomSlug, JSON.stringify(list));
+    localStorage.removeItem('sr-room-chat-last-' + roomSlug);
+    roomChatSwitchChannel('general');
+  }
+
+  function roomChatDeleteCurrentChannel() {
+    const ch = localStorage.getItem('sr-room-chat-last-' + roomSlug);
+    if (ch && ch !== 'general') roomChatDeleteChannel(ch);
+  }
+
+  function roomChatRefreshTabBar() {
+    const bar = document.getElementById('room-chat-tab-bar');
+    if (!bar) return;
+    [...bar.querySelectorAll('.room-chat-tab')].forEach(function(t) { t.remove(); });
+    const delBtn = document.getElementById('room-chat-del-btn');
+    if (delBtn) delBtn.style.display = 'none';
+
+    const saved = JSON.parse(localStorage.getItem('sr-room-chat-channels-' + roomSlug) || '[]');
+    roomChatAddTabButton('general');
+    saved.forEach(roomChatAddTabButton);
+
+    const last = localStorage.getItem('sr-room-chat-last-' + roomSlug);
+    const target = (last && (last === 'general' || saved.includes(last))) ? last : 'general';
+    roomChatSwitchChannel(target);
+  }
+
+  // ── Tab system ────────────────────────────────────────────────────
+  function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.tab === name);
+    });
+    document.querySelectorAll('.tab-panel').forEach(function(p) {
+      p.classList.toggle('active', p.id === 'tab-' + name);
+    });
+  }
+
+  // ── D&D ──────────────────────────────────────────────────────────
+  let dndCtrl = null;
+  let dndHistory = [];
+  let dndStream = null, dndCharStream = null;
+  let dndCharOpen = false;
+  let dndGenerating = false;
+  let dndCharGenerating = false;
+
+  function dndAddTabButton(name) {
+    const addBtn = document.getElementById('dnd-add-ch-btn');
+    const tab = document.createElement('button');
+    tab.className = 'dnd-ch-tab';
+    tab.dataset.channel = name;
+    tab.textContent = name;
+    tab.onclick = function() { dndSwitchChannel(name); };
+    addBtn.parentNode.insertBefore(tab, addBtn);
+  }
+
+  function dndEnsureChannel(name) {
+    name = String(name).toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (!name) return;
+    const exists = [...document.querySelectorAll('.dnd-ch-tab')].some(function(t) { return t.dataset.channel === name; });
+    if (!exists) {
+      dndAddTabButton(name);
+      const list = JSON.parse(localStorage.getItem('dnd-channels') || '[]');
+      if (!list.includes(name)) { list.push(name); localStorage.setItem('dnd-channels', JSON.stringify(list)); }
+    }
+    dndSwitchChannel(name);
+  }
+
+  function dndDeleteChannel(name) {
+    if (!confirm('Delete channel "' + name + '"?')) return;
+    const tab = [...document.querySelectorAll('.dnd-ch-tab')].find(function(t) { return t.dataset.channel === name; });
+    if (tab) tab.remove();
+    document.getElementById('dnd-del-btn').style.display = 'none';
+    const list = JSON.parse(localStorage.getItem('dnd-channels') || '[]').filter(function(c) { return c !== name; });
+    localStorage.setItem('dnd-channels', JSON.stringify(list));
+    localStorage.removeItem('dnd-last-ch');
+    dndSwitchChannel('general');
+  }
+
+  function dndSwitchChannel(name) {
+    dndCtrl = null;
+    dndHistory = [];
+    window.cpDndOpts.channel = 'dnd-' + h8(name) + '-v1';
+    const panel = document.getElementById('dnd-comment-panel');
+    panel.innerHTML = '';
+    update(panel);
+    document.getElementById('dnd-game').style.display = '';
+    document.querySelectorAll('.dnd-ch-tab').forEach(function(t) {
+      t.classList.toggle('active', t.dataset.channel === name);
+    });
+    // move delete button next to active tab; hide it for general
+    const delBtn = document.getElementById('dnd-del-btn');
+    const activeTab = document.querySelector('.dnd-ch-tab.active');
+    if (name !== 'general' && activeTab) {
+      activeTab.insertAdjacentElement('afterend', delBtn);
+      delBtn.style.display = 'inline-block';
+    } else {
+      delBtn.style.display = 'none';
+    }
+    localStorage.setItem('dnd-last-ch', name);
+  }
+
+  function dndAddChannel() {
+    const raw = prompt('Channel name:');
+    if (!raw) return;
+    const name = raw.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    if (!name) return;
+    if ([...document.querySelectorAll('.dnd-ch-tab')].some(function(t) { return t.dataset.channel === name; })) {
+      dndSwitchChannel(name);
+      return;
+    }
+    dndAddTabButton(name);
+    const list = JSON.parse(localStorage.getItem('dnd-channels') || '[]');
+    if (!list.includes(name)) { list.push(name); localStorage.setItem('dnd-channels', JSON.stringify(list)); }
+    dndSwitchChannel(name);
+  }
+
+  // ── Rooms: create / switch / delete ─────────────────────────────────
+  // Visit-count (joinedVids) and "everyone present upvoted" early-round-end
+  // are both handled server-side (the latter still via pubsub.numSubscribers
+  // + checkUnanimous) — the client just reacts to 'joinedCount'/'roundEnd' events.
+  function updateRoomHeader() {
+    const nameLabel = document.getElementById('room-name-label');
+    const metaLabel = document.getElementById('room-meta-label');
+    if (!nameLabel || !roomSlug) return;
+    nameLabel.textContent = roomName || roomSlug;
+    const mins = Math.round(roomRoundMs / 60000);
+    const cdMins = Math.round(roomCooldownMs / 60000);
+    const cdText = cdMins > 0 ? cdMins + ' min between your submissions' : 'no cooldown between your submissions';
+    metaLabel.innerHTML = 'Round length: ' + mins + ' min<br>' + esc(cdText) + '<br>share the room name "' + esc(roomName) + '" so others can join';
+  }
+
+  // writes the now-known-authoritative settings (learned from this room's own
+  // CFG event) back into the local room list, and fixes up the tab label —
+  // relevant mainly for rooms joined via roomJoin() before their settings were known
+  function roomPersistResolvedSettings() {
+    const rooms = JSON.parse(localStorage.getItem('sr-rooms') || '[]');
+    const idx = rooms.findIndex(function(r) { return r.slug === roomSlug; });
+    const entry = {
+      slug: roomSlug, name: roomName,
+      roundMin: Math.round(roomRoundMs / 60000),
+      cooldownMin: Math.round(roomCooldownMs / 60000)
+    };
+    if (idx >= 0) rooms[idx] = entry; else rooms.push(entry);
+    localStorage.setItem('sr-rooms', JSON.stringify(rooms));
+    const tab = [...document.querySelectorAll('.room-tab')].find(function(t) { return t.dataset.room === roomSlug; });
+    if (tab) tab.textContent = roomName;
+  }
+
+  function roomAddTabButton(name, slug) {
+    const addBtn = document.getElementById('room-add-btn');
+    const tab = document.createElement('button');
+    tab.className = 'room-tab';
+    tab.dataset.room = slug;
+    tab.textContent = name;
+    tab.onclick = function() { roomSwitchTo(slug); };
+    addBtn.parentNode.insertBefore(tab, addBtn);
+  }
+
+  function roomSwitchTo(slug, pendingMin, pendingCooldownMin, pendingPassword) {
+    const previousSlug = roomSlug;
+    roomArchiveCtrl = null;
+    roomTransitioning = false;
+    if (roomTimerIv) clearInterval(roomTimerIv);
+    roomTimerIv = null;
+    if (roomHeartbeatIv) clearInterval(roomHeartbeatIv);
+    roomHeartbeatIv = null;
+    Object.keys(roomRounds).forEach(function(k) { delete roomRounds[k]; });
+    Object.keys(roomSents).forEach(function(k) { delete roomSents[k]; });
+    Object.keys(roomWins).forEach(function(k) { delete roomWins[k]; });
+    roomCur = null;
+    roomCfgSeen = false;
+    roomJoinedCount = 1;
+    roomArchiveComments = [];
+    roomArchiveServerLoaded = false;
+    roomMigrationAttempted = false;
+    Object.keys(roomArchiveDays).forEach(function(k) { delete roomArchiveDays[k]; });
+    roomFetchingHistory = false;
+
+    const rooms = JSON.parse(localStorage.getItem('sr-rooms') || '[]');
+    const meta = rooms.find(function(r) { return r.slug === slug; });
+    roomSlug = slug;
+    roomName = meta ? meta.name : slug;
+    roomRoundMs = (meta && meta.roundMin) ? meta.roundMin * 60000 : 3600000;
+    roomCooldownMs = (meta && meta.cooldownMin != null) ? meta.cooldownMin * 60000 : 5 * 60000;
+    roomPendingRoundMin = pendingMin || null;
+    roomPendingCooldownMin = pendingCooldownMin != null ? pendingCooldownMin : null;
+    roomPendingPassword = pendingPassword || null;
+
+    if (previousSlug && previousSlug !== slug) {
+      isHost = false; hostPassword = null;
+    }
+
+    window.roomArchiveOpts.channel = 'sr-room-' + slug + '-archive';
+
+    const archiveMount = document.getElementById('room-archive-mount');
+    archiveMount.innerHTML = '';
+    update(archiveMount);
+    roomChatRefreshTabBar();
+
+    document.getElementById('room-empty').style.display = 'none';
+    document.getElementById('room-panel').style.display = '';
+    document.querySelectorAll('.room-tab').forEach(function(t) {
+      t.classList.toggle('active', t.dataset.room === slug);
+    });
+
+    document.getElementById('room-winner-banner').style.display = 'none';
+    document.getElementById('room-timer').textContent = '--:--';
+    document.getElementById('room-sentence-list').innerHTML = '<div id="room-sent-status">Connecting…</div>';
+    document.getElementById('room-daily-stories').innerHTML = '';
+    roomCancelModify();
+    const presenceEl = document.getElementById('room-presence-label');
+    if (presenceEl) presenceEl.textContent = '';
+
+    if (roomGenStream) { roomGenStream.stop(); roomGenStream = null; }
+    roomGenOpen = false;
+    document.getElementById('room-gen-prompt-wrap').style.display = 'none';
+    document.getElementById('room-gen-toggle-btn').classList.remove('open');
+    roomResetAiChat();
+
+    updateRoomHeader();
+
+    localStorage.setItem('sr-last-room', slug);
+
+    if (previousSlug && previousSlug !== slug && socket && socket.readyState === 1) {
+      socket.rpc.roomLeave(JSON.stringify({ slug: previousSlug, vid: vid() })).catch(function() {});
+    }
+    roomConnect();
+  }
+
+  function roomAdd() {
+    const rawName = prompt('Room name:');
+    if (!rawName) return;
+    const name = rawName.trim();
+    if (!name) return;
+    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    if (!slug) return;
+
+    const rooms = JSON.parse(localStorage.getItem('sr-rooms') || '[]');
+    if (rooms.some(function(r) { return r.slug === slug; })) { roomSwitchTo(slug); return; }
+
+    const minRaw = prompt('Round length in minutes (e.g. 60):', '60');
+    let mins = parseInt(minRaw);
+    if (!mins || mins < 1) mins = 60;
+    if (mins > 1440) mins = 1440;
+
+    const cdRaw = prompt('Cooldown between your own submissions, in minutes (0 = no cooldown):', '5');
+    let cdMins = parseInt(cdRaw);
+    if (isNaN(cdMins) || cdMins < 0) cdMins = 5;
+    if (cdMins > 1440) cdMins = 1440;
+
+    const pw = prompt('Set a host password for this room (lets you remove sentences & force-advance rounds). Leave blank for no host:', '');
+    const password = pw ? pw.trim() : '';
+
+    rooms.push({ slug, name, roundMin: mins, cooldownMin: cdMins });
+    localStorage.setItem('sr-rooms', JSON.stringify(rooms));
+    roomAddTabButton(name, slug);
+    roomSwitchTo(slug, mins, cdMins, password);
+  }
+
+  function roomJoin() {
+    const inp = document.getElementById('room-join-input');
+    const rawName = (inp.value || '').trim();
+    if (!rawName) return;
+    const slug = rawName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    if (!slug) return;
+    inp.value = '';
+
+    const rooms = JSON.parse(localStorage.getItem('sr-rooms') || '[]');
+    if (!rooms.some(function(r) { return r.slug === slug; })) {
+      // settings unknown until this room's own CFG event loads — never prompted here
+      rooms.push({ slug, name: rawName, roundMin: null, cooldownMin: null });
+      localStorage.setItem('sr-rooms', JSON.stringify(rooms));
+      roomAddTabButton(rawName, slug);
+    }
+    roomSwitchTo(slug);
+  }
+
+  function roomRefresh() {
+    if (!roomSlug) return;
+    roomSwitchTo(roomSlug);
+  }
+
+  function roomDeleteCurrent() {
+    if (!roomSlug) return;
+    if (!confirm('Remove room "' + roomName + '" from your room list? (The room and its story stay online for anyone who still has the name — you just stop seeing it here.)')) return;
+    const removedSlug = roomSlug;
+    const tab = [...document.querySelectorAll('.room-tab')].find(function(t) { return t.dataset.room === removedSlug; });
+    if (tab) tab.remove();
+    const rooms = JSON.parse(localStorage.getItem('sr-rooms') || '[]').filter(function(r) { return r.slug !== removedSlug; });
+    localStorage.setItem('sr-rooms', JSON.stringify(rooms));
+    localStorage.removeItem('sr-last-room');
+    if (socket && socket.readyState === 1) {
+      socket.rpc.roomLeave(JSON.stringify({ slug: removedSlug, vid: vid() })).catch(function() {});
+    }
+    if (rooms.length) {
+      roomSwitchTo(rooms[0].slug);
+    } else {
+      roomSlug = null; roomName = ''; roomArchiveCtrl = null;
+      if (roomTimerIv) clearInterval(roomTimerIv);
+      if (roomHeartbeatIv) clearInterval(roomHeartbeatIv);
+      document.getElementById('room-panel').style.display = 'none';
+      document.getElementById('room-empty').style.display = '';
+    }
+  }
+
+  function dndRollInfo(n) {
+    if (n <= 9)   return { label: 'Failure' };
+    if (n === 10) return { label: 'Nothing Happens' };
+    return        { label: 'Success' };
+  }
+
+  // commentsPlugin for D&D — initialized via Perchance template syntax
+  window.cpDndOpts = {
+    channel: '',
+    width: '100%', height: 760,
+    commentPlaceholderText: 'Chat with your group…  (type #name to create/join a channel)',
+    submitButtonText: 'Send',
+    customEmojis: commentOptions.customEmojis,
+    adminPasswordHash: _mod.adminPasswordHash,
+    adminFlair: _mod.adminFlair,
+    deleteButtonIcon: _mod.deleteButtonIcon,
+    bannedUsers: _mod.bannedUsers,
+    bannedWords: _mod.bannedWords,
+    rateLimits: _mod.rateLimits,
+    slashCommands: _mod.slashCommands,
+    onInputTextChange: _mod.onInputTextChange,
+    onLoad: function(comments) {
+      dndCtrl = window.cpDnd;
+      // seed recent context from existing comments that look like roll results
+      dndHistory = comments
+        .map(function(c) { return (c.message || c.text || '').trim(); })
+        .filter(function(t) { return t.startsWith('🎲'); })
+        .slice(-10);
+    },
+    onComment: function(c) {
+      const t = (c.message || c.text || '').trim();
+      if (t.startsWith('🎲')) { dndHistory.push(t); if (dndHistory.length > 20) dndHistory.shift(); }
+    },
+    beforeSubmit(data) {
+      const text = (data && typeof data.inputText === 'string') ? data.inputText : '';
+      const m = text.match(/^\s*#([a-zA-Z0-9-]+)/);
+      if (m) {
+        dndEnsureChannel(m[1].toLowerCase());
+        return null;
+      }
+    }
+  };
+
+  async function dndRollAndAct() {
+    if (dndGenerating) return;
+    const actionEl = document.getElementById('dnd-action');
+    const action = actionEl.value.trim();
+    if (!action) { document.getElementById('dnd-fl').textContent = 'Describe your action first.'; return; }
+    document.getElementById('dnd-fl').textContent = '';
+
+    const roll = Math.floor(Math.random() * 20) + 1;
+    const ri = dndRollInfo(roll);
+
+    const dieWrap = document.getElementById('dnd-die-wrap');
+    const dieFace = document.getElementById('dnd-die-face');
+    const dieLabel = document.getElementById('dnd-die-label');
+    dieWrap.style.display = '';
+    dieFace.textContent = roll;
+    dieFace.className = 'die-face' + (roll <= 9 ? ' die-cf' : roll >= 11 ? ' die-cs' : '');
+    dieLabel.textContent = ri.label;
+    dieLabel.className = 'die-label' + (roll <= 9 ? ' die-label-cf' : roll >= 11 ? ' die-label-cs' : '');
+
+    actionEl.value = '';
+
+    dndGenerating = true;
+    const dmArea = document.getElementById('dnd-dm-area');
+    const dmText = document.getElementById('dnd-dm-text');
+    dmArea.style.display = '';
+    dmText.textContent = '…';
+    document.getElementById('dnd-roll-btn').style.display = 'none';
+    document.getElementById('dnd-stop-btn').style.display = '';
+
+    const ctx = dndHistory.slice(-6).join('\n\n');
+    const outcomeHint = roll <= 9  ? 'The attempt fails.'
+      : roll === 10 ? 'Nothing happens — the situation is unchanged.'
+      : 'The attempt succeeds.';
+
+    const instruction = [
+      'You are a Dungeon Master narrating a collaborative D&D-style adventure.',
+      ctx ? 'Recent events:\n' + ctx : '',
+      'Action: ' + action,
+      'Roll: ' + roll + ' / 20 — ' + ri.label + '. ' + outcomeHint,
+      'Narrate the outcome in 2-3 vivid sentences. Only the narration — no labels or prefixes.'
+    ].filter(Boolean).join('\n');
+
+    let buf = '';
+    dndStream = ai({
+      instruction,
+      onChunk: function(data) { buf += data.textChunk; dmText.textContent = buf; },
+      onFinish: async function() {
+        const final = buf.trim();
+        dmText.textContent = final || '(no response)';
+        dndGenerating = false;
+        dndStream = null;
+        document.getElementById('dnd-roll-btn').style.display = '';
+        document.getElementById('dnd-stop-btn').style.display = 'none';
+        if (final && dndCtrl) {
+          const post = '🎲 Rolled ' + roll + ' — ' + ri.label + '\n' + action + '\n\n' + final;
+          try { await dndCtrl.submit(post); } catch(e) {}
+        }
+      }
+    });
+    await dndStream;
+  }
+
+  function dndStop() {
+    if (dndStream) { dndStream.stop(); dndStream = null; }
+    dndGenerating = false;
+    document.getElementById('dnd-roll-btn').style.display = '';
+    document.getElementById('dnd-stop-btn').style.display = 'none';
+  }
+
+  function toggleDndChar() {
+    dndCharOpen = !dndCharOpen;
+    document.getElementById('dnd-char-area').style.display = dndCharOpen ? '' : 'none';
+    document.getElementById('dnd-char-toggle').classList.toggle('open', dndCharOpen);
+    if (dndCharOpen) document.getElementById('dnd-char-name-input').focus();
+  }
+
+  function dndCharName() {
+    return (document.getElementById('dnd-char-name-input').value || '').trim() || 'The Oracle';
+  }
+
+  async function speakAsChar() {
+    if (dndCharGenerating) return;
+    const name = dndCharName();
+    const desc = (document.getElementById('dnd-char-desc-input').value || '').trim();
+    const prompt = (document.getElementById('dnd-char-prompt').value || '').trim();
+    const ctx = dndHistory.slice(-4).join('\n\n');
+
+    const lines = ['You are ' + name + (desc ? '. ' + desc : '.')];
+    if (ctx) lines.push('Current session events:\n' + ctx);
+    if (prompt) lines.push('Context: ' + prompt);
+    lines.push('Write one short in-character message that ' + name + ' would say right now. Just the message — no name prefix, no quotes.');
+    const instruction = lines.join('\n');
+
+    const preview = document.getElementById('dnd-char-preview');
+    preview.style.display = '';
+    preview.textContent = '…';
+    document.getElementById('dnd-char-send-btn').style.display = 'none';
+    document.getElementById('dnd-char-stop-btn').style.display = '';
+    document.getElementById('dnd-char-fl').textContent = '';
+    dndCharGenerating = true;
+
+    let buf = '';
+    dndCharStream = ai({
+      instruction,
+      onChunk: function(data) { buf += data.textChunk; preview.textContent = buf; },
+      onFinish: function() {
+        const final = buf.trim();
+        dndCharGenerating = false;
+        dndCharStream = null;
+        document.getElementById('dnd-char-send-btn').style.display = '';
+        document.getElementById('dnd-char-stop-btn').style.display = 'none';
+        preview.textContent = final || '(no response)';
+        if (final) document.getElementById('dnd-char-post-btn').style.display = '';
+      }
+    });
+    await dndCharStream;
+  }
+
+  function stopDndChar() {
+    if (dndCharStream) { dndCharStream.stop(); dndCharStream = null; }
+    dndCharGenerating = false;
+    document.getElementById('dnd-char-send-btn').style.display = '';
+    document.getElementById('dnd-char-stop-btn').style.display = 'none';
+  }
+
+  async function postCharMessage() {
+    const preview = document.getElementById('dnd-char-preview');
+    const text = (preview.textContent || '').trim();
+    if (!text || !dndCtrl) return;
+    const name = dndCharName();
+    try { await dndCtrl.submit(name + ': ' + text); } catch(e) {}
+    preview.style.display = 'none';
+    preview.textContent = '';
+    document.getElementById('dnd-char-post-btn').style.display = 'none';
+    document.getElementById('dnd-char-prompt').value = '';
+  }
+
+  // restore channels from localStorage and resume last active channel
+  (function() {
+    const delBtn = document.createElement('button');
+    delBtn.id = 'dnd-del-btn';
+    delBtn.textContent = '×';
+    delBtn.title = 'Delete channel';
+    delBtn.onclick = function() {
+      const ch = localStorage.getItem('dnd-last-ch');
+      if (ch && ch !== 'general') dndDeleteChannel(ch);
+    };
+    document.getElementById('dnd-tab-bar').appendChild(delBtn);
+
+    const saved = JSON.parse(localStorage.getItem('dnd-channels') || '[]');
+    saved.forEach(dndAddTabButton);
+    const last = localStorage.getItem('dnd-last-ch');
+    if (last && (last === 'general' || saved.includes(last))) dndSwitchChannel(last);
+    else dndSwitchChannel('general');
+  })();
+
+  // restore rooms from localStorage and resume last active room, if any
+  (function() {
+    const rooms = JSON.parse(localStorage.getItem('sr-rooms') || '[]');
+    rooms.forEach(function(r) { roomAddTabButton(r.name, r.slug); });
+    const last = localStorage.getItem('sr-last-room');
+    if (last && rooms.some(function(r) { return r.slug === last; })) roomSwitchTo(last);
+  })();
+
+  tickUtcClock();
+  setInterval(tickUtcClock, 1000);
+
+  connect();
+</script>
+
+<div style="position:fixed;bottom:0;left:0;width:8px;height:8px;overflow:clip;">
+  [window.cpArchive = commentsPlugin(window.cpArchiveOpts)]
+</div>
+<div style="position:fixed;bottom:8px;right:0;width:8px;height:8px;overflow:clip;">
+  [window.cpLegacy = commentsPlugin(window.cpLegacyOpts)]
+</div>
+<div id="room-archive-mount" style="position:fixed;bottom:16px;right:0;width:8px;height:8px;overflow:clip;">
+  [window.cpRoomArchive = commentsPlugin(window.roomArchiveOpts)]
+</div>
+
+</body>
+</html>

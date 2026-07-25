@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>ltx-vidgen-full-suite — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Qwen Image to Video</title>
+<style>
+  /* Use Flexbox for full height layout and better mobile handling */
+  body { 
+    background-color: black; 
+    margin: 0; 
+    display: flex; 
+    flex-direction: column; 
+    height: 100vh; 
+    overflow: hidden; /* Prevent scrolling on body, iframe handles it */
+    font-family: sans-serif;
+  }
+  
+  :root{
+    /* Slightly smaller button */
+    --btn-size: clamp(36px, 9vw, 44px);
+    --corner-gap: 12px;
+    --bg: color-mix(in srgb, #000 50%, transparent);
+    --bg-hover: color-mix(in srgb, #000 70%, transparent);
+    --accent: #00c3ff;
+  }
+
+  /* Main Container - fills available space */
+  #previewCtn {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    background: #1a1a1a;
+    min-height: 0; /* Ensures flex child behaves correctly */
+  }
+
+  /* Iframe fills the container perfectly */
+  #previewCtn iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+  }
+
+  /* Loading Element - fixed the missing element error */
+  #loadingEl {
+    position: absolute;
+    inset: 0; /* top:0; right:0; bottom:0; left:0; */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a1a;
+    z-index: 50;
+    color: white;
+    transition: opacity 0.5s ease;
+  }
+  #loadingEl.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-left-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Ribbon Styling */
+  #ribbonEl {
+    background: linear-gradient(135deg, #0077ff 0%, #00c3ff 100%); /* Fancy blue gradient */
+    color: white;
+    text-align: center;
+    padding: 12px;
+    font-weight: bold;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5); /* Little text shadow */
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    z-index: 100;
+    position: relative; /* Needed for absolute positioning of close button */
+    overflow: hidden; /* Keeps content contained during animation */
+    transition: all 0.5s ease; /* Slow animation properties */
+  }
+
+  /* State: Ribbon closed (slides up) */
+  #ribbonEl.closed {
+    height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    transform: translateY(-100%); /* Animate UP */
+    pointer-events: none;
+  }
+
+  footer {
+    background: #080808;
+    color: #666;
+    text-align: center;
+    padding: 10px;
+    font-size: 12px;
+    border-top: 1px solid #222;
+    position: relative; /* Needed for absolute positioning of close button */
+    overflow: hidden; /* Keeps content contained during animation */
+    transition: all 0.5s ease; /* Slow animation properties */
+  }
+
+  /* State: Footer closed (slides down) */
+  footer.closed {
+    height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    transform: translateY(100%); /* Animate DOWN */
+    pointer-events: none;
+  }
+
+  /* Shared styling for close 'x' icons */
+  .closeBtn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    opacity: 0.6;
+    font-size: 18px;
+    font-weight: bold;
+    padding: 0 4px;
+    transition: opacity 0.2s, background 0.2s;
+    border-radius: 4px;
+  }
+  .closeBtn:hover {
+    opacity: 1;
+    background: rgba(255,255,255,0.2);
+  }
+
+  /* --- New Floating Menu Styles --- */
+  #menuContainer {
+    position: fixed;
+    top: 16px; /* Initial position, adjusted via JS if ribbon is open */
+    right: 16px;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-family: sans-serif;
+    transition: top 0.5s ease; /* Smooth position change */
+  }
+
+  #menuBtn {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 30px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Center content */
+    gap: 8px;
+    font-size: 14px;
+    font-weight: bold;
+    transition: background 0.3s, transform 0.2s;
+    outline: none;
+    position: relative; /* Context for absolute X button */
+    min-height: 40px; /* Ensure button stays clickable when empty */
+    min-width: 40px;
+  }
+  #menuBtn:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+  #menuBtn:active {
+    transform: scale(0.95);
+  }
+  
+  #menuBtn svg {
+    width: 20px;
+    height: 20px;
+    fill: white;
+  }
+
+  /* Animation for swapping icons */
+  .fade-out {
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .fade-in {
+    opacity: 1;
+    transition: opacity 0.2s;
+  }
+
+  #menuContent {
+    margin-top: 8px;
+    background: rgba(20, 20, 20, 0.95);
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 16px;
+    width: 240px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    /* Hidden state logic handled in JS/CSS transitions */
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  #menuContent.open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+  }
+
+  #menuContent a {
+    display: block;
+    color: #ddd;
+    text-decoration: none;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  #menuContent a:hover {
+    color: #fff;
+  }
+
+  /* Fancy animated 'FREE' text */
+  .fancy-free {
+    color: #ff3333;
+    font-weight: 900;
+    font-style: italic;
+    text-transform: uppercase;
+    animation: pulse-red 1.5s infinite alternate;
+    text-shadow: 0 0 5px rgba(255, 50, 50, 0.5);
+    display: inline-block;
+  }
+
+  @keyframes pulse-red {
+    0% { transform: scale(1); text-shadow: 0 0 5px rgba(255, 50, 50, 0.5); }
+    100% { transform: scale(1.1); text-shadow: 0 0 15px rgba(255, 0, 0, 0.8); }
+  }
+
+</style>
+</head>
+<body>
+
+<!-- Floating Menu Button -->
+<div id="menuContainer">
+  <button id="menuBtn" onclick="toggleMenu()">
+    <span id="toolsIconWrapper">
+      <!-- Tools Icon (Hammer/Wrench) -->
+      <svg viewBox="0 0 24 24"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.7 4.7C.6 7.1 1 10.1 3 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.0-1.4z"/></svg>
+    </span>
+    <span id="menuLabel">More Tools</span>
+    <span id="closeIconWrapper" class="fade-out" style="display:none; position:absolute; inset:0; align-items:center; justify-content:center;">
+      <!-- X Icon -->
+      <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    </span>
+  </button>
+
+  <!-- Dropdown Content -->
+  <div id="menuContent">
+    <a href="https://perchance.org/free-image-to-image" target="_blank">
+      <span class="fancy-free">FREE</span> Image to Image
+    </a>
+  </div>
+</div>
+
+<!-- Fancy Blue Ribbon -->
+<div id="ribbonEl">
+  Thank you for 213.5k views!
+  <!-- Close button for top bar -->
+  <span class="closeBtn" onclick="closeRibbon()" title="Hide bar">&times;</span>
+</div>
+
+<div id="previewCtn">
+  <!-- 
+    Using the direct .hf.space subdomain URL provided in the user instruction. 
+    Using a standard iframe to avoid specific Gradio component error overlays.
+  -->
+  <iframe src="https://nsfwalex-ltx2-3-studio.hf.space" allow="camera; microphone; clipboard-read; clipboard-write"></iframe>
+  
+  <!-- Loading element added here to fix the JS reference error -->
+  <div id="loadingEl">
+    <div class="spinner"></div>
+    <div>Loading...</div>
+  </div>
+</div>
+
+<!-- Added ID for JS targeting -->
+<footer id="footerEl">
+  Qwen Image Edit Interface
+  <!-- Close button for bottom bar -->
+  <span class="closeBtn" onclick="closeFooter()" title="Hide footer">&times;</span>
+</footer>
+
+<script>
+  // --- Persistence Logic ---
+  // Check local storage on load to respect previous close actions
+  function checkStorage() {
+    if (localStorage.ribbonClosed === 'true') {
+      ribbonEl.classList.add('closed');
+    }
+    if (localStorage.footerClosed === 'true') {
+      footerEl.classList.add('closed');
+    }
+  }
+  
+  // Run check immediately
+  checkStorage();
+
+  // Adjust menu position based on ribbon visibility after checking storage
+  updateMenuPosition();
+
+  // Hide the loading indicator after a brief delay
+  // Added a safety check in case the element ID changes, though we fixed the HTML above
+  setTimeout(() => {
+    if(loadingEl) loadingEl.hidden = true;
+  }, 2000);
+
+  // Animates the top ribbon UP to hide it
+  function closeRibbon() {
+    ribbonEl.classList.add('closed');
+    localStorage.ribbonClosed = 'true'; // Save state
+    updateMenuPosition(); // Move menu back up
+  }
+
+  // Animates the bottom footer DOWN to hide it
+  function closeFooter() {
+    footerEl.classList.add('closed');
+    localStorage.footerClosed = 'true'; // Save state
+  }
+
+  // --- Floating Menu Logic ---
+  let isMenuOpen = false;
+
+  function toggleMenu() {
+    isMenuOpen = !isMenuOpen;
+    let menuContent = document.getElementById('menuContent');
+    let toolsWrapper = document.getElementById('toolsIconWrapper');
+    let closeWrapper = document.getElementById('closeIconWrapper');
+    let menuLabel = document.getElementById('menuLabel');
+
+    if (isMenuOpen) {
+      // Open Menu
+      menuContent.classList.add('open');
+      
+      // Animate Icon Swap
+      menuLabel.style.display = 'none'; // Hide text label
+      toolsWrapper.style.display = 'none'; // Hide tools
+      
+      closeWrapper.style.display = 'flex'; // Ensure it's in layout and centered
+      // Small delay to allow display flex to render before fading in
+      setTimeout(() => closeWrapper.classList.remove('fade-out'), 10);
+      
+    } else {
+      // Close Menu
+      menuContent.classList.remove('open');
+      
+      // Animate Icon Swap back
+      closeWrapper.classList.add('fade-out');
+      
+      // Wait for fade out to finish before swapping icons
+      setTimeout(() => {
+        closeWrapper.style.display = 'none';
+        toolsWrapper.style.display = 'block';
+        menuLabel.style.display = 'inline';
+      }, 200); 
+    }
+  }
+
+  // Helper to move menu out of the way of the ribbon
+  function updateMenuPosition() {
+    if (ribbonEl && !ribbonEl.classList.contains('closed')) {
+      // Ribbon is open, push menu down below it (approx height 60-70px)
+      menuContainer.style.top = '70px';
+    } else {
+      // Ribbon is closed, move to default position
+      menuContainer.style.top = '16px';
+    }
+  }
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

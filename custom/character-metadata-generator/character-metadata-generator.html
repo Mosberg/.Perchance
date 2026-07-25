@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%235b21b6%22/%3E%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-size%3D%2240%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20font-weight%3D%22bold%22%3EP%3C/text%3E%3C/svg%3E">
+  <title>character-metadata-generator — Perchance</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div id="appCtn" style="text-align:left; max-width:960px; margin:0 auto; padding:16px;">
+  <h2>Character Metadata Generator</h2>
+
+  <div style="margin:8px 0;">
+    <label>Schema Type</label><br>
+    <select id="schemaTypeInput">
+      <option value="normal">normal</option>
+      <option value="nsfw">nsfw</option>
+    </select>
+  </div>
+
+  <div style="margin:8px 0;">
+    <label>URL Input</label><br>
+    <input id="urlInput" type="text" placeholder="Enter one or more URLs separated by commas" style="width:100%;">
+  </div>
+
+  <div style="margin:8px 0;">
+    <label><input id="enableJsonEditorInput" type="checkbox"> Enable JSON Editor</label>
+  </div>
+
+  <div style="margin:8px 0;">
+    <button id="generateBtn">Generate Metadata</button>
+    <button id="downloadBtn" hidden>Download JSON</button>
+  </div>
+
+  <div id="statusEl" style="color:#555; font-size:14px; min-height:20px;"></div>
+
+  <div style="margin:8px 0;">
+    <label>JSON Output</label><br>
+    <textarea id="jsonOutput" style="width:100%; height:400px; font-family:monospace;" readonly></textarea>
+  </div>
+
+  <script>
+    // --- helpers ---
+    let qsText = (doc, s) => doc.querySelector(s)?.textContent?.trim() || "";
+    let getSection = (doc, title) => {
+      let h = [...doc.querySelectorAll("h2,h3,h4")].find(h => h.textContent.toLowerCase().includes(title.toLowerCase()));
+      if (!h) return "";
+      let parts = [];
+      let el = h.nextElementSibling;
+      while (el && !/^(H2|H3|H4)$/i.test(el.tagName)) {
+        if (el.matches("p,ul,ol")) parts.push(el.textContent.trim());
+        el = el.nextElementSibling;
+      }
+      return parts.join("\n");
+    };
+    let getList = (doc, title) => {
+      let h = [...doc.querySelectorAll("h2,h3,h4")].find(h => h.textContent.toLowerCase().includes(title.toLowerCase()));
+      if (!h) return [];
+      let items = [];
+      let el = h.nextElementSibling;
+      while (el && !/^(H2|H3|H4)$/i.test(el.tagName)) {
+        if (el.matches("ul,ol")) items.push(...[...el.querySelectorAll("li")].map(l => l.textContent.trim()));
+        el = el.nextElementSibling;
+      }
+      return items.length ? items : [getSection(doc, title)].filter(Boolean);
+    };
+    let infoboxVal = (doc, name) => {
+      for (let th of doc.querySelectorAll(".pi-data-label, .infobox th, th")) {
+        if (th.textContent.trim().toLowerCase().includes(name.toLowerCase())) {
+          let td = th.nextElementSibling;
+          if (td && td.matches("td,.pi-data-value")) return td.textContent.trim();
+          let tr = th.closest("tr");
+          if (tr) { td = tr.querySelector("td"); if (td) return td.textContent.trim(); }
+        }
+      }
+      return "";
+    };
+
+    // --- scrapers ---
+    function scrapeFandom(doc) {
+      let g = infoboxVal(doc, "Gender").toLowerCase();
+      return {
+        name: qsText(doc, ".pi-title") || qsText(doc, "#firstHeading"),
+        aliases: (infoboxVal(doc, "Also known as") || infoboxVal(doc, "Aliases")).split(/[,;/]/).map(s => s.trim()).filter(Boolean),
+        universe: qsText(doc, ".wds-breadcrumbs") || "",
+        origin: infoboxVal(doc, "Origin") || infoboxVal(doc, "Place of origin") || infoboxVal(doc, "Home world"),
+        type: "fictional character",
+        pronouns: g.includes("female") ? ["she/her"] : g.includes("male") ? ["he/him"] : [],
+        species: infoboxVal(doc, "Species"),
+        gender: infoboxVal(doc, "Gender"),
+        age: infoboxVal(doc, "Age"),
+        appearance: getSection(doc, "Appearance"),
+        personality: getSection(doc, "Personality"),
+        background: getSection(doc, "Background") || getSection(doc, "Biography") || getSection(doc, "History"),
+        abilities: getList(doc, "Powers and Abilities").concat(getList(doc, "Abilities")),
+        relationships: getList(doc, "Relationships"),
+        avatar: (doc.querySelector(".pi-image-thumbnail") || doc.querySelector(".infobox img") || {})?.src || "",
+        tags: [...doc.querySelectorAll("#catlinks a,.page-header__categories a")].map(a => a.textContent.trim()).filter(Boolean)
+      };
+    }
+    function scrapeWikipedia(doc) {
+      let ps = [...doc.querySelectorAll("#mw-content-text p,.mw-parser-output p")].map(p => p.textContent.trim()).filter(t => t.length > 20);
+      return {
+        name: qsText(doc, "#firstHeading"),
+        universe: infoboxVal(doc, "Series"),
+        origin: infoboxVal(doc, "Created by"),
+        type: "fictional character",
+        appearance: ps.slice(0, 2).join("\n\n"),
+        background: ps.slice(2, 6).join("\n\n"),
+        avatar: (doc.querySelector(".infobox img") || {})?.src || ""
+      };
+    }
+    function scrapeAO3(doc) {
+      let tags = [...doc.querySelectorAll(".tags li,a.tag")].map(a => a.textContent.trim()).filter(Boolean);
+      return {
+        name: qsText(doc, "h2.title") || doc.title?.split("-")[0]?.trim() || "",
+        universe: tags.find(t => /fandom|universe/i.test(t)) || "",
+        relationships: tags.filter(t => /\//.test(t)),
+        tags: tags,
+        background: qsText(doc, ".summary blockquote") || qsText(doc, ".summary")
+      };
+    }
+    function scrapeGeneric(doc) {
+      let ps = [...doc.querySelectorAll("p")].map(p => p.textContent.trim()).filter(t => t.length > 30);
+      return {
+        name: doc.title?.split(/[-|]/)[0]?.trim() || "",
+        background: ps.slice(0, 2).join("\n\n"),
+        appearance: ps.find(p => /appear|look|hair|eye|wear|tall|short|build/i.test(p)) || "",
+        personality: ps.find(p => /personality|kind|rude|calm|attitude|temper/i.test(p)) || "",
+        abilities: ps.filter(p => /power|ability|skill|fight|magic|weapon/i.test(p)),
+        tags: []
+      };
+    }
+    function scrapeCharacterFromHTML(html, url) {
+      let doc = new DOMParser().parseFromString(html, "text/html");
+      if (/fandom\.com|wikia\.com/i.test(url)) return scrapeFandom(doc);
+      if (/wikipedia\.org/i.test(url)) return scrapeWikipedia(doc);
+      if (/archiveofourown\.org|ao3\.org/i.test(url)) return scrapeAO3(doc);
+      return scrapeGeneric(doc);
+    }
+
+    // --- schema mapping ---
+    function mapToNormalSchema(p) {
+      return {
+        identity: {
+          name: p.name || "", aliases: p.aliases || [], universe: p.universe || "", origin: p.origin || "",
+          type: p.type || "", pronouns: p.pronouns || [], title: "", birth_date: "", death_date: "",
+          languages: [], voice_actor: "", concept_artist: ""
+        },
+        appearance: {
+          species: p.species || "", subspecies: "", gender: p.gender || "", sex: "", age: p.age || "",
+          height: "", weight: "", build: "", posture: "",
+          hair: { color: "", length: "", style: "", texture: "" },
+          eyes: { color: "", shape: "", expression: "" },
+          skin: { color: "", texture: "", temperature: "", scars: [] },
+          distinctive_features: [], markings: [], mutations: [], body_modifications: [], clothing_style: [],
+          scent: "", voice: ""
+        },
+        personality: {
+          traits_positive: [], traits_negative: [], traits_neutral: [], archetype: "", temperament: "",
+          moral_alignment: "", motivations: [], fears: [], values: [], quirks: [], cognitive_biases: [],
+          emotional_triggers: [], mental_illnesses: [], coping_mechanisms: []
+        },
+        background: {
+          role: "", alignment: "", occupation: "", previous_occupations: [], education: "", faction: "",
+          homeworld: "", current_residence: "", economic_status: "", notable_events: [],
+          backstory_summary: p.background || "", secrets: []
+        },
+        skills: {
+          combat_style: [], abilities: p.abilities || [], magic_type: "", power_level: "", specializations: [],
+          weaknesses: [], training: [], learning_style: "", iq: "", eq: "", adaptability: ""
+        },
+        relationships: {
+          allies: [], rivals: [], enemies: [], family: [], romantic_history: [], current_partners: [],
+          friends: [], acquaintances: [], mentors: [], students: [], favor_status: "", trust_level: ""
+        },
+        equipment: {
+          weapons: [], items: [], armor: [], signature_item: "", inventory: [], wealth: "", technology_access: ""
+        },
+        meta: {
+          genre: [], tags: p.tags || [], inspiration: [], tropes: [], archetypes: [], symbolism: [],
+          leith_motif: "", themes: []
+        },
+        physiology: {
+          metabolism: "", sleep_patterns: "", eating_habits: "", immune_system: "", healing_factor: "",
+          pain_tolerance: "", drug_resistance: "", poison_resistance: "", disease_resistance: "",
+          temperature_tolerance: "", radiation_resistance: "", biological_rhythms: []
+        },
+        psychology: {
+          intelligence_type: "", memory_capacity: "", attention_span: "", learning_rate: "",
+          decision_making_style: "", problem_solving_approach: "", creativity_level: "", empathy_level: "",
+          psychic_defenses: []
+        },
+        game_stats: {
+          charisma: "", strength: "", intelligence: "", dexterity: "", constitution: "", wisdom: "",
+          luck: "", perception: "", willpower: ""
+        },
+        misc: {
+          theme_song: "", catchphrase: "", signature_move: "", hobbies: [], pet_peeves: [],
+          guilty_pleasures: [], bucket_list: [], unusual_habits: [], collection: []
+        }
+      };
+    }
+    function mapToNSFWSchema(p) {
+      let base = mapToNormalSchema(p);
+      base.nsfw = [{
+        sexual_orientation: "", relationship_status: "",
+        partner_preferences: { gender: [], species: [], personality_traits: [], physical_traits: [] },
+        kinks: [], fetishes: [], turn_offs: [], sexual_experience: "", libido: "", attitude_toward_sex: "",
+        sexual_health: { std_status: "", contraception: "", fertility: "" },
+        explicit_content: { allowed_scenarios: [], limits: [], aftercare_preferences: [] },
+        bodily_fluids: { blood: "", sweat: "", saliva: "", semen: "", vaginal_fluids: "", urine: "", feces: "" },
+        consent_dynamics: { initiation_style: "", power_exchange: "", safeword: "" }
+      }];
+      return base;
+    }
+
+    // --- UI logic ---
+    enableJsonEditorInput.onchange = () => { jsonOutput.readOnly = !enableJsonEditorInput.checked; };
+
+    async function generateMetadata() {
+      generateBtn.disabled = true;
+      downloadBtn.hidden = true;
+      let urls = urlInput.value.split(",").map(u => u.trim()).filter(u => u.length);
+      if (!urls.length) {
+        statusEl.textContent = "⚠️ Enter at least one URL.";
+        generateBtn.disabled = false;
+        return;
+      }
+      let schema = schemaTypeInput.value;
+      let characters = [];
+      let errors = [];
+
+      for (let url of urls) {
+        statusEl.textContent = `⏳ Scraping: ${url} ...`;
+        try {
+          new URL(url); // validate
+          let html = await superFetch(url).then(r => r.text()); // fetch via proxy
+          if (!html) throw new Error("Empty response from " + url);
+          let parsed = scrapeCharacterFromHTML(html, url);
+          let mapped = schema === "nsfw" ? mapToNSFWSchema(parsed) : mapToNormalSchema(parsed);
+          characters.push(mapped);
+        } catch (err) {
+          console.error("Scrape error for", url, err);
+          errors.push(url + ": " + (err.message || err));
+          // push skeleton so array order is preserved and partial output is valid
+          let skeleton = schema === "nsfw" ? mapToNSFWSchema({}) : mapToNormalSchema({});
+          skeleton.identity.name = "FETCH_ERROR — " + (err.message || err);
+          characters.push(skeleton);
+        }
+      }
+
+      jsonOutput.value = JSON.stringify({ character: characters }, null, 2);
+      jsonOutput.readOnly = !enableJsonEditorInput.checked;
+      downloadBtn.hidden = false;
+      generateBtn.disabled = false;
+
+      if (errors.length) {
+        statusEl.innerHTML = `⚠️ Finished with ${errors.length} error(s):<br>` + errors.map(e => `<div style="color:#c00;">• ${e}</div>`).join("");
+      } else {
+        statusEl.textContent = `✅ Done. Generated ${characters.length} character(s).`;
+      }
+    }
+
+    // Attach listeners in JS so promise rejections are always caught
+    generateBtn.onclick = () => {
+      generateMetadata().catch(err => {
+        console.error(err);
+        statusEl.textContent = "❌ Critical error: " + (err.message || err);
+        generateBtn.disabled = false;
+        downloadBtn.hidden = true;
+      });
+    };
+
+    downloadBtn.onclick = () => {
+      if (!jsonOutput.value) return;
+      let blob = new Blob([jsonOutput.value], { type: "application/json" });
+      let a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "character-metadata.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    };
+  </script>
+</div>
+
+</body>
+</html>
